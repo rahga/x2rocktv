@@ -1,3 +1,25 @@
+# Secrets / local config
+local.properties
+
+# Gradle
+.gradle/
+build/
+**/build/
+*.hprof
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Android generated
+/app/release/
+
 # Compiled class file
 *.class
 
@@ -19,5 +41,5 @@
 *.tar.gz
 *.rar
 
-# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+# virtual machine crash logs
 hs_err_pid*
