@@ -91,6 +91,9 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.gson)
 
+    // Security
+    implementation(libs.androidx.security.crypto)
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
