@@ -2,6 +2,7 @@ package com.rahga.x2rock.repository
 
 import android.net.Uri
 import android.util.Base64
+import android.util.Log
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.auth.Pkce
 import com.rahga.x2rock.auth.TokenStore
@@ -39,7 +40,7 @@ class SonosAuthRepository @Inject constructor(
         pendingVerifier = verifier
         pendingState = state
 
-        return Uri.parse(AUTH_ENDPOINT).buildUpon()
+        val url = Uri.parse(AUTH_ENDPOINT).buildUpon()
             .appendQueryParameter("client_id", BuildConfig.SONOS_CLIENT_ID)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("state", state)
@@ -49,6 +50,8 @@ class SonosAuthRepository @Inject constructor(
             .appendQueryParameter("code_challenge_method", "S256")
             .build()
             .toString()
+        Log.d("SonosAuth", "Authorization URL: $url")
+        return url
     }
 
     suspend fun exchangeCodeForTokens(code: String, returnedState: String): Result<Unit> =
