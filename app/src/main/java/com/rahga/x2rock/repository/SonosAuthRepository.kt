@@ -22,7 +22,7 @@ class SonosAuthRepository @Inject constructor(
     companion object {
         private const val AUTH_ENDPOINT = "https://api.sonos.com/login/v3/oauth"
         private const val TOKEN_ENDPOINT = "https://api.sonos.com/login/v3/oauth/access"
-        const val REDIRECT_URI = "https://localhost/callback"
+        const val REDIRECT_URI = "https://rahga.github.io/x2rock/callback.html"
         private const val SCOPE = "playback-control-all"
     }
 

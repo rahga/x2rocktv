@@ -26,13 +26,14 @@ fun SonosAuthWebViewScreen(
                         request: WebResourceRequest
                     ): Boolean {
                         val url = request.url
-                        if (url.toString().startsWith(SonosAuthRepository.REDIRECT_URI)) {
+                        val isCallback = url.toString().startsWith(SonosAuthRepository.REDIRECT_URI)
+                            || (url.scheme == "x2rock" && url.host == "callback")
+                        if (isCallback) {
                             val code = url.getQueryParameter("code")
                             val state = url.getQueryParameter("state")
                             if (code != null && state != null) {
                                 onCodeReceived(code, state)
                             } else {
-                                // Redirect received but no code — user denied or error
                                 onCancel()
                             }
                             return true
