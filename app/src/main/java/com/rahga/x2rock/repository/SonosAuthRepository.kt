@@ -4,7 +4,6 @@ import android.net.Uri
 import android.util.Base64
 import android.util.Log
 import com.rahga.x2rock.BuildConfig
-import com.rahga.x2rock.auth.Pkce
 import com.rahga.x2rock.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -12,6 +11,7 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.security.SecureRandom
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -27,17 +27,13 @@ class SonosAuthRepository @Inject constructor(
         private const val SCOPE = "playback-control-all"
     }
 
-    @Volatile private var pendingVerifier: String? = null
     @Volatile private var pendingState: String? = null
 
     val isAuthenticated: Boolean get() = tokenStore.isAuthenticated
     val accessToken: String? get() = tokenStore.accessToken
 
     fun buildAuthUrl(): String {
-        val verifier = Pkce.generateVerifier()
-        val challenge = Pkce.generateChallenge(verifier)
-        val state = Pkce.generateState()
-        pendingVerifier = verifier
+        val state = generateState()
         pendingState = state
 
         val url = Uri.parse(AUTH_ENDPOINT).buildUpon()
@@ -46,8 +42,6 @@ class SonosAuthRepository @Inject constructor(
             .appendQueryParameter("state", state)
             .appendQueryParameter("scope", SCOPE)
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
-            .appendQueryParameter("code_challenge", challenge)
-            .appendQueryParameter("code_challenge_method", "S256")
             .build()
             .toString()
         Log.d("SonosAuth", "Authorization URL: $url")
@@ -62,20 +56,15 @@ class SonosAuthRepository @Inject constructor(
                     SecurityException("OAuth state mismatch — possible CSRF attack")
                 )
             }
-            val verifier = pendingVerifier
-                ?: return@withContext Result.failure(
-                    IllegalStateException("No PKCE verifier found — call buildAuthUrl() first")
-                )
 
             runCatching {
-                val response = okHttpClient.newCall(tokenRequest(code, verifier)).execute()
+                val response = okHttpClient.newCall(tokenRequest(code)).execute()
                 val body = response.body?.string()
                     ?: throw IllegalStateException("Empty response from token endpoint")
                 if (!response.isSuccessful) {
                     throw IllegalStateException("Token exchange failed (${response.code}): $body")
                 }
                 storeTokens(JSONObject(body))
-                pendingVerifier = null
                 pendingState = null
             }
         }
@@ -107,18 +96,23 @@ class SonosAuthRepository @Inject constructor(
 
     fun clearTokens() = tokenStore.clear()
 
-    private fun tokenRequest(code: String, verifier: String): Request {
+    private fun tokenRequest(code: String): Request {
         val body = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
             .add("redirect_uri", REDIRECT_URI)
-            .add("code_verifier", verifier)
             .build()
         return Request.Builder()
             .url(TOKEN_ENDPOINT)
             .addHeader("Authorization", basicAuthHeader())
             .post(body)
             .build()
+    }
+
+    private fun generateState(): String {
+        val bytes = ByteArray(16)
+        SecureRandom().nextBytes(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
     }
 
     private fun basicAuthHeader(): String {

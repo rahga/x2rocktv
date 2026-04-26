@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import android.util.Log
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -26,6 +27,7 @@ fun SonosAuthWebViewScreen(
                         request: WebResourceRequest
                     ): Boolean {
                         val url = request.url
+                        Log.d("SonosAuth", "shouldOverrideUrlLoading: $url")
                         val isCallback = url.toString().startsWith(SonosAuthRepository.REDIRECT_URI)
                             || (url.scheme == "x2rock" && url.host == "callback")
                         if (isCallback) {
