@@ -34,12 +34,12 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
@@ -191,11 +191,11 @@ private fun PlaybackControls(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = { viewModel.skipToPreviousTrack() }) { Text("⏮  Prev") }
+            AppButton(onClick = { viewModel.skipToPreviousTrack() }) { Text("⏮  Prev") }
             if (state.durationMillis > 0) {
-                Button(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
+                AppButton(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
             }
-            Button(
+            AppButton(
                 onClick = { viewModel.togglePlayPause() },
                 modifier = Modifier
                     .width(160.dp)
@@ -204,9 +204,9 @@ private fun PlaybackControls(
                 Text(if (state.playbackState == "PLAYBACK_STATE_PLAYING") "⏸  Pause" else "▶  Play")
             }
             if (state.durationMillis > 0) {
-                Button(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }
+                AppButton(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }
             }
-            Button(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
+            AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -216,14 +216,14 @@ private fun PlaybackControls(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = { viewModel.toggleShuffle() }) {
+            AppButton(onClick = { viewModel.toggleShuffle() }) {
                 Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
             }
-            Button(onClick = { viewModel.cycleRepeat() }) {
+            AppButton(onClick = { viewModel.cycleRepeat() }) {
                 Text(state.repeat.toRepeatLabel())
             }
-            Button(onClick = onOpenQueue) { Text("Queue") }
-            Button(onClick = onOpenFavorites) { Text("Favorites") }
+            AppButton(onClick = onOpenQueue) { Text("Queue") }
+            AppButton(onClick = onOpenFavorites) { Text("Favorites") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -233,13 +233,13 @@ private fun PlaybackControls(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = { viewModel.adjustVolume(-5) }, enabled = !state.isMuted) { Text("Vol −") }
+            AppButton(onClick = { viewModel.adjustVolume(-5) }, enabled = !state.isMuted) { Text("Vol −") }
             Text(
                 text = if (state.isMuted) "Muted" else "Volume: ${state.volume}",
                 style = MaterialTheme.typography.bodyLarge
             )
-            Button(onClick = { viewModel.adjustVolume(+5) }, enabled = !state.isMuted) { Text("Vol +") }
-            Button(onClick = { viewModel.toggleMute() }) {
+            AppButton(onClick = { viewModel.adjustVolume(+5) }, enabled = !state.isMuted) { Text("Vol +") }
+            AppButton(onClick = { viewModel.toggleMute() }) {
                 Text(if (state.isMuted) "Unmute" else "Mute")
             }
         }
@@ -271,7 +271,7 @@ private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Button(
+        AppButton(
             onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
             enabled = !entry.muted
         ) { Text("−") }
@@ -280,11 +280,11 @@ private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.width(52.dp)
         )
-        Button(
+        AppButton(
             onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
             enabled = !entry.muted
         ) { Text("+") }
-        Button(onClick = { viewModel.togglePlayerMute(entry.playerId) }) {
+        AppButton(onClick = { viewModel.togglePlayerMute(entry.playerId) }) {
             Text(if (entry.muted) "Unmute" else "Mute")
         }
     }
