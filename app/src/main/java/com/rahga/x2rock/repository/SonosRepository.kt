@@ -1,7 +1,9 @@
 package com.rahga.x2rock.repository
 
+import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
+import com.rahga.x2rock.model.LoadFavoriteRequest
 import com.rahga.x2rock.model.PlayModeResponse
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackMetadata
@@ -26,15 +28,18 @@ class SonosRepository @Inject constructor(
     private val apiService: SonosApiService,
     private val authRepository: SonosAuthRepository
 ) {
+    @Volatile private var cachedHouseholdId: String? = null
     @Volatile private var cachedPlayers: Map<String, Player> = emptyMap()
     @Volatile private var cachedGroups: Map<String, Group> = emptyMap()
 
     suspend fun getGroups(): Result<List<Group>> = withContext(Dispatchers.IO) {
         runCatching {
-            val householdId = fetchWithRefresh { apiService.getHouseholds() }
-                .households
-                .firstOrNull()
-                ?.id
+            val householdId = cachedHouseholdId
+                ?: fetchWithRefresh { apiService.getHouseholds() }
+                    .households
+                    .firstOrNull()
+                    ?.id
+                    ?.also { cachedHouseholdId = it }
                 ?: error("No households found on this account")
 
             val response = fetchWithRefresh { apiService.getGroups(householdId) }
@@ -105,6 +110,10 @@ class SonosRepository @Inject constructor(
         runCatching { executeWithRefresh { apiService.seek(groupId, SeekRequest(positionMillis)) } }
     }
 
+    suspend fun skipToQueueItem(groupId: String, trackNumber: Int): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { executeWithRefresh { apiService.seek(groupId, SeekRequest(positionMillis = 0, trackNumber = trackNumber)) } }
+    }
+
     suspend fun getPlayerVolume(playerId: String): Result<GroupVolume> = withContext(Dispatchers.IO) {
         runCatching { fetchWithRefresh { apiService.getPlayerVolume(playerId) } }
     }
@@ -115,6 +124,17 @@ class SonosRepository @Inject constructor(
 
     suspend fun setPlayerMute(playerId: String, muted: Boolean): Result<GroupVolume> = withContext(Dispatchers.IO) {
         runCatching { fetchWithRefresh { apiService.setPlayerMute(playerId, SetMuteRequest(muted)) } }
+    }
+
+    suspend fun getFavorites(): Result<FavoritesResponse> = withContext(Dispatchers.IO) {
+        runCatching {
+            val householdId = cachedHouseholdId ?: error("No household cached — call getGroups first")
+            fetchWithRefresh { apiService.getFavorites(householdId) }
+        }
+    }
+
+    suspend fun loadFavorite(groupId: String, favoriteId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { executeWithRefresh { apiService.loadFavorite(groupId, LoadFavoriteRequest(favoriteId)) } }
     }
 
     private suspend fun <T> fetchWithRefresh(call: suspend () -> Response<T>): T {

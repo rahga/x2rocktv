@@ -12,6 +12,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.LoginScreen
 import com.rahga.x2rock.ui.screens.PlayerScreen
@@ -105,6 +106,9 @@ fun X2RockNavGraph() {
                 onBack = { navController.popBackStack() },
                 onOpenQueue = {
                     navController.navigate("queue?groupId=${Uri.encode(groupId)}")
+                },
+                onOpenFavorites = {
+                    navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
                 }
             )
         }
@@ -114,6 +118,13 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             QueueScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "favorites?groupId={groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+        ) {
+            FavoritesScreen(onBack = { navController.popBackStack() })
         }
     }
 }

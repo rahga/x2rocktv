@@ -38,42 +38,53 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
-import com.rahga.x2rock.model.QueueItem
-import com.rahga.x2rock.viewmodel.QueueViewModel
+import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.viewmodel.FavoritesViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun QueueScreen(
+fun FavoritesScreen(
     onBack: () -> Unit,
-    viewModel: QueueViewModel = hiltViewModel()
+    viewModel: FavoritesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val loadingId by viewModel.loadingFavoriteId.collectAsState()
     BackHandler { onBack() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val s = state) {
-            is QueueViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading queue…", style = MaterialTheme.typography.titleLarge)
+            is FavoritesViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("Loading favorites…", style = MaterialTheme.typography.titleLarge)
             }
-            is QueueViewModel.UiState.Error -> Column(
+            is FavoritesViewModel.UiState.Error -> Column(
                 Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("Failed to load queue", style = MaterialTheme.typography.titleLarge)
+                Text("Failed to load favorites", style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.height(8.dp))
                 Text(s.message, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = { viewModel.reload() }) { Text("Retry") }
             }
-            is QueueViewModel.UiState.Success -> QueueList(s.items, onBack, viewModel::playItem)
+            is FavoritesViewModel.UiState.Success -> FavoritesList(
+                items = s.items,
+                loadingId = loadingId,
+                onBack = onBack,
+                onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
+            )
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (Int) -> Unit) {
+private fun FavoritesList(
+    items: List<Favorite>,
+    loadingId: String?,
+    onBack: () -> Unit,
+    onPlay: (Favorite) -> Unit
+) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
@@ -95,7 +106,7 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
             ) { Text("← Back") }
             Spacer(Modifier.width(24.dp))
             Text(
-                text = if (items.isEmpty()) "Queue is empty" else "Queue (${items.size})",
+                text = if (items.isEmpty()) "No favorites" else "Favorites",
                 style = MaterialTheme.typography.displaySmall
             )
         }
@@ -107,11 +118,12 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
             contentPadding = PaddingValues(bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            itemsIndexed(items) { index, item ->
-                QueueRow(
-                    index = index + 1,
-                    item = item,
-                    onClick = { onPlayItem(index + 1) },
+            itemsIndexed(items) { index, fav ->
+                FavoriteRow(
+                    favorite = fav,
+                    isLoading = loadingId == fav.id,
+                    enabled = loadingId == null,
+                    onClick = { onPlay(fav) },
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
             }
@@ -121,7 +133,13 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueRow(index: Int, item: QueueItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun FavoriteRow(
+    favorite: Favorite,
+    isLoading: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
         onClick = onClick,
         modifier = modifier.fillMaxWidth()
@@ -130,12 +148,7 @@ private fun QueueRow(index: Int, item: QueueItem, onClick: () -> Unit, modifier:
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            Text(
-                text = "$index",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(40.dp)
-            )
-            item.track?.imageUrl?.let { url ->
+            favorite.imageUrl?.let { url ->
                 AsyncImage(
                     model = url,
                     contentDescription = null,
@@ -146,20 +159,25 @@ private fun QueueRow(index: Int, item: QueueItem, onClick: () -> Unit, modifier:
                 )
                 Spacer(Modifier.width(16.dp))
             }
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.track?.name ?: "Unknown track",
+                    text = favorite.name,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val sub = listOfNotNull(
-                    item.track?.artist?.name,
-                    item.track?.album?.name
-                ).joinToString(" • ")
-                if (sub.isNotEmpty()) {
-                    Text(sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (favorite.description != null) {
+                    Text(
+                        text = favorite.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
+            }
+            if (isLoading) {
+                Spacer(Modifier.width(16.dp))
+                Text("Playing…", style = MaterialTheme.typography.bodySmall)
             }
         }
     }
