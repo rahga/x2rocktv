@@ -29,13 +29,16 @@ import com.rahga.x2rock.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
+fun HomeScreen(
+    onGroupSelected: (Group) -> Unit = {},
+    viewModel: HomeViewModel = hiltViewModel()
+) {
     val state by viewModel.uiState.collectAsState()
 
     Surface(modifier = Modifier.fillMaxSize()) {
         when (val s = state) {
             is HomeViewModel.UiState.Loading -> LoadingContent()
-            is HomeViewModel.UiState.Success -> RoomsContent(s.groups)
+            is HomeViewModel.UiState.Success -> RoomsContent(s.groups, onGroupSelected)
             is HomeViewModel.UiState.Error -> ErrorContent(s.message, viewModel::loadGroups)
         }
     }
@@ -51,7 +54,7 @@ private fun LoadingContent() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun RoomsContent(groups: List<Group>) {
+private fun RoomsContent(groups: List<Group>, onGroupSelected: (Group) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -67,7 +70,7 @@ private fun RoomsContent(groups: List<Group>) {
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 items(groups) { group ->
-                    RoomCard(group)
+                    RoomCard(group, onClick = { onGroupSelected(group) })
                 }
             }
         }
@@ -76,9 +79,9 @@ private fun RoomsContent(groups: List<Group>) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun RoomCard(group: Group) {
+private fun RoomCard(group: Group, onClick: () -> Unit) {
     Card(
-        onClick = {},
+        onClick = onClick,
         modifier = Modifier.size(width = 280.dp, height = 160.dp)
     ) {
         Column(

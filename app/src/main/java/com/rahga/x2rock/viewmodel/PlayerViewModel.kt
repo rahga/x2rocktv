@@ -1,0 +1,104 @@
+package com.rahga.x2rock.viewmodel
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.repository.SonosRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class PlayerUiState(
+    val groupName: String = "",
+    val playbackState: String = "PLAYBACK_STATE_IDLE",
+    val trackName: String? = null,
+    val artistName: String? = null,
+    val albumName: String? = null,
+    val volume: Int = 0,
+    val isMuted: Boolean = false,
+    val isLoading: Boolean = true,
+    val error: String? = null
+)
+
+@HiltViewModel
+class PlayerViewModel @Inject constructor(
+    private val repository: SonosRepository,
+    savedStateHandle: SavedStateHandle
+) : ViewModel() {
+
+    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+
+    private val _uiState = MutableStateFlow(
+        PlayerUiState(groupName = savedStateHandle["groupName"] ?: "")
+    )
+    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            while (isActive) {
+                refresh()
+                delay(5_000L)
+            }
+        }
+    }
+
+    private suspend fun refresh() {
+        runCatching {
+            val playback = repository.getPlaybackState(groupId).getOrThrow()
+            val metadata = repository.getPlaybackMetadata(groupId).getOrNull()
+            val vol = repository.getGroupVolume(groupId).getOrThrow()
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    error = null,
+                    playbackState = playback.playbackState,
+                    trackName = metadata?.currentItem?.track?.name,
+                    artistName = metadata?.currentItem?.track?.artist?.name,
+                    albumName = metadata?.currentItem?.track?.album?.name,
+                    volume = vol.volume,
+                    isMuted = vol.muted
+                )
+            }
+        }.onFailure { e ->
+            _uiState.update { it.copy(isLoading = false, error = e.message) }
+        }
+    }
+
+    fun togglePlayPause() {
+        viewModelScope.launch {
+            runCatching { repository.togglePlayPause(groupId) }
+            delay(300L)
+            refresh()
+        }
+    }
+
+    fun skipToNextTrack() {
+        viewModelScope.launch {
+            runCatching { repository.skipToNextTrack(groupId) }
+            delay(300L)
+            refresh()
+        }
+    }
+
+    fun skipToPreviousTrack() {
+        viewModelScope.launch {
+            runCatching { repository.skipToPreviousTrack(groupId) }
+            delay(300L)
+            refresh()
+        }
+    }
+
+    fun adjustVolume(delta: Int) {
+        val newVol = (_uiState.value.volume + delta).coerceIn(0, 100)
+        _uiState.update { it.copy(volume = newVol) }
+        viewModelScope.launch {
+            runCatching { repository.setGroupVolume(groupId, newVol) }
+        }
+    }
+}

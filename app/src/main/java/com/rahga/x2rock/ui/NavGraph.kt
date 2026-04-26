@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.LoginScreen
+import com.rahga.x2rock.ui.screens.PlayerScreen
 import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
 import com.rahga.x2rock.viewmodel.LoginViewModel
 
@@ -24,7 +25,6 @@ fun X2RockNavGraph() {
         composable("login") { backStackEntry ->
             val viewModel: LoginViewModel = hiltViewModel()
 
-            // Receive auth code posted by SonosAuthWebViewScreen via savedStateHandle
             val savedStateHandle = backStackEntry.savedStateHandle
             val code by savedStateHandle.getStateFlow<String?>("code", null).collectAsState()
             val returnedState by savedStateHandle.getStateFlow<String?>("state", null).collectAsState()
@@ -71,7 +71,23 @@ fun X2RockNavGraph() {
         }
 
         composable("home") {
-            HomeScreen()
+            HomeScreen(
+                onGroupSelected = { group ->
+                    navController.navigate(
+                        "player?groupId=${Uri.encode(group.id)}&groupName=${Uri.encode(group.name)}"
+                    )
+                }
+            )
+        }
+
+        composable(
+            route = "player?groupId={groupId}&groupName={groupName}",
+            arguments = listOf(
+                navArgument("groupId") { type = NavType.StringType },
+                navArgument("groupName") { type = NavType.StringType; defaultValue = "" }
+            )
+        ) {
+            PlayerScreen(onBack = { navController.popBackStack() })
         }
     }
 }
