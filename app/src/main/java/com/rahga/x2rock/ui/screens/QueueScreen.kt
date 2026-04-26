@@ -31,13 +31,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.viewmodel.QueueViewModel
 
@@ -64,7 +64,7 @@ fun QueueScreen(
                 Spacer(Modifier.height(8.dp))
                 Text(s.message, style = MaterialTheme.typography.bodySmall)
                 Spacer(Modifier.height(24.dp))
-                Button(onClick = { viewModel.reload() }) { Text("Retry") }
+                AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
             }
             is QueueViewModel.UiState.Success -> QueueList(s.items, onBack, viewModel::playItem)
         }
@@ -89,7 +89,7 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
             .padding(start = 48.dp, top = 40.dp, end = 48.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Button(
+            AppButton(
                 onClick = onBack,
                 modifier = if (items.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
             ) { Text("← Back") }

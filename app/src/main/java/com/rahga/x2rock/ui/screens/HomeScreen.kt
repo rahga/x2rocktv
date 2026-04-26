@@ -43,7 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Button
 import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -52,6 +51,7 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.swatchColor
 import com.rahga.x2rock.viewmodel.HomeViewModel
 
@@ -174,7 +174,7 @@ private fun SettingsPanel(
 
             Spacer(Modifier.weight(1f))
 
-            Button(
+            AppButton(
                 onClick = onSignOut,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -327,7 +327,7 @@ private fun ErrorContent(message: String, onRetry: () -> Unit) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(message, style = MaterialTheme.typography.bodySmall)
         Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onRetry) {
+        AppButton(onClick = onRetry) {
             Text("Retry")
         }
     }

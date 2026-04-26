@@ -12,11 +12,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.tv.material3.Button
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
+import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.viewmodel.LoginUiState
 import com.rahga.x2rock.viewmodel.LoginViewModel
 
@@ -51,7 +51,7 @@ fun LoginScreen(
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(48.dp))
-            Button(
+            AppButton(
                 onClick = { onConnect(viewModel.buildAuthUrl()) },
                 enabled = state !is LoginUiState.Loading
             ) {
