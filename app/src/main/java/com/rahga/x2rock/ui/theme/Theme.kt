@@ -30,25 +30,49 @@ fun X2RockTheme(colorTheme: AppColorTheme = AppColorTheme.DEFAULT, content: @Com
             primary = Color(0xFF4FC3F7),
             onPrimary = Color(0xFF003048),
             primaryContainer = Color(0xFF00607A),
-            onPrimaryContainer = Color(0xFFB3EBFF)
+            onPrimaryContainer = Color(0xFFB3EBFF),
+            background = Color(0xFF0A1929),
+            onBackground = Color(0xFFE3F2FD),
+            surface = Color(0xFF0D2137),
+            onSurface = Color(0xFFE3F2FD),
+            surfaceVariant = Color(0xFF1A3A50),
+            onSurfaceVariant = Color(0xFFB3EBFF),
         )
         AppColorTheme.EMBER -> darkColorScheme(
             primary = Color(0xFFFF7043),
             onPrimary = Color(0xFF3B1100),
             primaryContainer = Color(0xFF712600),
-            onPrimaryContainer = Color(0xFFFFDBCF)
+            onPrimaryContainer = Color(0xFFFFDBCF),
+            background = Color(0xFF1A0A00),
+            onBackground = Color(0xFFFFF3E0),
+            surface = Color(0xFF2D1000),
+            onSurface = Color(0xFFFFF3E0),
+            surfaceVariant = Color(0xFF4A1E00),
+            onSurfaceVariant = Color(0xFFFFDBCF),
         )
         AppColorTheme.FOREST -> darkColorScheme(
             primary = Color(0xFF66BB6A),
             onPrimary = Color(0xFF003910),
             primaryContainer = Color(0xFF005320),
-            onPrimaryContainer = Color(0xFFA9F4B5)
+            onPrimaryContainer = Color(0xFFA9F4B5),
+            background = Color(0xFF061209),
+            onBackground = Color(0xFFE8F5E9),
+            surface = Color(0xFF0D2110),
+            onSurface = Color(0xFFE8F5E9),
+            surfaceVariant = Color(0xFF1B3A1E),
+            onSurfaceVariant = Color(0xFFA9F4B5),
         )
         AppColorTheme.ORCHID -> darkColorScheme(
             primary = Color(0xFFCE93D8),
             onPrimary = Color(0xFF3E0056),
             primaryContainer = Color(0xFF5B0080),
-            onPrimaryContainer = Color(0xFFF2DAFF)
+            onPrimaryContainer = Color(0xFFF2DAFF),
+            background = Color(0xFF120D16),
+            onBackground = Color(0xFFF3E5F5),
+            surface = Color(0xFF1E1525),
+            onSurface = Color(0xFFF3E5F5),
+            surfaceVariant = Color(0xFF36204A),
+            onSurfaceVariant = Color(0xFFF2DAFF),
         )
     }
     MaterialTheme(colorScheme = colorScheme, content = content)
