@@ -1,11 +1,11 @@
 package com.rahga.x2rock.viewmodel
 
-import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -43,19 +43,21 @@ data class PlayerUiState(
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    private val repository: SonosRepository,
-    savedStateHandle: SavedStateHandle
+    private val repository: SonosRepository
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val _groupId = MutableStateFlow<String?>(null)
+    private var pollingJob: Job? = null
 
-    private val _uiState = MutableStateFlow(
-        PlayerUiState(groupName = savedStateHandle["groupName"] ?: "")
-    )
+    private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
-    init {
-        viewModelScope.launch {
+    fun selectGroup(id: String, name: String) {
+        if (_groupId.value == id) return
+        _groupId.value = id
+        _uiState.value = PlayerUiState(groupName = name, isLoading = true)
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
             while (isActive) {
                 refresh()
                 delay(5_000L)
@@ -64,17 +66,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     private suspend fun refresh() {
+        val id = _groupId.value ?: return
         runCatching {
-            val playback = repository.getPlaybackState(groupId).getOrThrow()
-            val metadata = repository.getPlaybackMetadata(groupId).getOrNull()
-            val vol = repository.getGroupVolume(groupId).getOrThrow()
-            val playMode = repository.getPlayMode(groupId).getOrNull()
+            val playback = repository.getPlaybackState(id).getOrThrow()
+            val metadata = repository.getPlaybackMetadata(id).getOrNull()
+            val vol = repository.getGroupVolume(id).getOrThrow()
+            val playMode = repository.getPlayMode(id).getOrNull()
 
-            val playerIds = repository.getPlayerIdsForGroup(groupId)
+            val playerIds = repository.getPlayerIdsForGroup(id)
             val playerVols = if (playerIds.size > 1) {
-                playerIds.mapNotNull { id ->
-                    repository.getPlayerVolume(id).getOrNull()?.let { v ->
-                        PlayerVolumeEntry(id, repository.getPlayerName(id), v.volume, v.muted)
+                playerIds.mapNotNull { pid ->
+                    repository.getPlayerVolume(pid).getOrNull()?.let { v ->
+                        PlayerVolumeEntry(pid, repository.getPlayerName(pid), v.volume, v.muted)
                     }
                 }
             } else emptyList()
@@ -104,73 +107,79 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun togglePlayPause() {
+        val id = _groupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.togglePlayPause(groupId) }
+            runCatching { repository.togglePlayPause(id) }
             delay(300L)
             refresh()
         }
     }
 
     fun skipToNextTrack() {
+        val id = _groupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.skipToNextTrack(groupId) }
+            runCatching { repository.skipToNextTrack(id) }
             delay(300L)
             refresh()
         }
     }
 
     fun skipToPreviousTrack() {
+        val id = _groupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.skipToPreviousTrack(groupId) }
+            runCatching { repository.skipToPreviousTrack(id) }
             delay(300L)
             refresh()
         }
     }
 
     fun seekBy(deltaMillis: Long) {
+        _groupId.value ?: return
         val state = _uiState.value
         val elapsed = if (state.playbackState == "PLAYBACK_STATE_PLAYING")
             System.currentTimeMillis() - state.positionUpdatedAt else 0L
         val current = state.positionMillis + elapsed
         val target = (current + deltaMillis).coerceIn(0, state.durationMillis)
         _uiState.update { it.copy(positionMillis = target, positionUpdatedAt = System.currentTimeMillis()) }
+        val id = _groupId.value ?: return
         viewModelScope.launch {
-            runCatching { repository.seek(groupId, target) }
+            runCatching { repository.seek(id, target) }
             delay(300L)
             refresh()
         }
     }
 
     fun toggleMute() {
+        val id = _groupId.value ?: return
         val newMuted = !_uiState.value.isMuted
         _uiState.update { it.copy(isMuted = newMuted) }
         viewModelScope.launch {
-            runCatching { repository.setGroupMute(groupId, newMuted) }
+            runCatching { repository.setGroupMute(id, newMuted) }
         }
     }
 
     fun adjustVolume(delta: Int) {
+        val id = _groupId.value ?: return
         val newVol = (_uiState.value.volume + delta).coerceIn(0, 100)
         _uiState.update { it.copy(volume = newVol) }
         viewModelScope.launch {
-            runCatching { repository.setGroupVolume(groupId, newVol) }
+            runCatching { repository.setGroupVolume(id, newVol) }
         }
     }
 
     fun toggleShuffle() {
+        val id = _groupId.value ?: return
         val newShuffle = !_uiState.value.shuffle
         _uiState.update { it.copy(shuffle = newShuffle) }
         viewModelScope.launch {
             runCatching {
-                repository.setPlayMode(
-                    groupId,
-                    PlayModeState(repeat = _uiState.value.repeat, shuffle = newShuffle)
-                )
+                repository.setPlayMode(id, PlayModeState(repeat = _uiState.value.repeat, shuffle = newShuffle))
             }
         }
     }
 
     fun cycleRepeat() {
+        val id = _groupId.value ?: return
         val next = when (_uiState.value.repeat) {
             "REPEAT_NONE" -> "REPEAT_ALL"
             "REPEAT_ALL" -> "REPEAT_ONE"
@@ -179,15 +188,13 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(repeat = next) }
         viewModelScope.launch {
             runCatching {
-                repository.setPlayMode(
-                    groupId,
-                    PlayModeState(repeat = next, shuffle = _uiState.value.shuffle)
-                )
+                repository.setPlayMode(id, PlayModeState(repeat = next, shuffle = _uiState.value.shuffle))
             }
         }
     }
 
     fun adjustPlayerVolume(playerId: String, delta: Int) {
+        _groupId.value ?: return
         val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
         val newVol = (entry.volume + delta).coerceIn(0, 100)
         _uiState.update {
@@ -201,6 +208,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun togglePlayerMute(playerId: String) {
+        _groupId.value ?: return
         val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
         val newMuted = !entry.muted
         _uiState.update {

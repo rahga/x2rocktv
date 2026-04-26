@@ -1,6 +1,5 @@
 package com.rahga.x2rock.ui.screens
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,15 +24,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -47,14 +45,13 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun PlayerScreen(
-    onBack: () -> Unit,
+fun PlayerPane(
+    viewModel: PlayerViewModel,
+    detailFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
-    onOpenFavorites: () -> Unit,
-    viewModel: PlayerViewModel = hiltViewModel()
+    onOpenFavorites: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
-    BackHandler { onBack() }
 
     Surface(
         modifier = Modifier
@@ -80,7 +77,7 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             TrackInfo(state)
-            PlaybackControls(state, viewModel, onOpenQueue, onOpenFavorites)
+            PlaybackControls(state, viewModel, detailFocusRequester, onOpenQueue, onOpenFavorites)
         }
     }
 }
@@ -174,19 +171,18 @@ private fun ProgressBar(state: PlayerUiState) {
 private fun PlaybackControls(
     state: PlayerUiState,
     viewModel: PlayerViewModel,
+    playPauseFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit
 ) {
-    val playPauseFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        try { playPauseFocus.requestFocus() } catch (_: Exception) {}
+        try { playPauseFocusRequester.requestFocus() } catch (_: Exception) {}
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         ProgressBar(state)
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Transport controls
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -199,7 +195,7 @@ private fun PlaybackControls(
                 onClick = { viewModel.togglePlayPause() },
                 modifier = Modifier
                     .width(160.dp)
-                    .focusRequester(playPauseFocus)
+                    .focusRequester(playPauseFocusRequester)
             ) {
                 Text(if (state.playbackState == "PLAYBACK_STATE_PLAYING") "⏸  Pause" else "▶  Play")
             }
@@ -211,7 +207,6 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Shuffle / repeat / queue
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -228,7 +223,6 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Group volume
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -244,7 +238,6 @@ private fun PlaybackControls(
             }
         }
 
-        // Per-player volumes (only shown for multi-speaker groups)
         if (state.playerVolumes.isNotEmpty()) {
             Spacer(modifier = Modifier.height(24.dp))
             Text("Speakers", style = MaterialTheme.typography.titleSmall)

@@ -15,7 +15,6 @@ import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.LoginScreen
-import com.rahga.x2rock.ui.screens.PlayerScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
 import com.rahga.x2rock.viewmodel.LoginUiState
@@ -24,7 +23,6 @@ import com.rahga.x2rock.viewmodel.LoginViewModel
 @Composable
 fun X2RockNavGraph() {
     val navController = rememberNavController()
-    // Read initial auth state synchronously — LoginViewModel sets it without a coroutine
     val loginViewModel: LoginViewModel = hiltViewModel()
     val startDestination = remember {
         if (loginViewModel.state.value is LoginUiState.Authenticated) "home" else "login"
@@ -81,34 +79,16 @@ fun X2RockNavGraph() {
 
         composable("home") {
             HomeScreen(
-                onGroupSelected = { group ->
-                    navController.navigate(
-                        "player?groupId=${Uri.encode(group.id)}&groupName=${Uri.encode(group.name)}"
-                    )
+                onOpenQueue = { groupId ->
+                    navController.navigate("queue?groupId=${Uri.encode(groupId)}")
+                },
+                onOpenFavorites = { groupId ->
+                    navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
                 },
                 onSignedOut = {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
-                }
-            )
-        }
-
-        composable(
-            route = "player?groupId={groupId}&groupName={groupName}",
-            arguments = listOf(
-                navArgument("groupId") { type = NavType.StringType },
-                navArgument("groupName") { type = NavType.StringType; defaultValue = "" }
-            )
-        ) { backStackEntry ->
-            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
-            PlayerScreen(
-                onBack = { navController.popBackStack() },
-                onOpenQueue = {
-                    navController.navigate("queue?groupId=${Uri.encode(groupId)}")
-                },
-                onOpenFavorites = {
-                    navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
                 }
             )
         }
