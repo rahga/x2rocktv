@@ -24,7 +24,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -40,6 +41,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -162,15 +168,11 @@ private fun SettingsPanel(
             Text("Theme", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
 
-            AppColorTheme.entries.forEachIndexed { index, theme ->
-                ThemeOptionRow(
-                    theme = theme,
-                    selected = theme == currentTheme,
-                    onClick = { onThemeSelected(theme) },
-                    modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
-                )
-                Spacer(Modifier.height(6.dp))
-            }
+            ThemeSelector(
+                currentTheme = currentTheme,
+                onThemeSelected = onThemeSelected,
+                modifier = Modifier.focusRequester(firstFocus)
+            )
 
             Spacer(Modifier.weight(1f))
 
@@ -186,40 +188,59 @@ private fun SettingsPanel(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ThemeOptionRow(
-    theme: AppColorTheme,
-    selected: Boolean,
-    onClick: () -> Unit,
+private fun ThemeSelector(
+    currentTheme: AppColorTheme,
+    onThemeSelected: (AppColorTheme) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val themes = AppColorTheme.entries
+    val currentIndex = themes.indexOf(currentTheme)
+
     Surface(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+        onClick = {},
+        modifier = modifier
+            .fillMaxWidth()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> {
+                        onThemeSelected(themes[(currentIndex - 1 + themes.size) % themes.size])
+                        true
+                    }
+                    Key.DirectionRight -> {
+                        onThemeSelected(themes[(currentIndex + 1) % themes.size])
+                        true
+                    }
+                    else -> false
+                }
+            }
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                contentDescription = "Previous theme",
+                modifier = Modifier.size(20.dp)
+            )
             Box(
                 modifier = Modifier
                     .size(20.dp)
                     .clip(CircleShape)
-                    .background(theme.swatchColor())
+                    .background(currentTheme.swatchColor())
             )
             Text(
-                text = theme.displayName,
+                text = currentTheme.displayName,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f)
             )
-            if (selected) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Next theme",
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
