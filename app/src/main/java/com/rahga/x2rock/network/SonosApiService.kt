@@ -1,8 +1,10 @@
 package com.rahga.x2rock.network
 
+import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.HouseholdsResponse
+import com.rahga.x2rock.model.LoadFavoriteRequest
 import com.rahga.x2rock.model.PlayModeResponse
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackState
@@ -85,6 +87,15 @@ interface SonosApiService {
         @Path("groupId") groupId: String,
         @Query("limit") limit: Int = 50
     ): Response<QueueResponse>
+
+    @GET("households/{householdId}/favorites")
+    suspend fun getFavorites(@Path("householdId") householdId: String): Response<FavoritesResponse>
+
+    @POST("groups/{groupId}/favorites/loadFavorite")
+    suspend fun loadFavorite(
+        @Path("groupId") groupId: String,
+        @Body request: LoadFavoriteRequest
+    ): Response<ResponseBody>
 
     @GET("players/{playerId}/playerVolume")
     suspend fun getPlayerVolume(@Path("playerId") playerId: String): Response<GroupVolume>

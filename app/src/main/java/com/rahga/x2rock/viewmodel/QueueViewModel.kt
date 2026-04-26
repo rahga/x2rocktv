@@ -35,6 +35,12 @@ class QueueViewModel @Inject constructor(
 
     fun reload() = load()
 
+    fun playItem(trackNumber: Int) {
+        viewModelScope.launch {
+            repository.skipToQueueItem(groupId, trackNumber)
+        }
+    }
+
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading

@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Button
@@ -31,6 +32,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.viewmodel.HomeViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -63,7 +65,7 @@ fun HomeScreen(
 
             when (val s = state) {
                 is HomeViewModel.UiState.Loading -> LoadingContent()
-                is HomeViewModel.UiState.Success -> RoomsContent(s.groups, onGroupSelected)
+                is HomeViewModel.UiState.Success -> RoomsContent(s.groups, s.nowPlaying, onGroupSelected)
                 is HomeViewModel.UiState.Error -> ErrorContent(s.message, viewModel::loadGroups)
             }
         }
@@ -80,7 +82,7 @@ private fun LoadingContent() {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun RoomsContent(groups: List<Group>, onGroupSelected: (Group) -> Unit) {
+private fun RoomsContent(groups: List<Group>, nowPlaying: Map<String, Track?>, onGroupSelected: (Group) -> Unit) {
     val firstCardFocus = remember { FocusRequester() }
 
     LaunchedEffect(groups.isNotEmpty()) {
@@ -104,6 +106,7 @@ private fun RoomsContent(groups: List<Group>, onGroupSelected: (Group) -> Unit) 
                 items(groups) { group ->
                     RoomCard(
                         group = group,
+                        track = nowPlaying[group.id],
                         modifier = if (group == groups.first()) Modifier.focusRequester(firstCardFocus) else Modifier,
                         onClick = { onGroupSelected(group) }
                     )
@@ -115,10 +118,10 @@ private fun RoomsContent(groups: List<Group>, onGroupSelected: (Group) -> Unit) 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun RoomCard(group: Group, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun RoomCard(group: Group, track: Track?, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Card(
         onClick = onClick,
-        modifier = modifier.size(width = 280.dp, height = 160.dp)
+        modifier = modifier.size(width = 300.dp, height = 180.dp)
     ) {
         Column(
             modifier = Modifier
@@ -129,12 +132,33 @@ private fun RoomCard(group: Group, modifier: Modifier = Modifier, onClick: () ->
             Text(
                 text = group.name,
                 style = MaterialTheme.typography.headlineMedium,
-                maxLines = 2
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Text(
-                text = group.playbackState.toDisplayLabel(),
-                style = MaterialTheme.typography.bodyMedium
-            )
+            Column {
+                if (track?.name != null) {
+                    Text(
+                        text = track.name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    val sub = listOfNotNull(track.artist?.name, track.album?.name).joinToString(" • ")
+                    if (sub.isNotEmpty()) {
+                        Text(
+                            text = sub,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    Text(
+                        text = group.playbackState.toDisplayLabel(),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
         }
     }
 }

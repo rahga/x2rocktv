@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Button
+import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -64,14 +66,14 @@ fun QueueScreen(
                 Spacer(Modifier.height(24.dp))
                 Button(onClick = { viewModel.reload() }) { Text("Retry") }
             }
-            is QueueViewModel.UiState.Success -> QueueList(s.items, onBack)
+            is QueueViewModel.UiState.Success -> QueueList(s.items, onBack, viewModel::playItem)
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueList(items: List<QueueItem>, onBack: () -> Unit) {
+private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (Int) -> Unit) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
@@ -103,12 +105,13 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit) {
         LazyColumn(
             state = listState,
             contentPadding = PaddingValues(bottom = 48.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             itemsIndexed(items) { index, item ->
                 QueueRow(
                     index = index + 1,
                     item = item,
+                    onClick = { onPlayItem(index + 1) },
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
             }
@@ -118,40 +121,45 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueRow(index: Int, item: QueueItem, modifier: Modifier = Modifier) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier.padding(vertical = 4.dp)
+private fun QueueRow(index: Int, item: QueueItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        onClick = onClick,
+        modifier = modifier.fillMaxWidth()
     ) {
-        Text(
-            text = "$index",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(40.dp)
-        )
-        item.track?.imageUrl?.let { url ->
-            AsyncImage(
-                model = url,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(4.dp))
-            )
-            Spacer(Modifier.width(16.dp))
-        }
-        Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
             Text(
-                text = item.track?.name ?: "Unknown track",
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                text = "$index",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.width(40.dp)
             )
-            val sub = listOfNotNull(
-                item.track?.artist?.name,
-                item.track?.album?.name
-            ).joinToString(" • ")
-            if (sub.isNotEmpty()) {
-                Text(sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            item.track?.imageUrl?.let { url ->
+                AsyncImage(
+                    model = url,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                )
+                Spacer(Modifier.width(16.dp))
+            }
+            Column {
+                Text(
+                    text = item.track?.name ?: "Unknown track",
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val sub = listOfNotNull(
+                    item.track?.artist?.name,
+                    item.track?.album?.name
+                ).joinToString(" • ")
+                if (sub.isNotEmpty()) {
+                    Text(sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }

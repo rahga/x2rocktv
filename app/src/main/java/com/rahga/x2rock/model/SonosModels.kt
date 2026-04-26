@@ -52,7 +52,7 @@ data class GroupVolume(
 
 data class SetVolumeRequest(val volume: Int)
 data class SetMuteRequest(val muted: Boolean)
-data class SeekRequest(val positionMillis: Long)
+data class SeekRequest(val positionMillis: Long, val trackNumber: Int? = null)
 
 data class PlayModeState(
     val repeat: String = "REPEAT_NONE",
@@ -70,4 +70,19 @@ data class QueueItem(
 data class QueueResponse(
     val items: List<QueueItem> = emptyList(),
     val totalItems: Int = 0
+)
+
+data class Favorite(
+    val id: String,
+    val name: String,
+    val description: String? = null,
+    val imageUrl: String? = null
+)
+data class FavoritesResponse(
+    val items: List<Favorite> = emptyList(),
+    val totalItems: Int = 0
+)
+data class LoadFavoriteRequest(
+    val favoriteId: String,
+    val playOnCompletion: Boolean = true
 )

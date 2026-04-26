@@ -45,6 +45,7 @@ import kotlinx.coroutines.delay
 fun PlayerScreen(
     onBack: () -> Unit,
     onOpenQueue: () -> Unit,
+    onOpenFavorites: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -58,7 +59,7 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             TrackInfo(state)
-            PlaybackControls(state, viewModel, onOpenQueue)
+            PlaybackControls(state, viewModel, onOpenQueue, onOpenFavorites)
         }
     }
 }
@@ -152,7 +153,8 @@ private fun ProgressBar(state: PlayerUiState) {
 private fun PlaybackControls(
     state: PlayerUiState,
     viewModel: PlayerViewModel,
-    onOpenQueue: () -> Unit
+    onOpenQueue: () -> Unit,
+    onOpenFavorites: () -> Unit
 ) {
     val playPauseFocus = remember { FocusRequester() }
     LaunchedEffect(Unit) {
@@ -200,6 +202,7 @@ private fun PlaybackControls(
                 Text(state.repeat.toRepeatLabel())
             }
             Button(onClick = onOpenQueue) { Text("Queue") }
+            Button(onClick = onOpenFavorites) { Text("Favorites") }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
