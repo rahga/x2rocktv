@@ -26,6 +26,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -51,7 +56,23 @@ fun PlayerScreen(
     val state by viewModel.uiState.collectAsState()
     BackHandler { onBack() }
 
-    Surface(modifier = Modifier.fillMaxSize()) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        viewModel.togglePlayPause(); true
+                    }
+                    Key.MediaNext -> { viewModel.skipToNextTrack(); true }
+                    Key.MediaPrevious -> { viewModel.skipToPreviousTrack(); true }
+                    Key.MediaFastForward -> { viewModel.seekBy(+30_000L); true }
+                    Key.MediaRewind -> { viewModel.seekBy(-30_000L); true }
+                    else -> false
+                }
+            }
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
