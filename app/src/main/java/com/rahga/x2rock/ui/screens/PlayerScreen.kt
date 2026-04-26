@@ -23,6 +23,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -34,6 +36,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.viewmodel.PlayerUiState
+import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
 
@@ -41,6 +44,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun PlayerScreen(
     onBack: () -> Unit,
+    onOpenQueue: () -> Unit,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -54,7 +58,7 @@ fun PlayerScreen(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             TrackInfo(state)
-            PlaybackControls(state, viewModel)
+            PlaybackControls(state, viewModel, onOpenQueue)
         }
     }
 }
@@ -145,34 +149,62 @@ private fun ProgressBar(state: PlayerUiState) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PlaybackControls(state: PlayerUiState, viewModel: PlayerViewModel) {
+private fun PlaybackControls(
+    state: PlayerUiState,
+    viewModel: PlayerViewModel,
+    onOpenQueue: () -> Unit
+) {
+    val playPauseFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        try { playPauseFocus.requestFocus() } catch (_: Exception) {}
+    }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         ProgressBar(state)
         Spacer(modifier = Modifier.height(24.dp))
+
+        // Transport controls
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Button(onClick = { viewModel.skipToPreviousTrack() }) {
-                Text("⏮  Prev")
-            }
+            Button(onClick = { viewModel.skipToPreviousTrack() }) { Text("⏮  Prev") }
             if (state.durationMillis > 0) {
                 Button(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
             }
             Button(
                 onClick = { viewModel.togglePlayPause() },
-                modifier = Modifier.width(160.dp)
+                modifier = Modifier
+                    .width(160.dp)
+                    .focusRequester(playPauseFocus)
             ) {
                 Text(if (state.playbackState == "PLAYBACK_STATE_PLAYING") "⏸  Pause" else "▶  Play")
             }
             if (state.durationMillis > 0) {
                 Button(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }
             }
-            Button(onClick = { viewModel.skipToNextTrack() }) {
-                Text("Next  ⏭")
-            }
+            Button(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
         }
-        Spacer(modifier = Modifier.height(32.dp))
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Shuffle / repeat / queue
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = { viewModel.toggleShuffle() }) {
+                Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
+            }
+            Button(onClick = { viewModel.cycleRepeat() }) {
+                Text(state.repeat.toRepeatLabel())
+            }
+            Button(onClick = onOpenQueue) { Text("Queue") }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Group volume
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -186,6 +218,50 @@ private fun PlaybackControls(state: PlayerUiState, viewModel: PlayerViewModel) {
             Button(onClick = { viewModel.toggleMute() }) {
                 Text(if (state.isMuted) "Unmute" else "Mute")
             }
+        }
+
+        // Per-player volumes (only shown for multi-speaker groups)
+        if (state.playerVolumes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Speakers", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+            state.playerVolumes.forEach { entry ->
+                PlayerVolumeRow(entry, viewModel)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(vertical = 4.dp)
+    ) {
+        Text(
+            text = entry.playerName,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.width(160.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Button(
+            onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
+            enabled = !entry.muted
+        ) { Text("−") }
+        Text(
+            text = if (entry.muted) "Muted" else "${entry.volume}",
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.width(52.dp)
+        )
+        Button(
+            onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
+            enabled = !entry.muted
+        ) { Text("+") }
+        Button(onClick = { viewModel.togglePlayerMute(entry.playerId) }) {
+            Text(if (entry.muted) "Unmute" else "Mute")
         }
     }
 }
@@ -202,4 +278,10 @@ private fun String.toPlayerDisplayLabel(): String = when (this) {
     "PLAYBACK_STATE_PAUSED" -> "Paused"
     "PLAYBACK_STATE_BUFFERING" -> "Buffering"
     else -> "Idle"
+}
+
+private fun String.toRepeatLabel(): String = when (this) {
+    "REPEAT_ALL" -> "Repeat All"
+    "REPEAT_ONE" -> "Repeat One"
+    else -> "Repeat OFF"
 }

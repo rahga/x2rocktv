@@ -3,6 +3,7 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -15,7 +16,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: SonosRepository
+    private val repository: SonosRepository,
+    private val authRepository: SonosAuthRepository
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -38,6 +40,10 @@ class HomeViewModel @Inject constructor(
 
     fun loadGroups() {
         viewModelScope.launch { refresh() }
+    }
+
+    fun signOut() {
+        authRepository.clearTokens()
     }
 
     private suspend fun refresh() {

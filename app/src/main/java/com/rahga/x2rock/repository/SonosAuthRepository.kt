@@ -6,6 +6,8 @@ import android.util.Log
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
@@ -28,6 +30,7 @@ class SonosAuthRepository @Inject constructor(
     }
 
     @Volatile private var pendingState: String? = null
+    private val refreshMutex = Mutex()
 
     val isAuthenticated: Boolean get() = tokenStore.isAuthenticated
     val accessToken: String? get() = tokenStore.accessToken
@@ -95,6 +98,17 @@ class SonosAuthRepository @Inject constructor(
     }
 
     fun clearTokens() = tokenStore.clear()
+
+    suspend fun ensureValidToken() {
+        val expiresAt = tokenStore.expiresAt
+        if (expiresAt > 0 && System.currentTimeMillis() > expiresAt - 60_000L) {
+            refreshMutex.withLock {
+                if (System.currentTimeMillis() > tokenStore.expiresAt - 60_000L) {
+                    refreshAccessToken()
+                }
+            }
+        }
+    }
 
     private fun tokenRequest(code: String): Request {
         val body = FormBody.Builder()
