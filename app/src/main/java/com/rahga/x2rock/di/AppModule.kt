@@ -1,6 +1,7 @@
 package com.rahga.x2rock.di
 
 import com.rahga.x2rock.BuildConfig
+import com.rahga.x2rock.network.AuthInterceptor
 import com.rahga.x2rock.network.SonosApiService
 import dagger.Module
 import dagger.Provides
@@ -18,33 +19,35 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val logging = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) {
-                HttpLoggingInterceptor.Level.BODY
-            } else {
-                HttpLoggingInterceptor.Level.NONE
-            }
+    fun provideLoggingInterceptor(): HttpLoggingInterceptor =
+        HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
+                    else HttpLoggingInterceptor.Level.NONE
         }
-        return OkHttpClient.Builder()
+
+    // Plain client used by SonosAuthRepository for token exchange (sets its own auth headers)
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(logging: HttpLoggingInterceptor): OkHttpClient =
+        OkHttpClient.Builder()
             .addInterceptor(logging)
             .build()
-    }
 
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
-        // Base URL will be set dynamically per-player on the local network
+    fun provideSonosApiService(
+        authInterceptor: AuthInterceptor,
+        logging: HttpLoggingInterceptor
+    ): SonosApiService {
+        val client = OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
+            .addInterceptor(logging)
+            .build()
         return Retrofit.Builder()
-            .baseUrl("http://localhost/")
-            .client(okHttpClient)
+            .baseUrl("https://api.ws.sonos.com/control/api/v1/")
+            .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideSonosApiService(retrofit: Retrofit): SonosApiService {
-        return retrofit.create(SonosApiService::class.java)
+            .create(SonosApiService::class.java)
     }
 }
