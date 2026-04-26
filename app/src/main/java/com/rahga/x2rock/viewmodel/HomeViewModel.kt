@@ -2,6 +2,8 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.repository.SonosAuthRepository
@@ -21,7 +23,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: SonosRepository,
-    private val authRepository: SonosAuthRepository
+    private val authRepository: SonosAuthRepository,
+    private val themeStore: ThemeStore
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -32,6 +35,8 @@ class HomeViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+
+    val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
 
     init {
         viewModelScope.launch {
@@ -49,6 +54,8 @@ class HomeViewModel @Inject constructor(
     fun signOut() {
         authRepository.clearTokens()
     }
+
+    fun setTheme(theme: AppColorTheme) = themeStore.setTheme(theme)
 
     private suspend fun refresh() {
         val showSpinner = _uiState.value is UiState.Error || _uiState.value is UiState.Loading
