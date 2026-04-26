@@ -5,9 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -26,16 +28,28 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     init {
-        loadGroups()
+        viewModelScope.launch {
+            while (isActive) {
+                refresh()
+                delay(5_000L)
+            }
+        }
     }
 
     fun loadGroups() {
-        viewModelScope.launch {
-            _uiState.value = UiState.Loading
-            repository.getGroups().fold(
-                onSuccess = { groups -> _uiState.value = UiState.Success(groups) },
-                onFailure = { e -> _uiState.value = UiState.Error(e.message ?: "Unknown error") }
-            )
-        }
+        viewModelScope.launch { refresh() }
+    }
+
+    private suspend fun refresh() {
+        val showSpinner = _uiState.value is UiState.Error || _uiState.value is UiState.Loading
+        if (showSpinner) _uiState.value = UiState.Loading
+        repository.getGroups().fold(
+            onSuccess = { groups -> _uiState.value = UiState.Success(groups) },
+            onFailure = { e ->
+                if (_uiState.value !is UiState.Success) {
+                    _uiState.value = UiState.Error(e.message ?: "Unknown error")
+                }
+            }
+        )
     }
 }

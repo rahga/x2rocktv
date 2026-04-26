@@ -38,7 +38,8 @@ data class Track(
     val name: String?,
     val artist: TrackArtist?,
     val album: TrackAlbum?,
-    val imageUrl: String?
+    val imageUrl: String?,
+    val durationMillis: Long = 0
 )
 data class CurrentItem(val track: Track?)
 data class PlaybackMetadata(val currentItem: CurrentItem?)
@@ -50,3 +51,5 @@ data class GroupVolume(
 )
 
 data class SetVolumeRequest(val volume: Int)
+data class SetMuteRequest(val muted: Boolean)
+data class SeekRequest(val positionMillis: Long)

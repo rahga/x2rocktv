@@ -4,6 +4,8 @@ import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackState
+import com.rahga.x2rock.model.SeekRequest
+import com.rahga.x2rock.model.SetMuteRequest
 import com.rahga.x2rock.model.SetVolumeRequest
 import com.rahga.x2rock.network.SonosApiService
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +65,14 @@ class SonosRepository @Inject constructor(
 
     suspend fun setGroupVolume(groupId: String, volume: Int): Result<GroupVolume> = withContext(Dispatchers.IO) {
         runCatching { fetchWithRefresh { apiService.setGroupVolume(groupId, SetVolumeRequest(volume)) } }
+    }
+
+    suspend fun setGroupMute(groupId: String, muted: Boolean): Result<GroupVolume> = withContext(Dispatchers.IO) {
+        runCatching { fetchWithRefresh { apiService.setGroupMute(groupId, SetMuteRequest(muted)) } }
+    }
+
+    suspend fun seek(groupId: String, positionMillis: Long): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { executeWithRefresh { apiService.seek(groupId, SeekRequest(positionMillis)) } }
     }
 
     private suspend fun <T> fetchWithRefresh(call: suspend () -> Response<T>): T {
