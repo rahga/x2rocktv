@@ -20,6 +20,10 @@ data class PlayerUiState(
     val trackName: String? = null,
     val artistName: String? = null,
     val albumName: String? = null,
+    val albumArtUrl: String? = null,
+    val positionMillis: Long = 0,
+    val durationMillis: Long = 0,
+    val positionUpdatedAt: Long = 0,
     val volume: Int = 0,
     val isMuted: Boolean = false,
     val isLoading: Boolean = true,
@@ -61,6 +65,10 @@ class PlayerViewModel @Inject constructor(
                     trackName = metadata?.currentItem?.track?.name,
                     artistName = metadata?.currentItem?.track?.artist?.name,
                     albumName = metadata?.currentItem?.track?.album?.name,
+                    albumArtUrl = metadata?.currentItem?.track?.imageUrl,
+                    durationMillis = metadata?.currentItem?.track?.durationMillis ?: 0,
+                    positionMillis = playback.positionMillis,
+                    positionUpdatedAt = System.currentTimeMillis(),
                     volume = vol.volume,
                     isMuted = vol.muted
                 )
@@ -91,6 +99,28 @@ class PlayerViewModel @Inject constructor(
             runCatching { repository.skipToPreviousTrack(groupId) }
             delay(300L)
             refresh()
+        }
+    }
+
+    fun seekBy(deltaMillis: Long) {
+        val state = _uiState.value
+        val elapsed = if (state.playbackState == "PLAYBACK_STATE_PLAYING")
+            System.currentTimeMillis() - state.positionUpdatedAt else 0L
+        val current = state.positionMillis + elapsed
+        val target = (current + deltaMillis).coerceIn(0, state.durationMillis)
+        _uiState.update { it.copy(positionMillis = target, positionUpdatedAt = System.currentTimeMillis()) }
+        viewModelScope.launch {
+            runCatching { repository.seek(groupId, target) }
+            delay(300L)
+            refresh()
+        }
+    }
+
+    fun toggleMute() {
+        val newMuted = !_uiState.value.isMuted
+        _uiState.update { it.copy(isMuted = newMuted) }
+        viewModelScope.launch {
+            runCatching { repository.setGroupMute(groupId, newMuted) }
         }
     }
 

@@ -5,6 +5,8 @@ import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.HouseholdsResponse
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackState
+import com.rahga.x2rock.model.SeekRequest
+import com.rahga.x2rock.model.SetMuteRequest
 import com.rahga.x2rock.model.SetVolumeRequest
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -38,6 +40,12 @@ interface SonosApiService {
         @Body body: Map<String, @JvmSuppressWildcards Any>
     ): Response<ResponseBody>
 
+    @POST("groups/{groupId}/playback/seek")
+    suspend fun seek(
+        @Path("groupId") groupId: String,
+        @Body request: SeekRequest
+    ): Response<ResponseBody>
+
     @POST("groups/{groupId}/playback/skipToPreviousTrack")
     suspend fun skipToPreviousTrack(
         @Path("groupId") groupId: String,
@@ -51,5 +59,11 @@ interface SonosApiService {
     suspend fun setGroupVolume(
         @Path("groupId") groupId: String,
         @Body request: SetVolumeRequest
+    ): Response<GroupVolume>
+
+    @POST("groups/{groupId}/groupVolume/mute")
+    suspend fun setGroupMute(
+        @Path("groupId") groupId: String,
+        @Body request: SetMuteRequest
     ): Response<GroupVolume>
 }
