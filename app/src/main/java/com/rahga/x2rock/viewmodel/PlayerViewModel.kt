@@ -3,6 +3,7 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
@@ -13,6 +14,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class PlayerVolumeEntry(
+    val playerId: String,
+    val playerName: String,
+    val volume: Int,
+    val muted: Boolean
+)
 
 data class PlayerUiState(
     val groupName: String = "",
@@ -26,6 +34,9 @@ data class PlayerUiState(
     val positionUpdatedAt: Long = 0,
     val volume: Int = 0,
     val isMuted: Boolean = false,
+    val shuffle: Boolean = false,
+    val repeat: String = "REPEAT_NONE",
+    val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null
 )
@@ -57,6 +68,17 @@ class PlayerViewModel @Inject constructor(
             val playback = repository.getPlaybackState(groupId).getOrThrow()
             val metadata = repository.getPlaybackMetadata(groupId).getOrNull()
             val vol = repository.getGroupVolume(groupId).getOrThrow()
+            val playMode = repository.getPlayMode(groupId).getOrNull()
+
+            val playerIds = repository.getPlayerIdsForGroup(groupId)
+            val playerVols = if (playerIds.size > 1) {
+                playerIds.mapNotNull { id ->
+                    repository.getPlayerVolume(id).getOrNull()?.let { v ->
+                        PlayerVolumeEntry(id, repository.getPlayerName(id), v.volume, v.muted)
+                    }
+                }
+            } else emptyList()
+
             _uiState.update {
                 it.copy(
                     isLoading = false,
@@ -70,7 +92,10 @@ class PlayerViewModel @Inject constructor(
                     positionMillis = playback.positionMillis,
                     positionUpdatedAt = System.currentTimeMillis(),
                     volume = vol.volume,
-                    isMuted = vol.muted
+                    isMuted = vol.muted,
+                    shuffle = playMode?.playMode?.shuffle ?: it.shuffle,
+                    repeat = playMode?.playMode?.repeat ?: it.repeat,
+                    playerVolumes = playerVols
                 )
             }
         }.onFailure { e ->
@@ -129,6 +154,62 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(volume = newVol) }
         viewModelScope.launch {
             runCatching { repository.setGroupVolume(groupId, newVol) }
+        }
+    }
+
+    fun toggleShuffle() {
+        val newShuffle = !_uiState.value.shuffle
+        _uiState.update { it.copy(shuffle = newShuffle) }
+        viewModelScope.launch {
+            runCatching {
+                repository.setPlayMode(
+                    groupId,
+                    PlayModeState(repeat = _uiState.value.repeat, shuffle = newShuffle)
+                )
+            }
+        }
+    }
+
+    fun cycleRepeat() {
+        val next = when (_uiState.value.repeat) {
+            "REPEAT_NONE" -> "REPEAT_ALL"
+            "REPEAT_ALL" -> "REPEAT_ONE"
+            else -> "REPEAT_NONE"
+        }
+        _uiState.update { it.copy(repeat = next) }
+        viewModelScope.launch {
+            runCatching {
+                repository.setPlayMode(
+                    groupId,
+                    PlayModeState(repeat = next, shuffle = _uiState.value.shuffle)
+                )
+            }
+        }
+    }
+
+    fun adjustPlayerVolume(playerId: String, delta: Int) {
+        val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
+        val newVol = (entry.volume + delta).coerceIn(0, 100)
+        _uiState.update {
+            it.copy(playerVolumes = it.playerVolumes.map { e ->
+                if (e.playerId == playerId) e.copy(volume = newVol) else e
+            })
+        }
+        viewModelScope.launch {
+            runCatching { repository.setPlayerVolume(playerId, newVol) }
+        }
+    }
+
+    fun togglePlayerMute(playerId: String) {
+        val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
+        val newMuted = !entry.muted
+        _uiState.update {
+            it.copy(playerVolumes = it.playerVolumes.map { e ->
+                if (e.playerId == playerId) e.copy(muted = newMuted) else e
+            })
+        }
+        viewModelScope.launch {
+            runCatching { repository.setPlayerMute(playerId, newMuted) }
         }
     }
 }

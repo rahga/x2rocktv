@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -14,14 +15,21 @@ import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.LoginScreen
 import com.rahga.x2rock.ui.screens.PlayerScreen
+import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
+import com.rahga.x2rock.viewmodel.LoginUiState
 import com.rahga.x2rock.viewmodel.LoginViewModel
 
 @Composable
 fun X2RockNavGraph() {
     val navController = rememberNavController()
+    // Read initial auth state synchronously — LoginViewModel sets it without a coroutine
+    val loginViewModel: LoginViewModel = hiltViewModel()
+    val startDestination = remember {
+        if (loginViewModel.state.value is LoginUiState.Authenticated) "home" else "login"
+    }
 
-    NavHost(navController = navController, startDestination = "login") {
+    NavHost(navController = navController, startDestination = startDestination) {
         composable("login") { backStackEntry ->
             val viewModel: LoginViewModel = hiltViewModel()
 
@@ -76,6 +84,11 @@ fun X2RockNavGraph() {
                     navController.navigate(
                         "player?groupId=${Uri.encode(group.id)}&groupName=${Uri.encode(group.name)}"
                     )
+                },
+                onSignedOut = {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }
@@ -86,8 +99,21 @@ fun X2RockNavGraph() {
                 navArgument("groupId") { type = NavType.StringType },
                 navArgument("groupName") { type = NavType.StringType; defaultValue = "" }
             )
+        ) { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            PlayerScreen(
+                onBack = { navController.popBackStack() },
+                onOpenQueue = {
+                    navController.navigate("queue?groupId=${Uri.encode(groupId)}")
+                }
+            )
+        }
+
+        composable(
+            route = "queue?groupId={groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
-            PlayerScreen(onBack = { navController.popBackStack() })
+            QueueScreen(onBack = { navController.popBackStack() })
         }
     }
 }

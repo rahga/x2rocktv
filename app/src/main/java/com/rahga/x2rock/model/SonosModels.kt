@@ -53,3 +53,21 @@ data class GroupVolume(
 data class SetVolumeRequest(val volume: Int)
 data class SetMuteRequest(val muted: Boolean)
 data class SeekRequest(val positionMillis: Long)
+
+data class PlayModeState(
+    val repeat: String = "REPEAT_NONE",
+    val shuffle: Boolean = false,
+    val crossfade: Boolean = false
+)
+data class PlayModeResponse(val playMode: PlayModeState)
+data class SetPlayModeRequest(val playMode: PlayModeState)
+
+data class QueueItem(
+    val id: String = "",
+    val track: Track? = null,
+    val deleted: Boolean = false
+)
+data class QueueResponse(
+    val items: List<QueueItem> = emptyList(),
+    val totalItems: Int = 0
+)
