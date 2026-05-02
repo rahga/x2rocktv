@@ -4,6 +4,7 @@ import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.LoadFavoriteRequest
+import com.rahga.x2rock.model.ModifyGroupMembersRequest
 import com.rahga.x2rock.model.PlayModeResponse
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackMetadata
@@ -124,6 +125,31 @@ class SonosRepository @Inject constructor(
 
     suspend fun setPlayerMute(playerId: String, muted: Boolean): Result<GroupVolume> = withContext(Dispatchers.IO) {
         runCatching { fetchWithRefresh { apiService.setPlayerMute(playerId, SetMuteRequest(muted)) } }
+    }
+
+    suspend fun joinGroup(sourceGroup: Group, targetGroupId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { modifyGroupMembers(targetGroupId, ModifyGroupMembersRequest(playerIdsToAdd = sourceGroup.playerIds)) }
+    }
+
+    suspend fun soloGroup(group: Group): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val toRemove = group.playerIds.filter { it != group.coordinatorId }
+            if (toRemove.isEmpty()) return@runCatching
+            modifyGroupMembers(group.id, ModifyGroupMembersRequest(playerIdsToRemove = toRemove))
+        }
+    }
+
+    suspend fun partyMode(topGroup: Group, otherGroups: List<Group>): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val playerIdsToAdd = otherGroups.flatMap { it.playerIds }
+            if (playerIdsToAdd.isEmpty()) return@runCatching
+            modifyGroupMembers(topGroup.id, ModifyGroupMembersRequest(playerIdsToAdd = playerIdsToAdd))
+        }
+    }
+
+    private suspend fun modifyGroupMembers(groupId: String, request: ModifyGroupMembersRequest) {
+        val householdId = cachedHouseholdId ?: error("No household cached")
+        executeWithRefresh { apiService.modifyGroupMembers(householdId, groupId, request) }
     }
 
     suspend fun getFavorites(): Result<FavoritesResponse> = withContext(Dispatchers.IO) {

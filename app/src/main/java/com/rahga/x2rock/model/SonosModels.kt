@@ -86,3 +86,8 @@ data class LoadFavoriteRequest(
     val favoriteId: String,
     val playOnCompletion: Boolean = true
 )
+
+data class ModifyGroupMembersRequest(
+    val playerIdsToAdd: List<String> = emptyList(),
+    val playerIdsToRemove: List<String> = emptyList()
+)
