@@ -43,6 +43,12 @@ class QueueViewModel @Inject constructor(
         }
     }
 
+    fun removeItem(itemId: String) {
+        viewModelScope.launch {
+            repository.deleteQueueItems(groupId, listOf(itemId)).onSuccess { load() }
+        }
+    }
+
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading

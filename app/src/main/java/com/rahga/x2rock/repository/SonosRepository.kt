@@ -1,5 +1,6 @@
 package com.rahga.x2rock.repository
 
+import com.rahga.x2rock.model.DeleteQueueItemsRequest
 import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
@@ -81,6 +82,10 @@ class SonosRepository @Inject constructor(
 
     suspend fun getQueue(groupId: String): Result<QueueResponse> = withContext(Dispatchers.IO) {
         runCatching { fetchWithRefresh { apiService.getQueue(groupId) } }
+    }
+
+    suspend fun deleteQueueItems(groupId: String, ids: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { executeWithRefresh { apiService.deleteQueueItems(groupId, DeleteQueueItemsRequest(ids)) } }
     }
 
     suspend fun togglePlayPause(groupId: String): Result<Unit> = withContext(Dispatchers.IO) {

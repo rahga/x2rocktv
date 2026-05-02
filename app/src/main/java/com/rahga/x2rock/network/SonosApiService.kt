@@ -1,5 +1,6 @@
 package com.rahga.x2rock.network
 
+import com.rahga.x2rock.model.DeleteQueueItemsRequest
 import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.GroupsResponse
@@ -86,7 +87,7 @@ interface SonosApiService {
     @GET("groups/{groupId}/queue")
     suspend fun getQueue(
         @Path("groupId") groupId: String,
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 500
     ): Response<QueueResponse>
 
     @GET("households/{householdId}/favorites")
@@ -112,6 +113,12 @@ interface SonosApiService {
         @Path("playerId") playerId: String,
         @Body request: SetMuteRequest
     ): Response<GroupVolume>
+
+    @POST("groups/{groupId}/queue/delete")
+    suspend fun deleteQueueItems(
+        @Path("groupId") groupId: String,
+        @Body request: DeleteQueueItemsRequest
+    ): Response<ResponseBody>
 
     @POST("households/{householdId}/groups/{groupId}/modifyGroupMembers")
     suspend fun modifyGroupMembers(

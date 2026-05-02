@@ -39,7 +39,8 @@ data class PlayerUiState(
     val crossfade: Boolean = false,
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
-    val error: String? = null
+    val error: String? = null,
+    val sleepTimerRemainingMillis: Long? = null
 )
 
 @HiltViewModel
@@ -49,6 +50,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _groupId = MutableStateFlow<String?>(null)
     private var pollingJob: Job? = null
+    private var volumeDebounceJob: Job? = null
+    private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
+    private var sleepTimerJob: Job? = null
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
@@ -58,6 +62,7 @@ class PlayerViewModel @Inject constructor(
         _groupId.value = id
         _uiState.value = PlayerUiState(groupName = name, isLoading = true)
         pollingJob?.cancel()
+        cancelSleepTimer()
         pollingJob = viewModelScope.launch {
             while (isActive) {
                 refresh()
@@ -164,7 +169,9 @@ class PlayerViewModel @Inject constructor(
         val id = _groupId.value ?: return
         val newVol = (_uiState.value.volume + delta).coerceIn(0, 100)
         _uiState.update { it.copy(volume = newVol) }
-        viewModelScope.launch {
+        volumeDebounceJob?.cancel()
+        volumeDebounceJob = viewModelScope.launch {
+            delay(300L)
             runCatching { repository.setGroupVolume(id, newVol) }
         }
     }
@@ -199,7 +206,9 @@ class PlayerViewModel @Inject constructor(
                 if (e.playerId == playerId) e.copy(volume = newVol) else e
             })
         }
-        viewModelScope.launch {
+        playerVolumeDebounceJobs[playerId]?.cancel()
+        playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
+            delay(300L)
             runCatching { repository.setPlayerVolume(playerId, newVol) }
         }
     }
@@ -216,5 +225,35 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repository.setPlayerMute(playerId, newMuted) }
         }
+    }
+
+    fun setSleepTimer(minutes: Int) {
+        val groupId = _groupId.value ?: return
+        sleepTimerJob?.cancel()
+        val endMs = System.currentTimeMillis() + minutes * 60_000L
+        _uiState.update { it.copy(sleepTimerRemainingMillis = minutes * 60_000L) }
+        sleepTimerJob = viewModelScope.launch {
+            while (isActive) {
+                val remaining = endMs - System.currentTimeMillis()
+                if (remaining <= 0) {
+                    _uiState.update { it.copy(sleepTimerRemainingMillis = null) }
+                    sleepTimerJob = null
+                    if (_uiState.value.playbackState == "PLAYBACK_STATE_PLAYING") {
+                        runCatching { repository.togglePlayPause(groupId) }
+                        delay(300L)
+                        refresh()
+                    }
+                    break
+                }
+                _uiState.update { it.copy(sleepTimerRemainingMillis = remaining) }
+                delay(1_000L)
+            }
+        }
+    }
+
+    fun cancelSleepTimer() {
+        sleepTimerJob?.cancel()
+        sleepTimerJob = null
+        _uiState.update { it.copy(sleepTimerRemainingMillis = null) }
     }
 }

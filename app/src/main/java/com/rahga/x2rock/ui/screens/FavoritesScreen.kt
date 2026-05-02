@@ -1,6 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,6 +70,7 @@ fun FavoritesScreen(
             }
             is FavoritesViewModel.UiState.Success -> FavoritesList(
                 items = s.items,
+                activeId = s.activeId,
                 loadingId = loadingId,
                 onBack = onBack,
                 onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
@@ -81,6 +83,7 @@ fun FavoritesScreen(
 @Composable
 private fun FavoritesList(
     items: List<Favorite>,
+    activeId: String?,
     loadingId: String?,
     onBack: () -> Unit,
     onPlay: (Favorite) -> Unit
@@ -121,6 +124,7 @@ private fun FavoritesList(
             itemsIndexed(items) { index, fav ->
                 FavoriteRow(
                     favorite = fav,
+                    isActive = activeId == fav.id,
                     isLoading = loadingId == fav.id,
                     enabled = loadingId == null,
                     onClick = { onPlay(fav) },
@@ -135,6 +139,7 @@ private fun FavoritesList(
 @Composable
 private fun FavoriteRow(
     favorite: Favorite,
+    isActive: Boolean,
     isLoading: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -142,7 +147,12 @@ private fun FavoriteRow(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (isActive) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                else Modifier
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -174,6 +184,10 @@ private fun FavoriteRow(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
+            if (isActive && !isLoading) {
+                Spacer(Modifier.width(16.dp))
+                Text("▶ Now Playing", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             if (isLoading) {
                 Spacer(Modifier.width(16.dp))
