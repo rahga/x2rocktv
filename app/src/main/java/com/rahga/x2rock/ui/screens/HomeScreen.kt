@@ -69,6 +69,7 @@ import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.swatchColor
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
@@ -107,7 +108,7 @@ fun HomeScreen(
     // When sidebar hides, move focus to detail pane
     LaunchedEffect(sidebarVisible) {
         if (!sidebarVisible) {
-            try { detailFocusRequester.requestFocus() } catch (_: Exception) {}
+            detailFocusRequester.requestFocusSafely()
         }
     }
 
@@ -117,7 +118,7 @@ fun HomeScreen(
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
-        if (showSettings) try { settingsFocus.requestFocus() } catch (_: Exception) {}
+        if (showSettings) settingsFocus.requestFocusSafely()
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -157,7 +158,7 @@ fun HomeScreen(
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown && event.key == Key.Back) {
                             if (!sidebarVisible) homeViewModel.toggleSidebar()
-                            try { sidebarFocusRequester.requestFocus() } catch (_: Exception) {}
+                            sidebarFocusRequester.requestFocusSafely()
                             true
                         } else false
                     }
@@ -466,7 +467,7 @@ private fun RoomContextMenu(
     onDismiss: () -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -520,7 +521,7 @@ private fun GroupPickerOverlay(
     onDismiss: () -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(

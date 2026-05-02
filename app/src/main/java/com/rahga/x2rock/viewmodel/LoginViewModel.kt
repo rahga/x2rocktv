@@ -9,11 +9,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-sealed class LoginUiState {
-    data object Idle : LoginUiState()
-    data object Loading : LoginUiState()
-    data object Authenticated : LoginUiState()
-    data class Error(val message: String) : LoginUiState()
+sealed interface LoginUiState {
+    data object Idle : LoginUiState
+    data object Loading : LoginUiState
+    data object Authenticated : LoginUiState
+    data class Error(val message: String) : LoginUiState
 }
 
 @HiltViewModel

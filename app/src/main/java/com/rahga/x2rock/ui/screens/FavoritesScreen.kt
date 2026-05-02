@@ -39,6 +39,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
 
@@ -93,7 +94,7 @@ private fun FavoritesList(
 
     LaunchedEffect(items.isNotEmpty()) {
         if (items.isNotEmpty()) {
-            try { firstFocus.requestFocus() } catch (_: Exception) {}
+            firstFocus.requestFocusSafely()
         }
     }
 

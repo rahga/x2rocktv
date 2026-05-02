@@ -2,7 +2,6 @@ package com.rahga.x2rock.repository
 
 import android.net.Uri
 import android.util.Base64
-import android.util.Log
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +46,6 @@ class SonosAuthRepository @Inject constructor(
             .appendQueryParameter("redirect_uri", REDIRECT_URI)
             .build()
             .toString()
-        Log.d("SonosAuth", "Authorization URL: $url")
         return url
     }
 

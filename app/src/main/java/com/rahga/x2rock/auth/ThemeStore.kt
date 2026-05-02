@@ -22,7 +22,7 @@ class ThemeStore @Inject constructor(@ApplicationContext context: Context) {
     }
 
     private fun loadTheme(): AppColorTheme = try {
-        AppColorTheme.valueOf(prefs.getString(KEY_THEME, AppColorTheme.DEFAULT.name)!!)
+        AppColorTheme.valueOf(prefs.getString(KEY_THEME, null) ?: AppColorTheme.DEFAULT.name)
     } catch (_: Exception) {
         AppColorTheme.DEFAULT
     }
