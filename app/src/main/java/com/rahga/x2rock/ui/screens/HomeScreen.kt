@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
@@ -90,6 +91,7 @@ fun HomeScreen(
 
     var showSettings by remember { mutableStateOf(false) }
     var contextMenuGroup by remember { mutableStateOf<Group?>(null) }
+    var groupPickerSource by remember { mutableStateOf<Group?>(null) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
@@ -110,6 +112,7 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = groupPickerSource != null) { groupPickerSource = null }
     BackHandler(enabled = contextMenuGroup != null) { contextMenuGroup = null }
 
     val settingsFocus = remember { FocusRequester() }
@@ -138,6 +141,7 @@ fun HomeScreen(
                     detailFocusRequester = detailFocusRequester,
                     onFocused = { homeViewModel.selectGroup(it.id) },
                     onLongPress = { contextMenuGroup = it },
+                    onPartyModeClick = { homeViewModel.partyMode() },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
                     onCollapseByKey = { homeViewModel.toggleSidebar() }
@@ -213,6 +217,7 @@ fun HomeScreen(
                     group = menuGroup,
                     isPrimary = menuGroup.id == primaryRoomId,
                     isFavorite = menuGroup.id in favoriteRoomIds,
+                    otherGroups = groups.filter { it.id != menuGroup.id },
                     onSetPrimary = {
                         homeViewModel.setPrimaryRoom(if (menuGroup.id == primaryRoomId) null else menuGroup.id)
                         contextMenuGroup = null
@@ -221,7 +226,34 @@ fun HomeScreen(
                         homeViewModel.toggleFavorite(menuGroup.id)
                         contextMenuGroup = null
                     },
+                    onGroupWith = {
+                        groupPickerSource = menuGroup
+                        contextMenuGroup = null
+                    },
+                    onGoSolo = {
+                        homeViewModel.soloGroup(menuGroup.id)
+                        contextMenuGroup = null
+                    },
                     onDismiss = { contextMenuGroup = null }
+                )
+            }
+        }
+
+        val pickerSource = groupPickerSource
+        if (pickerSource != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f))
+            ) {
+                GroupPickerOverlay(
+                    sourceGroup = pickerSource,
+                    availableGroups = groups.filter { it.id != pickerSource.id },
+                    onPick = { target ->
+                        homeViewModel.joinGroup(pickerSource.id, target.id)
+                        groupPickerSource = null
+                    },
+                    onDismiss = { groupPickerSource = null }
                 )
             }
         }
@@ -241,6 +273,7 @@ private fun RoomSidebar(
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
     onLongPress: (Group) -> Unit,
+    onPartyModeClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
     onCollapseByKey: () -> Unit
@@ -277,15 +310,14 @@ private fun RoomSidebar(
         ) {
             Text("x2rock", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Surface(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(18.dp))
-                    }
+                SidebarIconButton(onClick = onPartyModeClick) {
+                    Icon(Icons.Default.Celebration, contentDescription = "Party mode", modifier = Modifier.size(18.dp))
                 }
-                Surface(onClick = onCollapseClick, modifier = Modifier.size(36.dp)) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text("◀", style = MaterialTheme.typography.bodyMedium)
-                    }
+                SidebarIconButton(onClick = onSettingsClick) {
+                    Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(18.dp))
+                }
+                SidebarIconButton(onClick = onCollapseClick) {
+                    Text("◀", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -419,8 +451,11 @@ private fun RoomContextMenu(
     group: Group,
     isPrimary: Boolean,
     isFavorite: Boolean,
+    otherGroups: List<Group>,
     onSetPrimary: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onGroupWith: () -> Unit,
+    onGoSolo: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
@@ -449,10 +484,59 @@ private fun RoomContextMenu(
             ) {
                 Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites")
             }
+            if (otherGroups.isNotEmpty()) {
+                AppButton(onClick = onGroupWith, modifier = Modifier.fillMaxWidth()) {
+                    Text("Group With…")
+                }
+            }
+            if (group.playerIds.size > 1) {
+                AppButton(onClick = onGoSolo, modifier = Modifier.fillMaxWidth()) {
+                    Text("Go Solo")
+                }
+            }
             AppButton(
                 onClick = onDismiss,
                 modifier = Modifier.fillMaxWidth()
             ) {
+                Text("Cancel")
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun GroupPickerOverlay(
+    sourceGroup: Group,
+    availableGroups: List<Group>,
+    onPick: (Group) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            modifier = Modifier
+                .width(320.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp)
+                .onKeyEvent { it.key != Key.Back },
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Group \"${sourceGroup.name}\" with…", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(4.dp))
+            availableGroups.forEachIndexed { index, group ->
+                AppButton(
+                    onClick = { onPick(group) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                ) {
+                    Text(group.name)
+                }
+            }
+            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancel")
             }
         }
@@ -557,6 +641,16 @@ private fun ThemeSelector(
                 contentDescription = "Next theme",
                 modifier = Modifier.size(20.dp)
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SidebarIconButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Surface(onClick = onClick, modifier = Modifier.size(36.dp)) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+            content()
         }
     }
 }

@@ -5,6 +5,7 @@ import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.HouseholdsResponse
 import com.rahga.x2rock.model.LoadFavoriteRequest
+import com.rahga.x2rock.model.ModifyGroupMembersRequest
 import com.rahga.x2rock.model.PlayModeResponse
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackState
@@ -111,4 +112,12 @@ interface SonosApiService {
         @Path("playerId") playerId: String,
         @Body request: SetMuteRequest
     ): Response<GroupVolume>
+
+    @POST("households/{householdId}/groups/{groupId}/modifyGroupMembers")
+    suspend fun modifyGroupMembers(
+        @Path("householdId") householdId: String,
+        @Path("groupId") groupId: String,
+        @Body request: ModifyGroupMembersRequest
+    ): Response<ResponseBody>
+
 }

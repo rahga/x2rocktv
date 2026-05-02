@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +24,7 @@ class QueueViewModel @Inject constructor(
 
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val items: List<QueueItem>) : UiState
+        data class Success(val items: List<QueueItem>, val currentTrackName: String?) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -44,8 +46,16 @@ class QueueViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading
-            repository.getQueue(groupId)
-                .onSuccess { _uiState.value = UiState.Success(it.items.filter { item -> !item.deleted }) }
+            runCatching {
+                coroutineScope {
+                    val queueDeferred = async { repository.getQueue(groupId).getOrThrow() }
+                    val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
+                    val queue = queueDeferred.await()
+                    val currentTrackName = metaDeferred.await()?.currentItem?.track?.name
+                    UiState.Success(queue.items.filter { !it.deleted }, currentTrackName)
+                }
+            }
+                .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
         }
     }

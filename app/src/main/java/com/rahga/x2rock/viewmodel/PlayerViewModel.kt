@@ -36,6 +36,7 @@ data class PlayerUiState(
     val isMuted: Boolean = false,
     val shuffle: Boolean = false,
     val repeat: String = "REPEAT_NONE",
+    val crossfade: Boolean = false,
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null
@@ -98,6 +99,7 @@ class PlayerViewModel @Inject constructor(
                     isMuted = vol.muted,
                     shuffle = playMode?.playMode?.shuffle ?: it.shuffle,
                     repeat = playMode?.playMode?.repeat ?: it.repeat,
+                    crossfade = playMode?.playMode?.crossfade ?: it.crossfade,
                     playerVolumes = playerVols
                 )
             }
@@ -167,30 +169,25 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun toggleShuffle() {
-        val id = _groupId.value ?: return
-        val newShuffle = !_uiState.value.shuffle
-        _uiState.update { it.copy(shuffle = newShuffle) }
-        viewModelScope.launch {
-            runCatching {
-                repository.setPlayMode(id, PlayModeState(repeat = _uiState.value.repeat, shuffle = newShuffle))
-            }
-        }
-    }
+    fun toggleShuffle() = updatePlayMode { it.copy(shuffle = !it.shuffle) }
 
-    fun cycleRepeat() {
-        val id = _groupId.value ?: return
-        val next = when (_uiState.value.repeat) {
+    fun cycleRepeat() = updatePlayMode { mode ->
+        val next = when (mode.repeat) {
             "REPEAT_NONE" -> "REPEAT_ALL"
             "REPEAT_ALL" -> "REPEAT_ONE"
             else -> "REPEAT_NONE"
         }
-        _uiState.update { it.copy(repeat = next) }
-        viewModelScope.launch {
-            runCatching {
-                repository.setPlayMode(id, PlayModeState(repeat = next, shuffle = _uiState.value.shuffle))
-            }
-        }
+        mode.copy(repeat = next)
+    }
+
+    fun toggleCrossfade() = updatePlayMode { it.copy(crossfade = !it.crossfade) }
+
+    private fun updatePlayMode(transform: (PlayModeState) -> PlayModeState) {
+        val id = _groupId.value ?: return
+        val cur = _uiState.value
+        val newMode = transform(PlayModeState(repeat = cur.repeat, shuffle = cur.shuffle, crossfade = cur.crossfade))
+        _uiState.update { it.copy(repeat = newMode.repeat, shuffle = newMode.shuffle, crossfade = newMode.crossfade) }
+        viewModelScope.launch { runCatching { repository.setPlayMode(id, newMode) } }
     }
 
     fun adjustPlayerVolume(playerId: String, delta: Int) {

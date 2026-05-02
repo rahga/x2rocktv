@@ -79,6 +79,26 @@ class HomeViewModel @Inject constructor(
 
     fun toggleFavorite(id: String) = roomPrefsStore.toggleFavorite(id)
 
+    fun joinGroup(sourceGroupId: String, targetGroupId: String) {
+        val source = findGroup(sourceGroupId) ?: return
+        viewModelScope.launch { repository.joinGroup(source, targetGroupId); refresh() }
+    }
+
+    fun soloGroup(groupId: String) {
+        val group = findGroup(groupId) ?: return
+        viewModelScope.launch { repository.soloGroup(group); refresh() }
+    }
+
+    fun partyMode() {
+        val groups = (_uiState.value as? UiState.Success)?.groups ?: return
+        if (groups.size < 2) return
+        val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+        viewModelScope.launch { repository.partyMode(sorted.first(), sorted.drop(1)); refresh() }
+    }
+
+    private fun findGroup(id: String): Group? =
+        (_uiState.value as? UiState.Success)?.groups?.find { it.id == id }
+
     fun sortedGroups(groups: List<Group>, primaryId: String?, favoriteIds: Set<String>): List<Group> {
         val primary = groups.filter { it.id == primaryId }
         val favorites = groups.filter { it.id != primaryId && it.id in favoriteIds }.sortedBy { it.name }

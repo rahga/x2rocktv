@@ -1,6 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,14 +67,14 @@ fun QueueScreen(
                 Spacer(Modifier.height(24.dp))
                 AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
             }
-            is QueueViewModel.UiState.Success -> QueueList(s.items, onBack, viewModel::playItem)
+            is QueueViewModel.UiState.Success -> QueueList(s.items, s.currentTrackName, onBack, viewModel::playItem)
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (Int) -> Unit) {
+private fun QueueList(items: List<QueueItem>, currentTrackName: String?, onBack: () -> Unit, onPlayItem: (Int) -> Unit) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
@@ -111,6 +112,7 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
                 QueueRow(
                     index = index + 1,
                     item = item,
+                    isCurrent = currentTrackName != null && item.track?.name == currentTrackName,
                     onClick = { onPlayItem(index + 1) },
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
@@ -121,10 +123,15 @@ private fun QueueList(items: List<QueueItem>, onBack: () -> Unit, onPlayItem: (I
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun QueueRow(index: Int, item: QueueItem, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun QueueRow(index: Int, item: QueueItem, isCurrent: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Card(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (isCurrent) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                else Modifier
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

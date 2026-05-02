@@ -217,6 +217,9 @@ private fun PlaybackControls(
             AppButton(onClick = { viewModel.cycleRepeat() }) {
                 Text(state.repeat.toRepeatLabel())
             }
+            AppButton(onClick = { viewModel.toggleCrossfade() }) {
+                Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
+            }
             AppButton(onClick = onOpenQueue) { Text("Queue") }
             AppButton(onClick = onOpenFavorites) { Text("Favorites") }
         }
