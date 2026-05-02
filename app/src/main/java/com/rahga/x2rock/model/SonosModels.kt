@@ -42,7 +42,8 @@ data class Track(
     val durationMillis: Long = 0
 )
 data class CurrentItem(val track: Track?)
-data class PlaybackMetadata(val currentItem: CurrentItem?)
+data class ContainerMetadata(val name: String? = null)
+data class PlaybackMetadata(val currentItem: CurrentItem? = null, val container: ContainerMetadata? = null)
 
 data class GroupVolume(
     val volume: Int,
@@ -91,3 +92,5 @@ data class ModifyGroupMembersRequest(
     val playerIdsToAdd: List<String> = emptyList(),
     val playerIdsToRemove: List<String> = emptyList()
 )
+
+data class DeleteQueueItemsRequest(val ids: List<String>)

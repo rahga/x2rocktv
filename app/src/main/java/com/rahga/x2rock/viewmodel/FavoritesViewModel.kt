@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,7 +24,7 @@ class FavoritesViewModel @Inject constructor(
 
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val items: List<Favorite>) : UiState
+        data class Success(val items: List<Favorite>, val activeId: String?) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -49,8 +51,17 @@ class FavoritesViewModel @Inject constructor(
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading
-            repository.getFavorites()
-                .onSuccess { _uiState.value = UiState.Success(it.items) }
+            runCatching {
+                coroutineScope {
+                    val favsDeferred = async { repository.getFavorites().getOrThrow() }
+                    val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
+                    val favs = favsDeferred.await()
+                    val containerName = metaDeferred.await()?.container?.name
+                    val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
+                    UiState.Success(favs.items, activeId)
+                }
+            }
+                .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }
         }
     }

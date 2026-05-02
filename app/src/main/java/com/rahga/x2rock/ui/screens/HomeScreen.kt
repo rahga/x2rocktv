@@ -154,6 +154,13 @@ fun HomeScreen(
                     .weight(1f)
                     .fillMaxHeight()
                     .focusProperties { left = sidebarFocusRequester }
+                    .onKeyEvent { event ->
+                        if (event.type == KeyEventType.KeyDown && event.key == Key.Back) {
+                            if (!sidebarVisible) homeViewModel.toggleSidebar()
+                            try { sidebarFocusRequester.requestFocus() } catch (_: Exception) {}
+                            true
+                        } else false
+                    }
             ) {
                 if (selectedGroupId == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -1,6 +1,9 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,10 +20,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -52,32 +57,52 @@ fun PlayerPane(
     onOpenFavorites: () -> Unit
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showSleepTimerPicker by remember { mutableStateOf(false) }
 
-    Surface(
-        modifier = Modifier
-            .fillMaxSize()
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (event.key) {
-                    Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                        viewModel.togglePlayPause(); true
-                    }
-                    Key.MediaNext -> { viewModel.skipToNextTrack(); true }
-                    Key.MediaPrevious -> { viewModel.skipToPreviousTrack(); true }
-                    Key.MediaFastForward -> { viewModel.seekBy(+30_000L); true }
-                    Key.MediaRewind -> { viewModel.seekBy(-30_000L); true }
-                    else -> false
-                }
-            }
-    ) {
-        Column(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 64.dp, vertical = 48.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    when (event.key) {
+                        Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                            viewModel.togglePlayPause(); true
+                        }
+                        Key.MediaNext -> { viewModel.skipToNextTrack(); true }
+                        Key.MediaPrevious -> { viewModel.skipToPreviousTrack(); true }
+                        Key.MediaFastForward -> { viewModel.seekBy(+30_000L); true }
+                        Key.MediaRewind -> { viewModel.seekBy(-30_000L); true }
+                        else -> false
+                    }
+                }
         ) {
-            TrackInfo(state)
-            PlaybackControls(state, viewModel, detailFocusRequester, onOpenQueue, onOpenFavorites)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 64.dp, vertical = 48.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                TrackInfo(state)
+                PlaybackControls(
+                    state = state,
+                    viewModel = viewModel,
+                    playPauseFocusRequester = detailFocusRequester,
+                    onOpenQueue = onOpenQueue,
+                    onOpenFavorites = onOpenFavorites,
+                    onOpenSleepTimer = { showSleepTimerPicker = true }
+                )
+            }
+        }
+
+        if (showSleepTimerPicker) {
+            SleepTimerPickerOverlay(
+                onSelect = { minutes ->
+                    viewModel.setSleepTimer(minutes)
+                    showSleepTimerPicker = false
+                },
+                onDismiss = { showSleepTimerPicker = false }
+            )
         }
     }
 }
@@ -173,7 +198,8 @@ private fun PlaybackControls(
     viewModel: PlayerViewModel,
     playPauseFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
-    onOpenFavorites: () -> Unit
+    onOpenFavorites: () -> Unit,
+    onOpenSleepTimer: () -> Unit
 ) {
     LaunchedEffect(Unit) {
         try { playPauseFocusRequester.requestFocus() } catch (_: Exception) {}
@@ -222,6 +248,16 @@ private fun PlaybackControls(
             }
             AppButton(onClick = onOpenQueue) { Text("Queue") }
             AppButton(onClick = onOpenFavorites) { Text("Favorites") }
+            AppButton(onClick = {
+                if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                else onOpenSleepTimer()
+            }) {
+                Text(
+                    if (state.sleepTimerRemainingMillis != null)
+                        "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                    else "Sleep Timer"
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -282,6 +318,48 @@ private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel
         ) { Text("+") }
         AppButton(onClick = { viewModel.togglePlayerMute(entry.playerId) }) {
             Text(if (entry.muted) "Unmute" else "Mute")
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SleepTimerPickerOverlay(
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    BackHandler { onDismiss() }
+    val firstFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.6f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .width(280.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Sleep Timer", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            listOf(15, 30, 45, 60).forEachIndexed { index, minutes ->
+                AppButton(
+                    onClick = { onSelect(minutes) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                ) {
+                    Text("$minutes minutes")
+                }
+            }
+            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+                Text("Cancel")
+            }
         }
     }
 }
