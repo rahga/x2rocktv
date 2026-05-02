@@ -43,6 +43,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
@@ -202,7 +203,7 @@ private fun PlaybackControls(
     onOpenSleepTimer: () -> Unit
 ) {
     LaunchedEffect(Unit) {
-        try { playPauseFocusRequester.requestFocus() } catch (_: Exception) {}
+        playPauseFocusRequester.requestFocusSafely()
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -330,7 +331,7 @@ private fun SleepTimerPickerOverlay(
 ) {
     BackHandler { onDismiss() }
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Box(
         modifier = Modifier

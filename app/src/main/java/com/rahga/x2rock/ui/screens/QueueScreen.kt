@@ -52,6 +52,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.viewmodel.QueueViewModel
 
@@ -112,7 +113,7 @@ private fun QueueList(
     LaunchedEffect(items.isNotEmpty()) {
         if (items.isNotEmpty()) {
             if (currentIndex > 0) listState.scrollToItem(currentIndex)
-            try { firstFocus.requestFocus() } catch (_: Exception) {}
+            firstFocus.requestFocusSafely()
         }
     }
 
@@ -256,7 +257,7 @@ private fun QueueItemContextMenu(
 ) {
     BackHandler { onDismiss() }
     val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { try { firstFocus.requestFocus() } catch (_: Exception) {} }
+    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Box(
         modifier = Modifier

@@ -36,7 +36,7 @@ class RoomPreferencesStore @Inject constructor(@ApplicationContext context: Cont
     private fun loadPrimaryRoomId(): String? = prefs.getString(KEY_PRIMARY_ROOM, null)
 
     private fun loadFavoriteRoomIds(): Set<String> =
-        prefs.getStringSet(KEY_FAVORITE_ROOMS, emptySet())!!.toSet()
+        prefs.getStringSet(KEY_FAVORITE_ROOMS, emptySet())?.toSet() ?: emptySet()
 
     companion object {
         private const val KEY_PRIMARY_ROOM = "primary_room_id"
