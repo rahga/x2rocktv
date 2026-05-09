@@ -68,7 +68,9 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.swatchColor
 import com.rahga.x2rock.viewmodel.HomeViewModel
@@ -339,8 +341,7 @@ private fun RoomSidebar(
                 }
             }
             is HomeViewModel.UiState.Error -> {
-                val retryFocus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { retryFocus.requestFocusSafely() }
+                val retryFocus = rememberAutoFocusRequester()
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -445,7 +446,7 @@ private fun RoomListItem(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (group.playbackState == "PLAYBACK_STATE_PLAYING") {
+                if (group.playbackState.isPlaying()) {
                     Text(
                         "▶",
                         style = MaterialTheme.typography.bodySmall,
@@ -485,8 +486,7 @@ private fun RoomContextMenu(
     onGoSolo: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
+    val firstFocus = rememberAutoFocusRequester()
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
@@ -539,8 +539,7 @@ private fun GroupPickerOverlay(
     onPick: (Group) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
+    val firstFocus = rememberAutoFocusRequester()
 
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(

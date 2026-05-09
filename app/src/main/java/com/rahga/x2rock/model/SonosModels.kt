@@ -94,3 +94,5 @@ data class ModifyGroupMembersRequest(
 )
 
 data class DeleteQueueItemsRequest(val ids: List<String>)
+
+fun String.isPlaying() = this == "PLAYBACK_STATE_PLAYING"

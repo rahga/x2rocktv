@@ -3,6 +3,7 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.PlayModeState
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -143,7 +144,7 @@ class PlayerViewModel @Inject constructor(
     fun seekBy(deltaMillis: Long) {
         _groupId.value ?: return
         val state = _uiState.value
-        val elapsed = if (state.playbackState == "PLAYBACK_STATE_PLAYING")
+        val elapsed = if (state.playbackState.isPlaying())
             System.currentTimeMillis() - state.positionUpdatedAt else 0L
         val current = state.positionMillis + elapsed
         val target = (current + deltaMillis).coerceIn(0, state.durationMillis)
@@ -238,7 +239,7 @@ class PlayerViewModel @Inject constructor(
                 if (remaining <= 0) {
                     _uiState.update { it.copy(sleepTimerRemainingMillis = null) }
                     sleepTimerJob = null
-                    if (_uiState.value.playbackState == "PLAYBACK_STATE_PLAYING") {
+                    if (_uiState.value.playbackState.isPlaying()) {
                         runCatching { repository.togglePlayPause(groupId) }
                         delay(300L)
                         refresh()
