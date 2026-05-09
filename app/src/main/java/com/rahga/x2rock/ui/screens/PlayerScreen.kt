@@ -44,6 +44,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.PlayerUiState
@@ -168,7 +169,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
     }
 
     LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
-        if (state.playbackState == "PLAYBACK_STATE_PLAYING") {
+        if (state.playbackState.isPlaying()) {
             while (true) {
                 delay(1_000L)
                 displayPositionMillis = (displayPositionMillis + 1_000L).coerceAtMost(state.durationMillis)
@@ -247,7 +248,7 @@ private fun PlaybackControls(
                     .width(160.dp)
                     .focusRequester(playPauseFocusRequester)
             ) {
-                Text(if (state.playbackState == "PLAYBACK_STATE_PLAYING") "⏸  Pause" else "▶  Play")
+                Text(if (state.playbackState.isPlaying()) "⏸  Pause" else "▶  Play")
             }
             if (state.durationMillis > 0) {
                 AppButton(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }

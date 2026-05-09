@@ -4,6 +4,8 @@ import android.os.Build
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -136,6 +138,13 @@ fun AppButton(
 
 fun FocusRequester.requestFocusSafely() {
     try { requestFocus() } catch (_: Exception) {}
+}
+
+@Composable
+fun rememberAutoFocusRequester(): FocusRequester {
+    val requester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { requester.requestFocusSafely() }
+    return requester
 }
 
 fun AppColorTheme.swatchColor(): Color = when (this) {
