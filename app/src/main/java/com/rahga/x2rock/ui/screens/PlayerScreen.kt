@@ -2,6 +2,7 @@ package com.rahga.x2rock.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -158,7 +160,7 @@ private fun TrackInfo(state: PlayerUiState) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ProgressBar(state: PlayerUiState) {
+private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
     if (state.durationMillis <= 0) return
 
     var displayPositionMillis by remember(state.positionUpdatedAt) {
@@ -175,18 +177,39 @@ private fun ProgressBar(state: PlayerUiState) {
     }
 
     val progress = (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f)
+    var isFocused by remember { mutableStateOf(false) }
+    val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
     Column {
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier.fillMaxWidth()
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusable()
+                .onFocusChanged { isFocused = it.isFocused }
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> { onSeekBy(-15_000L); true }
+                        Key.DirectionRight -> { onSeekBy(+15_000L); true }
+                        else -> false
+                    }
+                }
+        ) {
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth(),
+                color = barColor
+            )
+        }
         Spacer(modifier = Modifier.height(4.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
+            if (isFocused) {
+                Text("◀ ▶  seek 15s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            }
             Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
         }
     }
@@ -207,7 +230,7 @@ private fun PlaybackControls(
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        ProgressBar(state)
+        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) })
         Spacer(modifier = Modifier.height(24.dp))
 
         Row(

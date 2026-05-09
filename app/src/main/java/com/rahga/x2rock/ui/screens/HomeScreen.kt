@@ -145,7 +145,8 @@ fun HomeScreen(
                     onPartyModeClick = { homeViewModel.partyMode() },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onCollapseByKey = { homeViewModel.toggleSidebar() }
+                    onCollapseByKey = { homeViewModel.toggleSidebar() },
+                    onRetry = { homeViewModel.loadGroups() }
                 )
             }
 
@@ -284,7 +285,8 @@ private fun RoomSidebar(
     onPartyModeClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
-    onCollapseByKey: () -> Unit
+    onCollapseByKey: () -> Unit,
+    onRetry: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -337,8 +339,18 @@ private fun RoomSidebar(
                 }
             }
             is HomeViewModel.UiState.Error -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                val retryFocus = remember { FocusRequester() }
+                LaunchedEffect(Unit) { retryFocus.requestFocusSafely() }
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     Text(state.message, style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(16.dp))
+                    AppButton(onClick = onRetry, modifier = Modifier.focusRequester(retryFocus)) {
+                        Text("Retry")
+                    }
                 }
             }
             is HomeViewModel.UiState.Success -> {
@@ -432,7 +444,14 @@ private fun RoomListItem(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (group.playbackState == "PLAYBACK_STATE_PLAYING") {
+                    Text(
+                        "▶",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 if (isPrimary) {
                     Icon(
                         imageVector = Icons.Filled.Star,
