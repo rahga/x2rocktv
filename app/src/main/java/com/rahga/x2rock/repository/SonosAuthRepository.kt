@@ -25,28 +25,33 @@ class SonosAuthRepository @Inject constructor(
         private const val AUTH_ENDPOINT = "https://api.sonos.com/login/v3/oauth"
         private const val TOKEN_ENDPOINT = "https://api.sonos.com/login/v3/oauth/access"
         const val REDIRECT_URI = "https://rahga.github.io/x2rock/callback.html"
+        const val BROWSER_REDIRECT_URI = "x2rock://callback"
         private const val SCOPE = "playback-control-all"
     }
 
     @Volatile private var pendingState: String? = null
+    @Volatile private var pendingRedirectUri: String? = null
     private val refreshMutex = Mutex()
 
     val isAuthenticated: Boolean get() = tokenStore.isAuthenticated
     val accessToken: String? get() = tokenStore.accessToken
 
-    fun buildAuthUrl(): String {
+    fun buildAuthUrl(): String = buildAuthUrlWithRedirect(REDIRECT_URI)
+
+    fun buildBrowserAuthUrl(): String = buildAuthUrlWithRedirect(BROWSER_REDIRECT_URI)
+
+    private fun buildAuthUrlWithRedirect(redirectUri: String): String {
         val state = generateState()
         pendingState = state
-
-        val url = Uri.parse(AUTH_ENDPOINT).buildUpon()
+        pendingRedirectUri = redirectUri
+        return Uri.parse(AUTH_ENDPOINT).buildUpon()
             .appendQueryParameter("client_id", BuildConfig.SONOS_CLIENT_ID)
             .appendQueryParameter("response_type", "code")
             .appendQueryParameter("state", state)
             .appendQueryParameter("scope", SCOPE)
-            .appendQueryParameter("redirect_uri", REDIRECT_URI)
+            .appendQueryParameter("redirect_uri", redirectUri)
             .build()
             .toString()
-        return url
     }
 
     suspend fun exchangeCodeForTokens(code: String, returnedState: String): Result<Unit> =
@@ -67,6 +72,7 @@ class SonosAuthRepository @Inject constructor(
                 }
                 storeTokens(JSONObject(body))
                 pendingState = null
+                pendingRedirectUri = null
             }
         }
 
@@ -112,7 +118,7 @@ class SonosAuthRepository @Inject constructor(
         val body = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
-            .add("redirect_uri", REDIRECT_URI)
+            .add("redirect_uri", pendingRedirectUri ?: REDIRECT_URI)
             .build()
         return Request.Builder()
             .url(TOKEN_ENDPOINT)

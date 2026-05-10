@@ -1,5 +1,8 @@
 package com.rahga.x2rock.ui.screens
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -28,6 +32,7 @@ fun LoginScreen(
     viewModel: LoginViewModel
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
 
     LaunchedEffect(state) {
         if (state is LoginUiState.Authenticated) {
@@ -51,18 +56,36 @@ fun LoginScreen(
                 style = MaterialTheme.typography.bodyLarge
             )
             Spacer(modifier = Modifier.height(48.dp))
+
             AppButton(
-                onClick = { onConnect(viewModel.buildAuthUrl()) },
+                onClick = {
+                    val url = viewModel.buildBrowserAuthUrl()
+                    try {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                    } catch (_: ActivityNotFoundException) {
+                        onConnect(viewModel.buildAuthUrl())
+                    }
+                },
                 enabled = state !is LoginUiState.Loading
             ) {
                 Text(
                     text = when (state) {
                         is LoginUiState.Loading -> "Connecting…"
                         is LoginUiState.Error -> "Try Again"
-                        else -> "Connect to Sonos"
+                        else -> "Sign in with Browser"
                     }
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            AppButton(
+                onClick = { onConnect(viewModel.buildAuthUrl()) },
+                enabled = state !is LoginUiState.Loading
+            ) {
+                Text("Sign in on this screen")
+            }
+
             if (state is LoginUiState.Error) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(

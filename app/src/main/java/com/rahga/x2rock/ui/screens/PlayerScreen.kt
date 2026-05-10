@@ -190,15 +190,15 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
-                        Key.DirectionLeft -> { onSeekBy(-15_000L); true }
-                        Key.DirectionRight -> { onSeekBy(+15_000L); true }
+                        Key.DirectionLeft -> { onSeekBy(-30_000L); true }
+                        Key.DirectionRight -> { onSeekBy(+30_000L); true }
                         else -> false
                     }
                 }
         ) {
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(8.dp),
                 color = barColor
             )
         }
@@ -209,7 +209,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
         ) {
             Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
             if (isFocused) {
-                Text("◀ ▶  seek 15s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             }
             Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
         }

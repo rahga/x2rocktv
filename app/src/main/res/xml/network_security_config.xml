@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Cloud API uses HTTPS — cleartext blocked by default -->
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Sonos speakers advertise via mDNS (.local) — allow cleartext for local network -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
+</network-security-config>

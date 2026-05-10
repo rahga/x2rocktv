@@ -51,43 +51,60 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.QueueItem
+import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun QueueScreen(
     onBack: () -> Unit,
+    playerViewModel: PlayerViewModel,
     viewModel: QueueViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    val playerState by playerViewModel.uiState.collectAsState()
     BackHandler { onBack() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        when (val s = state) {
-            is QueueViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading queue…", style = MaterialTheme.typography.titleLarge)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                when (val s = state) {
+                    is QueueViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Loading queue…", style = MaterialTheme.typography.titleLarge)
+                    }
+                    is QueueViewModel.UiState.Error -> Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("Failed to load queue", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(8.dp))
+                        Text(s.message, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(24.dp))
+                        AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
+                    }
+                    is QueueViewModel.UiState.Success -> QueueList(
+                        items = s.items,
+                        currentTrackName = s.currentTrackName,
+                        onBack = onBack,
+                        onPlayItem = viewModel::playItem,
+                        onRemoveItem = viewModel::removeItem
+                    )
+                }
             }
-            is QueueViewModel.UiState.Error -> Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("Failed to load queue", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(s.message, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(24.dp))
-                AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
+            if (playerState.trackName != null) {
+                NowPlayingBar(
+                    trackName = playerState.trackName!!,
+                    artistName = playerState.artistName,
+                    isCurrentlyPlaying = playerState.playbackState.isPlaying(),
+                    onPlayPause = { playerViewModel.togglePlayPause() }
+                )
             }
-            is QueueViewModel.UiState.Success -> QueueList(
-                items = s.items,
-                currentTrackName = s.currentTrackName,
-                onBack = onBack,
-                onPlayItem = viewModel::playItem,
-                onRemoveItem = viewModel::removeItem
-            )
         }
     }
 }
@@ -188,6 +205,12 @@ private fun QueueRow(
                 else Modifier
             )
             .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
+                    longPressJob?.cancel()
+                    longPressJob = null
+                    onLongPress()
+                    return@onKeyEvent true
+                }
                 if (event.key == Key.DirectionCenter || event.key == Key.Enter) {
                     when (event.type) {
                         KeyEventType.KeyDown -> {
@@ -256,8 +279,7 @@ private fun QueueItemContextMenu(
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
-    val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
+    val firstFocus = rememberAutoFocusRequester()
 
     Box(
         modifier = Modifier

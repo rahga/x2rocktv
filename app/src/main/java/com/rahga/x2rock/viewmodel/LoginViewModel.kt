@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.auth.PendingAuthState
 import com.rahga.x2rock.repository.SonosAuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,7 +19,8 @@ sealed interface LoginUiState {
 
 @HiltViewModel
 class LoginViewModel @Inject constructor(
-    private val authRepository: SonosAuthRepository
+    private val authRepository: SonosAuthRepository,
+    private val pendingAuthState: PendingAuthState
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<LoginUiState>(
@@ -26,7 +28,20 @@ class LoginViewModel @Inject constructor(
     )
     val state: StateFlow<LoginUiState> = _state
 
+    init {
+        viewModelScope.launch {
+            pendingAuthState.pending.collect { pending ->
+                if (pending != null) {
+                    pendingAuthState.clear()
+                    handleCallback(pending.first, pending.second)
+                }
+            }
+        }
+    }
+
     fun buildAuthUrl(): String = authRepository.buildAuthUrl()
+
+    fun buildBrowserAuthUrl(): String = authRepository.buildBrowserAuthUrl()
 
     fun handleCallback(code: String, state: String) {
         viewModelScope.launch {

@@ -38,44 +38,60 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
+import com.rahga.x2rock.viewmodel.PlayerViewModel
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun FavoritesScreen(
     onBack: () -> Unit,
+    playerViewModel: PlayerViewModel,
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
     val loadingId by viewModel.loadingFavoriteId.collectAsState()
+    val playerState by playerViewModel.uiState.collectAsState()
     BackHandler { onBack() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        when (val s = state) {
-            is FavoritesViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading favorites…", style = MaterialTheme.typography.titleLarge)
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f)) {
+                when (val s = state) {
+                    is FavoritesViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Loading favorites…", style = MaterialTheme.typography.titleLarge)
+                    }
+                    is FavoritesViewModel.UiState.Error -> Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text("Failed to load favorites", style = MaterialTheme.typography.titleLarge)
+                        Spacer(Modifier.height(8.dp))
+                        Text(s.message, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(24.dp))
+                        AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
+                    }
+                    is FavoritesViewModel.UiState.Success -> FavoritesList(
+                        items = s.items,
+                        activeId = s.activeId,
+                        loadingId = loadingId,
+                        onBack = onBack,
+                        onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
+                    )
+                }
             }
-            is FavoritesViewModel.UiState.Error -> Column(
-                Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text("Failed to load favorites", style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(8.dp))
-                Text(s.message, style = MaterialTheme.typography.bodySmall)
-                Spacer(Modifier.height(24.dp))
-                AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
+            if (playerState.trackName != null) {
+                NowPlayingBar(
+                    trackName = playerState.trackName!!,
+                    artistName = playerState.artistName,
+                    isCurrentlyPlaying = playerState.playbackState.isPlaying(),
+                    onPlayPause = { playerViewModel.togglePlayPause() }
+                )
             }
-            is FavoritesViewModel.UiState.Success -> FavoritesList(
-                items = s.items,
-                activeId = s.activeId,
-                loadingId = loadingId,
-                onBack = onBack,
-                onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
-            )
         }
     }
 }

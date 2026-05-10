@@ -41,6 +41,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -93,30 +96,40 @@ fun HomeScreen(
     val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
+    var showPartyConfirmation by remember { mutableStateOf(false) }
     var contextMenuGroup by remember { mutableStateOf<Group?>(null) }
     var groupPickerSource by remember { mutableStateOf<Group?>(null) }
+    var separateRoomSource by remember { mutableStateOf<Group?>(null) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
 
-    // Wire selected group into PlayerViewModel
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
+    val nowPlaying = (state as? HomeViewModel.UiState.Success)?.nowPlaying ?: emptyMap()
+
     LaunchedEffect(selectedGroupId) {
         val id = selectedGroupId ?: return@LaunchedEffect
         val name = groups.find { it.id == id }?.name ?: ""
         playerViewModel.selectGroup(id, name)
     }
 
-    // When sidebar hides, move focus to detail pane
     LaunchedEffect(sidebarVisible) {
-        if (!sidebarVisible) {
-            detailFocusRequester.requestFocusSafely()
+        if (!sidebarVisible) detailFocusRequester.requestFocusSafely()
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            if (homeViewModel.sidebarVisible.value) sidebarFocusRequester.requestFocusSafely()
+            else detailFocusRequester.requestFocusSafely()
         }
     }
 
     BackHandler(enabled = showSettings) { showSettings = false }
+    BackHandler(enabled = separateRoomSource != null) { separateRoomSource = null }
     BackHandler(enabled = groupPickerSource != null) { groupPickerSource = null }
     BackHandler(enabled = contextMenuGroup != null) { contextMenuGroup = null }
+    BackHandler(enabled = showPartyConfirmation) { showPartyConfirmation = false }
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
@@ -125,7 +138,6 @@ fun HomeScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
-            // Left sidebar
             AnimatedVisibility(
                 visible = sidebarVisible,
                 enter = expandHorizontally(),
@@ -139,12 +151,12 @@ fun HomeScreen(
                     sortedGroups = { grps ->
                         homeViewModel.sortedGroups(grps, primaryRoomId, favoriteRoomIds)
                     },
-                    nowPlaying = (state as? HomeViewModel.UiState.Success)?.nowPlaying ?: emptyMap(),
+                    nowPlaying = nowPlaying,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
                     onFocused = { homeViewModel.selectGroup(it.id) },
                     onLongPress = { contextMenuGroup = it },
-                    onPartyModeClick = { homeViewModel.partyMode() },
+                    onPartyModeClick = { showPartyConfirmation = true },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
                     onCollapseByKey = { homeViewModel.toggleSidebar() },
@@ -152,7 +164,6 @@ fun HomeScreen(
                 )
             }
 
-            // Detail pane
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -179,7 +190,6 @@ fun HomeScreen(
                     )
                 }
 
-                // Show sidebar toggle when sidebar is hidden
                 if (!sidebarVisible) {
                     Surface(
                         onClick = { homeViewModel.toggleSidebar() },
@@ -196,12 +206,10 @@ fun HomeScreen(
             }
         }
 
-        // Scrim
         AnimatedVisibility(visible = showSettings, enter = fadeIn(), exit = fadeOut()) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
         }
 
-        // Settings panel
         AnimatedVisibility(
             visible = showSettings,
             enter = slideInHorizontally(initialOffsetX = { it }),
@@ -216,16 +224,23 @@ fun HomeScreen(
             )
         }
 
-        // Context menu
+        if (showPartyConfirmation) {
+            Overlay {
+                PartyConfirmationDialog(
+                    groupCount = groups.size,
+                    onConfirm = { homeViewModel.partyMode(); showPartyConfirmation = false },
+                    onDismiss = { showPartyConfirmation = false }
+                )
+            }
+        }
+
         val menuGroup = contextMenuGroup
         if (menuGroup != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-            ) {
+            val playerNames = remember(menuGroup) { homeViewModel.playerNamesForGroup(menuGroup) }
+            Overlay {
                 RoomContextMenu(
                     group = menuGroup,
+                    playerNames = playerNames,
                     isPrimary = menuGroup.id == primaryRoomId,
                     isFavorite = menuGroup.id in favoriteRoomIds,
                     otherGroups = groups.filter { it.id != menuGroup.id },
@@ -237,11 +252,15 @@ fun HomeScreen(
                         homeViewModel.toggleFavorite(menuGroup.id)
                         contextMenuGroup = null
                     },
-                    onGroupWith = {
+                    onJoinGroup = {
                         groupPickerSource = menuGroup
                         contextMenuGroup = null
                     },
-                    onGoSolo = {
+                    onSeparateRoom = {
+                        separateRoomSource = menuGroup
+                        contextMenuGroup = null
+                    },
+                    onSeparateAll = {
                         homeViewModel.soloGroup(menuGroup.id)
                         contextMenuGroup = null
                     },
@@ -252,14 +271,11 @@ fun HomeScreen(
 
         val pickerSource = groupPickerSource
         if (pickerSource != null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.5f))
-            ) {
-                GroupPickerOverlay(
+            Overlay {
+                GroupPickerDialog(
                     sourceGroup = pickerSource,
                     availableGroups = groups.filter { it.id != pickerSource.id },
+                    nowPlaying = nowPlaying,
                     onPick = { target ->
                         homeViewModel.joinGroup(pickerSource.id, target.id)
                         groupPickerSource = null
@@ -268,6 +284,34 @@ fun HomeScreen(
                 )
             }
         }
+
+        val separateSource = separateRoomSource
+        if (separateSource != null) {
+            val playerNames = remember(separateSource) { homeViewModel.playerNamesForGroup(separateSource) }
+            Overlay {
+                SeparateRoomDialog(
+                    group = separateSource,
+                    playerNames = playerNames,
+                    onSeparate = { playerId ->
+                        homeViewModel.removePlayerFromGroup(separateSource.id, playerId)
+                        separateRoomSource = null
+                    },
+                    onDismiss = { separateRoomSource = null }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Overlay(content: @Composable () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.5f)),
+        contentAlignment = Alignment.Center
+    ) {
+        content()
     }
 }
 
@@ -294,7 +338,6 @@ private fun RoomSidebar(
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val sorted = remember(groups, primaryRoomId, favoriteRoomIds) { sortedGroups(groups) }
 
-    // Scroll to keep selected item visible when sort order changes
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
     LaunchedEffect(selectedGroupId, sorted) {
         if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
@@ -312,7 +355,6 @@ private fun RoomSidebar(
                 } else false
             }
     ) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -322,8 +364,10 @@ private fun RoomSidebar(
         ) {
             Text("x2rock", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                SidebarIconButton(onClick = onPartyModeClick) {
-                    Icon(Icons.Default.Celebration, contentDescription = "Party mode", modifier = Modifier.size(18.dp))
+                if (groups.size > 1) {
+                    SidebarIconButton(onClick = onPartyModeClick) {
+                        Icon(Icons.Default.Celebration, contentDescription = "Party mode", modifier = Modifier.size(18.dp))
+                    }
                 }
                 SidebarIconButton(onClick = onSettingsClick) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(18.dp))
@@ -399,6 +443,12 @@ private fun RoomListItem(
             .focusRequester(focusRequester)
             .onFocusChanged { if (it.isFocused) onFocused() }
             .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
+                    longPressJob?.cancel()
+                    longPressJob = null
+                    onLongPress()
+                    return@onKeyEvent true
+                }
                 if (event.key == Key.DirectionCenter || event.key == Key.Enter) {
                     when (event.type) {
                         KeyEventType.KeyDown -> {
@@ -434,10 +484,11 @@ private fun RoomListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                val roomCount = group.playerIds.size
                 val statusLine = when {
                     track?.name != null -> track.name
                     else -> group.playbackState.toSidebarLabel()
-                }
+                } + if (roomCount > 1) " · $roomCount rooms" else ""
                 Text(
                     text = statusLine,
                     style = MaterialTheme.typography.bodySmall,
@@ -447,23 +498,19 @@ private fun RoomListItem(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (group.playbackState.isPlaying()) {
-                    Text(
-                        "▶",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
                 if (isPrimary) {
                     Icon(
                         imageVector = Icons.Filled.Star,
-                        contentDescription = "Primary room",
+                        contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary
                     )
                 } else if (isFavorite) {
                     Icon(
                         imageVector = Icons.Outlined.Star,
-                        contentDescription = "Favorite room",
+                        contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
@@ -477,94 +524,193 @@ private fun RoomListItem(
 @Composable
 private fun RoomContextMenu(
     group: Group,
+    playerNames: List<Pair<String, String>>,
     isPrimary: Boolean,
     isFavorite: Boolean,
     otherGroups: List<Group>,
     onSetPrimary: () -> Unit,
     onToggleFavorite: () -> Unit,
-    onGroupWith: () -> Unit,
-    onGoSolo: () -> Unit,
+    onJoinGroup: () -> Unit,
+    onSeparateRoom: () -> Unit,
+    onSeparateAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val firstFocus = rememberAutoFocusRequester()
+    val roomCount = group.playerIds.size
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier
-                .width(320.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
-                .onKeyEvent { it.key != Key.Back },
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .width(340.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp)
+            .onKeyEvent { it.key != Key.Back },
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(group.name, style = MaterialTheme.typography.titleMedium)
+        if (roomCount > 1) {
+            Text(
+                text = playerNames.joinToString(" · ") { it.second },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        AppButton(
+            onClick = onSetPrimary,
+            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
         ) {
-            Text(group.name, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            AppButton(
-                onClick = onSetPrimary,
-                modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
-            ) {
-                Text(if (isPrimary) "Remove as Primary" else "Set as Primary")
+            Text(if (isPrimary) "Remove as Primary" else "Set as Primary")
+        }
+        AppButton(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) {
+            Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites")
+        }
+        if (otherGroups.isNotEmpty()) {
+            AppButton(onClick = onJoinGroup, modifier = Modifier.fillMaxWidth()) {
+                Text("Join Group…")
             }
-            AppButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites")
+        }
+        if (roomCount >= 3) {
+            AppButton(onClick = onSeparateRoom, modifier = Modifier.fillMaxWidth()) {
+                Text("Separate a Room…")
             }
-            if (otherGroups.isNotEmpty()) {
-                AppButton(onClick = onGroupWith, modifier = Modifier.fillMaxWidth()) {
-                    Text("Group With…")
-                }
+        }
+        if (roomCount >= 2) {
+            AppButton(onClick = onSeparateAll, modifier = Modifier.fillMaxWidth()) {
+                Text(if (roomCount == 2) "Separate Rooms" else "Separate All Rooms")
             }
-            if (group.playerIds.size > 1) {
-                AppButton(onClick = onGoSolo, modifier = Modifier.fillMaxWidth()) {
-                    Text("Go Solo")
-                }
-            }
-            AppButton(
-                onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel")
-            }
+        }
+        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
         }
     }
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun GroupPickerOverlay(
+private fun GroupPickerDialog(
     sourceGroup: Group,
     availableGroups: List<Group>,
+    nowPlaying: Map<String, Track?>,
     onPick: (Group) -> Unit,
     onDismiss: () -> Unit
 ) {
     val firstFocus = rememberAutoFocusRequester()
 
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(
-            modifier = Modifier
-                .width(320.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp)
-                .onKeyEvent { it.key != Key.Back },
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Group \"${sourceGroup.name}\" with…", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(4.dp))
-            availableGroups.forEachIndexed { index, group ->
-                AppButton(
-                    onClick = { onPick(group) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                ) {
-                    Text(group.name)
+    Column(
+        modifier = Modifier
+            .width(340.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp)
+            .onKeyEvent { it.key != Key.Back },
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("Join \"${sourceGroup.name}\" with…", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        availableGroups.forEachIndexed { index, group ->
+            AppButton(
+                onClick = { onPick(group) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+            ) {
+                Column(horizontalAlignment = Alignment.Start) {
+                    Text(group.name, style = MaterialTheme.typography.bodyLarge)
+                    val track = nowPlaying[group.id]
+                    val subtitle = when {
+                        track?.name != null -> track.name
+                        else -> group.playbackState.toSidebarLabel()
+                    }
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
-            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
+        }
+        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SeparateRoomDialog(
+    group: Group,
+    playerNames: List<Pair<String, String>>,
+    onSeparate: (playerId: String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstFocus = rememberAutoFocusRequester()
+    val removable = playerNames.filter { (id, _) -> id != group.coordinatorId }
+
+    Column(
+        modifier = Modifier
+            .width(340.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp)
+            .onKeyEvent { it.key != Key.Back },
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("Separate a room from \"${group.name}\"", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "The remaining rooms will stay grouped.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
+        Spacer(Modifier.height(4.dp))
+        removable.forEachIndexed { index, (id, name) ->
+            AppButton(
+                onClick = { onSeparate(id) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+            ) {
+                Text(name)
             }
+        }
+        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
+        }
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun PartyConfirmationDialog(
+    groupCount: Int,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val firstFocus = rememberAutoFocusRequester()
+
+    Column(
+        modifier = Modifier
+            .width(340.dp)
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(24.dp)
+            .onKeyEvent { it.key != Key.Back },
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text("Party Mode", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Combine all $groupCount rooms to play together?",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Spacer(Modifier.height(4.dp))
+        AppButton(
+            onClick = onConfirm,
+            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
+        ) {
+            Text("Combine All Rooms")
+        }
+        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Cancel")
         }
     }
 }
@@ -648,7 +794,7 @@ private fun ThemeSelector(
         ) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                contentDescription = "Previous theme",
+                contentDescription = null,
                 modifier = Modifier.size(20.dp)
             )
             Box(
@@ -664,7 +810,7 @@ private fun ThemeSelector(
             )
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Next theme",
+                contentDescription = null,
                 modifier = Modifier.size(20.dp)
             )
         }

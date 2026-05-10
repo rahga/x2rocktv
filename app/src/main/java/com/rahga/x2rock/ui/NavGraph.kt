@@ -17,15 +17,27 @@ import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.LoginScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
+import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.LoginUiState
 import com.rahga.x2rock.viewmodel.LoginViewModel
+import com.rahga.x2rock.viewmodel.PlayerViewModel
 
 @Composable
 fun X2RockNavGraph() {
     val navController = rememberNavController()
     val loginViewModel: LoginViewModel = hiltViewModel()
+    val playerViewModel: PlayerViewModel = hiltViewModel()
+    val homeViewModel: HomeViewModel = hiltViewModel()
     val startDestination = remember {
         if (loginViewModel.state.value is LoginUiState.Authenticated) "home" else "login"
+    }
+
+    val navigateToRoom by homeViewModel.navigateToRoom.collectAsState()
+    LaunchedEffect(navigateToRoom) {
+        if (navigateToRoom) {
+            navController.navigate("home") { launchSingleTop = true }
+            homeViewModel.clearNavigateToRoom()
+        }
     }
 
     NavHost(navController = navController, startDestination = startDestination) {
@@ -89,7 +101,9 @@ fun X2RockNavGraph() {
                     navController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
-                }
+                },
+                homeViewModel = homeViewModel,
+                playerViewModel = playerViewModel
             )
         }
 
@@ -97,14 +111,20 @@ fun X2RockNavGraph() {
             route = "queue?groupId={groupId}",
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
-            QueueScreen(onBack = { navController.popBackStack() })
+            QueueScreen(
+                onBack = { navController.popBackStack() },
+                playerViewModel = playerViewModel
+            )
         }
 
         composable(
             route = "favorites?groupId={groupId}",
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
-            FavoritesScreen(onBack = { navController.popBackStack() })
+            FavoritesScreen(
+                onBack = { navController.popBackStack() },
+                playerViewModel = playerViewModel
+            )
         }
     }
 }

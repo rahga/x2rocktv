@@ -17,6 +17,7 @@ hiltNavigationCompose = "1.2.0"
 navigationCompose = "2.8.0-beta02"
 securityCrypto = "1.1.0-alpha06"
 coil = "2.7.0"
+tvprovider = "1.0.0"
 
 [libraries]
 # AndroidX Core
@@ -56,6 +57,9 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
 hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hiltNavigationCompose" }
+
+# TV Provider (home screen channels)
+androidx-tvprovider = { group = "androidx.tvprovider", name = "tvprovider", version.ref = "tvprovider" }
 
 # Coil
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }

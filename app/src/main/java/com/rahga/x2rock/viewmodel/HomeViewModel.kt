@@ -2,14 +2,17 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.channel.RoomsChannelSync
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -26,7 +29,9 @@ class HomeViewModel @Inject constructor(
     private val repository: SonosRepository,
     private val authRepository: SonosAuthRepository,
     private val themeStore: ThemeStore,
-    private val roomPrefsStore: RoomPreferencesStore
+    private val roomPrefsStore: RoomPreferencesStore,
+    private val channelSync: RoomsChannelSync,
+    private val pendingRoomDeepLink: PendingRoomDeepLink
 ) : ViewModel() {
 
     sealed interface UiState {
@@ -48,7 +53,19 @@ class HomeViewModel @Inject constructor(
     private val _sidebarVisible = MutableStateFlow(true)
     val sidebarVisible: StateFlow<Boolean> = _sidebarVisible.asStateFlow()
 
+    private val _navigateToRoom = MutableStateFlow(false)
+    val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
+
     init {
+        viewModelScope.launch {
+            pendingRoomDeepLink.groupId.collect { groupId ->
+                if (groupId != null) {
+                    _selectedGroupId.value = groupId
+                    _navigateToRoom.value = true
+                    pendingRoomDeepLink.clear()
+                }
+            }
+        }
         viewModelScope.launch {
             while (isActive) {
                 refresh()
@@ -56,6 +73,8 @@ class HomeViewModel @Inject constructor(
             }
         }
     }
+
+    fun clearNavigateToRoom() { _navigateToRoom.value = false }
 
     fun loadGroups() {
         viewModelScope.launch { refresh() }
@@ -89,6 +108,13 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { repository.soloGroup(group); refresh() }
     }
 
+    fun removePlayerFromGroup(groupId: String, playerId: String) {
+        viewModelScope.launch { repository.removePlayerFromGroup(groupId, playerId); refresh() }
+    }
+
+    fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
+        group.playerIds.map { it to repository.getPlayerName(it) }
+
     fun partyMode() {
         val groups = (_uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
@@ -116,6 +142,9 @@ class HomeViewModel @Inject constructor(
                 if (_selectedGroupId.value == null && groups.isNotEmpty()) {
                     val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
                     _selectedGroupId.value = sorted.first().id
+                }
+                viewModelScope.launch(Dispatchers.IO) {
+                    channelSync.sync(groups, nowPlaying)
                 }
             },
             onFailure = { e ->

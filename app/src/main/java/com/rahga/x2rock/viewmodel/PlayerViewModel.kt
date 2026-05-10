@@ -1,11 +1,16 @@
 package com.rahga.x2rock.viewmodel
 
+import android.content.Context
+import android.media.MediaMetadata
+import android.media.session.MediaSession
+import android.media.session.PlaybackState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +51,8 @@ data class PlayerUiState(
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    private val repository: SonosRepository
+    private val repository: SonosRepository,
+    @ApplicationContext context: Context
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
@@ -58,9 +64,80 @@ class PlayerViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
 
+    private var lastMetadataKey = ""
+    private var lastPbStateCode = -1
+    private var lastPbPositionMillis = -1L
+
+    private val mediaSession = MediaSession(context, "x2rock").also { session ->
+        session.setCallback(object : MediaSession.Callback() {
+            override fun onPlay() { togglePlayPause() }
+            override fun onPause() { togglePlayPause() }
+            override fun onSkipToNext() { skipToNextTrack() }
+            override fun onSkipToPrevious() { skipToPreviousTrack() }
+            override fun onSeekTo(pos: Long) {
+                val state = _uiState.value
+                val elapsed = if (state.playbackState.isPlaying())
+                    System.currentTimeMillis() - state.positionUpdatedAt else 0L
+                seekBy(pos - state.positionMillis - elapsed)
+            }
+        })
+        session.isActive = true
+    }
+
+    init {
+        viewModelScope.launch {
+            _uiState.collect { updateMediaSession(it) }
+        }
+    }
+
+    private fun updateMediaSession(state: PlayerUiState) {
+        if (state.isLoading) return
+
+        val metadataKey = "${state.trackName}|${state.artistName}|${state.albumName}|${state.durationMillis}"
+        if (metadataKey != lastMetadataKey) {
+            lastMetadataKey = metadataKey
+            mediaSession.setMetadata(
+                MediaMetadata.Builder()
+                    .putString(MediaMetadata.METADATA_KEY_TITLE, state.trackName ?: "")
+                    .putString(MediaMetadata.METADATA_KEY_ARTIST, state.artistName ?: "")
+                    .putString(MediaMetadata.METADATA_KEY_ALBUM, state.albumName ?: "")
+                    .putLong(MediaMetadata.METADATA_KEY_DURATION, state.durationMillis)
+                    .build()
+            )
+        }
+
+        val pbState = if (state.trackName == null) PlaybackState.STATE_NONE
+            else if (state.playbackState.isPlaying()) PlaybackState.STATE_PLAYING
+            else PlaybackState.STATE_PAUSED
+        if (pbState == lastPbStateCode && state.positionMillis == lastPbPositionMillis) return
+        lastPbStateCode = pbState
+        lastPbPositionMillis = state.positionMillis
+        mediaSession.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(
+                    PlaybackState.ACTION_PLAY or
+                    PlaybackState.ACTION_PAUSE or
+                    PlaybackState.ACTION_PLAY_PAUSE or
+                    PlaybackState.ACTION_SKIP_TO_NEXT or
+                    PlaybackState.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackState.ACTION_SEEK_TO
+                )
+                .setState(pbState, state.positionMillis, 1f)
+                .build()
+        )
+    }
+
+    override fun onCleared() {
+        mediaSession.release()
+        super.onCleared()
+    }
+
     fun selectGroup(id: String, name: String) {
         if (_groupId.value == id) return
         _groupId.value = id
+        lastMetadataKey = ""
+        lastPbStateCode = -1
+        lastPbPositionMillis = -1L
         _uiState.value = PlayerUiState(groupName = name, isLoading = true)
         pollingJob?.cancel()
         cancelSleepTimer()
