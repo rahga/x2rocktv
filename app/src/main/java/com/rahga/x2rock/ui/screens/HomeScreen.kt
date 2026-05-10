@@ -47,6 +47,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -159,7 +160,6 @@ fun HomeScreen(
                     onPartyModeClick = { showPartyConfirmation = true },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onCollapseByKey = { homeViewModel.toggleSidebar() },
                     onRetry = { homeViewModel.loadGroups() }
                 )
             }
@@ -168,6 +168,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .focusGroup()
                     .focusProperties { left = sidebarFocusRequester }
                     .onKeyEvent { event ->
                         if (event.type == KeyEventType.KeyDown && event.key == Key.Back) {
@@ -331,7 +332,6 @@ private fun RoomSidebar(
     onPartyModeClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
-    onCollapseByKey: () -> Unit,
     onRetry: () -> Unit
 ) {
     val listState = rememberLazyListState()
@@ -349,11 +349,6 @@ private fun RoomSidebar(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .focusProperties { right = detailFocusRequester }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
-                    onCollapseByKey(); true
-                } else false
-            }
     ) {
         Row(
             modifier = Modifier
