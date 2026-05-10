@@ -136,6 +136,10 @@ class SonosRepository @Inject constructor(
         runCatching { modifyGroupMembers(targetGroupId, ModifyGroupMembersRequest(playerIdsToAdd = sourceGroup.playerIds)) }
     }
 
+    suspend fun removePlayerFromGroup(groupId: String, playerId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { modifyGroupMembers(groupId, ModifyGroupMembersRequest(playerIdsToRemove = listOf(playerId))) }
+    }
+
     suspend fun soloGroup(group: Group): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val toRemove = group.playerIds.filter { it != group.coordinatorId }

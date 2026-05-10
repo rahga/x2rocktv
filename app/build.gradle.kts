@@ -80,6 +80,9 @@ dependencies {
     // Leanback (provides Theme.Leanback for the manifest theme)
     implementation(libs.androidx.leanback)
 
+    // TV Provider (home screen channels)
+    implementation(libs.androidx.tvprovider)
+
     // Navigation
     implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.navigation.compose)
