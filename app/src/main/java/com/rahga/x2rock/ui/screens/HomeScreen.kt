@@ -337,6 +337,7 @@ private fun RoomSidebar(
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val sorted = remember(groups, primaryRoomId, favoriteRoomIds) { sortedGroups(groups) }
+    val iconRowFocusRequester = remember { FocusRequester() }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
     LaunchedEffect(selectedGroupId, sorted) {
@@ -348,7 +349,7 @@ private fun RoomSidebar(
             .width(320.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .focusProperties { right = detailFocusRequester }
+            .focusProperties { right = iconRowFocusRequester }
     ) {
         Row(
             modifier = Modifier
@@ -358,7 +359,13 @@ private fun RoomSidebar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("x2rock", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .focusRequester(iconRowFocusRequester)
+                    .focusGroup()
+                    .focusProperties { right = detailFocusRequester }
+            ) {
                 if (groups.size > 1) {
                     SidebarIconButton(onClick = onPartyModeClick) {
                         Icon(Icons.Default.Celebration, contentDescription = "Party mode", modifier = Modifier.size(18.dp))
