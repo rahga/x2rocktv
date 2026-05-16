@@ -2,6 +2,7 @@ package com.rahga.x2rock.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -236,7 +237,8 @@ private fun PlaybackControls(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.focusGroup()
         ) {
             AppButton(onClick = { viewModel.skipToPreviousTrack() }) { Text("⏮  Prev") }
             if (state.durationMillis > 0) {
@@ -260,7 +262,8 @@ private fun PlaybackControls(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.focusGroup()
         ) {
             AppButton(onClick = { viewModel.toggleShuffle() }) {
                 Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
@@ -289,7 +292,8 @@ private fun PlaybackControls(
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.focusGroup()
         ) {
             AppButton(onClick = { viewModel.adjustVolume(-5) }, enabled = !state.isMuted) { Text("Vol −") }
             Text(
@@ -319,7 +323,7 @@ private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(vertical = 4.dp)
+        modifier = Modifier.padding(vertical = 4.dp).focusGroup()
     ) {
         Text(
             text = entry.playerName,
