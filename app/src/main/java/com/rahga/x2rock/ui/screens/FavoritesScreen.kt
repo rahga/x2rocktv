@@ -84,9 +84,10 @@ fun FavoritesScreen(
                     )
                 }
             }
-            if (playerState.trackName != null) {
+            val nowPlayingTrack = playerState.trackName
+            if (nowPlayingTrack != null) {
                 NowPlayingBar(
-                    trackName = playerState.trackName!!,
+                    trackName = nowPlayingTrack,
                     artistName = playerState.artistName,
                     isCurrentlyPlaying = playerState.playbackState.isPlaying(),
                     onPlayPause = { playerViewModel.togglePlayPause() }

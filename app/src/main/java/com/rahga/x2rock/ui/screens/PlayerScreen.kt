@@ -27,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -46,7 +45,9 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
@@ -63,6 +64,11 @@ fun PlayerPane(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showSleepTimerPicker by remember { mutableStateOf(false) }
+
+    // The picker traps focus, so closing it has to hand focus back explicitly.
+    LaunchedEffect(showSleepTimerPicker) {
+        if (!showSleepTimerPicker) detailFocusRequester.requestFocusSafely()
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Surface(
@@ -358,15 +364,9 @@ private fun SleepTimerPickerOverlay(
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
-    val firstFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
+    val firstFocus = rememberAutoFocusRequester()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f)),
-        contentAlignment = Alignment.Center
-    ) {
+    Overlay {
         Column(
             modifier = Modifier
                 .width(280.dp)
@@ -394,10 +394,12 @@ private fun SleepTimerPickerOverlay(
 }
 
 private fun Long.toTimeString(): String {
-    val totalSeconds = this / 1_000
-    val minutes = totalSeconds / 60
+    val totalSeconds = (this / 1_000).coerceAtLeast(0)
+    val hours = totalSeconds / 3_600
+    val minutes = (totalSeconds % 3_600) / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
+           else "%d:%02d".format(minutes, seconds)
 }
 
 private fun String.toPlayerDisplayLabel(): String = when (this) {
