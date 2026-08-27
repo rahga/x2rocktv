@@ -12,7 +12,9 @@ data class CliConfig(
     val clientId: String? = null,
     val clientSecret: String? = null,
     /** Room used when `--room` is absent. */
-    val room: String? = null
+    val room: String? = null,
+    /** Household id used when the account has more than one; unset means "first household". */
+    val householdId: String? = null
 ) {
     companion object {
         private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -26,7 +28,8 @@ data class CliConfig(
             return base.copy(
                 clientId = System.getenv("SONOS_CLIENT_ID")?.takeIf { it.isNotBlank() } ?: base.clientId,
                 clientSecret = System.getenv("SONOS_CLIENT_SECRET")?.takeIf { it.isNotBlank() } ?: base.clientSecret,
-                room = System.getenv("X2ROCK_ROOM")?.takeIf { it.isNotBlank() } ?: base.room
+                room = System.getenv("X2ROCK_ROOM")?.takeIf { it.isNotBlank() } ?: base.room,
+                householdId = System.getenv("X2ROCK_HOUSEHOLD")?.takeIf { it.isNotBlank() } ?: base.householdId
             )
         }
 

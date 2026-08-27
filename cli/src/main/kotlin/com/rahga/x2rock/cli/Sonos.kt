@@ -12,8 +12,14 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
-/** The object graph, built by hand — the same shape Hilt assembles in the TV app. */
-class Sonos(val config: CliConfig) {
+/**
+ * The object graph, built by hand — the same shape Hilt assembles in the TV app.
+ *
+ * [householdOverride], when set (from `--household`/`-H`), names a room in the household to use
+ * for this invocation only — it is resolved to an id on first use and never written to disk,
+ * unlike `x2rock config --household`.
+ */
+class Sonos(val config: CliConfig, private val householdOverride: String? = null) {
     val tokens = FileTokenStore()
 
     private val baseClient = OkHttpClient.Builder()
@@ -39,14 +45,17 @@ class Sonos(val config: CliConfig) {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(SonosApiService::class.java)
-        SonosRepository(api, auth)
+        SonosRepository(api, auth).apply { preferredHouseholdId = config.householdId }
     }
 
     val hasClientCredentials: Boolean
         get() = !config.clientId.isNullOrBlank() && !config.clientSecret.isNullOrBlank()
 
     /** Fetches the groups and returns them with each group's member names for matching. */
-    suspend fun groups(): List<Group> = repo.getGroups().getOrThrow()
+    suspend fun groups(): List<Group> {
+        householdOverride?.let { repo.preferredHouseholdId = resolveHouseholdId(repo, it) }
+        return repo.getGroups().getOrThrow()
+    }
 
     /** Lets an OkHttp-backed process exit promptly instead of waiting on idle pool threads. */
     fun shutdown() {
@@ -79,3 +88,20 @@ fun matchRoom(groups: List<Group>, query: String, playerName: (String) -> String
 
 class AmbiguousRoomException(val query: String, val candidates: List<String>) :
     RuntimeException("\"$query\" matches ${candidates.size} rooms: ${candidates.joinToString()}")
+
+class NoSuchHouseholdException(val query: String) :
+    RuntimeException("No household has a room named \"$query\". Run `x2rock households` to see what's available.")
+
+class AmbiguousHouseholdException(val query: String, val candidates: List<String>) :
+    RuntimeException("More than one household has a room named \"$query\": ${candidates.joinToString()}")
+
+/** Finds the household containing a room named [query] (case-insensitive), by any player in it. */
+suspend fun resolveHouseholdId(repo: SonosRepository, query: String): String {
+    val households = repo.listHouseholds().getOrThrow()
+    val match = households.entries.filter { (_, players) -> players.any { it.equals(query, ignoreCase = true) } }
+    return when (match.size) {
+        1 -> match.single().key
+        0 -> throw NoSuchHouseholdException(query)
+        else -> throw AmbiguousHouseholdException(query, match.flatMap { it.value })
+    }
+}

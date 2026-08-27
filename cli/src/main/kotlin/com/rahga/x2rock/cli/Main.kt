@@ -17,6 +17,7 @@ import com.github.ajalt.mordant.rendering.TextColors.green
 import com.github.ajalt.mordant.rendering.TextColors.yellow
 import com.github.ajalt.mordant.rendering.TextStyles.bold
 import com.github.ajalt.mordant.rendering.TextStyles.dim
+import com.github.ajalt.mordant.table.ColumnWidth
 import com.github.ajalt.mordant.table.table
 import com.github.ajalt.mordant.terminal.Terminal
 import com.google.gson.GsonBuilder
@@ -40,10 +41,10 @@ import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 
 /** Everything a subcommand needs, built once by the root command. */
-class Session(val roomOption: String?) {
+class Session(val roomOption: String?, householdOption: String?) {
     val terminal = Terminal()
     val config: CliConfig = CliConfig.load()
-    val sonos: Sonos by lazy { Sonos(config) }
+    val sonos: Sonos by lazy { Sonos(config, householdOverride = householdOption) }
     val json = GsonBuilder().serializeNulls().create()
 }
 
@@ -52,7 +53,7 @@ fun main(args: Array<String>) {
     X2Rock()
         .subcommands(
             Login(), Logout(), Config(), InstallHandler(), OAuthCallbackCmd(),
-            Rooms(), Now(), Play(), Pause(), Toggle(), Next(), Prev(), Vol(), Mute(),
+            Rooms(), Households(), Now(), Play(), Pause(), Toggle(), Next(), Prev(), Vol(), Mute(),
             Queue(), Favorites(), Favorite(), Daemon()
         )
         .main(args)
@@ -67,10 +68,16 @@ class X2Rock : CliktCommand(name = "x2rock") {
     """.trimIndent()
 
     private val room by option("-r", "--room", help = "Room to control (group or speaker name)")
+    private val household by option(
+        "-H", "--household",
+        help = "Use the household containing this room, for this command only (see `x2rock households`)"
+    )
 
     override fun run() {
-        currentContext.obj = Session(room)
+        currentContext.obj = Session(room, household)
     }
+
+    override fun aliases(): Map<String, List<String>> = mapOf("stop" to listOf("pause"))
 }
 
 /** Base for commands that talk to Sonos: signed-in check, room resolution, error mapping. */
@@ -87,6 +94,10 @@ abstract class SonosCommand(name: String) : CliktCommand(name = name) {
             runBlocking { execute() }
         } catch (e: AmbiguousRoomException) {
             fail(e.message ?: "Ambiguous room")
+        } catch (e: NoSuchHouseholdException) {
+            fail(e.message ?: "No such household")
+        } catch (e: AmbiguousHouseholdException) {
+            fail(e.message ?: "Ambiguous household")
         } catch (e: RateLimitedException) {
             fail("Sonos rate-limited this request${e.retryAfterMillis?.let { " — retry in ${it / 1000}s" } ?: ""}.")
         } catch (e: HttpException) {
@@ -181,21 +192,37 @@ class Logout : CliktCommand(name = "logout") {
 }
 
 class Config : CliktCommand(name = "config") {
-    override fun help(context: Context) = "Show or set client credentials and the default room."
+    override fun help(context: Context) = "Show or set client credentials, the default room, and the household."
     private val clientId by option("--client-id")
     private val clientSecret by option("--client-secret")
     private val room by option("--room", help = "Default room when --room is not passed")
+    private val household by option(
+        "--household",
+        help = "Default household, by the name of any room inside it (see `x2rock households`)"
+    )
     private val session by requireObject<Session>()
 
     override fun run() {
         val current = session.config
-        if (clientId == null && clientSecret == null && room == null) {
+        if (clientId == null && clientSecret == null && room == null && household == null) {
             session.terminal.println("config file: ${CliConfig.file}")
             session.terminal.println("client id:   ${current.clientId ?: dim("(unset)")}")
             session.terminal.println("secret:      ${if (current.clientSecret.isNullOrBlank()) dim("(unset)") else "••••••••"}")
             session.terminal.println("room:        ${current.room ?: dim("(unset)")}")
+            session.terminal.println("household:   ${current.householdId ?: dim("(unset — using the first one)")}")
             return
         }
+
+        val householdId = household?.let { query ->
+            try {
+                runBlocking { resolveHouseholdId(session.sonos.repo, query) }
+            } catch (e: NoSuchHouseholdException) {
+                throw PrintMessage(e.message ?: "No such household", statusCode = 1, printError = true)
+            } catch (e: AmbiguousHouseholdException) {
+                throw PrintMessage(e.message ?: "Ambiguous household", statusCode = 1, printError = true)
+            }
+        }
+
         // Save only what came from the file/flags — never persist values that arrived via env.
         val onDisk = runCatching {
             if (Files.exists(CliConfig.file)) GsonBuilder().create().fromJson(Files.readString(CliConfig.file), CliConfig::class.java) else null
@@ -204,10 +231,31 @@ class Config : CliktCommand(name = "config") {
             onDisk.copy(
                 clientId = clientId ?: onDisk.clientId,
                 clientSecret = clientSecret ?: onDisk.clientSecret,
-                room = room ?: onDisk.room
+                room = room ?: onDisk.room,
+                householdId = householdId ?: onDisk.householdId
             )
         )
         session.terminal.println("Saved to ${CliConfig.file}")
+    }
+}
+
+class Households : SonosCommand("households") {
+    override fun help(context: Context) =
+        "List every household on the account, with the rooms in each — Sonos gives households no name of their own."
+    private val json by option("--json").flag()
+
+    override suspend fun execute() {
+        val households = sonos.repo.listHouseholds().getOrThrow()
+        if (json) {
+            t.println(session.json.toJson(households.map { (id, players) -> mapOf("id" to id, "rooms" to players) }))
+            return
+        }
+        households.entries.forEachIndexed { index, (id, players) ->
+            t.println("${bold("#${index + 1}")} ${dim(id)}")
+            t.println("   ${players.sorted().joinToString(", ").ifBlank { dim("(no rooms)") }}")
+        }
+        t.println()
+        t.println(dim("Pick one with: x2rock config --household \"<a room name from that household>\""))
     }
 }
 
@@ -277,6 +325,9 @@ class Rooms : SonosCommand("rooms") {
             return
         }
         t.println(table {
+            column(0) { width = ColumnWidth.Auto }
+            column(1) { width = ColumnWidth.Auto }
+            column(2) { width = ColumnWidth.Expand() }
             header { row("Room", "State", "Now playing") }
             body {
                 for (g in groups) {

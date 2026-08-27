@@ -41,14 +41,31 @@ class SonosRepository @Inject constructor(
     @Volatile private var cachedPlayers: Map<String, Player> = emptyMap()
     @Volatile private var cachedGroups: Map<String, Group> = emptyMap()
 
+    /** Household to use when the caller hasn't pinned one — set via config/`--household`. */
+    var preferredHouseholdId: String? = null
+
+    /**
+     * Every household on the account, each with the names of the players inside it. Sonos
+     * accounts can span multiple households (e.g. separate physical locations); the API gives
+     * households no name of their own, so their player list is the only way to tell them apart.
+     */
+    suspend fun listHouseholds(): Result<Map<String, List<String>>> = apiCall {
+        val households = fetchWithRefresh { apiService.getHouseholds() }.households
+        households.associate { household ->
+            val players = fetchWithRefresh { apiService.getGroups(household.id) }.players.map { it.name }
+            household.id to players
+        }
+    }
+
     suspend fun getGroups(): Result<List<Group>> = apiCall {
         val householdId = cachedHouseholdId
+            ?: preferredHouseholdId
             ?: fetchWithRefresh { apiService.getHouseholds() }
                 .households
                 .firstOrNull()
                 ?.id
-                ?.also { cachedHouseholdId = it }
             ?: error("No households found on this account")
+        cachedHouseholdId = householdId
 
         val response = fetchWithRefresh { apiService.getGroups(householdId) }
         cachedPlayers = response.players.associateBy { it.id }
