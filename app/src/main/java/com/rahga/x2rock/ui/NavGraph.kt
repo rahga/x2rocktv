@@ -6,6 +6,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -19,12 +22,30 @@ import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.LoginViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
+import kotlinx.coroutines.awaitCancellation
 
 @Composable
 fun X2RockNavGraph(startDestination: String) {
     val navController = rememberNavController()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
+
+    // Both view models poll the Sonos cloud API on a timer. Gate them here, once, so nothing
+    // keeps hitting the network while the TV is on another input — and so PlayerViewModel keeps
+    // polling on the queue and favorites screens, which show its now-playing bar.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            homeViewModel.setPollingActive(true)
+            playerViewModel.setPollingActive(true)
+            try {
+                awaitCancellation()
+            } finally {
+                homeViewModel.setPollingActive(false)
+                playerViewModel.setPollingActive(false)
+            }
+        }
+    }
 
     val navigateToRoom by homeViewModel.navigateToRoom.collectAsState()
     LaunchedEffect(navigateToRoom) {

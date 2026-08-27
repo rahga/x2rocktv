@@ -4,6 +4,7 @@ import android.net.Uri
 import android.util.Base64
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.auth.TokenStore
+import com.rahga.x2rock.di.TokenClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +23,7 @@ import javax.inject.Singleton
 @Singleton
 class SonosAuthRepository @Inject constructor(
     private val tokenStore: TokenStore,
-    private val okHttpClient: OkHttpClient
+    @TokenClient private val okHttpClient: OkHttpClient
 ) {
     companion object {
         private const val AUTH_ENDPOINT = "https://api.sonos.com/login/v3/oauth"

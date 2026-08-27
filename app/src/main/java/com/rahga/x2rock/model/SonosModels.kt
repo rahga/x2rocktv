@@ -96,3 +96,6 @@ data class ModifyGroupMembersRequest(
 data class DeleteQueueItemsRequest(val ids: List<String>)
 
 fun String.isPlaying() = this == "PLAYBACK_STATE_PLAYING"
+
+/** False only when the group is idle, i.e. there is no track worth asking the API about. */
+fun String.hasLoadedContent() = this != "PLAYBACK_STATE_IDLE"

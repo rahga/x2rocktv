@@ -9,18 +9,19 @@ import com.rahga.x2rock.channel.RoomsChannelSync
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -57,6 +58,8 @@ class HomeViewModel @Inject constructor(
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
 
+    private val pollingActive = MutableStateFlow(false)
+
     init {
         viewModelScope.launch {
             pendingRoomDeepLink.groupId.collect { groupId ->
@@ -68,17 +71,21 @@ class HomeViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            while (isActive) {
-                refresh()
-                delay(5_000L)
+            pollingActive.collectLatest { active ->
+                if (active) pollLoop(POLL_INTERVAL_MILLIS, ::onRefreshFailed) { refresh() }
             }
         }
+    }
+
+    /** Driven by the nav graph's lifecycle observer so nothing polls while the app is hidden. */
+    fun setPollingActive(active: Boolean) {
+        pollingActive.value = active
     }
 
     fun clearNavigateToRoom() { _navigateToRoom.value = false }
 
     fun loadGroups() {
-        viewModelScope.launch { refresh() }
+        viewModelScope.launch { refreshQuietly() }
     }
 
     fun signOut() {
@@ -101,16 +108,16 @@ class HomeViewModel @Inject constructor(
 
     fun joinGroup(sourceGroupId: String, targetGroupId: String) {
         val source = findGroup(sourceGroupId) ?: return
-        viewModelScope.launch { repository.joinGroup(source, targetGroupId); refresh() }
+        viewModelScope.launch { repository.joinGroup(source, targetGroupId); refreshQuietly() }
     }
 
     fun soloGroup(groupId: String) {
         val group = findGroup(groupId) ?: return
-        viewModelScope.launch { repository.soloGroup(group); refresh() }
+        viewModelScope.launch { repository.soloGroup(group); refreshQuietly() }
     }
 
     fun removePlayerFromGroup(groupId: String, playerId: String) {
-        viewModelScope.launch { repository.removePlayerFromGroup(groupId, playerId); refresh() }
+        viewModelScope.launch { repository.removePlayerFromGroup(groupId, playerId); refreshQuietly() }
     }
 
     fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
@@ -120,7 +127,7 @@ class HomeViewModel @Inject constructor(
         val groups = (_uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
         val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
-        viewModelScope.launch { repository.partyMode(sorted.first(), sorted.drop(1)); refresh() }
+        viewModelScope.launch { repository.partyMode(sorted.first(), sorted.drop(1)); refreshQuietly() }
     }
 
     private fun findGroup(id: String): Group? =
@@ -133,36 +140,54 @@ class HomeViewModel @Inject constructor(
         return primary + favorites + rest
     }
 
+    private suspend fun refreshQuietly() {
+        try {
+            refresh()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            onRefreshFailed(e)
+        }
+    }
+
     private suspend fun refresh() {
-        val showSpinner = _uiState.value is UiState.Error || _uiState.value is UiState.Loading
-        if (showSpinner) _uiState.value = UiState.Loading
-        repository.getGroups().fold(
-            onSuccess = { groups ->
-                val nowPlaying = fetchNowPlaying(groups)
-                _uiState.value = UiState.Success(groups, nowPlaying)
-                if (_selectedGroupId.value == null && groups.isNotEmpty()) {
-                    val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
-                    _selectedGroupId.value = sorted.first().id
-                }
-                viewModelScope.launch(Dispatchers.IO) {
-                    channelSync.sync(groups, nowPlaying)
-                }
-            },
-            onFailure = { e ->
-                if (_uiState.value !is UiState.Success) {
-                    _uiState.value = UiState.Error(e.message ?: "Unknown error")
-                }
-            }
-        )
+        if (_uiState.value !is UiState.Success) _uiState.value = UiState.Loading
+
+        val groups = repository.getGroups().getOrThrow()
+        val nowPlaying = fetchNowPlaying(groups)
+        _uiState.value = UiState.Success(groups, nowPlaying)
+
+        if (_selectedGroupId.value == null && groups.isNotEmpty()) {
+            val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+            _selectedGroupId.value = sorted.first().id
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            channelSync.sync(groups, nowPlaying)
+        }
+    }
+
+    private fun onRefreshFailed(e: Throwable) {
+        if (_uiState.value !is UiState.Success) {
+            _uiState.value = UiState.Error(e.message ?: "Unknown error")
+        }
     }
 
     private suspend fun fetchNowPlaying(groups: List<Group>): Map<String, Track?> = coroutineScope {
-        groups.map { group ->
+        // An idle room has no track to report, and the sidebar already renders its state from
+        // Group.playbackState — which the groups call returned for free. Skipping those saves a
+        // request per idle room on every tick.
+        val (loaded, idle) = groups.partition { it.playbackState.hasLoadedContent() }
+        val fetched = loaded.map { group ->
             async {
-                val track = repository.getPlaybackMetadata(group.id)
+                group.id to repository.getPlaybackMetadata(group.id)
                     .getOrNull()?.currentItem?.track
-                group.id to track
             }
-        }.awaitAll().toMap()
+        }.awaitAll()
+        fetched.toMap() + idle.associate { it.id to null }
+    }
+
+    private companion object {
+        /** The sidebar is ambient information; the selected room polls faster via PlayerViewModel. */
+        const val POLL_INTERVAL_MILLIS = 10_000L
     }
 }
