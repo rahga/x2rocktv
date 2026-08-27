@@ -12,9 +12,9 @@ x2rock lets you control Sonos speakers from a TV remote. You authenticate with y
 
 ## Modules
 
-Two Gradle modules. `:core` is a plain Kotlin/JVM library with no Android dependency — it is
-everything that talks to Sonos, and is the shared foundation for any desktop or CLI frontend.
-`:app` is the Android TV application.
+Three Gradle modules. `:core` is a plain Kotlin/JVM library with no Android dependency — it is
+everything that talks to Sonos. `:app` is the Android TV application. `:cli` is the Linux
+command line; it depends on `:core` only.
 
 `:core` carries `javax.inject` annotations (`@Inject`, `@Singleton`, `@Qualifier`) so Hilt in
 `:app` can construct its classes directly; a non-Hilt frontend just calls the constructors.
@@ -45,6 +45,15 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM)
 │
 └── di/
     └── TokenClient.kt             Qualifier for the token-exchange OkHttp client
+
+cli/src/main/kotlin/com/rahga/x2rock/cli/       (Linux, Clikt + Mordant)
+├── Main.kt                        Commands: login, rooms, now, play/pause/toggle, vol, queue, favorites…
+├── Sonos.kt                       Hand-built object graph (what Hilt does in :app) + room-name matching
+├── FileTokenStore.kt              TokenStore impl: 0600 JSON in $XDG_CONFIG_HOME/x2rock
+├── CliConfig.kt                   Client credentials + default room; env vars override the file
+├── OAuthCallback.kt               Browser → `x2rock oauth-callback URL` → file in $XDG_RUNTIME_DIR → `x2rock login`
+├── Xdg.kt                         XDG base dirs, private-file writes
+└── Format.kt                      Clock, one-line track, "+5"/"40" volume parsing
 
 app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── X2RockApp.kt                   Hilt application entry point
@@ -161,7 +170,11 @@ All methods return `Result<T>`. Internally, every call goes through `fetchWithRe
 OAuth 2.0 with Basic auth (client credentials). Tokens go through the `TokenStore` interface — on Android that is `EncryptedTokenStore` (AES256-GCM). A `Mutex` prevents concurrent refresh calls. Client credentials arrive via `SonosClientConfig` rather than `BuildConfig`, so the repository has no build-system coupling.
 
 **OAuth redirect URI:** `https://rahga.github.io/x2rock/callback.html`  
-The hosted page redirects to the deep link `x2rock://callback`, which the WebView intercepts.
+The hosted page redirects to the deep link `x2rock://callback`. On Android the WebView intercepts
+it. On Linux, `x2rock install-handler` registers an `x-scheme-handler/x2rock` desktop entry, so the
+browser launches `x2rock oauth-callback <url>`, which drops the URL in `$XDG_RUNTIME_DIR/x2rock/`
+for the waiting `x2rock login` process. Same registered redirect URI for both platforms — nothing
+to add in the Sonos integration manager.
 
 ---
 
@@ -229,6 +242,7 @@ All ViewModels are `@HiltViewModel` and injected automatically.
 
 - Language: Kotlin only
 - Min SDK: 21 / Target SDK: 34
-- Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM) and `:app` (Android)
-- Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
+- Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM), `:cli` (Kotlin/JVM) and `:app` (Android)
+- Unit tests: `./gradlew :core:test :cli:test :app:testDebugUnitTest`
+- CLI binary: `./gradlew :cli:installDist` → `cli/build/install/x2rock/bin/x2rock`
 - Key dependencies: Jetpack Compose TV, Dagger Hilt, Retrofit 2, OkHttp, Gson, Jetpack Navigation, AndroidX Security Crypto
