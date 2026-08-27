@@ -39,7 +39,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -58,9 +57,6 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -73,6 +69,9 @@ import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.dpadLongPress
+import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -108,9 +107,11 @@ fun HomeScreen(
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val nowPlaying = (state as? HomeViewModel.UiState.Success)?.nowPlaying ?: emptyMap()
 
-    LaunchedEffect(selectedGroupId) {
+    // Keyed on groups too: a deep link can select a room before the group list has loaded, and
+    // without the re-run the player pane would keep the empty name it resolved to first.
+    LaunchedEffect(selectedGroupId, groups) {
         val id = selectedGroupId ?: return@LaunchedEffect
-        val name = groups.find { it.id == id }?.name ?: ""
+        val name = groups.find { it.id == id }?.name ?: return@LaunchedEffect
         playerViewModel.selectGroup(id, name)
     }
 
@@ -135,6 +136,17 @@ fun HomeScreen(
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
         if (showSettings) settingsFocus.requestFocusSafely()
+    }
+
+    // Modals trap focus, so closing one has to hand it back explicitly — otherwise focus is left
+    // on a node that just left the composition and the remote goes dead until a direction press.
+    val modalVisible = showSettings || showPartyConfirmation || contextMenuGroup != null ||
+        groupPickerSource != null || separateRoomSource != null
+    LaunchedEffect(modalVisible) {
+        if (!modalVisible) {
+            if (sidebarVisible) sidebarFocusRequester.requestFocusSafely()
+            else detailFocusRequester.requestFocusSafely()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -304,18 +316,6 @@ fun HomeScreen(
     }
 }
 
-@Composable
-private fun Overlay(content: @Composable () -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f)),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
-}
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RoomSidebar(
@@ -404,7 +404,7 @@ private fun RoomSidebar(
                 LazyColumn(state = listState) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId
-                        val itemFocus = remember { FocusRequester() }
+                        val itemFocus = remember(group.id) { FocusRequester() }
                         RoomListItem(
                             group = group,
                             track = nowPlaying[group.id],
@@ -434,9 +434,6 @@ private fun RoomListItem(
     onFocused: () -> Unit,
     onLongPress: () -> Unit
 ) {
-    val scope = rememberCoroutineScope()
-    var longPressJob by remember { mutableStateOf<Job?>(null) }
-
     Card(
         onClick = {},
         modifier = Modifier
@@ -444,33 +441,7 @@ private fun RoomListItem(
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .focusRequester(focusRequester)
             .onFocusChanged { if (it.isFocused) onFocused() }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
-                    longPressJob?.cancel()
-                    longPressJob = null
-                    onLongPress()
-                    return@onKeyEvent true
-                }
-                if (event.key == Key.DirectionCenter || event.key == Key.Enter) {
-                    when (event.type) {
-                        KeyEventType.KeyDown -> {
-                            if (longPressJob == null) {
-                                longPressJob = scope.launch {
-                                    delay(600L)
-                                    longPressJob = null
-                                    onLongPress()
-                                }
-                            }
-                        }
-                        KeyEventType.KeyUp -> {
-                            longPressJob?.cancel()
-                            longPressJob = null
-                        }
-                        else -> {}
-                    }
-                }
-                false
-            }
+            .dpadLongPress(onLongPress)
     ) {
         Row(
             modifier = Modifier
@@ -544,8 +515,7 @@ private fun RoomContextMenu(
         modifier = Modifier
             .width(340.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp)
-            .onKeyEvent { it.key != Key.Back },
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(group.name, style = MaterialTheme.typography.titleMedium)
@@ -604,8 +574,7 @@ private fun GroupPickerDialog(
         modifier = Modifier
             .width(340.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp)
-            .onKeyEvent { it.key != Key.Back },
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Join \"${sourceGroup.name}\" with…", style = MaterialTheme.typography.titleMedium)
@@ -655,8 +624,7 @@ private fun SeparateRoomDialog(
         modifier = Modifier
             .width(340.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp)
-            .onKeyEvent { it.key != Key.Back },
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Separate a room from \"${group.name}\"", style = MaterialTheme.typography.titleMedium)
@@ -695,8 +663,7 @@ private fun PartyConfirmationDialog(
         modifier = Modifier
             .width(340.dp)
             .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp)
-            .onKeyEvent { it.key != Key.Back },
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text("Party Mode", style = MaterialTheme.typography.titleMedium)
@@ -730,7 +697,7 @@ private fun SettingsPanel(
             .width(380.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .onKeyEvent { it.key != Key.Back }
+            .modalFocusTrap()
     ) {
         Column(
             modifier = Modifier
