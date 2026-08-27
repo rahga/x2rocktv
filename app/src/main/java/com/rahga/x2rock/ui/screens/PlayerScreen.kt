@@ -395,7 +395,7 @@ private fun SleepTimerPickerOverlay(
     }
 }
 
-private fun Long.toTimeString(): String {
+internal fun Long.toTimeString(): String {
     val totalSeconds = (this / 1_000).coerceAtLeast(0)
     val hours = totalSeconds / 3_600
     val minutes = (totalSeconds % 3_600) / 60

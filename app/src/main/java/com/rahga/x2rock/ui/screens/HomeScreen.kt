@@ -79,6 +79,7 @@ import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.swatchColor
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
+import com.rahga.x2rock.viewmodel.sortGroups
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -162,9 +163,6 @@ fun HomeScreen(
                     selectedGroupId = selectedGroupId,
                     primaryRoomId = primaryRoomId,
                     favoriteRoomIds = favoriteRoomIds,
-                    sortedGroups = { grps ->
-                        homeViewModel.sortedGroups(grps, primaryRoomId, favoriteRoomIds)
-                    },
                     nowPlaying = nowPlaying,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
@@ -324,7 +322,6 @@ private fun RoomSidebar(
     selectedGroupId: String?,
     primaryRoomId: String?,
     favoriteRoomIds: Set<String>,
-    sortedGroups: (List<Group>) -> List<Group>,
     nowPlaying: Map<String, Track?>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
@@ -337,7 +334,9 @@ private fun RoomSidebar(
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val sorted = remember(groups, primaryRoomId, favoriteRoomIds) { sortedGroups(groups) }
+    val sorted = remember(groups, primaryRoomId, favoriteRoomIds) {
+        sortGroups(groups, primaryRoomId, favoriteRoomIds)
+    }
     val iconRowFocusRequester = remember { FocusRequester() }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
