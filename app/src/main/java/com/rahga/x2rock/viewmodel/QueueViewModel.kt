@@ -14,6 +14,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * A queue row paired with its position in the *unfiltered* queue. The API's seek command takes a
+ * 1-based track number over the whole queue, so it can't be derived from the displayed list —
+ * deleted tombstones are hidden but still occupy their slot.
+ */
+data class QueueEntry(val trackNumber: Int, val item: QueueItem)
+
+/** Numbers every item by its slot in the full queue, then hides the tombstones. */
+fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
+    items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
+        .filter { !it.item.deleted }
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val repository: SonosRepository,
@@ -24,7 +36,7 @@ class QueueViewModel @Inject constructor(
 
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val items: List<QueueItem>, val currentTrackName: String?) : UiState
+        data class Success(val entries: List<QueueEntry>, val currentTrackName: String?) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -58,7 +70,7 @@ class QueueViewModel @Inject constructor(
                     val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
                     val queue = queueDeferred.await()
                     val currentTrackName = metaDeferred.await()?.currentItem?.track?.name
-                    UiState.Success(queue.items.filter { !it.deleted }, currentTrackName)
+                    UiState.Success(queueEntries(queue.items), currentTrackName)
                 }
             }
                 .onSuccess { _uiState.value = it }

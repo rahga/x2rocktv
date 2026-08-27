@@ -56,7 +56,7 @@ data class SetMuteRequest(val muted: Boolean)
 data class SeekRequest(val positionMillis: Long, val trackNumber: Int? = null)
 
 data class PlayModeState(
-    val repeat: String = "REPEAT_NONE",
+    val repeat: String = RepeatModes.NONE,
     val shuffle: Boolean = false,
     val crossfade: Boolean = false
 )
@@ -95,4 +95,27 @@ data class ModifyGroupMembersRequest(
 
 data class DeleteQueueItemsRequest(val ids: List<String>)
 
-fun String.isPlaying() = this == "PLAYBACK_STATE_PLAYING"
+object PlaybackStates {
+    const val IDLE = "PLAYBACK_STATE_IDLE"
+    const val BUFFERING = "PLAYBACK_STATE_BUFFERING"
+    const val PAUSED = "PLAYBACK_STATE_PAUSED"
+    const val PLAYING = "PLAYBACK_STATE_PLAYING"
+}
+
+object RepeatModes {
+    const val NONE = "REPEAT_NONE"
+    const val ALL = "REPEAT_ALL"
+    const val ONE = "REPEAT_ONE"
+}
+
+fun String.isPlaying() = this == PlaybackStates.PLAYING
+
+/** False only when the group is idle, i.e. there is no track worth asking the API about. */
+fun String.hasLoadedContent() = this != PlaybackStates.IDLE
+
+fun String.toPlaybackLabel(): String = when (this) {
+    PlaybackStates.PLAYING -> "Playing"
+    PlaybackStates.PAUSED -> "Paused"
+    PlaybackStates.BUFFERING -> "Buffering"
+    else -> "Idle"
+}
