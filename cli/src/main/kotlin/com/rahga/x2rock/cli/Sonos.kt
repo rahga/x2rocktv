@@ -96,8 +96,11 @@ class AmbiguousHouseholdException(val query: String, val candidates: List<String
     RuntimeException("More than one household has a room named \"$query\": ${candidates.joinToString()}")
 
 /** Finds the household containing a room named [query] (case-insensitive), by any player in it. */
-suspend fun resolveHouseholdId(repo: SonosRepository, query: String): String {
-    val households = repo.listHouseholds().getOrThrow()
+suspend fun resolveHouseholdId(repo: SonosRepository, query: String): String =
+    matchHousehold(repo.listHouseholds().getOrThrow(), query)
+
+/** Pure matching logic behind [resolveHouseholdId], split out so it's testable without the network. */
+fun matchHousehold(households: Map<String, List<String>>, query: String): String {
     val match = households.entries.filter { (_, players) -> players.any { it.equals(query, ignoreCase = true) } }
     return when (match.size) {
         1 -> match.single().key

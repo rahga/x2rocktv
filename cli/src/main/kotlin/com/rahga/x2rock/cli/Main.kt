@@ -41,7 +41,7 @@ import java.nio.file.Path
 import kotlin.time.Duration.Companion.minutes
 
 /** Everything a subcommand needs, built once by the root command. */
-class Session(val roomOption: String?, householdOption: String?) {
+class Session(val roomOption: String?, val householdOption: String?) {
     val terminal = Terminal()
     val config: CliConfig = CliConfig.load()
     val sonos: Sonos by lazy { Sonos(config, householdOverride = householdOption) }
@@ -82,7 +82,21 @@ class X2Rock : CliktCommand(name = "x2rock") {
 
 /** Base for commands that talk to Sonos: signed-in check, room resolution, error mapping. */
 abstract class SonosCommand(name: String) : CliktCommand(name = name) {
-    protected val session by requireObject<Session>()
+    private val parentSession by requireObject<Session>()
+
+    // `-r`/`-H` also work after the subcommand name (`x2rock daemon -H room`), not just before it
+    // (`x2rock -H room daemon`) — Clikt doesn't share a parent's options with its children, so we
+    // repeat them here and fall back to whatever the root command already parsed.
+    private val roomOverride by option("-r", "--room", help = "Room to control (group or speaker name)")
+    private val householdOverride by option(
+        "-H", "--household",
+        help = "Use the household containing this room, for this command only (see `x2rock households`)"
+    )
+
+    protected val session: Session by lazy {
+        if (roomOverride == null && householdOverride == null) parentSession
+        else Session(roomOverride ?: parentSession.roomOption, householdOverride ?: parentSession.householdOption)
+    }
     protected val t get() = session.terminal
     protected val sonos get() = session.sonos
 

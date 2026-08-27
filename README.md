@@ -32,6 +32,21 @@ from `X2ROCK_ROOM`. Everything else lives in `$XDG_CONFIG_HOME/x2rock/` with mod
 If the browser can't invoke the handler (no `xdg-mime`, a locked-down browser), `x2rock login --manual`
 lets you paste the redirected URL instead.
 
+`-r`/`--room` and `-H`/`--household` work either before or after the subcommand:
+`x2rock -r Office next` and `x2rock next -r Office` are equivalent.
+
+### Multiple households
+
+A Sonos account can have more than one household — for example a standalone speaker that got set
+up separately from the rest of your system. `x2rock rooms` (and everything else) only looks at one
+household at a time.
+
+```sh
+x2rock households                        # list every household by the rooms in it
+x2rock config --household "Media Room"   # persistent default: pick by naming any room in it
+x2rock rooms -H "Media Room"             # one-off override, doesn't touch the saved config
+```
+
 ### MPRIS (playerctl, Waybar, media keys)
 
 `x2rock daemon` publishes the room on the session bus as `org.mpris.MediaPlayer2.x2rock`, so
@@ -54,6 +69,35 @@ bind = , XF86AudioPlay,       exec, x2rock toggle
 bind = , XF86AudioNext,       exec, x2rock next
 bind = , XF86AudioRaiseVolume, exec, x2rock vol +3
 ```
+
+Running more than one room at once — e.g. a home system and a separate-household office
+speaker — needs one daemon per room, each with its own `--bus-name`, as a systemd `--user` service:
+
+```ini
+# ~/.config/systemd/user/x2rock-media-room.service
+[Unit]
+Description=x2rock MPRIS bridge for Media Room
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/x2rock daemon -r "Media Room" -H "Media Room" --bus-name x2rock-media-room
+Restart=on-failure
+RestartSec=5
+Environment=XDG_RUNTIME_DIR=%t
+
+[Install]
+WantedBy=graphical-session.target
+```
+
+```sh
+systemctl --user enable --now x2rock-media-room.service
+```
+
+The unit references `~/.local/bin/x2rock`, not `cli/build/install/...`, since a rebuild wipes the
+build directory — copy (or symlink) the installed app there, e.g.
+`cp -r cli/build/install/x2rock ~/.local/share/x2rock && ln -sf ~/.local/share/x2rock/bin/x2rock ~/.local/bin/x2rock`.
 
 ## Tests
 
