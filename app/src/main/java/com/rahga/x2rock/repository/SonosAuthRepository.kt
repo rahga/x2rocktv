@@ -5,6 +5,9 @@ import android.util.Base64
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.auth.TokenStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -27,14 +30,16 @@ class SonosAuthRepository @Inject constructor(
         const val REDIRECT_URI = "https://rahga.github.io/x2rock/callback.html"
         const val BROWSER_REDIRECT_URI = "x2rock://callback"
         private const val SCOPE = "playback-control-all"
+        private const val EXPIRY_MARGIN_MILLIS = 60_000L
     }
 
-    @Volatile private var pendingState: String? = null
-    @Volatile private var pendingRedirectUri: String? = null
     private val refreshMutex = Mutex()
 
+    /** Set when the refresh token is rejected — the UI routes back to login. */
+    private val _sessionExpired = MutableStateFlow(false)
+    val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
+
     val isAuthenticated: Boolean get() = tokenStore.isAuthenticated
-    val accessToken: String? get() = tokenStore.accessToken
 
     fun buildAuthUrl(): String = buildAuthUrlWithRedirect(REDIRECT_URI)
 
@@ -42,8 +47,9 @@ class SonosAuthRepository @Inject constructor(
 
     private fun buildAuthUrlWithRedirect(redirectUri: String): String {
         val state = generateState()
-        pendingState = state
-        pendingRedirectUri = redirectUri
+        // Persisted, not held in memory: the browser round trip can outlive this process.
+        tokenStore.pendingAuthState = state
+        tokenStore.pendingRedirectUri = redirectUri
         return Uri.parse(AUTH_ENDPOINT).buildUpon()
             .appendQueryParameter("client_id", BuildConfig.SONOS_CLIENT_ID)
             .appendQueryParameter("response_type", "code")
@@ -56,69 +62,88 @@ class SonosAuthRepository @Inject constructor(
 
     suspend fun exchangeCodeForTokens(code: String, returnedState: String): Result<Unit> =
         withContext(Dispatchers.IO) {
-            val expectedState = pendingState
-            if (returnedState != expectedState) {
+            val expectedState = tokenStore.pendingAuthState
+            if (expectedState == null || returnedState != expectedState) {
                 return@withContext Result.failure(
                     SecurityException("OAuth state mismatch — possible CSRF attack")
                 )
             }
 
             runCatching {
-                val response = okHttpClient.newCall(tokenRequest(code)).execute()
-                val body = response.body?.string()
-                    ?: throw IllegalStateException("Empty response from token endpoint")
-                if (!response.isSuccessful) {
-                    throw IllegalStateException("Token exchange failed (${response.code}): $body")
+                val request = tokenRequest(code)
+                okHttpClient.newCall(request).execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        throw IllegalStateException("Token exchange failed (${response.code}): $body")
+                    }
+                    storeTokens(JSONObject(body))
                 }
-                storeTokens(JSONObject(body))
-                pendingState = null
-                pendingRedirectUri = null
+                tokenStore.pendingAuthState = null
+                tokenStore.pendingRedirectUri = null
+                _sessionExpired.value = false
             }
         }
 
+    /**
+     * Refreshes the access token, deduplicating concurrent callers. Sonos rotates the refresh
+     * token on every use, so parallel refreshes would invalidate each other — callers that queue
+     * behind an in-flight refresh return success instead of issuing their own.
+     */
     suspend fun refreshAccessToken(): Result<Unit> = withContext(Dispatchers.IO) {
-        val refresh = tokenStore.refreshToken
-            ?: return@withContext Result.failure(
-                IllegalStateException("No refresh token stored")
-            )
-        runCatching {
-            val body = FormBody.Builder()
-                .add("grant_type", "refresh_token")
-                .add("refresh_token", refresh)
-                .build()
-            val request = Request.Builder()
-                .url(TOKEN_ENDPOINT)
-                .addHeader("Authorization", basicAuthHeader())
-                .post(body)
-                .build()
-            val response = okHttpClient.newCall(request).execute()
-            val responseBody = response.body?.string()
-                ?: throw IllegalStateException("Empty response from token endpoint")
-            if (!response.isSuccessful) {
-                throw IllegalStateException("Token refresh failed (${response.code}): $responseBody")
+        val tokenBeforeLock = tokenStore.accessToken
+        refreshMutex.withLock {
+            if (tokenStore.accessToken != tokenBeforeLock) return@withLock Result.success(Unit)
+
+            val refresh = tokenStore.refreshToken
+            if (refresh == null) {
+                _sessionExpired.value = true
+                return@withLock Result.failure(IllegalStateException("No refresh token stored"))
             }
-            storeTokens(JSONObject(responseBody))
+
+            runCatching {
+                val body = FormBody.Builder()
+                    .add("grant_type", "refresh_token")
+                    .add("refresh_token", refresh)
+                    .build()
+                val request = Request.Builder()
+                    .url(TOKEN_ENDPOINT)
+                    .addHeader("Authorization", basicAuthHeader())
+                    .post(body)
+                    .build()
+                okHttpClient.newCall(request).execute().use { response ->
+                    val responseBody = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        // 400 invalid_grant / 401 — the refresh token is dead, not a transient failure.
+                        if (response.code == 400 || response.code == 401) {
+                            _sessionExpired.value = true
+                        }
+                        throw IllegalStateException("Token refresh failed (${response.code})")
+                    }
+                    storeTokens(JSONObject(responseBody))
+                }
+            }
         }
     }
 
-    fun clearTokens() = tokenStore.clear()
+    fun clearTokens() {
+        tokenStore.clear()
+        _sessionExpired.value = false
+    }
 
-    suspend fun ensureValidToken() {
+    /** Refreshes proactively when the token is within [EXPIRY_MARGIN_MILLIS] of expiring. */
+    suspend fun ensureValidToken(): Result<Unit> {
         val expiresAt = tokenStore.expiresAt
-        if (expiresAt > 0 && System.currentTimeMillis() > expiresAt - 60_000L) {
-            refreshMutex.withLock {
-                if (System.currentTimeMillis() > tokenStore.expiresAt - 60_000L) {
-                    refreshAccessToken()
-                }
-            }
+        if (expiresAt <= 0L || System.currentTimeMillis() <= expiresAt - EXPIRY_MARGIN_MILLIS) {
+            return Result.success(Unit)
         }
+        return refreshAccessToken()
     }
 
     private fun tokenRequest(code: String): Request {
         val body = FormBody.Builder()
             .add("grant_type", "authorization_code")
             .add("code", code)
-            .add("redirect_uri", pendingRedirectUri ?: REDIRECT_URI)
+            .add("redirect_uri", tokenStore.pendingRedirectUri ?: REDIRECT_URI)
             .build()
         return Request.Builder()
             .url(TOKEN_ENDPOINT)

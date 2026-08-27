@@ -36,6 +36,18 @@ class TokenStore @Inject constructor(
         get() = prefs.getLong(KEY_EXPIRES_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_EXPIRES_AT, value).apply()
 
+    /**
+     * OAuth CSRF state and the redirect URI it was issued for. Persisted rather than held in
+     * memory because the browser sign-in round trip can outlive this process.
+     */
+    var pendingAuthState: String?
+        get() = prefs.getString(KEY_PENDING_STATE, null)
+        set(value) = prefs.edit().putString(KEY_PENDING_STATE, value).apply()
+
+    var pendingRedirectUri: String?
+        get() = prefs.getString(KEY_PENDING_REDIRECT_URI, null)
+        set(value) = prefs.edit().putString(KEY_PENDING_REDIRECT_URI, value).apply()
+
     val isAuthenticated: Boolean
         get() = accessToken != null
 
@@ -45,5 +57,7 @@ class TokenStore @Inject constructor(
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_PENDING_STATE = "pending_auth_state"
+        private const val KEY_PENDING_REDIRECT_URI = "pending_redirect_uri"
     }
 }

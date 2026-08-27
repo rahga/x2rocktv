@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import com.rahga.x2rock.auth.PendingAuthState
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,14 +21,16 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var themeStore: ThemeStore
     @Inject lateinit var pendingAuthState: PendingAuthState
     @Inject lateinit var pendingRoomDeepLink: PendingRoomDeepLink
+    @Inject lateinit var authRepository: SonosAuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
+        val startDestination = if (authRepository.isAuthenticated) "home" else "login"
         setContent {
             val theme by themeStore.theme.collectAsState()
             X2RockTheme(colorTheme = theme) {
-                X2RockNavGraph()
+                X2RockNavGraph(startDestination = startDestination)
             }
         }
     }
