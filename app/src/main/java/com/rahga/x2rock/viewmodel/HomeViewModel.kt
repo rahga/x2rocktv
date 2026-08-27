@@ -21,6 +21,17 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Sidebar order: the primary room pinned first, then favourites, then the rest, each alphabetical.
+ * Pure, so the ordering is testable without standing the view model up.
+ */
+fun sortGroups(groups: List<Group>, primaryId: String?, favoriteIds: Set<String>): List<Group> {
+    val primary = groups.filter { it.id == primaryId }
+    val favorites = groups.filter { it.id != primaryId && it.id in favoriteIds }.sortedBy { it.name }
+    val rest = groups.filter { it.id != primaryId && it.id !in favoriteIds }.sortedBy { it.name }
+    return primary + favorites + rest
+}
+
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val repository: SonosRepository,
@@ -122,19 +133,12 @@ class HomeViewModel @Inject constructor(
     fun partyMode() {
         val groups = (_uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
-        val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+        val sorted = sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
         viewModelScope.launch { repository.partyMode(sorted.first(), sorted.drop(1)); refreshQuietly() }
     }
 
     private fun findGroup(id: String): Group? =
         (_uiState.value as? UiState.Success)?.groups?.find { it.id == id }
-
-    fun sortedGroups(groups: List<Group>, primaryId: String?, favoriteIds: Set<String>): List<Group> {
-        val primary = groups.filter { it.id == primaryId }
-        val favorites = groups.filter { it.id != primaryId && it.id in favoriteIds }.sortedBy { it.name }
-        val rest = groups.filter { it.id != primaryId && it.id !in favoriteIds }.sortedBy { it.name }
-        return primary + favorites + rest
-    }
 
     private suspend fun refreshQuietly() {
         try {
@@ -154,7 +158,7 @@ class HomeViewModel @Inject constructor(
         _uiState.value = UiState.Success(groups, nowPlaying)
 
         if (_selectedGroupId.value == null && groups.isNotEmpty()) {
-            val sorted = sortedGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+            val sorted = sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
             _selectedGroupId.value = sorted.first().id
         }
         viewModelScope.launch(Dispatchers.IO) {

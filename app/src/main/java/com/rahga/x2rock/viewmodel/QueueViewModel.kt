@@ -21,6 +21,11 @@ import javax.inject.Inject
  */
 data class QueueEntry(val trackNumber: Int, val item: QueueItem)
 
+/** Numbers every item by its slot in the full queue, then hides the tombstones. */
+fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
+    items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
+        .filter { !it.item.deleted }
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val repository: SonosRepository,
@@ -65,10 +70,7 @@ class QueueViewModel @Inject constructor(
                     val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
                     val queue = queueDeferred.await()
                     val currentTrackName = metaDeferred.await()?.currentItem?.track?.name
-                    val entries = queue.items
-                        .mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
-                        .filter { !it.item.deleted }
-                    UiState.Success(entries, currentTrackName)
+                    UiState.Success(queueEntries(queue.items), currentTrackName)
                 }
             }
                 .onSuccess { _uiState.value = it }
