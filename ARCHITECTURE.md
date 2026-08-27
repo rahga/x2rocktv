@@ -48,6 +48,12 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM)
 
 cli/src/main/kotlin/com/rahga/x2rock/cli/       (Linux, Clikt + Mordant)
 ├── Main.kt                        Commands: login, rooms, now, play/pause/toggle, vol, queue, favorites…
+├── Daemon.kt                      `x2rock daemon`: polls one room, publishes it over MPRIS
+├── mpris/
+│   ├── PlayerSnapshot.kt          Pure Sonos→MPRIS mapping: status, metadata, volume, position, diffs
+│   ├── MprisInterfaces.kt         org.mpris.MediaPlayer2 + .Player as dbus-java interfaces
+│   ├── MprisPlayer.kt             The exported D-Bus object; Properties Get/Set/GetAll, PropertiesChanged
+│   └── PlayerControls.kt          What MPRIS clients can ask for; the daemon binds it to SonosRepository
 ├── Sonos.kt                       Hand-built object graph (what Hilt does in :app) + room-name matching
 ├── FileTokenStore.kt              TokenStore impl: 0600 JSON in $XDG_CONFIG_HOME/x2rock
 ├── CliConfig.kt                   Client credentials + default room; env vars override the file
@@ -201,6 +207,20 @@ to add in the Sonos integration manager.
 | POST | `/households/{id}/groups/{id}/modifyGroupMembers` | Group/ungroup players |
 
 ---
+
+## MPRIS daemon (Linux)
+
+`x2rock daemon` owns a poll loop for one room and mirrors it onto the session bus as
+`org.mpris.MediaPlayer2.x2rock`. `PlayerSnapshot` is the pure mapping layer — Sonos state to MPRIS
+`PlaybackStatus`/`Metadata`/`Volume`/`LoopStatus`, plus a diff so only changed properties are
+signalled. `Position` is not signalled (per spec) but extrapolated from the last poll while playing,
+so progress bars move between polls. An MPRIS command runs the Sonos call and then nudges the loop
+to re-poll immediately, so the bus reflects the result within a round trip. Polling failures back off
+with the same `nextBackoffMillis` curve as the TV app; a failed poll also re-resolves the room by
+name, because group ids change whenever rooms are grouped or ungrouped.
+
+`MprisBusTest` exports a real `MprisPlayer` onto the session bus and drives it with `busctl`; it
+skips when no bus is available.
 
 ## Persistence
 

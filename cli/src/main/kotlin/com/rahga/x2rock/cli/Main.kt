@@ -47,13 +47,16 @@ class Session(val roomOption: String?) {
     val json = GsonBuilder().serializeNulls().create()
 }
 
-fun main(args: Array<String>) = X2Rock()
-    .subcommands(
-        Login(), Logout(), Config(), InstallHandler(), OAuthCallbackCmd(),
-        Rooms(), Now(), Play(), Pause(), Toggle(), Next(), Prev(), Vol(), Mute(),
-        Queue(), Favorites(), Favorite()
-    )
-    .main(args)
+fun main(args: Array<String>) {
+    System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", "warn")
+    X2Rock()
+        .subcommands(
+            Login(), Logout(), Config(), InstallHandler(), OAuthCallbackCmd(),
+            Rooms(), Now(), Play(), Pause(), Toggle(), Next(), Prev(), Vol(), Mute(),
+            Queue(), Favorites(), Favorite(), Daemon()
+        )
+        .main(args)
+}
 
 class X2Rock : CliktCommand(name = "x2rock") {
     override fun help(context: Context) = """

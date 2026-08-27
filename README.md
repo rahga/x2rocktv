@@ -32,6 +32,21 @@ from `X2ROCK_ROOM`. Everything else lives in `$XDG_CONFIG_HOME/x2rock/` with mod
 If the browser can't invoke the handler (no `xdg-mime`, a locked-down browser), `x2rock login --manual`
 lets you paste the redirected URL instead.
 
+### MPRIS (playerctl, Waybar, media keys)
+
+`x2rock daemon` publishes the room on the session bus as `org.mpris.MediaPlayer2.x2rock`, so
+anything that speaks MPRIS drives Sonos like a local player:
+
+```sh
+x2rock daemon &                      # or a systemd --user service / exec-once in hyprland.conf
+playerctl -p x2rock play-pause
+playerctl -p x2rock metadata title
+playerctl -p x2rock volume 0.4
+```
+
+Waybar's built-in `mpris` module picks it up with no configuration. The daemon polls every
+5 seconds (`--interval`), re-polls immediately after any MPRIS command, and backs off on errors.
+
 Hyprland binds, for example:
 
 ```
