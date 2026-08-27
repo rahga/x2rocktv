@@ -27,6 +27,11 @@ dependencies {
     implementation(libs.clikt)
     implementation(libs.mordant)
 
+    // MPRIS over the session bus (daemon). Pure-Java transport on JDK 16+ unix sockets, no JNI.
+    implementation(libs.dbus.java.core)
+    runtimeOnly(libs.dbus.java.transport)
+    runtimeOnly(libs.slf4j.simple)
+
     testImplementation(libs.junit)
 }
 
