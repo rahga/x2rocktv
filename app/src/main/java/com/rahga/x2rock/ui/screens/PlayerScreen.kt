@@ -44,7 +44,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
+import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
@@ -153,7 +155,7 @@ private fun TrackInfo(state: PlayerUiState) {
                         }
                     }
                     else -> Text(
-                        text = state.playbackState.toPlayerDisplayLabel(),
+                        text = state.playbackState.toPlaybackLabel(),
                         style = MaterialTheme.typography.headlineMedium
                     )
                 }
@@ -402,15 +404,8 @@ private fun Long.toTimeString(): String {
            else "%d:%02d".format(minutes, seconds)
 }
 
-private fun String.toPlayerDisplayLabel(): String = when (this) {
-    "PLAYBACK_STATE_PLAYING" -> "Playing"
-    "PLAYBACK_STATE_PAUSED" -> "Paused"
-    "PLAYBACK_STATE_BUFFERING" -> "Buffering"
-    else -> "Idle"
-}
-
 private fun String.toRepeatLabel(): String = when (this) {
-    "REPEAT_ALL" -> "Repeat All"
-    "REPEAT_ONE" -> "Repeat One"
+    RepeatModes.ALL -> "Repeat All"
+    RepeatModes.ONE -> "Repeat One"
     else -> "Repeat OFF"
 }

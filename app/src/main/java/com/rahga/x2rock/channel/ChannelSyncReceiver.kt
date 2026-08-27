@@ -9,11 +9,14 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
+
+/** A broadcast receiver gets roughly ten seconds before the system reclaims it. */
+private const val BROADCAST_BUDGET_MILLIS = 8_000L
 
 @AndroidEntryPoint
 class ChannelSyncReceiver : BroadcastReceiver() {
@@ -24,19 +27,18 @@ class ChannelSyncReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TvContractCompat.ACTION_INITIALIZE_PROGRAMS) return
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+        val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+        scope.launch {
             try {
-                val groups = repository.getGroups().getOrNull() ?: return@launch
-                val nowPlaying = coroutineScope {
-                    groups.map { group ->
-                        async {
-                            group.id to repository.getPlaybackMetadata(group.id).getOrNull()?.currentItem?.track
-                        }
-                    }.awaitAll().toMap()
+                withTimeout(BROADCAST_BUDGET_MILLIS) {
+                    val groups = repository.getGroups().getOrNull() ?: return@withTimeout
+                    channelSync.sync(groups, repository.getNowPlaying(groups))
                 }
-                channelSync.sync(groups, nowPlaying)
+            } catch (_: TimeoutCancellationException) {
+                // Out of budget. The next INITIALIZE_PROGRAMS, or the app itself, will retry.
             } finally {
                 pending.finish()
+                scope.cancel()
             }
         }
     }

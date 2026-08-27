@@ -16,10 +16,15 @@ import com.rahga.x2rock.model.SeekRequest
 import com.rahga.x2rock.model.SetMuteRequest
 import com.rahga.x2rock.model.SetPlayModeRequest
 import com.rahga.x2rock.model.SetVolumeRequest
+import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.network.RateLimitedException
 import com.rahga.x2rock.network.SonosApiService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.ResponseBody
 import retrofit2.HttpException
@@ -67,6 +72,18 @@ class SonosRepository @Inject constructor(
         } catch (e: HttpException) {
             if (e.code() == 404) null else throw e
         }
+    }
+
+    /**
+     * Now-playing track per group. Idle groups report null without a request — they have no track,
+     * and the groups response already said so, which saves one call per idle room per poll.
+     */
+    suspend fun getNowPlaying(groups: List<Group>): Map<String, Track?> = coroutineScope {
+        val (loaded, idle) = groups.partition { it.playbackState.hasLoadedContent() }
+        val fetched = loaded.map { group ->
+            async { group.id to getPlaybackMetadata(group.id).getOrNull()?.currentItem?.track }
+        }.awaitAll()
+        fetched.toMap() + idle.associate { it.id to null }
     }
 
     suspend fun getPlayMode(groupId: String): Result<PlayModeResponse> = apiCall {

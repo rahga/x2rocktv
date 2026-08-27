@@ -7,6 +7,8 @@ import android.media.session.PlaybackState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.PlayModeState
+import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,7 +39,7 @@ data class PlayerVolumeEntry(
 
 data class PlayerUiState(
     val groupName: String = "",
-    val playbackState: String = "PLAYBACK_STATE_IDLE",
+    val playbackState: String = PlaybackStates.IDLE,
     val trackName: String? = null,
     val artistName: String? = null,
     val albumName: String? = null,
@@ -48,7 +50,7 @@ data class PlayerUiState(
     val volume: Int = 0,
     val isMuted: Boolean = false,
     val shuffle: Boolean = false,
-    val repeat: String = "REPEAT_NONE",
+    val repeat: String = RepeatModes.NONE,
     val crossfade: Boolean = false,
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
@@ -293,9 +295,9 @@ class PlayerViewModel @Inject constructor(
 
     fun cycleRepeat() = updatePlayMode { mode ->
         val next = when (mode.repeat) {
-            "REPEAT_NONE" -> "REPEAT_ALL"
-            "REPEAT_ALL" -> "REPEAT_ONE"
-            else -> "REPEAT_NONE"
+            RepeatModes.NONE -> RepeatModes.ALL
+            RepeatModes.ALL -> RepeatModes.ONE
+            else -> RepeatModes.NONE
         }
         mode.copy(repeat = next)
     }

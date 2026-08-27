@@ -9,15 +9,11 @@ import com.rahga.x2rock.channel.RoomsChannelSync
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
-import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -154,7 +150,7 @@ class HomeViewModel @Inject constructor(
         if (_uiState.value !is UiState.Success) _uiState.value = UiState.Loading
 
         val groups = repository.getGroups().getOrThrow()
-        val nowPlaying = fetchNowPlaying(groups)
+        val nowPlaying = repository.getNowPlaying(groups)
         _uiState.value = UiState.Success(groups, nowPlaying)
 
         if (_selectedGroupId.value == null && groups.isNotEmpty()) {
@@ -170,20 +166,6 @@ class HomeViewModel @Inject constructor(
         if (_uiState.value !is UiState.Success) {
             _uiState.value = UiState.Error(e.message ?: "Unknown error")
         }
-    }
-
-    private suspend fun fetchNowPlaying(groups: List<Group>): Map<String, Track?> = coroutineScope {
-        // An idle room has no track to report, and the sidebar already renders its state from
-        // Group.playbackState — which the groups call returned for free. Skipping those saves a
-        // request per idle room on every tick.
-        val (loaded, idle) = groups.partition { it.playbackState.hasLoadedContent() }
-        val fetched = loaded.map { group ->
-            async {
-                group.id to repository.getPlaybackMetadata(group.id)
-                    .getOrNull()?.currentItem?.track
-            }
-        }.awaitAll()
-        fetched.toMap() + idle.associate { it.id to null }
     }
 
     private companion object {

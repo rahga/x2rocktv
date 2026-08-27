@@ -136,8 +136,16 @@ fun AppButton(
     )
 }
 
+/**
+ * Focus is requested from effects that can run a frame before the target node attaches — on TV
+ * that is routine. Only that specific failure is ignored; anything else should still surface.
+ */
 fun FocusRequester.requestFocusSafely() {
-    try { requestFocus() } catch (_: Exception) {}
+    try {
+        requestFocus()
+    } catch (_: IllegalStateException) {
+        // FocusRequester is not initialized: the node isn't attached yet.
+    }
 }
 
 @Composable

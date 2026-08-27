@@ -74,7 +74,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Compose TV
-    implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.tv.material)
 
     // Leanback (provides Theme.Leanback for the manifest theme)

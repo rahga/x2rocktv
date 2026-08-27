@@ -15,7 +15,7 @@
 
     <application
         android:name=".X2RockApp"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:banner="@drawable/banner"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -26,7 +26,7 @@
 
         <activity
             android:name=".MainActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation"
+            android:configChanges="keyboard|keyboardHidden|navigation|screenSize|orientation|uiMode"
             android:exported="true"
             android:label="@string/app_name"
             android:launchMode="singleTop"
@@ -46,6 +46,8 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="x2rock" android:host="room" />
+                <!-- The home-screen channel's own tile links here; without it the tile dead-ends. -->
+                <data android:scheme="x2rock" android:host="home" />
             </intent-filter>
         </activity>
 

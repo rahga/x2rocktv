@@ -37,7 +37,6 @@ androidx-compose-material-icons-core = { group = "androidx.compose.material", na
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 # Compose TV
-androidx-tv-foundation = { group = "androidx.tv", name = "tv-foundation", version.ref = "composeTv" }
 androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "composeTv" }
 
 # Leanback
