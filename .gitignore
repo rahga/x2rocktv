@@ -3,6 +3,7 @@ local.properties
 
 # Gradle
 .gradle/
+.kotlin/
 build/
 **/build/
 *.hprof
