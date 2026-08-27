@@ -43,6 +43,10 @@ fun SonosAuthWebViewScreen(
                 }
                 loadUrl(authUrl)
             }
+        },
+        onRelease = { webView ->
+            webView.stopLoading()
+            webView.destroy()
         }
     )
 }

@@ -57,6 +57,9 @@ android {
 }
 
 dependencies {
+    // Sonos API, models, repositories — pure JVM, shared with desktop frontends
+    implementation(project(":core"))
+
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -74,7 +77,6 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // Compose TV
-    implementation(libs.androidx.tv.foundation)
     implementation(libs.androidx.tv.material)
 
     // Leanback (provides Theme.Leanback for the manifest theme)
@@ -90,12 +92,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Network
-    implementation(libs.retrofit)
+    // Network (retrofit/okhttp come through :core; AppModule still builds the clients here)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    implementation(libs.gson)
 
     // Image loading
     implementation(libs.coil.compose)
@@ -106,4 +105,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // Test
+    testImplementation(libs.junit)
 }
