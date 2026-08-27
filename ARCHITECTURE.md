@@ -10,32 +10,54 @@ x2rock lets you control Sonos speakers from a TV remote. You authenticate with y
 
 ---
 
+## Modules
+
+Two Gradle modules. `:core` is a plain Kotlin/JVM library with no Android dependency — it is
+everything that talks to Sonos, and is the shared foundation for any desktop or CLI frontend.
+`:app` is the Android TV application.
+
+`:core` carries `javax.inject` annotations (`@Inject`, `@Singleton`, `@Qualifier`) so Hilt in
+`:app` can construct its classes directly; a non-Hilt frontend just calls the constructors.
+
 ## File Map
 
 ```
-app/src/main/java/com/rahga/x2rock/
-├── X2RockApp.kt                   Hilt application entry point
-├── MainActivity.kt                Single activity; sets Compose content + theme
-│
+core/src/main/kotlin/com/rahga/x2rock/          (pure JVM)
 ├── model/
 │   ├── SonosModels.kt             All data classes (API requests/responses, UI state)
 │   └── AppColorTheme.kt           Enum: DEFAULT, OCEAN, EMBER, FOREST, ORCHID
 │
 ├── network/
 │   ├── SonosApiService.kt         Retrofit interface — 20 suspend endpoints
-│   └── AuthInterceptor.kt         OkHttp interceptor: injects Bearer token
+│   ├── AuthInterceptor.kt         OkHttp interceptor: injects Bearer token
+│   └── RateLimitedException.kt    Surfaces 429 + Retry-After to the pollers
 │
 ├── repository/
 │   ├── SonosRepository.kt         Wraps all Sonos Control API calls; handles 401 retry
 │   └── SonosAuthRepository.kt     OAuth 2.0 flow; token exchange, refresh, storage
 │
 ├── auth/
-│   ├── TokenStore.kt              EncryptedSharedPreferences for access/refresh tokens
+│   ├── TokenStore.kt              Interface: where tokens persist (platform supplies the impl)
+│   └── SonosClientConfig.kt       OAuth client id + secret (platform supplies the values)
+│
+├── viewmodel/
+│   └── Polling.kt                 pollLoop() with exponential backoff and Retry-After
+│
+└── di/
+    └── TokenClient.kt             Qualifier for the token-exchange OkHttp client
+
+app/src/main/java/com/rahga/x2rock/             (Android TV)
+├── X2RockApp.kt                   Hilt application entry point
+├── MainActivity.kt                Single activity; sets Compose content + theme
+│
+├── auth/
+│   ├── EncryptedTokenStore.kt     TokenStore impl: EncryptedSharedPreferences + keystore
 │   ├── ThemeStore.kt              StateFlow-backed theme preference
 │   └── RoomPreferencesStore.kt    StateFlow-backed favorites + primary room
 │
 ├── di/
-│   └── AppModule.kt               Dagger Hilt bindings (OkHttp, Retrofit, singletons)
+│   ├── AppModule.kt               Hilt @Provides: OkHttp, Retrofit, SonosClientConfig from BuildConfig
+│   └── StoreModule.kt             Hilt @Binds: TokenStore → EncryptedTokenStore
 │
 ├── ui/
 │   ├── NavGraph.kt                Navigation graph — 5 routes
@@ -136,7 +158,7 @@ All methods return `Result<T>`. Internally, every call goes through `fetchWithRe
 3. If 401 → calls `refreshAccessToken()` and retries once
 
 ### SonosAuthRepository
-OAuth 2.0 with Basic auth (client credentials). Tokens stored in `TokenStore` (EncryptedSharedPreferences, AES256-GCM). A `Mutex` prevents concurrent refresh calls.
+OAuth 2.0 with Basic auth (client credentials). Tokens go through the `TokenStore` interface — on Android that is `EncryptedTokenStore` (AES256-GCM). A `Mutex` prevents concurrent refresh calls. Client credentials arrive via `SonosClientConfig` rather than `BuildConfig`, so the repository has no build-system coupling.
 
 **OAuth redirect URI:** `https://rahga.github.io/x2rock/callback.html`  
 The hosted page redirects to the deep link `x2rock://callback`, which the WebView intercepts.
@@ -171,7 +193,7 @@ The hosted page redirects to the deep link `x2rock://callback`, which the WebVie
 
 | Store | Mechanism | What's stored |
 |-------|-----------|---------------|
-| `TokenStore` | EncryptedSharedPreferences (AES256-GCM) | Access token, refresh token, expiry |
+| `EncryptedTokenStore` | EncryptedSharedPreferences (AES256-GCM) | Access token, refresh token, expiry, pending OAuth state |
 | `ThemeStore` | Plain SharedPreferences + StateFlow | Selected theme enum |
 | `RoomPreferencesStore` | Plain SharedPreferences + StateFlow | Primary room ID, Set of favorite room IDs |
 
@@ -181,10 +203,13 @@ No local database — all content state is remote.
 
 ## Dependency Injection
 
-Dagger Hilt throughout. `AppModule` provides:
+Dagger Hilt in `:app` only. `AppModule` provides:
+- `SonosClientConfig` from `BuildConfig` (which reads `local.properties`)
 - Two `OkHttpClient` instances: one plain (for token exchange), one with `AuthInterceptor` + logging
 - `Retrofit` instance backed by the authenticated client, using `GsonConverterFactory`
-- `SonosApiService`, both repositories, all stores as `@Singleton`
+
+`StoreModule` binds `TokenStore` to `EncryptedTokenStore`. The `:core` repositories and
+`AuthInterceptor` have `@Inject` constructors and are picked up without explicit bindings.
 
 All ViewModels are `@HiltViewModel` and injected automatically.
 
@@ -204,5 +229,6 @@ All ViewModels are `@HiltViewModel` and injected automatically.
 
 - Language: Kotlin only
 - Min SDK: 21 / Target SDK: 34
-- Build system: Gradle with Kotlin DSL (`build.gradle.kts`)
+- Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM) and `:app` (Android)
+- Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
 - Key dependencies: Jetpack Compose TV, Dagger Hilt, Retrofit 2, OkHttp, Gson, Jetpack Navigation, AndroidX Security Crypto

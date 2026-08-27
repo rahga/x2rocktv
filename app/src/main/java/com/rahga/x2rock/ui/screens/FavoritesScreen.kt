@@ -194,9 +194,9 @@ private fun FavoriteRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (favorite.description != null) {
+                favorite.description?.let { description ->
                     Text(
-                        text = favorite.description,
+                        text = description,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

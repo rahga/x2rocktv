@@ -1,8 +1,8 @@
 package com.rahga.x2rock.repository
 
-import android.net.Uri
-import android.util.Base64
-import com.rahga.x2rock.BuildConfig
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import com.rahga.x2rock.auth.SonosClientConfig
 import com.rahga.x2rock.auth.TokenStore
 import com.rahga.x2rock.di.TokenClient
 import kotlinx.coroutines.Dispatchers
@@ -13,16 +13,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.json.JSONObject
 import java.security.SecureRandom
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SonosAuthRepository @Inject constructor(
     private val tokenStore: TokenStore,
+    private val config: SonosClientConfig,
     @TokenClient private val okHttpClient: OkHttpClient
 ) {
     companion object {
@@ -51,12 +53,12 @@ class SonosAuthRepository @Inject constructor(
         // Persisted, not held in memory: the browser round trip can outlive this process.
         tokenStore.pendingAuthState = state
         tokenStore.pendingRedirectUri = redirectUri
-        return Uri.parse(AUTH_ENDPOINT).buildUpon()
-            .appendQueryParameter("client_id", BuildConfig.SONOS_CLIENT_ID)
-            .appendQueryParameter("response_type", "code")
-            .appendQueryParameter("state", state)
-            .appendQueryParameter("scope", SCOPE)
-            .appendQueryParameter("redirect_uri", redirectUri)
+        return AUTH_ENDPOINT.toHttpUrl().newBuilder()
+            .addQueryParameter("client_id", config.clientId)
+            .addQueryParameter("response_type", "code")
+            .addQueryParameter("state", state)
+            .addQueryParameter("scope", SCOPE)
+            .addQueryParameter("redirect_uri", redirectUri)
             .build()
             .toString()
     }
@@ -77,7 +79,7 @@ class SonosAuthRepository @Inject constructor(
                     if (!response.isSuccessful) {
                         throw IllegalStateException("Token exchange failed (${response.code}): $body")
                     }
-                    storeTokens(JSONObject(body))
+                    storeTokens(parseJson(body))
                 }
                 tokenStore.pendingAuthState = null
                 tokenStore.pendingRedirectUri = null
@@ -120,7 +122,7 @@ class SonosAuthRepository @Inject constructor(
                         }
                         throw IllegalStateException("Token refresh failed (${response.code})")
                     }
-                    storeTokens(JSONObject(responseBody))
+                    storeTokens(parseJson(responseBody))
                 }
             }
         }
@@ -156,24 +158,23 @@ class SonosAuthRepository @Inject constructor(
     private fun generateState(): String {
         val bytes = ByteArray(16)
         SecureRandom().nextBytes(bytes)
-        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
     private fun basicAuthHeader(): String {
-        val credentials = "${BuildConfig.SONOS_CLIENT_ID}:${BuildConfig.SONOS_CLIENT_SECRET}"
-        val encoded = Base64.encodeToString(
-            credentials.toByteArray(Charsets.UTF_8),
-            Base64.NO_WRAP
-        )
+        val credentials = "${config.clientId}:${config.clientSecret}"
+        val encoded = Base64.getEncoder().encodeToString(credentials.toByteArray(Charsets.UTF_8))
         return "Basic $encoded"
     }
 
-    private fun storeTokens(json: JSONObject) {
-        tokenStore.accessToken = json.getString("access_token")
-        json.optString("refresh_token").takeIf { it.isNotEmpty() }?.let {
+    private fun parseJson(body: String): JsonObject = JsonParser.parseString(body).asJsonObject
+
+    private fun storeTokens(json: JsonObject) {
+        tokenStore.accessToken = json["access_token"].asString
+        json["refresh_token"]?.takeIf { !it.isJsonNull }?.asString?.takeIf { it.isNotEmpty() }?.let {
             tokenStore.refreshToken = it
         }
-        val expiresIn = json.optLong("expires_in", 3600L)
+        val expiresIn = json["expires_in"]?.takeIf { !it.isJsonNull }?.asLong ?: 3600L
         tokenStore.expiresAt = System.currentTimeMillis() + expiresIn * 1000L
     }
 }
