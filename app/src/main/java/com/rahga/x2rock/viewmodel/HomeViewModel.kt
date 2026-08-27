@@ -44,6 +44,7 @@ class HomeViewModel @Inject constructor(
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
+    val sessionExpired: StateFlow<Boolean> = authRepository.sessionExpired
     val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
     val favoriteRoomIds: StateFlow<Set<String>> = roomPrefsStore.favoriteRoomIds
 

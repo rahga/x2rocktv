@@ -5,7 +5,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -18,25 +17,29 @@ import com.rahga.x2rock.ui.screens.LoginScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
 import com.rahga.x2rock.viewmodel.HomeViewModel
-import com.rahga.x2rock.viewmodel.LoginUiState
 import com.rahga.x2rock.viewmodel.LoginViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
 @Composable
-fun X2RockNavGraph() {
+fun X2RockNavGraph(startDestination: String) {
     val navController = rememberNavController()
-    val loginViewModel: LoginViewModel = hiltViewModel()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
-    val startDestination = remember {
-        if (loginViewModel.state.value is LoginUiState.Authenticated) "home" else "login"
-    }
 
     val navigateToRoom by homeViewModel.navigateToRoom.collectAsState()
     LaunchedEffect(navigateToRoom) {
         if (navigateToRoom) {
             navController.navigate("home") { launchSingleTop = true }
             homeViewModel.clearNavigateToRoom()
+        }
+    }
+
+    // The refresh token was rejected — drop back to login rather than looping on errors.
+    val sessionExpired by homeViewModel.sessionExpired.collectAsState()
+    LaunchedEffect(sessionExpired) {
+        if (sessionExpired) {
+            homeViewModel.signOut()
+            navController.navigate("login") { popUpTo(0) { inclusive = true } }
         }
     }
 
