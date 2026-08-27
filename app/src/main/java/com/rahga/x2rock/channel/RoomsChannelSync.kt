@@ -25,11 +25,14 @@ class RoomsChannelSync @Inject constructor(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         synchronized(this) {
             if (groups == lastGroups && nowPlaying == lastNowPlaying) return
-            lastGroups = groups
-            lastNowPlaying = nowPlaying
+            val channelId = ensureChannel() ?: return
+            // Remember only what actually reached the provider. Recording it up front meant a
+            // failed write suppressed every identical retry from then on.
+            if (runCatching { updatePrograms(channelId, groups, nowPlaying) }.isSuccess) {
+                lastGroups = groups
+                lastNowPlaying = nowPlaying
+            }
         }
-        val id = ensureChannel() ?: return
-        updatePrograms(id, groups, nowPlaying)
     }
 
     private fun ensureChannel(): Long? {
@@ -91,7 +94,7 @@ class RoomsChannelSync @Inject constructor(
                 .setDescription(track?.name ?: "")
                 .setInternalProviderId(group.id)
                 .setWeight(groups.size - index)
-                .setIntentUri(Uri.parse("x2rock://room/${group.id}"))
+                .setIntentUri(Uri.parse("x2rock://room/${Uri.encode(group.id)}"))
 
             track?.imageUrl?.let { url ->
                 builder.setPosterArtUri(Uri.parse(url))

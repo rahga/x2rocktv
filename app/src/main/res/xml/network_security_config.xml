@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Cloud API uses HTTPS — cleartext blocked by default -->
+    <!--
+      Everything goes to the Sonos cloud Control API over HTTPS. When local player control lands
+      (see ARCHITECTURE.md) this is where the .local cleartext exemption for mDNS-discovered
+      speakers goes back in; until then there is nothing to exempt.
+    -->
     <base-config cleartextTrafficPermitted="false" />
-    <!-- Sonos speakers advertise via mDNS (.local) — allow cleartext for local network -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">local</domain>
-    </domain-config>
 </network-security-config>

@@ -69,6 +69,7 @@ import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.dpadLongPress
 import com.rahga.x2rock.ui.components.modalFocusTrap
@@ -460,7 +461,7 @@ private fun RoomListItem(
                 val roomCount = group.playerIds.size
                 val statusLine = when {
                     track?.name != null -> track.name
-                    else -> group.playbackState.toSidebarLabel()
+                    else -> group.playbackState.toPlaybackLabel()
                 } + if (roomCount > 1) " · $roomCount rooms" else ""
                 Text(
                     text = statusLine,
@@ -591,7 +592,7 @@ private fun GroupPickerDialog(
                     val track = nowPlaying[group.id]
                     val subtitle = when {
                         track?.name != null -> track.name
-                        else -> group.playbackState.toSidebarLabel()
+                        else -> group.playbackState.toPlaybackLabel()
                     }
                     Text(
                         text = subtitle,
@@ -794,11 +795,4 @@ private fun SidebarIconButton(onClick: () -> Unit, content: @Composable () -> Un
             content()
         }
     }
-}
-
-private fun String.toSidebarLabel(): String = when (this) {
-    "PLAYBACK_STATE_PLAYING" -> "Playing"
-    "PLAYBACK_STATE_PAUSED" -> "Paused"
-    "PLAYBACK_STATE_BUFFERING" -> "Buffering"
-    else -> "Idle"
 }
