@@ -8,10 +8,11 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** [TokenStore] backed by EncryptedSharedPreferences, keyed against the device keystore. */
 @Singleton
-class TokenStore @Inject constructor(
+class EncryptedTokenStore @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : TokenStore {
     private val prefs by lazy { openPrefs() }
 
     /**
@@ -40,34 +41,27 @@ class TokenStore @Inject constructor(
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
 
-    var accessToken: String?
+    override var accessToken: String?
         get() = prefs.getString(KEY_ACCESS_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_ACCESS_TOKEN, value).apply()
 
-    var refreshToken: String?
+    override var refreshToken: String?
         get() = prefs.getString(KEY_REFRESH_TOKEN, null)
         set(value) = prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply()
 
-    var expiresAt: Long
+    override var expiresAt: Long
         get() = prefs.getLong(KEY_EXPIRES_AT, 0L)
         set(value) = prefs.edit().putLong(KEY_EXPIRES_AT, value).apply()
 
-    /**
-     * OAuth CSRF state and the redirect URI it was issued for. Persisted rather than held in
-     * memory because the browser sign-in round trip can outlive this process.
-     */
-    var pendingAuthState: String?
+    override var pendingAuthState: String?
         get() = prefs.getString(KEY_PENDING_STATE, null)
         set(value) = prefs.edit().putString(KEY_PENDING_STATE, value).apply()
 
-    var pendingRedirectUri: String?
+    override var pendingRedirectUri: String?
         get() = prefs.getString(KEY_PENDING_REDIRECT_URI, null)
         set(value) = prefs.edit().putString(KEY_PENDING_REDIRECT_URI, value).apply()
 
-    val isAuthenticated: Boolean
-        get() = accessToken != null
-
-    fun clear() = prefs.edit().clear().apply()
+    override fun clear() = prefs.edit().clear().apply()
 
     companion object {
         private const val PREFS_NAME = "sonos_tokens"

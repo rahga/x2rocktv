@@ -57,6 +57,9 @@ android {
 }
 
 dependencies {
+    // Sonos API, models, repositories — pure JVM, shared with desktop frontends
+    implementation(project(":core"))
+
     // AndroidX Core
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -89,12 +92,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Network
-    implementation(libs.retrofit)
+    // Network (retrofit/okhttp come through :core; AppModule still builds the clients here)
     implementation(libs.retrofit.converter.gson)
-    implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
-    implementation(libs.gson)
 
     // Image loading
     implementation(libs.coil.compose)

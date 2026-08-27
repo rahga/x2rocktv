@@ -1,6 +1,7 @@
 package com.rahga.x2rock.di
 
 import com.rahga.x2rock.BuildConfig
+import com.rahga.x2rock.auth.SonosClientConfig
 import com.rahga.x2rock.network.AuthInterceptor
 import com.rahga.x2rock.network.SonosApiService
 import dagger.Module
@@ -18,6 +19,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideSonosClientConfig(): SonosClientConfig =
+        SonosClientConfig(BuildConfig.SONOS_CLIENT_ID, BuildConfig.SONOS_CLIENT_SECRET)
 
     /**
      * Shared connection pool and dispatcher. Both derived clients call newBuilder() on this so a

@@ -589,10 +589,7 @@ private fun GroupPickerDialog(
                 Column(horizontalAlignment = Alignment.Start) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge)
                     val track = nowPlaying[group.id]
-                    val subtitle = when {
-                        track?.name != null -> track.name
-                        else -> group.playbackState.toPlaybackLabel()
-                    }
+                    val subtitle = track?.name ?: group.playbackState.toPlaybackLabel()
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
