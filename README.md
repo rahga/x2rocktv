@@ -3,6 +3,10 @@
 A Sonos controller. Started as a Google TV app; the Sonos layer is a plain Kotlin/JVM library
 (`:core`) so the same code also drives a Linux command line (`:cli`).
 
+## Status
+
+Not stable at present, primarily due to GUI bugs.
+
 ## Android TV
 
 Open in Android Studio, put `SONOS_CLIENT_ID` / `SONOS_CLIENT_SECRET` in `local.properties`, run `:app`.
