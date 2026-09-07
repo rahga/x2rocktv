@@ -10,12 +10,12 @@ object Xdg {
 
     val configDir: Path
         get() = (System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }?.let(Path::of)
-            ?: home.resolve(".config")).resolve("x2rock")
+            ?: home.resolve(".config")).resolve("x2rocktv")
 
     /** Per-login, tmpfs-backed, user-only. Where the OAuth callback is handed between processes. */
     val runtimeDir: Path
         get() = (System.getenv("XDG_RUNTIME_DIR")?.takeIf { it.isNotBlank() }?.let(Path::of)
-            ?: Path.of("/tmp", "x2rock-${System.getProperty("user.name")}")).resolve("x2rock")
+            ?: Path.of("/tmp", "x2rocktv-${System.getProperty("user.name")}")).resolve("x2rocktv")
 
     /** Creates [dir] readable only by the current user. */
     fun privateDir(dir: Path): Path {

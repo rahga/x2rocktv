@@ -5,7 +5,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Non-secret-ish settings in `$XDG_CONFIG_HOME/x2rock/config.json`. The client secret lives here
+ * Non-secret-ish settings in `$XDG_CONFIG_HOME/x2rocktv/config.json`. The client secret lives here
  * too (0600) unless SONOS_CLIENT_ID / SONOS_CLIENT_SECRET are set, which win.
  */
 data class CliConfig(

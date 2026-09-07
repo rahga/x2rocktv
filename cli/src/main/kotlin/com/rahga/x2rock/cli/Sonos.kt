@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
  *
  * [householdOverride], when set (from `--household`/`-H`), names a room in the household to use
  * for this invocation only — it is resolved to an id on first use and never written to disk,
- * unlike `x2rock config --household`.
+ * unlike `x2rocktv config --household`.
  */
 class Sonos(val config: CliConfig, private val householdOverride: String? = null) {
     val tokens = FileTokenStore()
@@ -90,7 +90,7 @@ class AmbiguousRoomException(val query: String, val candidates: List<String>) :
     RuntimeException("\"$query\" matches ${candidates.size} rooms: ${candidates.joinToString()}")
 
 class NoSuchHouseholdException(val query: String) :
-    RuntimeException("No household has a room named \"$query\". Run `x2rock households` to see what's available.")
+    RuntimeException("No household has a room named \"$query\". Run `x2rocktv households` to see what's available.")
 
 class AmbiguousHouseholdException(val query: String, val candidates: List<String>) :
     RuntimeException("More than one household has a room named \"$query\": ${candidates.joinToString()}")

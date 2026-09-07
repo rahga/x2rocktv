@@ -31,7 +31,7 @@ class Daemon : SonosCommand("daemon") {
         "Run in the background, exposing the room over MPRIS (playerctl, Waybar, media keys)."
 
     private val interval by option("--interval", help = "Poll interval in seconds").int().default(5)
-    private val busName by option("--bus-name", help = "Suffix after org.mpris.MediaPlayer2.").default("x2rock")
+    private val busName by option("--bus-name", help = "Suffix after org.mpris.MediaPlayer2.").default("x2rocktv")
 
     private val refresh = Channel<Unit>(Channel.CONFLATED)
     private val stopping = AtomicBoolean(false)

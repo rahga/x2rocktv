@@ -88,7 +88,7 @@ fun rootProperties(identity: String): Map<String, Variant<*>> = mapOf(
     "CanRaise" to Variant(false),
     "HasTrackList" to Variant(false),
     "Identity" to Variant(identity),
-    "DesktopEntry" to Variant("x2rock"),
+    "DesktopEntry" to Variant("x2rocktv"),
     "SupportedUriSchemes" to Variant(emptyList<String>(), "as"),
     "SupportedMimeTypes" to Variant(emptyList<String>(), "as")
 )
