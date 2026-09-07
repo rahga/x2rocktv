@@ -33,6 +33,19 @@ claim in it was run against real hardware.
 - **Scope matters.** Group-scoped namespaces go to that group's *coordinator's* socket,
   player-scoped ones to that *player's own* socket; anything else answers
   `ERROR_INVALID_OBJECT_ID`.
+- **Switching a room to its TV input is UPnP too**, and for the same reason: the Control
+  API has no notion of a source. It is `SetAVTransportURI` to
+  `x-sonos-htastream:<soundbarId>:spdif`, sent to the group's **coordinator** while naming
+  the *soundbar* — which need not be the same player. Addressing the soundbar directly means
+  something else entirely: it leaves the group and takes the TV alone, rather than bringing
+  the room with it. Verified on a Kitchen+Bedroom group: Kitchen came along.
+
+  When the soundbar is a member, taking the TV hands coordination to it, so the player we
+  asked stops coordinating before it answers and the reply is simply lost. That is normal,
+  not a failure, and only the coordinator's own answer is treated as real. **Nothing polls
+  to find out** — unlike the sibling project, which had to: the switch arrives as a
+  `playbackMetadata:1` event carrying `htInputFormat`, the same thing that lights the row.
+  Measured on hardware: TV audio at ~4-5s, the format settled by ~9s.
 - The **queue is not in the Control API at all** (`ERROR_UNSUPPORTED_NAMESPACE`). It lives
   behind UPnP on cleartext port 1400 — see `Upnp` — and is the one thing still asked for
   rather than pushed.
@@ -163,14 +176,23 @@ look right while testing nothing, because a household that never re-subscribes p
   on demand — deep links, `MEDIA_PLAY_FROM_SEARCH`, a broadcast receiver like
   `ChannelSyncReceiver` — needs none. Only hosting a listener the outside world calls into
   does, and that is a design decision, not a gap to be filled by default.
-- **Only tested on one device.** An NVIDIA Shield (Android 11, Ethernet). The Google TV
-  Streamer (Android 14) is the stricter target and would surface newer local-network policy
-  first.
+- **Tested on two devices**, and the stricter one raised nothing. An NVIDIA Shield
+  (Android 11, Ethernet) and a Google TV Streamer (Android 14, API 34, **Wi-Fi**). The
+  Streamer was expected to surface newer local-network policy first and did not: the
+  WebSocket, SSDP over Wi-Fi and cleartext UPnP to `.local` all worked unchanged, with no
+  crash and a 4.3s cold start. What it *did* surface were two UI faults and one wrong
+  assumption, all recorded below. Its ADB is wireless-only and needs pairing — plain
+  `adb connect <ip>:5555` is refused until Wireless debugging is switched on.
 - **A custom `X509TrustManager` is still required**, because players present a leaf-only
   chain whose root is not in any store. Hostname verification is *not* relaxed — see
   `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
 - The queue does not update by itself: UPnP eventing needs the player to connect back to us,
   which is deliberately not used, so the queue screen re-reads instead.
+- **`Upnp` keeps its own read timeout, and must.** It is handed the WebSocket's client,
+  where `readTimeout(0)` is right because a subscription is meant to sit idle — and fatal
+  for request/response, where a player that goes quiet mid-answer would hang the caller
+  forever. Not hypothetical: switching a soundbar's group to its HDMI stalls AVTransport
+  across the handoff.
 
 ## Where the UI is going
 
@@ -191,17 +213,38 @@ send volume keys to the selected room instead of local output. Worth knowing bef
 building it that the Living Room Beam is on HDMI ARC, so the Shield's remote may already
 drive that one room over CEC and the two could disagree.
 
-### Planned rework: party mode and grouping
+### The room panel
 
-Party mode belongs in the room view, not the rooms panel: it hinges on a *source* player
-that the others join, so it needs a room already chosen. Grouping generally goes with it.
+Click (DPAD centre) on a room opens `RoomPanel`: everything that room can be told to do, on
+one surface. It replaced a context menu that opened two further dialogs — `RoomContextMenu`
+led to `GroupPickerDialog` and `SeparateRoomDialog` — so three surfaces became one.
+
+The shape follows the sibling project's Quickshell group selector (`BarWidget.qml`, the
+`groupingPanel`), which is worth reading before changing this:
+
+- **Playing together** — drawn only when the group has more than one room. Every member
+  carries its own level on left/right, and a `leave` target except the coordinator: the
+  coordinator *is* the group, so removing it would dissolve the group rather than free the
+  room.
+- **Add another** (or **Play together with** when the room is solo) — every other group,
+  joining this one. "Every room is in this group." when there is nothing left.
+
+Two things sit outside the widget's version, in the order asked for:
+
+- **Party is first**, because it is the one press that answers "put this everywhere". It
+  hosts from *the room the panel was opened on* — `partyMode(hostGroupId)` — since party
+  mode hinges on a source, which is the whole reason it moved off the sidebar.
+- **TV Input is last**, and only for a room with a soundbar in it. It is the one row that
+  changes what the room is *playing* rather than which rooms are listening.
 
 The sidebar's control row **stays at the top**, matching what most Android apps and Plex do.
-The party button has been removed from it already, since party mode is moving to the room
-view; `HomeViewModel.partyMode()` is deliberately kept for that.
+Reordering rooms would live here too, if Sonos had an order to reorder — it does not.
 
-Reordering rooms will live inside the group/party selector — out of the main view, where it
-costs no clutter.
+**Do not disable a row to say it is already true.** A disabled `tv-material3` `Button` still
+takes focus and draws no highlight, so pressing down onto the TV Input row while it was
+already the source left the remote sitting on an invisible row with nothing but Back to
+press. Seen on the Streamer. Re-selecting the current input is harmless anyway, and is the
+obvious thing to press when the TV audio has dropped out.
 
 ### The television's own soundbar
 
@@ -221,6 +264,23 @@ soundbar is what actually stays put.
 alphabetically and offers no ordering of its own, so hoisting a room here would make this
 list disagree with every other controller in the house to no purpose. The list matches
 Sonos; the television's room is simply what is selected.
+
+**And it has to be correctable, because the heuristic answered confidently and wrongly.**
+On the Streamer it stored *Living Room* — the other end of the house — and then kept it,
+because "never overwrite an answer" was meant to protect a good answer from a later
+ambiguity. What produced it was an ordinary moment: Bedroom had been grouped with Kitchen
+for a test, so it was playing music rather than sitting on its input, which left Living Room
+the only soundbar on a TV input and therefore unambiguous. Any evening where one room plays
+music manufactures the same false certainty, and the two-televisions guard only holds if
+both happen to be on at the instant of observation. There is a startup version of this too:
+the first check runs before every room's metadata has arrived, so arrival order alone can
+decide it.
+
+So `RoomPanel` offers **"This is my TV"** for any room with an HDMI socket, and a stated
+answer wins — the detector only ever fills this in while it is empty. Detection supplies a
+default; it does not get the last word. Like detection it stores a **player**, so pressing
+it on a group names the soundbar in that group, not the coordinator, which on a grouped
+Kitchen+Bedroom would otherwise name a One SL as the television's.
 
 The first-launch case needs care, because detection lands a moment *after* the first room
 is auto-chosen. Moving the selection then is right, but only while it is still the app's

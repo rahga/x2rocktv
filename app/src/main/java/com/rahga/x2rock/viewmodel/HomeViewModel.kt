@@ -305,6 +305,24 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { runCatching { household.useTvInput(groupId) } }
     }
 
+    /**
+     * Say which soundbar this television is plugged into, or take it back.
+     *
+     * Detection is a heuristic and cannot be otherwise — Android will not say what is on the
+     * far end of its HDMI — and it has been seen to answer confidently and wrongly: any
+     * moment when one soundbar is on a TV input and the others are playing music looks
+     * exactly like the answer. So the viewer can state it, and a stated answer wins: the
+     * detector only ever fills this in while it is empty.
+     *
+     * Stores the **player**, never the group, because a regroup mints new group ids while
+     * the soundbar stays bolted to the same television.
+     */
+    fun setTvSoundbar(groupId: String) {
+        val group = findGroup(groupId) ?: return
+        val soundbar = TvSoundbar.soundbarOf(group, household.state.value) ?: return
+        roomPrefsStore.setTvPlayer(if (roomPrefsStore.tvPlayerId.value == soundbar) null else soundbar)
+    }
+
     /** One speaker's own level, accumulating presses the way the group volume does. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
         val current = playerVolumes.value[playerId] ?: return
