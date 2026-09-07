@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Star
@@ -98,10 +97,10 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
     val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
+    val tvPlayerId by homeViewModel.tvPlayerId.collectAsState()
     val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
-    var showPartyConfirmation by remember { mutableStateOf(false) }
     var contextMenuGroup by remember { mutableStateOf<Group?>(null) }
     var groupPickerSource by remember { mutableStateOf<Group?>(null) }
     var separateRoomSource by remember { mutableStateOf<Group?>(null) }
@@ -136,7 +135,6 @@ fun HomeScreen(
     BackHandler(enabled = separateRoomSource != null) { separateRoomSource = null }
     BackHandler(enabled = groupPickerSource != null) { groupPickerSource = null }
     BackHandler(enabled = contextMenuGroup != null) { contextMenuGroup = null }
-    BackHandler(enabled = showPartyConfirmation) { showPartyConfirmation = false }
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
@@ -145,7 +143,7 @@ fun HomeScreen(
 
     // Modals trap focus, so closing one has to hand it back explicitly — otherwise focus is left
     // on a node that just left the composition and the remote goes dead until a direction press.
-    val modalVisible = showSettings || showPartyConfirmation || contextMenuGroup != null ||
+    val modalVisible = showSettings || contextMenuGroup != null ||
         groupPickerSource != null || separateRoomSource != null
     LaunchedEffect(modalVisible) {
         if (!modalVisible) {
@@ -166,12 +164,12 @@ fun HomeScreen(
                     selectedGroupId = selectedGroupId,
                     primaryRoomId = primaryRoomId,
                     favoriteRoomIds = favoriteRoomIds,
+                    tvPlayerId = tvPlayerId,
                     rooms = rooms,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
                     onFocused = { homeViewModel.selectGroup(it.id) },
                     onLongPress = { contextMenuGroup = it },
-                    onPartyModeClick = { showPartyConfirmation = true },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
                     onRetry = { homeViewModel.setActive(true) }
@@ -237,16 +235,6 @@ fun HomeScreen(
                 firstFocus = settingsFocus,
                 onThemeSelected = { homeViewModel.setTheme(it) }
             )
-        }
-
-        if (showPartyConfirmation) {
-            Overlay {
-                PartyConfirmationDialog(
-                    groupCount = groups.size,
-                    onConfirm = { homeViewModel.partyMode(); showPartyConfirmation = false },
-                    onDismiss = { showPartyConfirmation = false }
-                )
-            }
         }
 
         val menuGroup = contextMenuGroup
@@ -325,12 +313,13 @@ private fun RoomSidebar(
     selectedGroupId: String?,
     primaryRoomId: String?,
     favoriteRoomIds: Set<String>,
+    /** Puts the television's own soundbar first when nothing has been pinned. */
+    tvPlayerId: String?,
     rooms: Map<String, HomeViewModel.RoomInfo>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
     onLongPress: (Group) -> Unit,
-    onPartyModeClick: () -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
     onRetry: () -> Unit
@@ -338,7 +327,7 @@ private fun RoomSidebar(
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val sorted = remember(groups, primaryRoomId, favoriteRoomIds) {
-        sortGroups(groups, primaryRoomId, favoriteRoomIds)
+        sortGroups(groups, primaryRoomId, favoriteRoomIds, tvPlayerId)
     }
     val iconRowFocusRequester = remember { FocusRequester() }
 
@@ -369,11 +358,6 @@ private fun RoomSidebar(
                     .focusGroup()
                     .focusProperties { right = detailFocusRequester }
             ) {
-                if (groups.size > 1) {
-                    SidebarIconButton(onClick = onPartyModeClick) {
-                        Icon(Icons.Default.Celebration, contentDescription = "Party mode", modifier = Modifier.size(18.dp))
-                    }
-                }
                 SidebarIconButton(onClick = onSettingsClick) {
                     Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(18.dp))
                 }
@@ -683,40 +667,6 @@ private fun SeparateRoomDialog(
             ) {
                 Text(name)
             }
-        }
-        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PartyConfirmationDialog(
-    groupCount: Int,
-    onConfirm: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val firstFocus = rememberAutoFocusRequester()
-
-    Column(
-        modifier = Modifier
-            .width(340.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Party Mode", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Combine all $groupCount rooms to play together?",
-            style = MaterialTheme.typography.bodyMedium
-        )
-        Spacer(Modifier.height(4.dp))
-        AppButton(
-            onClick = onConfirm,
-            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
-        ) {
-            Text("Combine All Rooms")
         }
         AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
             Text("Cancel")
