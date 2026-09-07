@@ -71,6 +71,13 @@ you are working from a stale mental model of this project.
 
 ### Two test suites, and why both
 
+`FakePlayer` lives in `core/src/testFixtures/`, so `:app`'s view models test against the
+same fake household over a real socket rather than a hand-stubbed repository. Three seams
+exist to make that possible, and are worth keeping: `Preferences` (so the stores are plain
+Kotlin instead of `Context` holders), `ChannelSync`, and `NowPlayingPublisher` (so
+`PlayerViewModel` no longer builds a `MediaSession` in a field initializer — the single
+reason it had no coverage at all).
+
 **`./gradlew :core:test` — against `FakePlayer`, no hardware.** An in-process TLS WebSocket
 server replaying captured payloads. It exists for one reason that carries on its own: CI has
 no Sonos on its LAN, so without it there is *no* automated regression check and verification

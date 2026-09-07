@@ -57,8 +57,39 @@ class FakePlayer(
 
     val hostname: String = PlayerNames.localHostname(id)!!
 
-    /** Every command frame the client sent, so tests can assert on scope and ordering. */
+    /** Every command header the client sent, so tests can assert on scope and ordering. */
     val received = LinkedBlockingQueue<JsonObject>()
+
+    /**
+     * Command bodies, kept alongside the headers.
+     *
+     * The header says what was asked and of whom; the body carries the value — the volume
+     * actually set, the play modes actually sent — which is usually the thing under test.
+     */
+    private val bodies = mutableListOf<Pair<String, JsonObject>>()
+
+    /**
+     * Every command name in order, never consumed.
+     *
+     * [received] is a queue and [awaitCommand] *polls* it, so anything waited for is gone
+     * afterwards — counting it after a wait reports zero. This is the log to count.
+     */
+    private val commandLog = mutableListOf<String>()
+
+    @Synchronized
+    fun commandsNamed(command: String): Int = commandLog.count { it == command }
+
+    @Synchronized
+    fun clearHistory() {
+        received.clear()
+        bodies.clear()
+        commandLog.clear()
+    }
+
+    /** The body of the most recent [command], or null if it was never sent. */
+    @Synchronized
+    fun lastCommandBody(command: String): JsonObject? =
+        bodies.lastOrNull { it.first == command }?.second
 
     /** Handshakes the player refused, with the code — empty is the expected state. */
     val rejected = LinkedBlockingQueue<Int>()
@@ -171,8 +202,16 @@ class FakePlayer(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val header = JsonParser.parseString(text).asJsonArray[0].asJsonObject
+            val frame = JsonParser.parseString(text).asJsonArray
+            val header = frame[0].asJsonObject
             received += header
+            header.get("command")?.asString?.let { command ->
+                val body = frame[1].takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
+                synchronized(this@FakePlayer) {
+                    bodies += command to body
+                    commandLog += command
+                }
+            }
             reply(webSocket, header)
         }
     })

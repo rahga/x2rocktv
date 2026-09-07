@@ -1,18 +1,14 @@
 package com.rahga.x2rock.viewmodel
 
-import android.content.Context
-import android.media.MediaMetadata
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -62,7 +58,7 @@ data class PlayerUiState(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val household: SonosHousehold,
-    @ApplicationContext context: Context
+    private val nowPlaying: NowPlayingPublisher,
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
@@ -142,33 +138,22 @@ class PlayerViewModel @Inject constructor(
             state.copy(sleepTimerRemainingMillis = remaining)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
-    private val mediaSession = MediaSession(context, "x2rock").also { session ->
-        // Without these the system never nominates this session as the media button
-        // target — `dumpsys media_session` shows "Media button session is null" and a
-        // MEDIA_PAUSE key does nothing, which also means voice transport ("pause") has
-        // nowhere to land. Deprecated since API 26 on the theory that every session
-        // handles buttons, but this device (API 30) reports flags=0 without them.
-        @Suppress("DEPRECATION")
-        session.setFlags(
-            MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
-        )
-        session.setCallback(object : MediaSession.Callback() {
-            override fun onPlay() { togglePlayPause() }
-            override fun onPause() { togglePlayPause() }
-            override fun onSkipToNext() { skipToNextTrack() }
-            override fun onSkipToPrevious() { skipToPreviousTrack() }
-            override fun onSeekTo(pos: Long) {
+    init {
+        nowPlaying.attach(object : NowPlayingPublisher.Controls {
+            override fun togglePlayPause() = this@PlayerViewModel.togglePlayPause()
+            override fun next() = skipToNextTrack()
+            override fun previous() = skipToPreviousTrack()
+            override fun seekTo(positionMillis: Long) {
                 val state = uiState.value
                 val elapsed = if (state.playbackState.isPlaying())
                     System.currentTimeMillis() - state.positionUpdatedAt else 0L
-                seekBy(pos - state.positionMillis - elapsed)
+                seekBy(positionMillis - state.positionMillis - elapsed)
             }
         })
-        session.isActive = true
     }
 
     init {
-        viewModelScope.launch { uiState.collect { updateMediaSession(it) } }
+        viewModelScope.launch { uiState.collect { publish(it) } }
     }
 
     fun selectGroup(id: String, name: String) {
@@ -176,38 +161,22 @@ class PlayerViewModel @Inject constructor(
         _groupName.value = name
     }
 
-    private fun updateMediaSession(state: PlayerUiState) {
+    /** Metadata and state are pushed separately, and only when they actually change. */
+    private fun publish(state: PlayerUiState) {
         if (state.isLoading) return
 
         val metadataKey = "${state.trackName}|${state.artistName}|${state.albumName}|${state.durationMillis}"
         if (metadataKey != lastMetadataKey) {
             lastMetadataKey = metadataKey
-            mediaSession.setMetadata(
-                MediaMetadata.Builder()
-                    .putString(MediaMetadata.METADATA_KEY_TITLE, state.trackName ?: "")
-                    .putString(MediaMetadata.METADATA_KEY_ARTIST, state.artistName ?: "")
-                    .putString(MediaMetadata.METADATA_KEY_ALBUM, state.albumName ?: "")
-                    .putLong(MediaMetadata.METADATA_KEY_DURATION, state.durationMillis)
-                    .build()
-            )
+            nowPlaying.publish(state.trackName, state.artistName, state.albumName, state.durationMillis)
         }
 
-        val pbState = if (state.trackName == null) PlaybackState.STATE_NONE
-            else if (state.playbackState.isPlaying()) PlaybackState.STATE_PLAYING
-            else PlaybackState.STATE_PAUSED
-        if (pbState == lastPbStateCode && state.positionMillis == lastPbPositionMillis) return
-        lastPbStateCode = pbState
+        val playing = state.playbackState.isPlaying()
+        val code = if (state.trackName == null) 0 else if (playing) 1 else 2
+        if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis) return
+        lastPbStateCode = code
         lastPbPositionMillis = state.positionMillis
-        mediaSession.setPlaybackState(
-            PlaybackState.Builder()
-                .setActions(
-                    PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                        PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
-                        PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_SEEK_TO
-                )
-                .setState(pbState, state.positionMillis, 1.0f)
-                .build()
-        )
+        nowPlaying.publishState(playing, state.trackName != null, state.positionMillis)
     }
 
     // ------------------------------------------------------------ transport
@@ -331,7 +300,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        mediaSession.release()
+        nowPlaying.release()
         super.onCleared()
     }
 
