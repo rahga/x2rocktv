@@ -176,9 +176,10 @@ drive that one room over CEC and the two could disagree.
 Party mode belongs in the room view, not the rooms panel: it hinges on a *source* player
 that the others join, so it needs a room already chosen. Grouping generally goes with it.
 
-The sidebar's control row (leave party, settings, collapse) then moves to the **bottom** of
-the panel, so a room is what the panel offers first and DOWN from the last room reaches the
-controls rather than them sitting between the user and the list.
+Where the sidebar's control row (leave party, settings, collapse) belongs is **undecided**.
+Moving it to the bottom would make a room the first thing the panel offers; keeping it at
+the top matches what most Android apps and Plex do. Not a settled question — do not move it
+without asking.
 
 ### Focus, and why it is handled as keys
 
