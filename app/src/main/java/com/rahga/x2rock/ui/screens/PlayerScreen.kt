@@ -305,7 +305,11 @@ private fun PlaybackControls(
         ) {
             AppButton(onClick = { viewModel.adjustVolume(-5) }, enabled = !state.isMuted) { Text("Vol −") }
             Text(
-                text = if (state.isMuted) "Muted" else "Volume: ${state.volume}",
+                text = when {
+                    state.volume == null -> "Volume: —"
+                    state.isMuted -> "Muted"
+                    else -> "Volume: ${state.volume}"
+                },
                 style = MaterialTheme.typography.bodyLarge
             )
             AppButton(onClick = { viewModel.adjustVolume(+5) }, enabled = !state.isMuted) { Text("Vol +") }
