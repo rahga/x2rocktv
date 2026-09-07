@@ -59,18 +59,18 @@ fun main(args: Array<String>) {
         .main(args)
 }
 
-class X2Rock : CliktCommand(name = "x2rock") {
+class X2Rock : CliktCommand(name = "x2rocktv") {
     override fun help(context: Context) = """
         Control Sonos from the terminal.
 
-        Rooms default to the one in `x2rock config --room`, or X2ROCK_ROOM. Most commands
+        Rooms default to the one in `x2rocktv config --room`, or X2ROCK_ROOM. Most commands
         accept --json for status bars and scripts.
     """.trimIndent()
 
     private val room by option("-r", "--room", help = "Room to control (group or speaker name)")
     private val household by option(
         "-H", "--household",
-        help = "Use the household containing this room, for this command only (see `x2rock households`)"
+        help = "Use the household containing this room, for this command only (see `x2rocktv households`)"
     )
 
     override fun run() {
@@ -84,13 +84,13 @@ class X2Rock : CliktCommand(name = "x2rock") {
 abstract class SonosCommand(name: String) : CliktCommand(name = name) {
     private val parentSession by requireObject<Session>()
 
-    // `-r`/`-H` also work after the subcommand name (`x2rock daemon -H room`), not just before it
-    // (`x2rock -H room daemon`) — Clikt doesn't share a parent's options with its children, so we
+    // `-r`/`-H` also work after the subcommand name (`x2rocktv daemon -H room`), not just before it
+    // (`x2rocktv -H room daemon`) — Clikt doesn't share a parent's options with its children, so we
     // repeat them here and fall back to whatever the root command already parsed.
     private val roomOverride by option("-r", "--room", help = "Room to control (group or speaker name)")
     private val householdOverride by option(
         "-H", "--household",
-        help = "Use the household containing this room, for this command only (see `x2rock households`)"
+        help = "Use the household containing this room, for this command only (see `x2rocktv households`)"
     )
 
     protected val session: Session by lazy {
@@ -103,7 +103,7 @@ abstract class SonosCommand(name: String) : CliktCommand(name = name) {
     abstract suspend fun execute()
 
     override fun run() {
-        if (!sonos.tokens.isAuthenticated) fail("Not signed in. Run `x2rock login`.")
+        if (!sonos.tokens.isAuthenticated) fail("Not signed in. Run `x2rocktv login`.")
         try {
             runBlocking { execute() }
         } catch (e: AmbiguousRoomException) {
@@ -116,7 +116,7 @@ abstract class SonosCommand(name: String) : CliktCommand(name = name) {
             fail("Sonos rate-limited this request${e.retryAfterMillis?.let { " — retry in ${it / 1000}s" } ?: ""}.")
         } catch (e: HttpException) {
             if (e.code() == 401 || sonos.auth.sessionExpired.value) {
-                fail("Session expired. Run `x2rock login`.")
+                fail("Session expired. Run `x2rocktv login`.")
             }
             fail("Sonos returned HTTP ${e.code()}${e.response()?.errorBody()?.string()?.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}")
         } catch (e: IOException) {
@@ -134,7 +134,7 @@ abstract class SonosCommand(name: String) : CliktCommand(name = name) {
         val query = session.roomOption ?: session.config.room
         if (query == null) {
             if (groups.size == 1) return groups.single()
-            fail("Which room? Pass --room or set one with `x2rock config --room NAME`.\n" +
+            fail("Which room? Pass --room or set one with `x2rocktv config --room NAME`.\n" +
                 "Rooms: ${groups.map { it.name }.sorted().joinToString()}")
         }
         return matchRoom(groups, query, sonos.repo::getPlayerName)
@@ -157,7 +157,7 @@ class Login : CliktCommand(name = "login") {
         if (!sonos.hasClientCredentials) {
             throw PrintMessage(
                 "No Sonos client credentials. Set them with\n" +
-                    "  x2rock config --client-id ID --client-secret SECRET\n" +
+                    "  x2rocktv config --client-id ID --client-secret SECRET\n" +
                     "or export SONOS_CLIENT_ID / SONOS_CLIENT_SECRET.",
                 statusCode = 1, printError = true
             )
@@ -181,7 +181,7 @@ class Login : CliktCommand(name = "login") {
             OAuthCallback.await(5.minutes)
                 ?: throw PrintMessage(
                     "Timed out waiting for the callback. If the browser showed the x2rock:// link but nothing " +
-                        "happened, run `x2rock install-handler` once, or retry with `x2rock login --manual`.",
+                        "happened, run `x2rocktv install-handler` once, or retry with `x2rocktv login --manual`.",
                     statusCode = 1, printError = true
                 )
         }
@@ -212,7 +212,7 @@ class Config : CliktCommand(name = "config") {
     private val room by option("--room", help = "Default room when --room is not passed")
     private val household by option(
         "--household",
-        help = "Default household, by the name of any room inside it (see `x2rock households`)"
+        help = "Default household, by the name of any room inside it (see `x2rocktv households`)"
     )
     private val session by requireObject<Session>()
 
@@ -269,16 +269,16 @@ class Households : SonosCommand("households") {
             t.println("   ${players.sorted().joinToString(", ").ifBlank { dim("(no rooms)") }}")
         }
         t.println()
-        t.println(dim("Pick one with: x2rock config --household \"<a room name from that household>\""))
+        t.println(dim("Pick one with: x2rocktv config --household \"<a room name from that household>\""))
     }
 }
 
 class InstallHandler : CliktCommand(name = "install-handler") {
     override fun help(context: Context) =
-        "Register x2rock:// with the desktop so the browser can hand the OAuth redirect back to `x2rock login`."
+        "Register x2rock:// with the desktop so the browser can hand the OAuth redirect back to `x2rocktv login`."
 
     private val exec by option("--exec", help = "Launcher path to put in the .desktop file")
-        .default(System.getProperty("x2rock.launcher") ?: "x2rock")
+        .default(System.getProperty("x2rocktv.launcher") ?: "x2rocktv")
     private val session by requireObject<Session>()
 
     override fun run() {
@@ -286,13 +286,13 @@ class InstallHandler : CliktCommand(name = "install-handler") {
         val appsDir = (System.getenv("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }?.let(Path::of)
             ?: Path.of(System.getProperty("user.home"), ".local", "share")).resolve("applications")
         Files.createDirectories(appsDir)
-        val desktop = appsDir.resolve("x2rock-url-handler.desktop")
+        val desktop = appsDir.resolve("x2rocktv-url-handler.desktop")
         Files.writeString(
             desktop,
             """
             [Desktop Entry]
             Type=Application
-            Name=x2rock OAuth handler
+            Name=x2rocktv OAuth handler
             Exec=$exec oauth-callback %u
             NoDisplay=true
             Terminal=false
@@ -548,7 +548,7 @@ class Favorite : SonosCommand("favorite") {
         val pick = which.toIntOrNull()?.let { favs.getOrNull(it - 1) }
             ?: favs.firstOrNull { it.name.equals(which, ignoreCase = true) }
             ?: favs.singleOrNull { it.name.contains(which, ignoreCase = true) }
-            ?: fail("No favorite matches \"$which\". Run `x2rock favorites`.")
+            ?: fail("No favorite matches \"$which\". Run `x2rocktv favorites`.")
         sonos.repo.loadFavorite(g.id, pick.id).getOrThrow()
         t.println("▶ ${pick.name} → ${g.name}")
     }

@@ -40,27 +40,28 @@ full module/file map before making non-trivial changes.
 
 ## Setting up the Linux CLI on a new machine
 
-> **STOP — name collision.** A separate Rust project (`rahga/x2rock`, cloned alongside this
-> repo as `../x2rock`) also builds a binary called `x2rock`, and on the developer's machine
-> **that** is what `~/.local/bin/x2rock` already is, with a `systemd --user` unit running its
-> daemon. The `ln -sf` below would overwrite it. The Rust binary is local-first (no account,
-> LAN only) and supersedes `:cli` on the desktop, so do not install this one over it without
-> asking. Whether `:cli` should exist at all is an open question — see `docs/lan-transport.md`.
+> **This CLI is `x2rocktv`, not `x2rock`.** A separate Rust project (`rahga/x2rock`, cloned
+> alongside this repo as `../x2rock`) owns the name `x2rock`: its binary is what
+> `~/.local/bin/x2rock` is on the developer's machine, with a `systemd --user` unit running
+> its daemon, and it uses `~/.config/x2rock/` and the `org.mpris.MediaPlayer2.x2rock-<room>`
+> bus names. This project was renamed off all of those in 2026-09 so the two can coexist.
+> **Never install this one as `x2rock`.** The Rust binary is local-first (no account, LAN
+> only) and supersedes `:cli` on the desktop; whether `:cli` should exist at all is still
+> open — see `docs/lan-transport.md`.
 
 ```sh
 git clone git@github.com:rahga/x2rocktv.git
 cd x2rocktv
 ./gradlew :cli:installDist
-cp -r cli/build/install/x2rock ~/.local/share/x2rock
-# Check what ~/.local/bin/x2rock already is before running this:
-ln -sf ~/.local/share/x2rock/bin/x2rock ~/.local/bin/x2rock   # ~/.local/bin must be on PATH
+cp -r cli/build/install/x2rocktv ~/.local/share/x2rocktv
+ln -sf ~/.local/share/x2rocktv/bin/x2rocktv ~/.local/bin/x2rocktv   # ~/.local/bin must be on PATH
 
-x2rock config --client-id ID --client-secret SECRET   # ask the user — not committed anywhere
-x2rock install-handler                                 # once: registers the x2rock:// OAuth redirect
-x2rock login                                            # interactive: user completes browser sign-in
-x2rock households                                       # if the account has more than one, see below
-x2rock config --household "<a room in the target household>"
-x2rock config --room "<default room>"
+x2rocktv config --client-id ID --client-secret SECRET   # ask the user — not committed anywhere
+x2rocktv install-handler                                 # once: registers the x2rock:// OAuth redirect
+x2rocktv login                                            # interactive: user completes browser sign-in
+x2rocktv households                                       # if the account has more than one, see below
+x2rocktv config --household "<a room in the target household>"
+x2rocktv config --room "<default room>"
 ```
 
 If Java/Gradle aren't present, the project pins Gradle 8.7 (`gradle/wrapper/gradle-wrapper.properties`);
@@ -69,17 +70,17 @@ install a JDK (17+ is safe, 21 is what's been tested) via the system package man
 isn't excluding it unintentionally), regenerate it with `gradle wrapper --gradle-version 8.7` using
 any locally installed Gradle before running `./gradlew`.
 
-**Do not guess or reuse Sonos client-id/secret from memory** — always ask the user; `x2rock login`
+**Do not guess or reuse Sonos client-id/secret from memory** — always ask the user; `x2rocktv login`
 requires an interactive browser step only the user can complete.
 
 ### Multiple households
-If `x2rock rooms` doesn't show a room the user says exists, check `x2rock households` before
+If `x2rocktv rooms` doesn't show a room the user says exists, check `x2rocktv households` before
 assuming a network/discovery problem — the CLI only talks to the cloud API, never local UPnP, and
 an account can have more than one household (e.g. a standalone speaker set up separately from the
 rest of the system). `-H "<room>"` overrides the household for one command without touching config.
 
 ### MPRIS daemon / systemd
-`x2rock daemon -r "<room>" -H "<household room>" --bus-name <unique-name>` publishes one room to
+`x2rocktv daemon -r "<room>" -H "<household room>" --bus-name <unique-name>` publishes one room to
 the D-Bus session bus as an MPRIS2 player (works with Waybar, playerctl, media keys — see README
 for a systemd `--user` unit template). One daemon process per room; each needs a distinct
 `--bus-name`. Systemd unit files for a given machine are NOT checked into this repo (they live in

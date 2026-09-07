@@ -9,7 +9,7 @@ import java.nio.file.Path
 /**
  * [TokenStore] as a 0600 JSON file. Weaker than the Android keystore — anything running as this
  * user can read the refresh token — but it is the same trust model as ~/.ssh and every other CLI
- * credential on the box. Every write goes straight to disk so a concurrent `x2rock` invocation
+ * credential on the box. Every write goes straight to disk so a concurrent `x2rocktv` invocation
  * (a keybind firing mid-refresh) sees the rotated refresh token.
  */
 class FileTokenStore(private val file: Path = Xdg.configDir.resolve("tokens.json")) : TokenStore {

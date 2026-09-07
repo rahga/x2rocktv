@@ -1,4 +1,4 @@
-// Linux command-line frontend. `./gradlew :cli:installDist` produces cli/build/install/x2rock/bin/x2rock.
+// Linux command-line frontend. `./gradlew :cli:installDist` produces cli/build/install/x2rocktv/bin/x2rocktv.
 plugins {
     alias(libs.plugins.kotlin.jvm)
     application
@@ -16,7 +16,7 @@ kotlin {
 }
 
 application {
-    applicationName = "x2rock"
+    applicationName = "x2rocktv"
     mainClass.set("com.rahga.x2rock.cli.MainKt")
 }
 
@@ -35,9 +35,9 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-// Bake the install location into the launcher so `x2rock install-handler` can write an absolute
+// Bake the install location into the launcher so `x2rocktv install-handler` can write an absolute
 // Exec= line without the user having to know where installDist put things.
-application.applicationDefaultJvmArgs = listOf("-Dx2rock.launcher=APP_HOME_PLACEHOLDER/bin/x2rock")
+application.applicationDefaultJvmArgs = listOf("-Dx2rocktv.launcher=APP_HOME_PLACEHOLDER/bin/x2rocktv")
 tasks.startScripts {
     doLast {
         unixScript.writeText(unixScript.readText().replace("APP_HOME_PLACEHOLDER", "'\"\$APP_HOME\"'"))

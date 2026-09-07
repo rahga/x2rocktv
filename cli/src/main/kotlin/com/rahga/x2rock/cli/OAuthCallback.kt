@@ -8,8 +8,8 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 /**
- * Hands the OAuth redirect from the browser-spawned `x2rock oauth-callback <url>` process to
- * the `x2rock login` process that is waiting for it. A file in the runtime dir is the whole
+ * Hands the OAuth redirect from the browser-spawned `x2rocktv oauth-callback <url>` process to
+ * the `x2rocktv login` process that is waiting for it. A file in the runtime dir is the whole
  * protocol: the handler writes it, login polls for it and deletes it. No sockets, nothing to
  * leak, trivially inspectable when it goes wrong.
  */
