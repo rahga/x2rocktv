@@ -43,9 +43,32 @@ class HomeViewModel @Inject constructor(
     private val pendingRoomDeepLink: PendingRoomDeepLink
 ) : ViewModel() {
 
+    /**
+     * Everything one row of the room list shows.
+     *
+     * A soundbar on its TV input is three lines rather than two — the room, then what the
+     * HDMI is carrying ("Dolby Digital Surround 5.1"), then the source ("TV Audio") — so
+     * the row needs more than a track.
+     */
+    data class RoomInfo(
+        val track: Track? = null,
+        /** Track art, falling back to the container's: radio has a station logo, not a cover. */
+        val artUrl: String? = null,
+        val onTvInput: Boolean = false,
+        /** e.g. "Dolby Digital Surround 5.1"; empty unless on a TV input with a signal. */
+        val inputFormat: String = "",
+        /** Whether this room has an HDMI input at all, from any of its speakers. */
+        val hasTvInput: Boolean = false,
+        /** The container: an album, a station, or "TV Audio". */
+        val source: String? = null,
+    )
+
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val groups: List<Group>, val nowPlaying: Map<String, Track?>) : UiState
+        data class Success(val groups: List<Group>, val rooms: Map<String, RoomInfo>) : UiState {
+            /** The TV home-screen channels only care about what is playing. */
+            val nowPlaying: Map<String, Track?> get() = rooms.mapValues { it.value.track }
+        }
         data class Error(val message: String) : UiState
     }
 
@@ -61,7 +84,17 @@ class HomeViewModel @Inject constructor(
                 !state.connected -> UiState.Loading
                 else -> UiState.Success(
                     groups = state.groups,
-                    nowPlaying = state.groups.associate { it.id to groupStates[it.id]?.track },
+                    rooms = state.groups.associate { group ->
+                        val pushed = groupStates[group.id]
+                        group.id to RoomInfo(
+                            track = pushed?.track,
+                            artUrl = pushed?.track?.imageUrl ?: pushed?.container?.imageUrl,
+                            onTvInput = pushed?.onTvInput == true,
+                            inputFormat = pushed?.inputFormat.orEmpty(),
+                            hasTvInput = state.hasTvInput(group),
+                            source = pushed?.container?.name,
+                        )
+                    },
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)

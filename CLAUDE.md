@@ -151,10 +151,6 @@ discovery than a second household.
   `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
 - The queue does not update by itself: UPnP eventing needs the player to connect back to us,
   which is deliberately not used, so the queue screen re-reads instead.
-- **Album art over `.local` has not been seen on screen.** The rewrite is unit-tested and
-  container art renders (verified with an `https` station logo), but the player-served
-  `http://sonos-<MAC>.local:1400/getaa` path — Dining Room or Kitchen — has only been proven
-  as far as the URL. Select one of those rooms on a device to close it.
 
 ## Where the UI is going
 
@@ -163,10 +159,11 @@ cover art, room name, state, what is playing, inline transport and a volume slid
 a soundbar, three lines rather than two (room and state, then the input format, then "TV
 Audio").
 
-`:core` now supplies everything that needs: `GroupState.onTvInput` and `.inputFormat`,
-`HouseholdState.hasTvInput(group)`, container art as a fallback when a track has none, and
-the alternate `images` arrays beside each `imageUrl`. None of it is rendered yet — the
-sidebar still shows one line of track text and `hasTvInput` has no caller.
+The room list now carries art and the soundbar's three lines. Still missing against the
+reference: inline transport and a volume slider per row, a TV badge (`hasTvInput` is
+modelled and plumbed as far as `RoomInfo`, but nothing draws it), and a placeholder for a
+TV input, which has no art of its own — the player really does send `images: []` for
+`TV Audio`, so anything shown there is the app's invention rather than data.
 
 The household this was developed against is a good test of that layout, because bonded and
 soundbar cut across each other: Living Room (Beam + Sub + 2x Play:1), Bedroom (Beam + 2x One

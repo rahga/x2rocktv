@@ -66,6 +66,9 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.Track
@@ -107,7 +110,7 @@ fun HomeScreen(
     val sidebarFocusRequester = remember { FocusRequester() }
 
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val nowPlaying = (state as? HomeViewModel.UiState.Success)?.nowPlaying ?: emptyMap()
+    val rooms = (state as? HomeViewModel.UiState.Success)?.rooms ?: emptyMap()
 
     // Keyed on groups too: a deep link can select a room before the group list has loaded, and
     // without the re-run the player pane would keep the empty name it resolved to first.
@@ -163,7 +166,7 @@ fun HomeScreen(
                     selectedGroupId = selectedGroupId,
                     primaryRoomId = primaryRoomId,
                     favoriteRoomIds = favoriteRoomIds,
-                    nowPlaying = nowPlaying,
+                    rooms = rooms,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
                     onFocused = { homeViewModel.selectGroup(it.id) },
@@ -286,7 +289,7 @@ fun HomeScreen(
                 GroupPickerDialog(
                     sourceGroup = pickerSource,
                     availableGroups = groups.filter { it.id != pickerSource.id },
-                    nowPlaying = nowPlaying,
+                    rooms = rooms,
                     onPick = { target ->
                         homeViewModel.joinGroup(pickerSource.id, target.id)
                         groupPickerSource = null
@@ -321,7 +324,7 @@ private fun RoomSidebar(
     selectedGroupId: String?,
     primaryRoomId: String?,
     favoriteRoomIds: Set<String>,
-    nowPlaying: Map<String, Track?>,
+    rooms: Map<String, HomeViewModel.RoomInfo>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
@@ -406,7 +409,7 @@ private fun RoomSidebar(
                         val itemFocus = remember(group.id) { FocusRequester() }
                         RoomListItem(
                             group = group,
-                            track = nowPlaying[group.id],
+                            info = rooms[group.id] ?: HomeViewModel.RoomInfo(),
                             isSelected = isSelected,
                             isPrimary = group.id == primaryRoomId,
                             isFavorite = group.id in favoriteRoomIds,
@@ -425,7 +428,7 @@ private fun RoomSidebar(
 @Composable
 private fun RoomListItem(
     group: Group,
-    track: Track?,
+    info: HomeViewModel.RoomInfo,
     isSelected: Boolean,
     isPrimary: Boolean,
     isFavorite: Boolean,
@@ -449,24 +452,50 @@ private fun RoomListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // Cover art, or the station logo for radio. Absent for an idle room and for a
+            // TV input, which have nothing to show.
+            if (info.artUrl != null) {
+                AsyncImage(
+                    model = info.artUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                )
+                Spacer(Modifier.width(12.dp))
+            }
+
             Column(modifier = Modifier.weight(1f)) {
+                val roomCount = group.playerIds.size
                 Text(
-                    text = group.name,
+                    text = group.name + if (roomCount > 1) " · $roomCount rooms" else "",
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val roomCount = group.playerIds.size
-                val statusLine = when {
-                    track?.name != null -> track.name
-                    else -> (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
-                } + if (roomCount > 1) " · $roomCount rooms" else ""
-                Text(
-                    text = statusLine,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // A soundbar on its TV input gets the format it is receiving, then the
+                // source — "Dolby Digital Surround 5.1" over "TV Audio" — because the
+                // format is what changes and what a listener is checking for.
+                val lines = when {
+                    info.onTvInput -> listOfNotNull(
+                        info.inputFormat.ifEmpty { null } ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
+                        info.source,
+                    )
+                    info.track?.name != null -> listOfNotNull(
+                        info.track.name,
+                        info.track.artist?.name,
+                    )
+                    else -> listOf((group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel())
+                }
+                lines.forEach { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
@@ -563,7 +592,7 @@ private fun RoomContextMenu(
 private fun GroupPickerDialog(
     sourceGroup: Group,
     availableGroups: List<Group>,
-    nowPlaying: Map<String, Track?>,
+    rooms: Map<String, HomeViewModel.RoomInfo>,
     onPick: (Group) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -587,7 +616,7 @@ private fun GroupPickerDialog(
             ) {
                 Column(horizontalAlignment = Alignment.Start) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge)
-                    val track = nowPlaying[group.id]
+                    val track = rooms[group.id]?.track
                     val subtitle = track?.name ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
                     Text(
                         text = subtitle,
