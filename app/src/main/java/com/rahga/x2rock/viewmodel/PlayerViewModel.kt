@@ -7,6 +7,7 @@ import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
+import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -138,18 +139,20 @@ class PlayerViewModel @Inject constructor(
             state.copy(sleepTimerRemainingMillis = remaining)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
+    private val controls = object : NowPlayingPublisher.Controls {
+        override fun togglePlayPause() = this@PlayerViewModel.togglePlayPause()
+        override fun next() = skipToNextTrack()
+        override fun previous() = skipToPreviousTrack()
+        override fun seekTo(positionMillis: Long) {
+            val state = uiState.value
+            val elapsed = if (state.playbackState.isPlaying())
+                System.currentTimeMillis() - state.positionUpdatedAt else 0L
+            seekBy(positionMillis - state.positionMillis - elapsed)
+        }
+    }
+
     init {
-        nowPlaying.attach(object : NowPlayingPublisher.Controls {
-            override fun togglePlayPause() = this@PlayerViewModel.togglePlayPause()
-            override fun next() = skipToNextTrack()
-            override fun previous() = skipToPreviousTrack()
-            override fun seekTo(positionMillis: Long) {
-                val state = uiState.value
-                val elapsed = if (state.playbackState.isPlaying())
-                    System.currentTimeMillis() - state.positionUpdatedAt else 0L
-                seekBy(positionMillis - state.positionMillis - elapsed)
-            }
-        })
+        nowPlaying.attach(controls)
     }
 
     init {
@@ -172,11 +175,14 @@ class PlayerViewModel @Inject constructor(
         }
 
         val playing = state.playbackState.isPlaying()
-        val code = if (state.trackName == null) 0 else if (playing) 1 else 2
+        // Idle is a playback state, not the absence of a title. A soundbar on TV audio has
+        // no track metadata and is still playing.
+        val idle = !state.playbackState.hasLoadedContent()
+        val code = if (idle) 0 else if (playing) 1 else 2
         if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis) return
         lastPbStateCode = code
         lastPbPositionMillis = state.positionMillis
-        nowPlaying.publishState(playing, state.trackName != null, state.positionMillis)
+        nowPlaying.publishState(playing, idle, state.positionMillis)
     }
 
     // ------------------------------------------------------------ transport
@@ -300,7 +306,8 @@ class PlayerViewModel @Inject constructor(
     }
 
     override fun onCleared() {
-        nowPlaying.release()
+        // Detach, not release: the publisher is application-scoped and outlives this.
+        nowPlaying.detach(controls)
         super.onCleared()
     }
 

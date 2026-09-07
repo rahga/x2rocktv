@@ -8,6 +8,7 @@ import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.RepeatModes
+import com.rahga.x2rock.model.isPlaying
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -188,6 +189,27 @@ class PlayerViewModelTest {
             it.get("command")?.asString == "skipToNextTrack"
         }
         assertEquals(groupId, command.get("groupId").asString)
+    }
+
+    /**
+     * Regression, found on the television: a soundbar playing TV audio carries no track
+     * metadata, and the session was reporting STATE_NONE for it. The system then treats the
+     * session as inactive, so media keys and voice transport do nothing — for precisely the
+     * room most likely to be in use.
+     */
+    @Test fun `a playing room with no track still reports playing`() = runBlocking<Unit> {
+        fake.push(
+            "playback:1", "playbackStatus",
+            """{"playbackState":"PLAYBACK_STATE_PLAYING"}""",
+            groupId,
+        )
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState.isPlaying() } }
+        withTimeout(5_000) {
+            while (publisher.states.isEmpty()) delay(20)
+        }
+        val published = publisher.states.last()
+        assertTrue("a playing room was published as not playing", published.playing)
+        assertFalse("a playing room with no title was published as idle", published.idle)
     }
 
     // ---------------------------------------------------------------- failure

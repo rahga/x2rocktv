@@ -26,21 +26,25 @@ class RecordingChannelSync : ChannelSync {
 /** Records what the system would have been told, and can drive the controls back. */
 class RecordingNowPlaying : NowPlayingPublisher {
     data class Metadata(val title: String?, val artist: String?, val album: String?, val duration: Long)
-    data class State(val playing: Boolean, val hasTrack: Boolean, val positionMillis: Long)
+    data class State(val playing: Boolean, val idle: Boolean, val positionMillis: Long)
 
     val metadata = mutableListOf<Metadata>()
     val states = mutableListOf<State>()
     var controls: NowPlayingPublisher.Controls? = null
         private set
-    var released = false
+    var detached = false
         private set
 
     override fun attach(controls: NowPlayingPublisher.Controls) { this.controls = controls }
     override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long) {
         metadata += Metadata(title, artist, album, durationMillis)
     }
-    override fun publishState(playing: Boolean, hasTrack: Boolean, positionMillis: Long) {
-        states += State(playing, hasTrack, positionMillis)
+    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long) {
+        states += State(playing, idle, positionMillis)
     }
-    override fun release() { released = true }
+    override fun detach(controls: NowPlayingPublisher.Controls) {
+        if (this.controls !== controls) return
+        detached = true
+        this.controls = null
+    }
 }

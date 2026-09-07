@@ -22,8 +22,27 @@ interface NowPlayingPublisher {
 
     fun attach(controls: Controls)
     fun publish(title: String?, artist: String?, album: String?, durationMillis: Long)
-    fun publishState(playing: Boolean, hasTrack: Boolean, positionMillis: Long)
-    fun release()
+    /**
+     * @param idle nothing is loaded at all. **Not** "has no title": a soundbar playing TV
+     *   audio reports no track metadata while very much playing, and calling that idle
+     *   makes the system treat the session as inactive — media keys and voice transport
+     *   then have nowhere to land for exactly the room most likely to be in use.
+     */
+    fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long)
+
+    /**
+     * Stop routing controls to [controls], if they are still the ones attached.
+     *
+     * Deliberately *not* a release: the session belongs to the application, not to a view
+     * model. A view model going away must not destroy it, or the next one would attach to a
+     * dead session and media keys would stop working with nothing to show why.
+     *
+     * And identity-checked, because a replacement view model is constructed *before* the
+     * one it replaces is cleared. An unconditional detach would let the outgoing one unhook
+     * the incoming one, leaving a session that publishes state but answers no keys — which
+     * is indistinguishable, from the outside, from the transport being broken.
+     */
+    fun detach(controls: Controls)
 }
 
 /**
@@ -48,7 +67,10 @@ class MediaSessionPublisher @Inject constructor(
         isActive = true
     }
 
+    @Volatile private var attached: NowPlayingPublisher.Controls? = null
+
     override fun attach(controls: NowPlayingPublisher.Controls) {
+        attached = controls
         session.setCallback(object : MediaSession.Callback() {
             override fun onPlay() = controls.togglePlayPause()
             override fun onPause() = controls.togglePlayPause()
@@ -69,9 +91,9 @@ class MediaSessionPublisher @Inject constructor(
         )
     }
 
-    override fun publishState(playing: Boolean, hasTrack: Boolean, positionMillis: Long) {
+    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long) {
         val state = when {
-            !hasTrack -> PlaybackState.STATE_NONE
+            idle -> PlaybackState.STATE_NONE
             playing -> PlaybackState.STATE_PLAYING
             else -> PlaybackState.STATE_PAUSED
         }
@@ -87,5 +109,9 @@ class MediaSessionPublisher @Inject constructor(
         )
     }
 
-    override fun release() = session.release()
+    override fun detach(controls: NowPlayingPublisher.Controls) {
+        if (attached !== controls) return
+        attached = null
+        session.setCallback(null)
+    }
 }
