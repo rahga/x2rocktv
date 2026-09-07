@@ -37,8 +37,43 @@ class HomeTheaterFormatTest {
     }
 
     /**
+     * A real 5.1 stream, captured from a Beam with a Sub and two surrounds while a film
+     * played on the Shield over HDMI. The stereo capture above cannot exercise any of
+     * this: no LFE channel, nothing to call surround, and a codec name that happens to
+     * end in a word ("Silence") rather than one that already says "Surround".
+     */
+    @Test fun `the captured 5 point 1 stream reports its codec and layout`() {
+        val meta = gson.fromJson(
+            FakePlayer.fixture("event.tvSurroundMetadataStatus.json"),
+            PlaybackMetadata::class.java,
+        )
+        val format = meta.container!!.htInputFormat!!
+        assertEquals(5, format.numGroundChannels)
+        assertEquals(1, format.numLfeChannels)
+        assertEquals("5.1", format.channels)
+        assertTrue(format.isSurround)
+        assertFalse(format.isSilent)
+        // Exactly what the Rust CLI prints for the same stream.
+        assertEquals("Dolby Digital Surround 5.1", format.summary())
+    }
+
+    /** Still the TV input, and still reported as such, whatever is arriving over it. */
+    @Test fun `a surround stream is on the TV input like any other`() {
+        val meta = gson.fromJson(
+            FakePlayer.fixture("event.tvSurroundMetadataStatus.json"),
+            PlaybackMetadata::class.java,
+        )
+        val state = GroupState(container = meta.container)
+        assertTrue(state.onTvInput)
+        assertEquals("Dolby Digital Surround 5.1", state.inputFormat)
+        assertEquals("TV Audio", meta.container!!.name)
+        assertEquals("linein.homeTheater.hdmi", meta.container!!.type)
+    }
+
+    /**
      * `numLFEChannels` is not the casing a camelCase convention derives from the field
-     * name, so it is mapped explicitly. Getting it wrong silently reports 5.0 for 5.1.
+     * name, so it is mapped explicitly. Getting it wrong silently reports 5.0 for 5.1 —
+     * and the captured stream above is the one that would catch it.
      */
     @Test fun `the oddly-cased LFE field is read`() {
         val format = gson.fromJson(
