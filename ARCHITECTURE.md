@@ -2,6 +2,14 @@
 
 A Sonos controller for Google TV / Android TV, written in Kotlin with Jetpack Compose.
 
+> **This document describes the code as it stands, which is built on the Sonos cloud API.**
+> That transport is being replaced: the same Control API is served by the speakers over the
+> LAN with no account, it pushes instead of polling, and the cloud OAuth flow cannot be
+> completed with a TV remote — so the login path described below cannot ship on the target
+> device. The replacement is proven on hardware and specified in
+> [`docs/lan-transport.md`](docs/lan-transport.md). Read that first if you are touching the
+> network layer, `:core`, or anything auth-related.
+
 ---
 
 ## What it does
