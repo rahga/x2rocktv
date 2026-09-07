@@ -1,0 +1,339 @@
+package com.rahga.x2rock.lan
+
+import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.rahga.x2rock.model.ContainerMetadata
+import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.model.GroupVolume
+import com.rahga.x2rock.model.GroupsResponse
+import com.rahga.x2rock.model.PlayModeState
+import com.rahga.x2rock.model.PlaybackMetadata
+import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.model.Player
+import com.rahga.x2rock.model.Track
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.net.InetAddress
+import java.net.URI
+
+/** What is playing in one group. Every field arrives by push; nothing here is polled. */
+data class GroupState(
+    val playbackState: String = PlaybackStates.IDLE,
+    val positionMillis: Long = 0,
+    /** When [positionMillis] was last told to us, so a UI can extrapolate between events. */
+    val positionUpdatedAt: Long = 0,
+    val durationMillis: Long = 0,
+    val track: Track? = null,
+    val container: ContainerMetadata? = null,
+    val volume: GroupVolume? = null,
+    val playMode: PlayModeState = PlayModeState(),
+)
+
+/** The household as a whole. */
+data class HouseholdState(
+    val connected: Boolean = false,
+    val householdId: String? = null,
+    val groups: List<Group> = emptyList(),
+    val players: List<Player> = emptyList(),
+    /** Set when the household is unreachable. Withdraw the UI rather than showing stale state. */
+    val error: String? = null,
+)
+
+/**
+ * A live view of one Sonos household over the LAN, and the commands that change it.
+ *
+ * This replaces polling entirely. [state] and [groupStates] are fed by subscriptions:
+ * the speakers push, and a command's effect arrives as an event like any other change,
+ * so there is nothing to re-fetch after acting and no interval to tune.
+ *
+ * One socket is opened per group coordinator, because group-scoped namespaces are only
+ * answered by the coordinator. Player-scoped calls open that player's own socket.
+ *
+ * **Not covered here: the queue.** `queue:1` / `playbackQueue:1` answer
+ * `ERROR_UNSUPPORTED_NAMESPACE` — the Control API has no queue at all, cloud or LAN. That
+ * lives behind UPnP/SOAP on port 1400 and needs a separate module; see
+ * `docs/lan-transport.md`.
+ *
+ * Reconnection and network-change handling are **not** implemented yet: [connect] is
+ * one-shot. See the note in `CLAUDE.md` about "assume dead, reconnect from scratch".
+ */
+class SonosHousehold(
+    private val scope: CoroutineScope,
+    private val addressBook: PlayerAddressBook = PlayerAddressBook(),
+) {
+
+    private val gson = Gson()
+    private val client = LanHttp.client(addressBook)
+
+    private val sockets = mutableMapOf<String, SonosSocket>()
+    private val socketJobs = mutableListOf<Job>()
+    private val lock = Mutex()
+
+    private val _state = MutableStateFlow(HouseholdState())
+    val state: StateFlow<HouseholdState> = _state.asStateFlow()
+
+    private val _groupStates = MutableStateFlow<Map<String, GroupState>>(emptyMap())
+    val groupStates: StateFlow<Map<String, GroupState>> = _groupStates.asStateFlow()
+
+    // ---------------------------------------------------------------- lifecycle
+
+    /**
+     * Connects, learns the household, and subscribes to everything.
+     *
+     * [seed] is any player's address. With none, SSDP finds one — reaching a single player
+     * is enough, because `getGroups` then reports where all the others are.
+     */
+    suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
+        try {
+            val entry = seed ?: Discovery.findPlayers().firstOrNull()
+                ?: error("no Sonos players answered on this network")
+
+            // Discovery reports the player's id and address together, so even the very
+            // first connection is made to the name on the certificate. There is no point
+            // in the flow where hostname verification has to be relaxed.
+            val hostname = entry.hostname
+                ?: error("cannot derive a certificate hostname for ${entry.id}")
+            addressBook.register(hostname, entry.address)
+            val seedSocket = socketForHostname(hostname)
+
+            // SSDP already answered this; only ask a player if it somehow did not.
+            val householdId = entry.householdId ?: seedSocket.householdId()
+
+            val groups = gson.fromJson(
+                seedSocket.command(Frames.onHousehold("groups:1", "getGroups", householdId)),
+                GroupsResponse::class.java,
+            )
+            registerAddresses(groups)
+            _state.update {
+                it.copy(connected = true, householdId = householdId, groups = groups.groups, players = groups.players, error = null)
+            }
+
+            // Topology changes arrive here: a group forming or breaking rewrites the list.
+            // The socket is already being watched — socketForHostname does that on open,
+            // before any subscribe, so no snapshot can be missed.
+            seedSocket.subscribe(Frames.onHousehold("groups:1", "subscribe", householdId))
+
+            groups.groups.forEach { subscribeGroup(it) }
+        } catch (e: Exception) {
+            _state.update { it.copy(connected = false, error = e.message ?: e.toString()) }
+            throw e
+        }
+    }
+
+    fun disconnect() {
+        socketJobs.forEach { it.cancel() }
+        socketJobs.clear()
+        sockets.values.forEach { it.close() }
+        sockets.clear()
+        addressBook.clear()
+        _state.value = HouseholdState()
+        _groupStates.value = emptyMap()
+    }
+
+    // ---------------------------------------------------------------- reads
+
+    fun groupState(groupId: String): GroupState = _groupStates.value[groupId] ?: GroupState()
+
+    fun playerName(playerId: String): String =
+        _state.value.players.firstOrNull { it.id == playerId }?.name ?: playerId
+
+    suspend fun favorites(): JsonObject {
+        val household = _state.value.householdId ?: error("not connected")
+        val socket = sockets.values.firstOrNull() ?: error("not connected")
+        return socket.command(
+            Frames.onHousehold("favorites:1", "getFavorites", household)
+        ).asJsonObject
+    }
+
+    // ---------------------------------------------------------------- commands
+
+    suspend fun play(groupId: String) = onGroup(groupId, "play")
+    suspend fun pause(groupId: String) = onGroup(groupId, "pause")
+    suspend fun togglePlayPause(groupId: String) = onGroup(groupId, "togglePlayPause")
+    suspend fun skipToNextTrack(groupId: String) = onGroup(groupId, "skipToNextTrack")
+    suspend fun skipToPreviousTrack(groupId: String) = onGroup(groupId, "skipToPreviousTrack")
+
+    suspend fun seek(groupId: String, positionMillis: Long) {
+        coordinator(groupId).command(
+            Frames.onGroup("playback:1", "seek", groupId),
+            JsonObject().apply { addProperty("positionMillis", positionMillis) },
+        )
+    }
+
+    suspend fun setPlayMode(groupId: String, mode: PlayModeState) {
+        coordinator(groupId).command(
+            Frames.onGroup("playback:1", "setPlayModes", groupId),
+            PlayModes.toBody(mode),
+        )
+    }
+
+    suspend fun setGroupVolume(groupId: String, volume: Int) {
+        coordinator(groupId).command(
+            Frames.onGroup("groupVolume:1", "setVolume", groupId),
+            JsonObject().apply { addProperty("volume", volume.coerceIn(0, 100)) },
+        )
+    }
+
+    suspend fun setGroupMute(groupId: String, muted: Boolean) {
+        coordinator(groupId).command(
+            Frames.onGroup("groupVolume:1", "setMute", groupId),
+            JsonObject().apply { addProperty("muted", muted) },
+        )
+    }
+
+    /** Player-scoped: this must go to the player's own socket, not its coordinator's. */
+    suspend fun setPlayerVolume(playerId: String, volume: Int) {
+        socketForPlayer(playerId).command(
+            Frames.onPlayer("playerVolume:1", "setVolume", playerId),
+            JsonObject().apply { addProperty("volume", volume.coerceIn(0, 100)) },
+        )
+    }
+
+    suspend fun setPlayerMute(playerId: String, muted: Boolean) {
+        socketForPlayer(playerId).command(
+            Frames.onPlayer("playerVolume:1", "setMute", playerId),
+            JsonObject().apply { addProperty("muted", muted) },
+        )
+    }
+
+    suspend fun loadFavorite(groupId: String, favoriteId: String, playOnCompletion: Boolean = true) {
+        coordinator(groupId).command(
+            Frames.onGroup("favorites:1", "loadFavorite", groupId),
+            JsonObject().apply {
+                addProperty("favoriteId", favoriteId)
+                addProperty("playOnCompletion", playOnCompletion)
+            },
+        )
+    }
+
+    suspend fun modifyGroupMembers(groupId: String, add: List<String>, remove: List<String>) {
+        coordinator(groupId).command(
+            Frames.onGroup("groups:1", "modifyGroupMembers", groupId),
+            JsonObject().apply {
+                add("playerIdsToAdd", gson.toJsonTree(add))
+                add("playerIdsToRemove", gson.toJsonTree(remove))
+            },
+        )
+    }
+
+    private suspend fun onGroup(groupId: String, command: String) {
+        coordinator(groupId).command(Frames.onGroup("playback:1", command, groupId))
+    }
+
+    // ---------------------------------------------------------------- sockets
+
+    private suspend fun SonosSocket.householdId(): String =
+        // No command asks this, but every reply header answers it, so the cheapest question
+        // is a deliberately invalid one. It fails by design.
+        send(JsonObject()).header.householdId
+            ?: error("player did not report a householdId")
+
+    /** The coordinator's socket, opened on first use and reused after. */
+    private suspend fun coordinator(groupId: String): SonosSocket {
+        val group = _state.value.groups.firstOrNull { it.id == groupId }
+            ?: error("no group $groupId")
+        return socketForPlayer(group.coordinatorId)
+    }
+
+    private suspend fun socketForPlayer(playerId: String): SonosSocket {
+        val name = PlayerNames.localHostname(playerId)
+            ?: error("cannot derive a certificate hostname for $playerId")
+        return socketForHostname(name)
+    }
+
+    private suspend fun socketForHostname(hostname: String): SonosSocket = lock.withLock {
+        sockets[hostname]?.let { return it }
+        SonosSocket.open(client, hostname).also {
+            sockets[hostname] = it
+            watch(it)
+        }
+    }
+
+    /** Routes one socket's events into the state flows. */
+    private fun watch(socket: SonosSocket) {
+        socketJobs += scope.launch {
+            socket.events.collect { event -> apply(event) }
+        }
+    }
+
+    private suspend fun subscribeGroup(group: Group) {
+        val socket = socketForPlayer(group.coordinatorId)
+        // Subscribing returns the current state as the first event, so there is no
+        // separate "get" needed to seed the flow.
+        listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
+            socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id))
+        }
+    }
+
+    private fun registerAddresses(groups: GroupsResponse) {
+        groups.players.forEach { player ->
+            val name = PlayerNames.localHostname(player.id) ?: return@forEach
+            val host = player.websocketUrl?.let { runCatching { URI(it).host }.getOrNull() } ?: return@forEach
+            addressBook.register(name, host)
+        }
+    }
+
+    // ---------------------------------------------------------------- events
+
+    private fun apply(event: SonosEvent) {
+        val groupId = event.header.groupId
+        when (event.namespace) {
+            "groups:1" -> {
+                val groups = gson.fromJson(event.body, GroupsResponse::class.java) ?: return
+                registerAddresses(groups)
+                _state.update { it.copy(groups = groups.groups, players = groups.players) }
+            }
+
+            "playback:1" -> {
+                if (groupId == null) return
+                val body = event.body.asJsonObject
+                update(groupId) {
+                    it.copy(
+                        playbackState = body.string("playbackState") ?: it.playbackState,
+                        positionMillis = body.long("positionMillis") ?: it.positionMillis,
+                        positionUpdatedAt = System.currentTimeMillis(),
+                        durationMillis = body.long("durationMillis") ?: it.durationMillis,
+                        playMode = PlayModes.fromJson(body.getAsJsonObject("playModes")),
+                    )
+                }
+            }
+
+            "playbackMetadata:1" -> {
+                if (groupId == null) return
+                val meta = gson.fromJson(event.body, PlaybackMetadata::class.java) ?: return
+                update(groupId) {
+                    it.copy(
+                        track = meta.currentItem?.track,
+                        container = meta.container,
+                        durationMillis = meta.currentItem?.track?.durationMillis ?: it.durationMillis,
+                    )
+                }
+            }
+
+            "groupVolume:1" -> {
+                if (groupId == null) return
+                val volume = gson.fromJson(event.body, GroupVolume::class.java) ?: return
+                update(groupId) { it.copy(volume = volume) }
+            }
+        }
+    }
+
+    private fun update(groupId: String, block: (GroupState) -> GroupState) {
+        _groupStates.update { all ->
+            all + (groupId to block(all[groupId] ?: GroupState()))
+        }
+    }
+
+    private fun JsonObject.string(name: String): String? =
+        get(name)?.takeIf { it.isJsonPrimitive }?.asString
+
+    private fun JsonObject.long(name: String): Long? =
+        get(name)?.takeIf { it.isJsonPrimitive }?.asLong
+}

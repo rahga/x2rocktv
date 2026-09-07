@@ -57,6 +57,24 @@ class SonosSocket private constructor(
      * rather than retry on it.
      */
     suspend fun command(header: JsonObject, body: JsonObject = JsonObject()): JsonElement {
+        val reply = send(header, body)
+        if (!reply.isSuccess) {
+            throw SonosCommandException(
+                header.get("command")?.asString ?: "command",
+                reply.errorOrNull() ?: "refused",
+            )
+        }
+        return reply.body
+    }
+
+    /**
+     * Like [command] but hands back a refusal instead of throwing.
+     *
+     * Needed because a refusal is sometimes the point: there is no command for "what
+     * household am I?", and the cheapest way to ask is to send something invalid and read
+     * `householdId` off the reply header.
+     */
+    suspend fun send(header: JsonObject, body: JsonObject = JsonObject()): SonosReply {
         val id = nextId.getAndIncrement().toString()
         val waiter = CompletableDeferred<SonosReply>()
         pending[id] = waiter
@@ -64,18 +82,11 @@ class SonosSocket private constructor(
             if (!socket.send(Frames.encode(header, body, id))) {
                 throw IOException("socket to $hostname is closed")
             }
-            val reply = try {
+            return try {
                 withTimeout(REPLY_TIMEOUT_MILLIS) { waiter.await() }
             } catch (e: TimeoutCancellationException) {
                 throw IOException("no reply from $hostname within ${REPLY_TIMEOUT_MILLIS}ms", e)
             }
-            if (!reply.isSuccess) {
-                throw SonosCommandException(
-                    header.get("command")?.asString ?: "command",
-                    reply.errorOrNull() ?: "refused",
-                )
-            }
-            return reply.body
         } finally {
             pending.remove(id)
         }
