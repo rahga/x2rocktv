@@ -203,6 +203,30 @@ class SonosHouseholdTest {
         assertEquals(null, household.reachableArt(null))
     }
 
+    /**
+     * Which rooms can take a TV input, from the captured topology.
+     *
+     * The household this was captured from is a good test of the distinction, because
+     * "several speakers" and "has an HDMI socket" cut across each other:
+     *
+     * ```
+     *   Living Room  Beam + Sub + 2x Play:1   bonded, soundbar
+     *   Bedroom      Beam + 2x One SL         bonded, soundbar
+     *   Guest TV     Beam                     single, soundbar
+     *   Dining Room  2x Symfonisk bookshelf   bonded, no HDMI
+     *   Kitchen      One SL                   single, no HDMI
+     * ```
+     *
+     * So a bonded set is not a soundbar, and a soundbar need not be bonded. Only the
+     * HT_PLAYBACK capability tells them apart.
+     */
+    @Test fun `a TV input follows the soundbar, not the number of speakers`() {
+        val state = connected()
+        val withTv = state.groups.filter { state.hasTvInput(it) }.map { it.name }.toSet()
+
+        assertEquals(setOf("Living Room", "Bedroom", "Guest TV"), withTv)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

@@ -1,0 +1,20 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "name": "TV Audio",
+    "type": "linein.homeTheater.hdmi",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "objectId": "homeTheater-input"
+    },
+    "images": [],
+    "htInputFormat": {
+      "_objectType": "homeTheaterInputFormat",
+      "numGroundChannels": 5,
+      "numLFEChannels": 1,
+      "numHeightChannels": 0,
+      "streamDescription": "Dolby Digital Surround"
+    }
+  }
+}
