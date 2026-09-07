@@ -1,9 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
     <!--
-      Everything goes to the Sonos cloud Control API over HTTPS. When local player control lands
-      (see ARCHITECTURE.md) this is where the .local cleartext exemption for mDNS-discovered
-      speakers goes back in; until then there is nothing to exempt.
+      Cleartext stays off everywhere by default.
     -->
     <base-config cleartextTrafficPermitted="false" />
+
+    <!--
+      The queue is served by UPnP/SOAP on port 1400, which is plain HTTP with no TLS
+      alternative, and album art is served from the same place. Both are reached by the
+      player's own `sonos-<MAC>.local` name — derived from its RINCON id, never guessed —
+      so the exemption can be scoped to .local names alone.
+
+      Verified on device: with this config a request to http://sonos-<MAC>.local:1400
+      succeeds while the same request to the player's raw IP is still refused, and the
+      internet stays covered by the base config above.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">local</domain>
+    </domain-config>
 </network-security-config>

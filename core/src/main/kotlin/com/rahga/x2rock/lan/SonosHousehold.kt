@@ -5,6 +5,7 @@ import com.google.gson.JsonObject
 import com.rahga.x2rock.model.ContainerMetadata
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
+import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackMetadata
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.OkHttpClient
 import java.net.InetAddress
 import java.net.URI
 
@@ -67,10 +69,15 @@ data class HouseholdState(
 class SonosHousehold(
     private val scope: CoroutineScope,
     private val addressBook: PlayerAddressBook = PlayerAddressBook(),
+    /**
+     * Injected so the *same* client can be handed to the image loader: album art lives on
+     * the players at cleartext `.local` URLs, and a loader with its own client would have
+     * neither the address book nor permission to fetch them.
+     */
+    private val client: OkHttpClient = LanHttp.client(addressBook),
 ) {
 
     private val gson = Gson()
-    private val client = LanHttp.client(addressBook)
     private val upnp = Upnp(client)
 
     private val sockets = mutableMapOf<String, SonosSocket>()
@@ -83,6 +90,13 @@ class SonosHousehold(
     private val _groupStates = MutableStateFlow<Map<String, GroupState>>(emptyMap())
     val groupStates: StateFlow<Map<String, GroupState>> = _groupStates.asStateFlow()
 
+    /**
+     * Per-speaker volume, which is a different thing from a group's volume and needs its
+     * own subscription on each player's own socket.
+     */
+    private val _playerVolumes = MutableStateFlow<Map<String, GroupVolume>>(emptyMap())
+    val playerVolumes: StateFlow<Map<String, GroupVolume>> = _playerVolumes.asStateFlow()
+
     // ---------------------------------------------------------------- lifecycle
 
     /**
@@ -92,6 +106,7 @@ class SonosHousehold(
      * is enough, because `getGroups` then reports where all the others are.
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
+        if (_state.value.connected) return
         try {
             val entry = seed ?: Discovery.findPlayers().firstOrNull()
                 ?: error("no Sonos players answered on this network")
@@ -113,7 +128,7 @@ class SonosHousehold(
             )
             registerAddresses(groups)
             _state.update {
-                it.copy(connected = true, householdId = householdId, groups = groups.groups, players = groups.players, error = null)
+                it.copy(connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups), players = groups.players, error = null)
             }
 
             // Topology changes arrive here: a group forming or breaking rewrites the list.
@@ -122,6 +137,14 @@ class SonosHousehold(
             seedSocket.subscribe(Frames.onHousehold("groups:1", "subscribe", householdId))
 
             groups.groups.forEach { subscribeGroup(it) }
+            // Per-speaker volume only matters once rooms are grouped, but subscribing up
+            // front means the rows are already populated when a group forms.
+            groups.players.forEach { player ->
+                runCatching {
+                    socketForPlayer(player.id)
+                        .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
+                }
+            }
         } catch (e: Exception) {
             _state.update { it.copy(connected = false, error = e.message ?: e.toString()) }
             throw e
@@ -136,6 +159,7 @@ class SonosHousehold(
         addressBook.clear()
         _state.value = HouseholdState()
         _groupStates.value = emptyMap()
+        _playerVolumes.value = emptyMap()
     }
 
     // ---------------------------------------------------------------- reads
@@ -166,12 +190,11 @@ class SonosHousehold(
             ?: error("cannot derive a hostname for ${group.coordinatorId}")
     }
 
-    suspend fun favorites(): JsonObject {
+    suspend fun favorites(): FavoritesResponse {
         val household = _state.value.householdId ?: error("not connected")
         val socket = sockets.values.firstOrNull() ?: error("not connected")
-        return socket.command(
-            Frames.onHousehold("favorites:1", "getFavorites", household)
-        ).asJsonObject
+        val body = socket.command(Frames.onHousehold("favorites:1", "getFavorites", household))
+        return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
     }
 
     // ---------------------------------------------------------------- commands
@@ -310,12 +333,24 @@ class SonosHousehold(
             "groups:1" -> {
                 val groups = gson.fromJson(event.body, GroupsResponse::class.java) ?: return
                 registerAddresses(groups)
-                _state.update { it.copy(groups = groups.groups, players = groups.players) }
+                _state.update { it.copy(groups = fillPlaybackState(groups.groups), players = groups.players) }
             }
 
             "playback:1" -> {
                 if (groupId == null) return
                 val body = event.body.asJsonObject
+                // Keep the groups list in step. It carries its own playbackState, which only
+                // a groups:1 event would otherwise refresh — leaving a room list showing
+                // "Playing" for something that stopped seconds ago.
+                body.string("playbackState")?.let { pushed ->
+                    _state.update { state ->
+                        state.copy(
+                            groups = state.groups.map {
+                                if (it.id == groupId) it.copy(playbackState = pushed) else it
+                            }
+                        )
+                    }
+                }
                 update(groupId) {
                     it.copy(
                         playbackState = body.string("playbackState") ?: it.playbackState,
@@ -344,8 +379,17 @@ class SonosHousehold(
                 val volume = gson.fromJson(event.body, GroupVolume::class.java) ?: return
                 update(groupId) { it.copy(volume = volume) }
             }
+
+            "playerVolume:1" -> {
+                val playerId = event.header.playerId ?: return
+                val volume = gson.fromJson(event.body, GroupVolume::class.java) ?: return
+                _playerVolumes.update { it + (playerId to volume) }
+            }
         }
     }
+
+    private fun fillPlaybackState(groups: List<Group>): List<Group> =
+        fillPlaybackState(groups, _groupStates.value, _state.value.groups)
 
     private fun update(groupId: String, block: (GroupState) -> GroupState) {
         _groupStates.update { all ->
@@ -358,4 +402,28 @@ class SonosHousehold(
 
     private fun JsonObject.long(name: String): Long? =
         get(name)?.takeIf { it.isJsonPrimitive }?.asLong
+}
+
+/**
+ * A `groups:1` event omits `playbackState`, though the `getGroups` reply carries it — so
+ * a group's state has to be recovered rather than read.
+ *
+ * Preference order: whatever the event did say, then the group's own `playback:1`
+ * subscription (more current than the groups list anyway), then the last value known for
+ * that group, and only then idle. Pure so the precedence can be tested without a socket.
+ */
+internal fun fillPlaybackState(
+    groups: List<Group>,
+    pushed: Map<String, GroupState>,
+    previous: List<Group>,
+): List<Group> {
+    val lastKnown = previous.associate { it.id to it.playbackState }
+    return groups.map { group ->
+        group.copy(
+            playbackState = group.playbackState
+                ?: pushed[group.id]?.playbackState
+                ?: lastKnown[group.id]
+                ?: PlaybackStates.IDLE
+        )
+    }
 }

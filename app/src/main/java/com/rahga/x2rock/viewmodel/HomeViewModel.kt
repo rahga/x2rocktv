@@ -6,18 +6,20 @@ import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.channel.RoomsChannelSync
+import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
-import com.rahga.x2rock.repository.SonosAuthRepository
-import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -34,8 +36,7 @@ fun sortGroups(groups: List<Group>, primaryId: String?, favoriteIds: Set<String>
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
-    private val repository: SonosRepository,
-    private val authRepository: SonosAuthRepository,
+    private val household: SonosHousehold,
     private val themeStore: ThemeStore,
     private val roomPrefsStore: RoomPreferencesStore,
     private val channelSync: RoomsChannelSync,
@@ -48,11 +49,24 @@ class HomeViewModel @Inject constructor(
         data class Error(val message: String) : UiState
     }
 
-    private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    /**
+     * Derived, not polled. Both sources are pushed by the speakers, so this recomputes when
+     * something actually changes and at no other time.
+     */
+    val uiState: StateFlow<UiState> =
+        combine(household.state, household.groupStates) { state, groupStates ->
+            val error = state.error
+            when {
+                error != null -> UiState.Error(error)
+                !state.connected -> UiState.Loading
+                else -> UiState.Success(
+                    groups = state.groups,
+                    nowPlaying = state.groups.associate { it.id to groupStates[it.id]?.track },
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
-    val sessionExpired: StateFlow<Boolean> = authRepository.sessionExpired
     val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
     val favoriteRoomIds: StateFlow<Set<String>> = roomPrefsStore.favoriteRoomIds
 
@@ -65,8 +79,6 @@ class HomeViewModel @Inject constructor(
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
 
-    private val pollingActive = MutableStateFlow(false)
-
     init {
         viewModelScope.launch {
             pendingRoomDeepLink.groupId.collect { groupId ->
@@ -77,103 +89,87 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
+        // Pick an initial room once the household is known, and only then.
         viewModelScope.launch {
-            pollingActive.collectLatest { active ->
-                if (active) pollLoop(POLL_INTERVAL_MILLIS, ::onRefreshFailed) { refresh() }
+            household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
+                if (_selectedGroupId.value == null && groups.isNotEmpty()) {
+                    _selectedGroupId.value =
+                        sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+                            .first().id
+                }
+            }
+        }
+        // The TV home-screen channels follow whatever the household last said.
+        viewModelScope.launch(Dispatchers.IO) {
+            uiState.collect { state ->
+                if (state is UiState.Success) channelSync.sync(state.groups, state.nowPlaying)
             }
         }
     }
 
-    /** Driven by the nav graph's lifecycle observer so nothing polls while the app is hidden. */
-    fun setPollingActive(active: Boolean) {
-        pollingActive.value = active
+    /**
+     * Connects on the way in. Previously this gated a poll loop; now it is the connection
+     * itself, and staying connected while hidden is what keeps state warm for the next
+     * frame rather than something to be avoided.
+     */
+    fun setActive(active: Boolean) {
+        if (!active) return
+        viewModelScope.launch {
+            runCatching { household.connect() }
+        }
     }
 
     fun clearNavigateToRoom() { _navigateToRoom.value = false }
 
-    fun loadGroups() {
-        viewModelScope.launch { refreshQuietly() }
-    }
-
-    fun signOut() {
-        authRepository.clearTokens()
-    }
-
     fun setTheme(theme: AppColorTheme) = themeStore.setTheme(theme)
 
-    fun selectGroup(id: String) {
-        _selectedGroupId.value = id
-    }
+    fun selectGroup(id: String) { _selectedGroupId.value = id }
 
-    fun toggleSidebar() {
-        _sidebarVisible.value = !_sidebarVisible.value
-    }
+    fun toggleSidebar() { _sidebarVisible.value = !_sidebarVisible.value }
 
     fun setPrimaryRoom(id: String?) = roomPrefsStore.setPrimaryRoom(id)
 
     fun toggleFavorite(id: String) = roomPrefsStore.toggleFavorite(id)
 
+    // Grouping changes arrive back as a groups:1 event, so none of these re-fetch.
+
     fun joinGroup(sourceGroupId: String, targetGroupId: String) {
         val source = findGroup(sourceGroupId) ?: return
-        viewModelScope.launch { repository.joinGroup(source, targetGroupId); refreshQuietly() }
+        viewModelScope.launch {
+            runCatching { household.modifyGroupMembers(targetGroupId, add = source.playerIds, remove = emptyList()) }
+        }
     }
 
     fun soloGroup(groupId: String) {
         val group = findGroup(groupId) ?: return
-        viewModelScope.launch { repository.soloGroup(group); refreshQuietly() }
+        // Everything but the coordinator leaves, which is what "solo" means here.
+        val others = group.playerIds.filter { it != group.coordinatorId }
+        if (others.isEmpty()) return
+        viewModelScope.launch {
+            runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = others) }
+        }
     }
 
     fun removePlayerFromGroup(groupId: String, playerId: String) {
-        viewModelScope.launch { repository.removePlayerFromGroup(groupId, playerId); refreshQuietly() }
+        viewModelScope.launch {
+            runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = listOf(playerId)) }
+        }
     }
 
     fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
-        group.playerIds.map { it to repository.getPlayerName(it) }
+        group.playerIds.map { it to household.playerName(it) }
 
     fun partyMode() {
-        val groups = (_uiState.value as? UiState.Success)?.groups ?: return
+        val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
         val sorted = sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
-        viewModelScope.launch { repository.partyMode(sorted.first(), sorted.drop(1)); refreshQuietly() }
+        val host = sorted.first()
+        val joiners = sorted.drop(1).flatMap { it.playerIds }
+        viewModelScope.launch {
+            runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
+        }
     }
 
     private fun findGroup(id: String): Group? =
-        (_uiState.value as? UiState.Success)?.groups?.find { it.id == id }
-
-    private suspend fun refreshQuietly() {
-        try {
-            refresh()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            onRefreshFailed(e)
-        }
-    }
-
-    private suspend fun refresh() {
-        if (_uiState.value !is UiState.Success) _uiState.value = UiState.Loading
-
-        val groups = repository.getGroups().getOrThrow()
-        val nowPlaying = repository.getNowPlaying(groups)
-        _uiState.value = UiState.Success(groups, nowPlaying)
-
-        if (_selectedGroupId.value == null && groups.isNotEmpty()) {
-            val sorted = sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
-            _selectedGroupId.value = sorted.first().id
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            channelSync.sync(groups, nowPlaying)
-        }
-    }
-
-    private fun onRefreshFailed(e: Throwable) {
-        if (_uiState.value !is UiState.Success) {
-            _uiState.value = UiState.Error(e.message ?: "Unknown error")
-        }
-    }
-
-    private companion object {
-        /** The sidebar is ambient information; the selected room polls faster via PlayerViewModel. */
-        const val POLL_INTERVAL_MILLIS = 10_000L
-    }
+        (uiState.value as? UiState.Success)?.groups?.find { it.id == id }
 }
