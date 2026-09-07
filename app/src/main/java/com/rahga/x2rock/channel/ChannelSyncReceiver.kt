@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import javax.inject.Inject
@@ -32,11 +33,17 @@ class ChannelSyncReceiver : BroadcastReceiver() {
             try {
                 withTimeout(BROADCAST_BUDGET_MILLIS) {
                     // The app may not be running, so this connects rather than assuming a
-                    // live household. connect() is a no-op if one is already up, and the
-                    // subscriptions it opens seed their own state, so the snapshot below is
-                    // read straight afterwards rather than fetched separately.
+                    // live household. connect() is a no-op if one is already up.
                     household.connect()
-                    val state = household.state.value
+
+                    // Then *wait*. A subscription's opening snapshot arrives as an event and
+                    // is applied by a collector on another dispatcher, so it is not in place
+                    // the instant connect() returns — reading straight through would publish
+                    // rooms with no now-playing. Both awaits return at once when the app is
+                    // already running, and the enclosing timeout bounds the cold case.
+                    val state = household.state.first { it.connected && it.groups.isNotEmpty() }
+                    household.groupStates.first { pushed -> pushed.isNotEmpty() }
+
                     val nowPlaying = state.groups.associate { it.id to household.groupState(it.id).track }
                     channelSync.sync(state.groups, nowPlaying)
                 }

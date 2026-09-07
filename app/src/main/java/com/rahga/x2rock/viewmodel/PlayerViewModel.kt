@@ -66,6 +66,16 @@ class PlayerViewModel @Inject constructor(
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
     private var sleepTimerJob: Job? = null
+    private var seekDebounceJob: Job? = null
+
+    // What the last press asked for, before the speaker has said anything back.
+    //
+    // Necessary because uiState is now purely pushed: without it, five volume presses
+    // inside the debounce window all read the same unchanged pushed value and the speaker
+    // moves one step instead of five. Cleared once the command has gone.
+    private var pendingVolume: Int? = null
+    private var pendingSeekMillis: Long? = null
+    private val pendingPlayerVolumes = mutableMapOf<String, Int>()
 
     private var lastMetadataKey = ""
     private var lastPbStateCode = -1
@@ -86,7 +96,13 @@ class PlayerViewModel @Inject constructor(
             val group = householdState.groups.firstOrNull { it.id == groupId }
             val state = groupStates[groupId]
             if (groupId == null || state == null) {
-                PlayerUiState(groupName = groupName, isLoading = !householdState.connected)
+                // A teardown clears groupStates, so this is also the "connection lost"
+                // branch — carry the error, or a failing household spins forever.
+                PlayerUiState(
+                    groupName = groupName,
+                    isLoading = householdState.error == null && !householdState.connected,
+                    error = householdState.error,
+                )
             } else {
                 PlayerUiState(
                     groupName = group?.name ?: groupName,
@@ -187,13 +203,24 @@ class PlayerViewModel @Inject constructor(
     fun skipToNextTrack() = command { household.skipToNextTrack(it) }
     fun skipToPreviousTrack() = command { household.skipToPreviousTrack(it) }
 
+    /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
+        val groupId = _groupId.value ?: return
         val state = uiState.value
-        val elapsed = if (state.playbackState.isPlaying())
-            System.currentTimeMillis() - state.positionUpdatedAt else 0L
-        val target = (state.positionMillis + elapsed + deltaMillis)
+        val base = pendingSeekMillis ?: run {
+            val elapsed = if (state.playbackState.isPlaying())
+                System.currentTimeMillis() - state.positionUpdatedAt else 0L
+            state.positionMillis + elapsed
+        }
+        val target = (base + deltaMillis)
             .coerceIn(0, state.durationMillis.takeIf { it > 0 } ?: Long.MAX_VALUE)
-        command { household.seek(it, target) }
+        pendingSeekMillis = target
+        seekDebounceJob?.cancel()
+        seekDebounceJob = viewModelScope.launch {
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            runCatching { household.seek(groupId, target) }
+            pendingSeekMillis = null
+        }
     }
 
     fun toggleMute() {
@@ -204,11 +231,13 @@ class PlayerViewModel @Inject constructor(
     /** Debounced: a held D-pad key would otherwise send one command per repeat. */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
-        val target = (uiState.value.volume + delta).coerceIn(0, 100)
+        val target = ((pendingVolume ?: uiState.value.volume) + delta).coerceIn(0, 100)
+        pendingVolume = target
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setGroupVolume(groupId, target) }
+            pendingVolume = null
         }
     }
 
@@ -238,11 +267,13 @@ class PlayerViewModel @Inject constructor(
 
     fun adjustPlayerVolume(playerId: String, delta: Int) {
         val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
-        val target = (current.volume + delta).coerceIn(0, 100)
+        val target = ((pendingPlayerVolumes[playerId] ?: current.volume) + delta).coerceIn(0, 100)
+        pendingPlayerVolumes[playerId] = target
         playerVolumeDebounceJobs[playerId]?.cancel()
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
+            pendingPlayerVolumes.remove(playerId)
         }
     }
 
