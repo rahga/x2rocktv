@@ -1,0 +1,32 @@
+{
+  "_objectType": "playbackStatus",
+  "playbackState": "PLAYBACK_STATE_IDLE",
+  "isDucking": false,
+  "queueVersion": "8",
+  "queueId": "00000000-0000-4000-8000-000000000002",
+  "itemId": "1",
+  "positionMillis": 0,
+  "previousItemId": "redacted=",
+  "previousPositionMillis": 119257,
+  "playModes": {
+    "_objectType": "playMode",
+    "repeat": false,
+    "repeatOne": false,
+    "shuffle": false,
+    "crossfade": false
+  },
+  "availablePlaybackActions": {
+    "_objectType": "playbackAction",
+    "canPlay": true,
+    "canSkip": true,
+    "canSkipBack": false,
+    "canSkipToPrevious": false,
+    "canSeek": true,
+    "canPause": true,
+    "canStop": true,
+    "canRepeat": true,
+    "canRepeatOne": true,
+    "canCrossfade": true,
+    "canShuffle": true
+  }
+}
