@@ -20,9 +20,11 @@ x2rock lets you control Sonos speakers from a TV remote. You authenticate with y
 
 ## Modules
 
-Three Gradle modules. `:core` is a plain Kotlin/JVM library with no Android dependency — it is
-everything that talks to Sonos. `:app` is the Android TV application. `:cli` is the Linux
-command line; it depends on `:core` only.
+Two Gradle modules. `:core` is a plain Kotlin/JVM library with no Android dependency — it is
+everything that talks to Sonos. `:app` is the Android TV application and depends on `:core`.
+
+A third module `:cli` (a Linux command line plus an MPRIS daemon) was removed in 2026-09;
+the Rust project `rahga/x2rock` covers that ground on the desktop.
 
 `:core` carries `javax.inject` annotations (`@Inject`, `@Singleton`, `@Qualifier`) so Hilt in
 `:app` can construct its classes directly; a non-Hilt frontend just calls the constructors.
@@ -53,21 +55,6 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM)
 │
 └── di/
     └── TokenClient.kt             Qualifier for the token-exchange OkHttp client
-
-cli/src/main/kotlin/com/rahga/x2rock/cli/       (Linux, Clikt + Mordant)
-├── Main.kt                        Commands: login, rooms, now, play/pause/toggle, vol, queue, favorites…
-├── Daemon.kt                      `x2rocktv daemon`: polls one room, publishes it over MPRIS
-├── mpris/
-│   ├── PlayerSnapshot.kt          Pure Sonos→MPRIS mapping: status, metadata, volume, position, diffs
-│   ├── MprisInterfaces.kt         org.mpris.MediaPlayer2 + .Player as dbus-java interfaces
-│   ├── MprisPlayer.kt             The exported D-Bus object; Properties Get/Set/GetAll, PropertiesChanged
-│   └── PlayerControls.kt          What MPRIS clients can ask for; the daemon binds it to SonosRepository
-├── Sonos.kt                       Hand-built object graph (what Hilt does in :app) + room-name matching
-├── FileTokenStore.kt              TokenStore impl: 0600 JSON in $XDG_CONFIG_HOME/x2rocktv
-├── CliConfig.kt                   Client credentials + default room; env vars override the file
-├── OAuthCallback.kt               Browser → `x2rocktv oauth-callback URL` → file in $XDG_RUNTIME_DIR → `x2rocktv login`
-├── Xdg.kt                         XDG base dirs, private-file writes
-└── Format.kt                      Clock, one-line track, "+5"/"40" volume parsing
 
 app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── X2RockApp.kt                   Hilt application entry point
@@ -184,11 +171,10 @@ All methods return `Result<T>`. Internally, every call goes through `fetchWithRe
 OAuth 2.0 with Basic auth (client credentials). Tokens go through the `TokenStore` interface — on Android that is `EncryptedTokenStore` (AES256-GCM). A `Mutex` prevents concurrent refresh calls. Client credentials arrive via `SonosClientConfig` rather than `BuildConfig`, so the repository has no build-system coupling.
 
 **OAuth redirect URI:** `https://rahga.github.io/x2rock/callback.html`  
-The hosted page redirects to the deep link `x2rock://callback`. On Android the WebView intercepts
-it. On Linux, `x2rocktv install-handler` registers an `x-scheme-handler/x2rock` desktop entry, so the
-browser launches `x2rocktv oauth-callback <url>`, which drops the URL in `$XDG_RUNTIME_DIR/x2rocktv/`
-for the waiting `x2rocktv login` process. Same registered redirect URI for both platforms — nothing
-to add in the Sonos integration manager.
+The hosted page redirects to the deep link `x2rock://callback`, which the WebView intercepts.
+
+Note this whole flow is a dead end on the target device — see the banner at the top of this
+file and `docs/lan-transport.md`.
 
 ---
 
@@ -216,24 +202,7 @@ to add in the Sonos integration manager.
 
 ---
 
-## MPRIS daemon (Linux)
-
-`x2rocktv daemon` owns a poll loop for one room and mirrors it onto the session bus as
-`org.mpris.MediaPlayer2.x2rocktv`. `PlayerSnapshot` is the pure mapping layer — Sonos state to MPRIS
-`PlaybackStatus`/`Metadata`/`Volume`/`LoopStatus`, plus a diff so only changed properties are
-signalled. `Position` is not signalled (per spec) but extrapolated from the last poll while playing,
-so progress bars move between polls. An MPRIS command runs the Sonos call and then nudges the loop
-to re-poll immediately, so the bus reflects the result within a round trip. Polling failures back off
-with the same `nextBackoffMillis` curve as the TV app; a failed poll also re-resolves the room by
-name, because group ids change whenever rooms are grouped or ungrouped.
-
-`MprisBusTest` exports a real `MprisPlayer` onto the session bus and drives it with `busctl`; it
-skips when no bus is available.
-
-## Persistence
-
-| Store | Mechanism | What's stored |
-|-------|-----------|---------------|
+-------|-----------|---------------|
 | `EncryptedTokenStore` | EncryptedSharedPreferences (AES256-GCM) | Access token, refresh token, expiry, pending OAuth state |
 | `ThemeStore` | Plain SharedPreferences + StateFlow | Selected theme enum |
 | `RoomPreferencesStore` | Plain SharedPreferences + StateFlow | Primary room ID, Set of favorite room IDs |
@@ -269,8 +238,7 @@ All ViewModels are `@HiltViewModel` and injected automatically.
 ## Build
 
 - Language: Kotlin only
-- Min SDK: 21 / Target SDK: 34
-- Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM), `:cli` (Kotlin/JVM) and `:app` (Android)
-- Unit tests: `./gradlew :core:test :cli:test :app:testDebugUnitTest`
-- CLI binary: `./gradlew :cli:installDist` → `cli/build/install/x2rocktv/bin/x2rock`
+- Min SDK: 23 / Compile & Target SDK: 35
+- Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM) and `:app` (Android)
+- Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
 - Key dependencies: Jetpack Compose TV, Dagger Hilt, Retrofit 2, OkHttp, Gson, Jetpack Navigation, AndroidX Security Crypto

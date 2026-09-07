@@ -21,4 +21,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "x2rock"
-include(":app", ":core", ":cli")
+include(":app", ":core")
