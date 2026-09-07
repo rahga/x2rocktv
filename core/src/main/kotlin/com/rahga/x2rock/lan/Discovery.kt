@@ -61,8 +61,15 @@ object Discovery {
      *
      * Returns more hosts than there are rooms: surrounds and subs answer too, and they are
      * `Invisible` in group topology. Any of them is a usable entry point.
+     *
+     * @param stopAfterFirst return as soon as any player answers. Reaching one is enough to
+     *   connect — `getGroups` reports the rest — so a start need not sit out the whole
+     *   window. Pass false only when the full inventory is the point.
      */
-    suspend fun findPlayers(timeoutMillis: Int = 3_000): List<DiscoveredPlayer> = withContext(Dispatchers.IO) {
+    suspend fun findPlayers(
+        timeoutMillis: Int = 3_000,
+        stopAfterFirst: Boolean = false,
+    ): List<DiscoveredPlayer> = withContext(Dispatchers.IO) {
         val found = LinkedHashMap<String, DiscoveredPlayer>()
         DatagramSocket().use { socket ->
             socket.soTimeout = timeoutMillis
@@ -82,6 +89,7 @@ object Discovery {
                 }
                 parse(String(packet.data, 0, packet.length), packet.address)
                     ?.let { found.putIfAbsent(it.id, it) }
+                if (stopAfterFirst && found.isNotEmpty()) break
             }
         }
         found.values.toList()
