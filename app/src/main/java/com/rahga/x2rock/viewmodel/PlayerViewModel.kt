@@ -113,7 +113,10 @@ class PlayerViewModel @Inject constructor(
                     trackName = state.track?.name,
                     artistName = state.track?.artist?.name,
                     albumName = state.track?.album?.name,
-                    albumArtUrl = state.track?.imageUrl,
+                    // Radio has no per-track art but the station has a logo, which is what
+                    // a listener recognises — so fall back to the container rather than
+                    // showing an empty pane.
+                    albumArtUrl = state.track?.imageUrl ?: state.container?.imageUrl,
                     positionMillis = state.positionMillis,
                     durationMillis = state.durationMillis,
                     positionUpdatedAt = state.positionUpdatedAt,

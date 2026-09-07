@@ -1,5 +1,7 @@
 package com.rahga.x2rock.model
 
+import com.google.gson.annotations.SerializedName
+
 data class Household(
     val id: String,
     val name: String
@@ -27,6 +29,12 @@ data class Player(
     val id: String,
     val name: String,
     /**
+     * What this speaker can do, e.g. `PLAYBACK`, `AIRPLAY`, `HT_PLAYBACK`. The last is how
+     * a soundbar is told apart from a speaker — a room has a TV input to offer when any of
+     * its members reports it, which need not be the one coordinating the group.
+     */
+    val capabilities: List<String> = emptyList(),
+    /**
      * `wss://<ip>:1443/websocket/api`, and so the only place a player's address is
      * reported. Present over the LAN transport, absent (null) over the cloud one.
      */
@@ -50,10 +58,68 @@ data class Track(
     val artist: TrackArtist?,
     val album: TrackAlbum?,
     val imageUrl: String?,
-    val durationMillis: Long = 0
+    val durationMillis: Long = 0,
+    /** Alternate art for the same track; `imageUrl` is the one to prefer. */
+    val images: List<SonosImage> = emptyList()
 )
 data class CurrentItem(val track: Track?)
-data class ContainerMetadata(val name: String? = null)
+data class SonosImage(val url: String? = null)
+
+/**
+ * What a soundbar is receiving over HDMI, which is not what the source claims to send: a TV
+ * that has quietly dropped to stereo still reports its codec with two channels and no LFE.
+ */
+data class HomeTheaterFormat(
+    val numGroundChannels: Int = 0,
+    /**
+     * The player spells this `numLFEChannels`. That is not the casing a camelCase
+     * convention derives from the field name, so it has to be named exactly.
+     */
+    @SerializedName("numLFEChannels") val numLfeChannels: Int = 0,
+    val numHeightChannels: Int = 0,
+    /** The codec: `Dolby Digital`, `PCM`, `Silence`, `No Signal`. */
+    val streamDescription: String? = null,
+) {
+    /** The layout as people write it: `2.0`, `5.1`, `5.1.2`. */
+    val channels: String
+        get() = "$numGroundChannels.$numLfeChannels" +
+            if (numHeightChannels > 0) ".$numHeightChannels" else ""
+
+    /** True when nothing is arriving at all — the television off, or between sources. */
+    val isSilent: Boolean
+        get() = numGroundChannels == 0 && numLfeChannels == 0 && numHeightChannels == 0
+
+    val isSurround: Boolean
+        get() = numGroundChannels > 2 || numLfeChannels > 0 || numHeightChannels > 0
+
+    /**
+     * Codec and layout together — the pair that shows a source has fallen back, "Dolby
+     * Digital 2.0" rather than "Dolby Digital 5.1".
+     *
+     * With the television off a player reports `No Signal` and no channels at all, and
+     * "No Signal 0.0" reads worse than "No Signal", so a silent input names only its codec.
+     */
+    fun summary(): String {
+        val codec = streamDescription?.takeIf { it.isNotEmpty() }
+        return when {
+            codec != null && isSilent -> codec
+            codec != null -> "$codec $channels"
+            isSilent -> ""
+            else -> channels
+        }
+    }
+}
+
+data class ContainerMetadata(
+    val name: String? = null,
+    /** e.g. `album`, `station`, `linein.homeTheater.hdmi`. */
+    val type: String? = null,
+    val imageUrl: String? = null,
+    /** Alternate art for the same container; `imageUrl` is the one to prefer. */
+    val images: List<SonosImage> = emptyList(),
+    /** Present only while a soundbar is on its TV input — its presence *is* the signal. */
+    val htInputFormat: HomeTheaterFormat? = null,
+)
 data class PlaybackMetadata(val currentItem: CurrentItem? = null, val container: ContainerMetadata? = null)
 
 data class GroupVolume(
