@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit
  * Three things make it faithful where faithfulness carries weight:
  *
  * - **Its payloads are captured, never invented.** Everything served comes from
- *   `src/test/resources/fixtures/`, recorded verbatim off a real household and redacted for
+ *   `src/testFixtures/resources/fixtures/`, recorded verbatim off a real household and redacted for
  *   identifiers only. The invented versions these replaced had no `_objectType` anywhere,
  *   no `queueVersion`, no `availablePlaybackActions`, and no stereo pair. A fake built from
  *   what one assumes the protocol looks like tests those assumptions against themselves and
@@ -166,6 +166,12 @@ class FakePlayer(
         socket = null
     }
 
+    /** Serve and announce a topology, the way a real regrouping arrives. */
+    fun pushTopology(topology: JsonObject) {
+        groups = topology
+        emit("groups:1", "groups", topology, groupId = null)
+    }
+
     /** Push a captured event body verbatim. */
     fun pushFixture(type: String, groupId: String? = null) {
         emit(namespaceFor(type), type, fixture("event.$type.json"), groupId)
@@ -204,7 +210,9 @@ class FakePlayer(
         override fun onMessage(webSocket: WebSocket, text: String) {
             val frame = JsonParser.parseString(text).asJsonArray
             val header = frame[0].asJsonObject
-            received += header
+            // Record the body *first*. A test blocked in awaitCommand wakes the instant the
+            // header is enqueued, and would otherwise be able to read lastCommandBody
+            // before this thread had stored it.
             header.get("command")?.asString?.let { command ->
                 val body = frame[1].takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
                 synchronized(this@FakePlayer) {
@@ -212,6 +220,7 @@ class FakePlayer(
                     commandLog += command
                 }
             }
+            received += header
             reply(webSocket, header)
         }
     })
@@ -268,7 +277,7 @@ class FakePlayer(
 
     companion object {
 
-        /** Reads a verbatim capture from `src/test/resources/fixtures/`. */
+        /** Reads a verbatim capture from `src/testFixtures/resources/fixtures/`. */
         fun fixture(name: String): JsonObject {
             val stream = FakePlayer::class.java.getResourceAsStream("/fixtures/$name")
                 ?: error("missing fixture $name — capture it from a real player, do not write one")
@@ -313,6 +322,29 @@ class FakePlayer(
             val rewritten = fixture("getGroups.reply.json").toString()
                 .replace(Regex("wss://[0-9.]+:[0-9]+/"), "wss://127.0.0.1:1443/")
             return JsonParser.parseString(rewritten).asJsonObject
+        }
+
+        /**
+         * The captured topology with one room's player merged into another's group.
+         *
+         * Every group in the capture has exactly one player, which is true of this
+         * household and useless for testing anything about *members*: a check that only
+         * ever looked at the coordinator would pass. Rather than hand-writing a grouped
+         * payload — which would be inventing a shape — this rearranges the captured one,
+         * so every field stays as a real player sent it and only the membership moves.
+         */
+        fun groupedTopology(coordinatorRoom: String, memberRoom: String): JsonObject {
+            val topology = reachableTopology()
+            val groups = topology.getAsJsonArray("groups")
+            val host = groups.map { it.asJsonObject }.first { it.get("name").asString == coordinatorRoom }
+            val joiner = groups.map { it.asJsonObject }.first { it.get("name").asString == memberRoom }
+
+            joiner.getAsJsonArray("playerIds").forEach { host.getAsJsonArray("playerIds").add(it) }
+            val remaining = JsonArray().apply {
+                groups.filter { it.asJsonObject.get("name").asString != memberRoom }.forEach { add(it) }
+            }
+            topology.add("groups", remaining)
+            return topology
         }
 
         private fun namespaceFor(type: String) = when (type) {

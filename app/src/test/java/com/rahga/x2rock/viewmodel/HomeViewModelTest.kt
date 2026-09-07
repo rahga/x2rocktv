@@ -4,6 +4,7 @@ import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.lan.Discovery
+import com.google.gson.JsonObject
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
@@ -162,23 +163,46 @@ class HomeViewModelTest {
         assertTrue("the host should not be asked to join itself", host.coordinatorId !in added)
     }
 
-    /** Solo removes the members, never the coordinator — that would dissolve the group. */
+    /**
+     * Solo removes the members and never the coordinator — that would dissolve the group.
+     *
+     * Every group in the captured topology has one player, so this first regroups two
+     * rooms. Without that the early "nothing to remove" path always won and the test could
+     * not fail.
+     */
     @Test fun `solo removes every member except the coordinator`() = runBlocking<Unit> {
-        val state = connect()
-        val group = state.groups.first { it.coordinatorId == fake.id }
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val grouped = withTimeout(10_000) {
+            viewModel.uiState.first {
+                it is HomeViewModel.UiState.Success &&
+                    it.groups.firstOrNull { g -> g.name == "Kitchen" }?.playerIds?.size == 2
+            } as HomeViewModel.UiState.Success
+        }
+        val group = grouped.groups.first { it.name == "Kitchen" }
         fake.clearHistory()
 
         viewModel.soloGroup(group.id)
-        // A group of one has nothing to remove, so nothing should be sent.
-        if (group.playerIds.size <= 1) {
-            delay(500)
-            assertEquals(0, fake.commandsNamed("modifyGroupMembers"))
-            return@runBlocking
-        }
         fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "modifyGroupMembers" }
-        val removed = fake.lastCommandBody("modifyGroupMembers")!!
-            .getAsJsonArray("playerIdsToRemove").map { it.asString }
+        val body = fake.lastCommandBody("modifyGroupMembers")!!
+        val removed = body.getAsJsonArray("playerIdsToRemove").map { it.asString }
+
+        assertEquals("only the joined member should leave", 1, removed.size)
         assertTrue("the coordinator was removed from its own group", group.coordinatorId !in removed)
+        assertTrue(
+            "the member was not removed",
+            group.playerIds.first { it != group.coordinatorId } in removed,
+        )
+    }
+
+    /** A group of one has nothing to remove, so nothing is sent at all. */
+    @Test fun `solo on an ungrouped room sends nothing`() = runBlocking<Unit> {
+        val state = connect()
+        val alone = state.groups.first { it.playerIds.size == 1 }
+        fake.clearHistory()
+        viewModel.soloGroup(alone.id)
+        delay(600)
+        assertEquals(0, fake.commandsNamed("modifyGroupMembers"))
     }
 
     // ---------------------------------------------------------------- preferences
