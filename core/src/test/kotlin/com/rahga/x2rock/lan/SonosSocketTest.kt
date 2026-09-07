@@ -55,15 +55,22 @@ class SonosSocketTest {
         socket.close()
     }
 
-    @Test fun `a refusal surfaces as SonosCommandException, not a hang`() = runBlocking<Unit> {
+    @Test fun `a refusal surfaces as SonosCommandException carrying the reason`() = runBlocking<Unit> {
         val socket = open()
         val thrown = runCatching {
-            withTimeout(5_000) { socket.command(Frames.onPlayer("playerVolume:1", "getVolume", "nope")) }
+            withTimeout(5_000) {
+                socket.command(Frames.onPlayer("playerVolume:1", "getVolume", "RINCON_NOPE"))
+            }
         }.exceptionOrNull()
         socket.close()
-        // The fake refuses anything with no namespace; a real player refuses a bad id the
-        // same way. Either must arrive as an exception rather than silence.
-        assertTrue(thrown is SonosCommandException || thrown == null)
+        // Asserted outright. An earlier version allowed `thrown == null`, which combined
+        // with a fake that said yes to everything meant this passed without a refusal ever
+        // happening — a test that could not fail.
+        assertTrue("expected a refusal, got $thrown", thrown is SonosCommandException)
+        assertTrue(
+            "the player's own error code should survive: ${thrown!!.message}",
+            thrown.message!!.contains("ERROR_INVALID_OBJECT_ID"),
+        )
     }
 
     @Test fun `closing on purpose reports no failure`() = runBlocking<Unit> {

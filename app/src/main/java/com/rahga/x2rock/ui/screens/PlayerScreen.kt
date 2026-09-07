@@ -303,7 +303,14 @@ private fun PlaybackControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
-            AppButton(onClick = { viewModel.adjustVolume(-5) }, enabled = !state.isMuted) { Text("Vol −") }
+            // Disabled until the speaker's volume is known, not merely while muted: the
+            // view model declines to act without a baseline, so an enabled button in that
+            // window would take focus and then do nothing at all.
+            val volumeKnown = state.volume != null
+            AppButton(
+                onClick = { viewModel.adjustVolume(-5) },
+                enabled = volumeKnown && !state.isMuted,
+            ) { Text("Vol −") }
             Text(
                 text = when {
                     state.volume == null -> "Volume: —"
@@ -312,8 +319,11 @@ private fun PlaybackControls(
                 },
                 style = MaterialTheme.typography.bodyLarge
             )
-            AppButton(onClick = { viewModel.adjustVolume(+5) }, enabled = !state.isMuted) { Text("Vol +") }
-            AppButton(onClick = { viewModel.toggleMute() }) {
+            AppButton(
+                onClick = { viewModel.adjustVolume(+5) },
+                enabled = volumeKnown && !state.isMuted,
+            ) { Text("Vol +") }
+            AppButton(onClick = { viewModel.toggleMute() }, enabled = volumeKnown) {
                 Text(if (state.isMuted) "Unmute" else "Mute")
             }
         }

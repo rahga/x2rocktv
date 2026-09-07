@@ -16,6 +16,7 @@ import com.rahga.x2rock.model.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -25,6 +26,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import java.net.InetAddress
 import java.net.URI
@@ -148,7 +151,7 @@ class SonosHousehold(
      * runs again rather than reusing what worked on the last network.
      */
     fun onNetworkChanged() {
-        if (wantConnection) reconnect(immediate = true)
+        if (wantConnection) reconnect(immediate = true, fresh = true)
     }
 
     /**
@@ -159,15 +162,22 @@ class SonosHousehold(
      * the connect fails and discovery runs, which is both simpler and more reliable than
      * trying to decide in advance whether the memory is still good.
      */
-    private suspend fun findEntryPoint(): Discovery.DiscoveredPlayer {
-        seeds.load()?.let { remembered ->
-            val hostname = remembered.hostname
-            if (hostname != null) {
+    private suspend fun findEntryPoint(rediscover: Boolean = false): Discovery.DiscoveredPlayer {
+        // After a network change the remembered address is not merely unverified, it is
+        // probably wrong — and trying it first would burn the connect timeout before
+        // discovery ever runs.
+        if (!rediscover) {
+            val remembered = withContext(Dispatchers.IO) { seeds.load() }
+            val hostname = remembered?.hostname
+            if (remembered != null && hostname != null) {
                 addressBook.register(hostname, remembered.address)
-                val reachable = runCatching { socketForHostname(hostname) }.isSuccess
+                // Bounded: the client has no call timeout and a zero read timeout, so a
+                // host that accepts the TCP connect and then says nothing would hang here
+                // forever and discovery would never be reached.
+                val reachable = runCatching {
+                    withTimeout(PROBE_TIMEOUT_MILLIS) { socketForHostname(hostname) }
+                }.isSuccess
                 if (reachable) return remembered
-                // Stale. Forget it rather than retrying it on every start from now on.
-                seeds.clear()
                 addressBook.forget(hostname)
             }
         }
@@ -175,9 +185,15 @@ class SonosHousehold(
             ?: error("no Sonos players answered on this network")
     }
 
-    private suspend fun establish(seed: Discovery.DiscoveredPlayer? = null) {
+    private suspend fun establish(
+        seed: Discovery.DiscoveredPlayer? = null,
+        rediscover: Boolean = false,
+    ) {
+        var fromMemory = false
         try {
-            val entry = seed ?: findEntryPoint()
+            val entry = seed ?: findEntryPoint(rediscover).also {
+                fromMemory = !rediscover && it.id == seeds.load()?.id
+            }
 
             // Discovery reports the player's id and address together, so even the very
             // first connection is made to the name on the certificate. There is no point
@@ -206,7 +222,7 @@ class SonosHousehold(
 
             // Worth remembering only once the whole session stood up, not merely because a
             // socket opened.
-            seeds.save(entry.copy(householdId = householdId))
+            withContext(Dispatchers.IO) { seeds.save(entry.copy(householdId = householdId)) }
 
             groups.groups.forEach { subscribeGroup(it) }
             // Per-speaker volume only matters once rooms are grouped, but subscribing up
@@ -218,6 +234,12 @@ class SonosHousehold(
                 }
             }
         } catch (e: Exception) {
+            // A remembered player whose socket opened but whose session did not stand up is
+            // still unusable — a household id that no longer exists, say, after a re-setup.
+            // Without this the same dead memory is retried on every launch, forever.
+            if (fromMemory) {
+                withContext(Dispatchers.IO) { seeds.clear() }
+            }
             _state.update { it.copy(connected = false, error = e.message ?: e.toString()) }
             throw e
         }
@@ -230,15 +252,19 @@ class SonosHousehold(
      * tears everything down first and treats the fresh snapshot as truth rather than
      * merging it with what was there before an outage.
      */
-    private fun reconnect(immediate: Boolean = false) {
+    private fun reconnect(immediate: Boolean = false, fresh: Boolean = false) {
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             teardown()
             var backoff = if (immediate) 0L else MIN_BACKOFF_MILLIS
+            var skipSeed = fresh
             while (isActive) {
                 if (backoff > 0) delay(backoff)
-                val recovered = runCatching { establish() }.isSuccess
+                val recovered = runCatching { establish(rediscover = skipSeed) }.isSuccess
                 if (recovered) return@launch
+                // Only the first attempt after a network change ignores the remembered
+                // address; if discovery then fails too, the memory is worth another try.
+                skipSeed = false
                 backoff = nextBackoff(backoff)
             }
         }
@@ -572,6 +598,9 @@ internal fun fillPlaybackState(
 /** Matches the Rust daemon's curve: start at a second, double, stop at a minute. */
 internal const val MIN_BACKOFF_MILLIS = 1_000L
 internal const val MAX_BACKOFF_MILLIS = 60_000L
+
+/** A remembered address gets this long to prove itself before discovery takes over. */
+internal const val PROBE_TIMEOUT_MILLIS = 3_000L
 
 internal fun nextBackoff(current: Long): Long =
     (if (current <= 0) MIN_BACKOFF_MILLIS else current * 2).coerceAtMost(MAX_BACKOFF_MILLIS)

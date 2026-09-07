@@ -3,9 +3,9 @@ package com.rahga.x2rock.lan
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -160,6 +160,15 @@ class SonosHouseholdTest {
         assertNotNull(group.playbackState)
     }
 
+    /** A player-scoped command naming an unknown id must be refused, not quietly accepted. */
+    @Test fun `an unknown playerId is refused`() = runBlocking<Unit> {
+        connected()
+        val thrown = runCatching {
+            household.setPlayerVolume(FakePlayer.fixtureCoordinatorId().replace("AA0", "ZZ0"), 10)
+        }.exceptionOrNull()
+        assertNotNull("an unknown playerId was accepted", thrown)
+    }
+
     @Test fun `a command is addressed to the group and the player answers`() = runBlocking {
         connected()
         val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
@@ -199,15 +208,20 @@ class SonosHouseholdTest {
         }
     }
 
-    @Test fun `disconnect stops everything and does not reconnect`() = runBlocking {
+    @Test fun `disconnect stops everything and does not reconnect`() = runBlocking<Unit> {
         connected()
         household.disconnect()
         assertTrue(household.state.value.groups.isEmpty())
         assertTrue(household.groupStates.value.isEmpty())
 
-        // Nothing should be trying to come back up.
-        val stillDown = withTimeout(3_000) { household.state.first { !it.connected } }
-        assertTrue(!stillDown.connected)
-        assertEquals(0, scope.coroutineContext[Job]!!.children.count { it.isActive && !it.isCompleted }.coerceAtMost(0))
+        // And nothing is trying to come back up. Asserted behaviourally rather than by
+        // counting jobs: wait past the first backoff and check the player is left alone.
+        fake.received.clear()
+        delay(MIN_BACKOFF_MILLIS + 1_500)
+        assertTrue(
+            "disconnect() was followed by ${fake.received.size} commands — it reconnected",
+            fake.received.isEmpty(),
+        )
+        assertTrue(!household.state.value.connected)
     }
 }
