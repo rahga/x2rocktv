@@ -127,6 +127,26 @@ A household is discovered, not configured: SSDP's reply carries
 practice; a room missing from a listing is more likely a player that did not answer
 discovery than a second household.
 
+## Anything on the network can change this household
+
+Other controllers — the Sonos app, a voice assistant, another copy of this one — regroup,
+retarget and retransport at will, and the app has to keep working through changes it did
+not make rather than merely not crash on them.
+
+Two things this costs, both of which were wrong once:
+
+- **A regroup mints new group ids.** Subscribing only at connect left every group formed
+  afterwards listed but permanently frozen — no playback, metadata or volume subscription
+  at all. `SonosHousehold` tracks group id to the coordinator it subscribed on, and brings
+  subscriptions back in line on every `groups:1` event; unchanged groups are left alone.
+- **A selected group can simply cease to exist.** `HomeViewModel` follows the *speakers*
+  rather than the id: whichever group now holds them is the same room to a listener, even
+  though it is a different group. Only if that fails does it fall back to the sorted first.
+
+When writing a test for this, a derived topology must change the host group's **id**, not
+just its membership — `FakePlayer.groupedTopology` does. Keeping the id made the fixture
+look right while testing nothing, because a household that never re-subscribes passes it.
+
 ## Known Gaps / Deferred Work
 - **No foreground service, and probably no need of one.** The sockets are held by an
   application-scoped `CoroutineScope`, which survives Activity changes but not the process
