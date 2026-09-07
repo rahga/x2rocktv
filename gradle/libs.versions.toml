@@ -20,10 +20,6 @@ coil = "2.7.0"
 junit = "4.13.2"
 tvprovider = "1.0.0"
 javaxInject = "1"
-clikt = "5.0.3"
-mordant = "3.0.2"
-dbusJava = "5.2.0"
-slf4j = "2.0.17"
 
 [libraries]
 # AndroidX Core
@@ -76,12 +72,6 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 # Security
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 
-# CLI
-clikt = { group = "com.github.ajalt.clikt", name = "clikt", version.ref = "clikt" }
-mordant = { group = "com.github.ajalt.mordant", name = "mordant", version.ref = "mordant" }
-dbus-java-core = { group = "com.github.hypfvieh", name = "dbus-java-core", version.ref = "dbusJava" }
-dbus-java-transport = { group = "com.github.hypfvieh", name = "dbus-java-transport-native-unixsocket", version.ref = "dbusJava" }
-slf4j-simple = { group = "org.slf4j", name = "slf4j-simple", version.ref = "slf4j" }
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
