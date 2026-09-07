@@ -329,7 +329,8 @@ class FakePlayer(
          *
          * Every group in the capture has exactly one player, which is true of this
          * household and useless for testing anything about *members*: a check that only
-         * ever looked at the coordinator would pass. Rather than hand-writing a grouped
+         * ever looked at the coordinator would pass. The host group also takes a new id,
+         * because that is what a regroup really does. Rather than hand-writing a grouped
          * payload — which would be inventing a shape — this rearranges the captured one,
          * so every field stays as a real player sent it and only the membership moves.
          */
@@ -340,6 +341,13 @@ class FakePlayer(
             val joiner = groups.map { it.asJsonObject }.first { it.get("name").asString == memberRoom }
 
             joiner.getAsJsonArray("playerIds").forEach { host.getAsJsonArray("playerIds").add(it) }
+
+            // A real regroup mints a *new* group id — the suffix after the coordinator's
+            // RINCON changes. Keeping the old id would quietly make this a much weaker
+            // fixture than it looks: a household that only ever re-subscribes on a changed
+            // id would pass, which is exactly the bug worth catching.
+            val id = host.get("id").asString
+            host.addProperty("id", id.substringBeforeLast(":") + ":" + (System.nanoTime() % 1_000_000_000))
             val remaining = JsonArray().apply {
                 groups.filter { it.asJsonObject.get("name").asString != memberRoom }.forEach { add(it) }
             }

@@ -132,6 +132,19 @@ class SonosHousehold(
     @Volatile private var wantConnection = false
 
     /**
+     * Group id to the coordinator we subscribed on its behalf.
+     *
+     * Anything else on the network — the Sonos app, another controller, a voice
+     * assistant — can regroup this household at any moment, and a regroup mints *new*
+     * group ids. Subscribing once at connect would leave every group formed afterwards
+     * with no playback, metadata or volume subscription at all: present in the room list
+     * and permanently frozen. The coordinator is tracked too, because a group can keep its
+     * id while coordination moves to a different player, and the old socket would then be
+     * the wrong one to have subscribed on.
+     */
+    private val subscribedGroups = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
      * Bumped by every teardown. A socket opened concurrently with one belongs to a session
      * that no longer exists, and closing it is the only way it does not leak past the
      * rebuild and later trigger a spurious reconnect.
@@ -310,6 +323,7 @@ class SonosHousehold(
         // graceful close waits for a handshake a dead peer will never send.
         sockets.values.forEach { runCatching { it.cancel() } }
         sockets.clear()
+        subscribedGroups.clear()
         addressBook.clear()
         _state.update { it.copy(connected = false) }
         _groupStates.value = emptyMap()
@@ -503,6 +517,36 @@ class SonosHousehold(
         }
     }
 
+    /**
+     * Brings subscriptions in line with a topology someone else may have changed.
+     *
+     * Only what actually moved is touched: an unchanged group keeps its subscription, so a
+     * regroup elsewhere in the house costs nothing here. Vanished groups are forgotten so
+     * that an id reappearing later — Sonos reuses them — is treated as new.
+     */
+    private suspend fun resubscribe(groups: GroupsResponse) {
+        val live = groups.groups.associateBy { it.id }
+
+        subscribedGroups.keys.filter { it !in live }.forEach { gone ->
+            subscribedGroups.remove(gone)
+            _groupStates.update { it - gone }
+        }
+
+        live.values.forEach { group ->
+            if (subscribedGroups[group.id] != group.coordinatorId) {
+                runCatching { subscribeGroup(group) }
+            }
+        }
+
+        // A player can arrive with a regroup — a speaker taken out of standby, say.
+        groups.players.forEach { player ->
+            runCatching {
+                socketForPlayer(player.id)
+                    .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
+            }
+        }
+    }
+
     private suspend fun subscribeGroup(group: Group) {
         val socket = socketForPlayer(group.coordinatorId)
         // Subscribing returns the current state as the first event, so there is no
@@ -510,6 +554,7 @@ class SonosHousehold(
         listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
             socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id))
         }
+        subscribedGroups[group.id] = group.coordinatorId
     }
 
     private fun registerAddresses(groups: GroupsResponse) {
@@ -529,6 +574,9 @@ class SonosHousehold(
                 val groups = gson.fromJson(event.body, GroupsResponse::class.java) ?: return
                 registerAddresses(groups)
                 _state.update { it.copy(groups = fillPlaybackState(groups.groups), players = groups.players) }
+                // Someone regrouped. Catch up rather than sit on subscriptions for groups
+                // that no longer exist.
+                scope.launch { runCatching { resubscribe(groups) } }
             }
 
             "playback:1" -> {

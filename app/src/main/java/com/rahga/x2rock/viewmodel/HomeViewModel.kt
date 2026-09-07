@@ -109,6 +109,9 @@ class HomeViewModel @Inject constructor(
     private val _sidebarVisible = MutableStateFlow(true)
     val sidebarVisible: StateFlow<Boolean> = _sidebarVisible.asStateFlow()
 
+    /** The speakers of the last selection, so it can be found again after a regroup. */
+    @Volatile private var lastSelectedPlayers: Set<String> = emptySet()
+
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
 
@@ -122,15 +125,34 @@ class HomeViewModel @Inject constructor(
                 }
             }
         }
-        // Pick an initial room once the household is known, and only then.
+        // Keep a room selected, including through regroupings this app did not perform.
         viewModelScope.launch {
             household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
-                if (_selectedGroupId.value == null && groups.isNotEmpty()) {
-                    _selectedGroupId.value =
-                        sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
-                            .first().id
-                }
+                if (groups.isEmpty()) return@collect
+                val current = _selectedGroupId.value
+                if (current != null && groups.any { it.id == current }) return@collect
+
+                // A regroup mints new group ids, so the selected one can simply cease to
+                // exist — anything else on the network can do that at any moment. Follow
+                // the speakers rather than the id: whichever group now holds them is the
+                // same room to a listener, even though it is a different group.
+                val followed = lastSelectedPlayers
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { players -> groups.firstOrNull { g -> g.playerIds.any { it in players } } }
+
+                _selectedGroupId.value = (followed ?: sortGroups(
+                    groups,
+                    roomPrefsStore.primaryRoomId.value,
+                    roomPrefsStore.favoriteRoomIds.value,
+                ).first()).id
             }
+        }
+
+        // Remembered so a vanished selection can be followed to wherever its speakers went.
+        viewModelScope.launch {
+            combine(household.state, _selectedGroupId) { state, id ->
+                state.groups.firstOrNull { it.id == id }?.playerIds.orEmpty()
+            }.collect { players -> if (players.isNotEmpty()) lastSelectedPlayers = players.toSet() }
         }
         // The TV home-screen channels follow whatever the household last said.
         viewModelScope.launch(Dispatchers.IO) {

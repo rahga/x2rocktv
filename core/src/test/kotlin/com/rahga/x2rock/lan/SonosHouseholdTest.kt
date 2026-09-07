@@ -26,6 +26,12 @@ import java.net.InetAddress
  */
 class SonosHouseholdTest {
 
+    private companion object {
+        const val VOLUME_42 = "{\"volume\":42,\"muted\":false,\"fixed\":false}"
+        const val VOLUME_9 = "{\"volume\":9,\"muted\":false,\"fixed\":false}"
+    }
+
+
     private lateinit var fake: FakePlayer
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
@@ -245,6 +251,51 @@ class SonosHouseholdTest {
         }
         val kitchen = state.groups.first { it.name == "Kitchen" }
         assertTrue("the Beam's input was lost when it joined a speaker", state.hasTvInput(kitchen))
+    }
+
+    /**
+     * Anything on the network can regroup this household at any moment — the Sonos app, a
+     * voice assistant, another controller — and a regroup mints *new* group ids.
+     *
+     * Subscribing only at connect left every group formed afterwards with no playback,
+     * metadata or volume subscription: listed, and permanently frozen.
+     */
+    @Test fun `a group formed by someone else gets subscribed`() = runBlocking<Unit> {
+        connected()
+        fake.clearHistory()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+
+        val merged = withTimeout(10_000) {
+            household.state.first { s -> s.groups.firstOrNull { it.name == "Kitchen" }?.playerIds?.size == 2 }
+        }.groups.first { it.name == "Kitchen" }
+
+        // The new id must be subscribed, not merely listed.
+        listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
+            fake.awaitCommand(timeoutMillis = 5_000) {
+                it.get("namespace")?.asString == namespace &&
+                    it.get("command")?.asString == "subscribe" &&
+                    it.get("groupId")?.asString == merged.id
+            }
+        }
+
+        // And it then receives state, which is the thing that was actually broken.
+        fake.push("groupVolume:1", "groupVolume", VOLUME_42, merged.id)
+        val volume = withTimeout(5_000) {
+            household.groupStates.first { it[merged.id]?.volume != null }[merged.id]!!.volume!!
+        }
+        assertEquals(42, volume.volume)
+    }
+
+    /** A group that no longer exists should not keep occupying state. */
+    @Test fun `a group that disappears is forgotten`() = runBlocking<Unit> {
+        connected()
+        val doomed = household.state.value.groups.first { it.name == "Guest TV" }
+        fake.push("groupVolume:1", "groupVolume", VOLUME_9, doomed.id)
+        withTimeout(5_000) { household.groupStates.first { it[doomed.id]?.volume != null } }
+
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        withTimeout(10_000) { household.groupStates.first { doomed.id !in it.keys } }
+        assertTrue(doomed.id !in household.groupStates.value)
     }
 
     /** The whole point of the seed store: a warm start skips discovery. */
