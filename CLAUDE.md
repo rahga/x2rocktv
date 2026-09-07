@@ -113,6 +113,13 @@ And the check that stops a green CI quietly becoming a lie: the live suite compa
 structure a real player sends *now* against the recorded fixtures, and fails when they
 diverge. That is the signal to re-capture.
 
+**Mutation-check any test about behaviour before trusting it.** Five tests in this repo have
+been written that could not fail — an assertion allowing the null it always got, a
+`coerceAtMost(0)` compared against 0, a fake that refused nothing, and twice a captured
+topology with one player per group making anything about *members* unreachable. In every
+case the assertion read correctly and the input made it moot. Break the code the test names
+and confirm it fails; nothing else reliably catches this.
+
 ### Households
 A household is discovered, not configured: SSDP's reply carries
 `HOUSEHOLD.SMARTSPEAKER.AUDIO`, which is the full id the WebSocket needs (note
@@ -144,3 +151,23 @@ discovery than a second household.
   `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
 - The queue does not update by itself: UPnP eventing needs the player to connect back to us,
   which is deliberately not used, so the queue screen re-reads instead.
+- **Album art over `.local` has not been seen on screen.** The rewrite is unit-tested and
+  container art renders (verified with an `https` station logo), but the player-served
+  `http://sonos-<MAC>.local:1400/getaa` path — Dining Room or Kitchen — has only been proven
+  as far as the URL. Select one of those rooms on a device to close it.
+
+## Where the UI is going
+
+The reference is the sibling project's Quickshell widget: a room list where each row carries
+cover art, room name, state, what is playing, inline transport and a volume slider — and for
+a soundbar, three lines rather than two (room and state, then the input format, then "TV
+Audio").
+
+`:core` now supplies everything that needs: `GroupState.onTvInput` and `.inputFormat`,
+`HouseholdState.hasTvInput(group)`, container art as a fallback when a track has none, and
+the alternate `images` arrays beside each `imageUrl`. None of it is rendered yet — the
+sidebar still shows one line of track text and `hasTvInput` has no caller.
+
+The household this was developed against is a good test of that layout, because bonded and
+soundbar cut across each other: Living Room (Beam + Sub + 2x Play:1), Bedroom (Beam + 2x One
+SL), Guest TV (Beam), Dining Room (2x Symfonisk, bonded but no HDMI), Kitchen (One SL).
