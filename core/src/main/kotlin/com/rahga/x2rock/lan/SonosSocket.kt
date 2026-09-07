@@ -35,8 +35,18 @@ class SonosSocket private constructor(
     private val socket: WebSocket,
     private val pending: ConcurrentHashMap<String, CompletableDeferred<SonosReply>>,
     private val _events: MutableSharedFlow<SonosEvent>,
+    private val _failures: MutableSharedFlow<Throwable>,
+    private val closedByUs: java.util.concurrent.atomic.AtomicBoolean,
     val hostname: String,
 ) {
+
+    /**
+     * Emits once when this socket dies, for any reason.
+     *
+     * Replayed, so a collector that arrives after the failure still hears about it — the
+     * alternative is a socket that is quietly dead and a caller that never finds out.
+     */
+    val failures: SharedFlow<Throwable> get() = _failures.asSharedFlow()
 
     /**
      * Everything the player says without being asked, including each subscription's
@@ -95,7 +105,9 @@ class SonosSocket private constructor(
     /** `subscribe` answers with the current state, then pushes changes as [events]. */
     suspend fun subscribe(header: JsonObject): JsonElement = command(header)
 
+    /** Deliberate shutdown: no failure is emitted, because nothing broke. */
     fun close() {
+        closedByUs.set(true)
         socket.close(1000, null)
         failPending(IOException("socket to $hostname closed"))
     }
@@ -129,6 +141,10 @@ class SonosSocket private constructor(
                 .build()
 
             val pending = ConcurrentHashMap<String, CompletableDeferred<SonosReply>>()
+            val failures = MutableSharedFlow<Throwable>(replay = 1, extraBufferCapacity = 1)
+            // Shared with the listener so a close we asked for can be told apart from one
+            // that happened to us; only the latter is worth reconnecting over.
+            val closedByUs = java.util.concurrent.atomic.AtomicBoolean(false)
             // Replay 0, but buffer generously: events arrive on OkHttp's reader thread and
             // must never block it, so emission is non-suspending and a slow collector
             // drops rather than stalls the socket.
@@ -137,7 +153,9 @@ class SonosSocket private constructor(
             return suspendCancellableCoroutine { cont ->
                 val listener = object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
-                        cont.resume(SonosSocket(webSocket, pending, events, hostname))
+                        cont.resume(
+                            SonosSocket(webSocket, pending, events, failures, closedByUs, hostname)
+                        )
                     }
 
                     override fun onMessage(webSocket: WebSocket, text: String) {
@@ -158,13 +176,15 @@ class SonosSocket private constructor(
                         )
                         pending.values.forEach { it.completeExceptionally(cause) }
                         pending.clear()
-                        if (cont.isActive) cont.resumeWithException(cause)
+                        if (cont.isActive) cont.resumeWithException(cause) else failures.tryEmit(cause)
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         val cause = IOException("websocket to $hostname closed ($code $reason)")
                         pending.values.forEach { it.completeExceptionally(cause) }
                         pending.clear()
+                        // A close we asked for is not a failure worth reconnecting over.
+                        if (!closedByUs.get()) failures.tryEmit(cause)
                     }
                 }
                 val ws = client.newWebSocket(request, listener)
