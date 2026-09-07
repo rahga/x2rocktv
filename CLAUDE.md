@@ -82,11 +82,21 @@ practice; a room missing from a listing is more likely a player that did not ans
 discovery than a second household.
 
 ## Known Gaps / Deferred Work
-- **No foreground service.** The sockets are held by an application-scoped `CoroutineScope`,
-  which survives Activity changes but not the process being reclaimed. A long-lived
-  connection wants a `Service`; on API 34+ it must declare
-  `foregroundServiceType="mediaPlayback"`. Nothing has needed it yet on a TV that rarely
-  sleeps, but it is the next real gap.
+- **No foreground service, and probably no need of one.** The sockets are held by an
+  application-scoped `CoroutineScope`, which survives Activity changes but not the process
+  being reclaimed; the cost of reclaim is a reconnect on next launch, which works.
+
+  If one is ever added, **do not declare `foregroundServiceType="mediaPlayback"`** — an
+  earlier version of this note suggested it, wrongly. This app plays nothing: the speakers
+  do. That type is for apps that are themselves playing, and claiming it would be claiming
+  a capability x2rock does not have. `connectedDevice` describes what this actually is
+  (interacting with devices on the network) and is the type to reach for; check its
+  permission requirements against current docs before relying on it.
+
+  Whether a service is needed at all depends on the mechanism. Anything the system starts
+  on demand — deep links, `MEDIA_PLAY_FROM_SEARCH`, a broadcast receiver like
+  `ChannelSyncReceiver` — needs none. Only hosting a listener the outside world calls into
+  does, and that is a design decision, not a gap to be filled by default.
 - **Only tested on one device.** An NVIDIA Shield (Android 11, Ethernet). The Google TV
   Streamer (Android 14) is the stricter target and would surface newer local-network policy
   first.
