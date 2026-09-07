@@ -15,6 +15,8 @@ import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +85,7 @@ class SonosHousehold(
     private val sockets = mutableMapOf<String, SonosSocket>()
     private val socketJobs = mutableListOf<Job>()
     private val lock = Mutex()
+    private var reconnectJob: Job? = null
 
     private val _state = MutableStateFlow(HouseholdState())
     val state: StateFlow<HouseholdState> = _state.asStateFlow()
@@ -106,7 +109,23 @@ class SonosHousehold(
      * is enough, because `getGroups` then reports where all the others are.
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
-        if (_state.value.connected) return
+        if (_state.value.connected || reconnectJob?.isActive == true) return
+        establish(seed)
+    }
+
+    /**
+     * Called when the device changes network, or wakes.
+     *
+     * **Assume dead, reconnect from scratch.** A resumed TCP session can be a zombie that
+     * accepts writes and never surfaces a failure, so nothing here waits for the socket to
+     * admit it is gone — and a cached address is a DHCP hint, not a fact, so discovery
+     * runs again rather than reusing what worked on the last network.
+     */
+    fun onNetworkChanged() {
+        if (_state.value.connected || reconnectJob?.isActive == true) reconnect(immediate = true)
+    }
+
+    private suspend fun establish(seed: Discovery.DiscoveredPlayer? = null) {
         try {
             val entry = seed ?: Discovery.findPlayers().firstOrNull()
                 ?: error("no Sonos players answered on this network")
@@ -151,7 +170,48 @@ class SonosHousehold(
         }
     }
 
+    /**
+     * Rebuilds the connection, with capped exponential backoff.
+     *
+     * Subscriptions do not survive a reconnect and there is no replay buffer, so this
+     * tears everything down first and treats the fresh snapshot as truth rather than
+     * merging it with what was there before an outage.
+     */
+    private fun reconnect(immediate: Boolean = false) {
+        reconnectJob?.cancel()
+        reconnectJob = scope.launch {
+            teardown()
+            var backoff = if (immediate) 0L else MIN_BACKOFF_MILLIS
+            while (isActive) {
+                if (backoff > 0) delay(backoff)
+                val recovered = runCatching { establish() }.isSuccess
+                if (recovered) return@launch
+                backoff = nextBackoff(backoff)
+            }
+        }
+    }
+
+    /** A socket died on its own. One loss is enough: the whole session is rebuilt. */
+    private fun handleLoss(cause: Throwable) {
+        if (reconnectJob?.isActive == true) return
+        _state.update { it.copy(connected = false, error = cause.message ?: "connection lost") }
+        reconnect()
+    }
+
+    private fun teardown() {
+        socketJobs.forEach { it.cancel() }
+        socketJobs.clear()
+        sockets.values.forEach { runCatching { it.close() } }
+        sockets.clear()
+        addressBook.clear()
+        _state.update { it.copy(connected = false) }
+        _groupStates.value = emptyMap()
+        _playerVolumes.value = emptyMap()
+    }
+
     fun disconnect() {
+        reconnectJob?.cancel()
+        reconnectJob = null
         socketJobs.forEach { it.cancel() }
         socketJobs.clear()
         sockets.values.forEach { it.close() }
@@ -301,10 +361,13 @@ class SonosHousehold(
         }
     }
 
-    /** Routes one socket's events into the state flows. */
+    /** Routes one socket's events into the state flows, and its death into a reconnect. */
     private fun watch(socket: SonosSocket) {
         socketJobs += scope.launch {
             socket.events.collect { event -> apply(event) }
+        }
+        socketJobs += scope.launch {
+            socket.failures.collect { cause -> handleLoss(cause) }
         }
     }
 
@@ -427,3 +490,10 @@ internal fun fillPlaybackState(
         )
     }
 }
+
+/** Matches the Rust daemon's curve: start at a second, double, stop at a minute. */
+internal const val MIN_BACKOFF_MILLIS = 1_000L
+internal const val MAX_BACKOFF_MILLIS = 60_000L
+
+internal fun nextBackoff(current: Long): Long =
+    (if (current <= 0) MIN_BACKOFF_MILLIS else current * 2).coerceAtMost(MAX_BACKOFF_MILLIS)
