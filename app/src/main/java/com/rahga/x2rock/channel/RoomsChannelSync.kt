@@ -13,15 +13,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** Publishing rooms to the TV home screen, behind an interface so callers stay testable. */
+interface ChannelSync {
+    fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>)
+}
+
 @Singleton
 class RoomsChannelSync @Inject constructor(
     @ApplicationContext private val context: Context
-) {
+) : ChannelSync {
     @Volatile private var channelId = NO_ID
     private var lastGroups: List<Group> = emptyList()
     private var lastNowPlaying: Map<String, Track?> = emptyMap()
 
-    fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>) {
+    override fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         synchronized(this) {
             if (groups == lastGroups && nowPlaying == lastNowPlaying) return

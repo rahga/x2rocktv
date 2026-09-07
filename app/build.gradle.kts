@@ -93,4 +93,10 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    // The same FakePlayer :core tests against, so view models are exercised over a real
+    // socket and real captured payloads rather than a hand-stubbed repository.
+    testImplementation(testFixtures(project(":core")))
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockwebserver)
+    testImplementation(libs.okhttp.tls)
 }

@@ -193,7 +193,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a dropped socket reconnects and resubscribes`() = runBlocking<Unit> {
         connected()
-        fake.received.clear()
+        fake.clearHistory()
 
         fake.dropConnection()
 
@@ -216,7 +216,7 @@ class SonosHouseholdTest {
 
         // And nothing is trying to come back up. Asserted behaviourally rather than by
         // counting jobs: wait past the first backoff and check the player is left alone.
-        fake.received.clear()
+        fake.clearHistory()
         delay(MIN_BACKOFF_MILLIS + 1_500)
         assertTrue(
             "disconnect() was followed by ${fake.received.size} commands — it reconnected",

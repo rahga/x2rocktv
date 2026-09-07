@@ -3,6 +3,10 @@
 // from a plain JVM test, which is how it was developed.
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    // FakePlayer and the captured fixtures are published as test fixtures rather than kept
+    // private to this module's tests: :app's view models need the same fake household, and
+    // a shared testing artifact is what this is.
+    `java-test-fixtures`
 }
 
 java {
@@ -33,6 +37,12 @@ dependencies {
     api(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.javax.inject)
+
+    testFixturesImplementation(libs.mockwebserver)
+    testFixturesImplementation(libs.okhttp.tls)
+    // `api`, not `implementation`: FakePlayer hands back JsonObject, so Gson is part of the
+    // fixtures' surface and consumers need it on their compile classpath.
+    testFixturesApi(libs.gson)
 
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)

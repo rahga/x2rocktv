@@ -279,8 +279,7 @@ class SonosHousehold(
 
     private suspend fun teardown() = lock.withLock {
         generation++
-        socketJobs.forEach { it.cancel() }
-        socketJobs.clear()
+        takeJobs().forEach { it.cancel() }
         // cancel(), not close(): this runs on the premise that the peer may be gone, and a
         // graceful close waits for a handshake a dead peer will never send.
         sockets.values.forEach { runCatching { it.cancel() } }
@@ -296,8 +295,7 @@ class SonosHousehold(
         reconnectJob?.cancel()
         reconnectJob = null
         generation++
-        socketJobs.forEach { it.cancel() }
-        socketJobs.clear()
+        takeJobs().forEach { it.cancel() }
         sockets.values.forEach { it.close() }
         sockets.clear()
         addressBook.clear()
@@ -450,6 +448,18 @@ class SonosHousehold(
         sockets[hostname] = socket
         watch(socket)
         return socket
+    }
+
+    /**
+     * Empties the job list under its own lock and hands back a snapshot.
+     *
+     * `Collections.synchronizedList` synchronises each *operation*, not iteration — a bare
+     * `forEach` over it throws `ConcurrentModificationException` when the reconnect loop
+     * appends a watch job at the same moment, which is exactly what `disconnect()` used to
+     * do. Taking a copy first means the cancelling happens outside the lock, too.
+     */
+    private fun takeJobs(): List<Job> = synchronized(socketJobs) {
+        socketJobs.toList().also { socketJobs.clear() }
     }
 
     /** Routes one socket's events into the state flows, and its death into a reconnect. */

@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
-import com.rahga.x2rock.channel.RoomsChannelSync
+import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
@@ -39,7 +39,7 @@ class HomeViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val themeStore: ThemeStore,
     private val roomPrefsStore: RoomPreferencesStore,
-    private val channelSync: RoomsChannelSync,
+    private val channelSync: ChannelSync,
     private val pendingRoomDeepLink: PendingRoomDeepLink
 ) : ViewModel() {
 
