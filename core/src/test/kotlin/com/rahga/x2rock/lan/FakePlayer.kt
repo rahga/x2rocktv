@@ -1,47 +1,56 @@
 package com.rahga.x2rock.lan
 
 import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import okhttp3.mockwebserver.Dispatcher
-import okhttp3.mockwebserver.MockResponse
-import okhttp3.mockwebserver.RecordedRequest
-import okhttp3.mockwebserver.MockWebServer
-import okhttp3.tls.HeldCertificate
-import okhttp3.tls.HandshakeCertificates
+import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
-import okhttp3.Response
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.tls.HandshakeCertificates
+import okhttp3.tls.HeldCertificate
 import java.net.InetAddress
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLSocketFactory
-import javax.net.ssl.X509TrustManager
 
 /**
- * A Sonos player, near enough to test against.
+ * A Sonos household, near enough to test against.
  *
- * The point of this class is that the transport has been verifiable only by pointing it at
- * real speakers — which meant every check was a throwaway, ran nowhere but this network,
- * and caught no regressions. This serves the same protocol over a real TLS WebSocket, so
- * connection lifecycle, subscriptions, event routing and reconnection can all be asserted
- * on without hardware.
+ * This exists for one reason that carries on its own: **CI has no Sonos on its LAN.**
+ * Without it there is no automated regression check at all, and verification happens only
+ * when someone remembers — which is how coverage rots. Convenience or speed would not have
+ * justified it; that gap does.
  *
- * It is deliberately faithful where faithfulness is load-bearing:
+ * What it is *not* is a substitute for real hardware. It exercises this code — parsing, the
+ * state machine, error handling — against a *modelled* protocol, and so catches regressions
+ * we introduce. It cannot discover protocol truth: everything this project learned the hard
+ * way came from speakers, and a fake only knows what it was told. Run the live suite
+ * (`-Dx2rock.live=<ip>`) for "does the protocol really behave this way"; run this for "did
+ * I break my own parser".
  *
- * - It serves a certificate whose SAN is the player's own `sonos-<MAC>.local` name, so the
- *   [PlayerAddressBook] and the default hostname verifier are exercised rather than
- *   sidestepped. A test that passed by turning verification off would prove nothing about
- *   the design it is meant to protect.
- * - It **rejects the handshake** the way a real player does: 403 if an `Origin` header is
- *   present, 400 if the API key is missing. Those two facts cost a while to establish
- *   against hardware and are otherwise recorded only in a comment.
- * - Replies carry `success`; pushed events never do, which is the only thing distinguishing
- *   them on the wire.
+ * Three things make it faithful where faithfulness carries weight:
+ *
+ * - **Its payloads are captured, never invented.** Everything served comes from
+ *   `src/test/resources/fixtures/`, recorded verbatim off a real household and redacted for
+ *   identifiers only. The invented versions these replaced had no `_objectType` anywhere,
+ *   no `queueVersion`, no `availablePlaybackActions`, and no stereo pair. A fake built from
+ *   what one assumes the protocol looks like tests those assumptions against themselves and
+ *   passes for the wrong reasons. **Add fixtures by capturing, never by writing them out.**
+ * - It serves a certificate carrying the players' real `sonos-<MAC>.local` names, so the
+ *   address book and OkHttp's default hostname verifier are exercised rather than switched
+ *   off. A test that passed by disabling verification would prove nothing about the design
+ *   it exists to protect.
+ * - It refuses handshakes the way a player does: 403 with an `Origin` header, 400 without
+ *   the API key. Both cost real effort to establish against hardware.
  */
 class FakePlayer(
-    val id: String = "RINCON_48A6B8306687" + "01400",
-    val householdId: String = "Sonos_Fake.Household",
+    /** The fixture's first coordinator, so the topology it serves is self-consistent. */
+    val id: String = fixtureCoordinatorId(),
+    val householdId: String = "Sonos_ExampleHousehold.ExampleToken",
 ) {
 
     val hostname: String = PlayerNames.localHostname(id)!!
@@ -49,9 +58,19 @@ class FakePlayer(
     /** Every command frame the client sent, so tests can assert on scope and ordering. */
     val received = LinkedBlockingQueue<JsonObject>()
 
+    /** Handshakes the player refused, with the code — empty is the expected state. */
+    val rejected = LinkedBlockingQueue<Int>()
+
+    /**
+     * One certificate covering every coordinator in the captured topology.
+     *
+     * That topology has five groups on five different players, so the household opens a
+     * socket per coordinator. This answers for all of them rather than flattening the
+     * fixture into something more convenient.
+     */
     private val certificate = HeldCertificate.Builder()
-        .addSubjectAlternativeName(hostname)
-        .commonName(id.removePrefix("RINCON_").dropLast(5))
+        .apply { coordinatorHostnames().forEach { addSubjectAlternativeName(it) } }
+        .commonName("fake-player")
         .build()
 
     private val serverCertificates = HandshakeCertificates.Builder()
@@ -62,27 +81,18 @@ class FakePlayer(
         useHttps(serverCertificates.sslSocketFactory(), false)
     }
 
-    /** Trusts this fake's certificate only — nothing here trusts everything. */
-    val clientCertificates: HandshakeCertificates = HandshakeCertificates.Builder()
-        .addTrustedCertificate(certificate.certificate)
-        .build()
-
-    val sslSocketFactory: SSLSocketFactory get() = clientCertificates.sslSocketFactory()
-    val trustManager: X509TrustManager get() = clientCertificates.trustManager
-
     val port: Int get() = server.port
 
-    @Volatile private var socket: WebSocket? = null
-    @Volatile private var groups: JsonObject = defaultGroups(id, "Kitchen")
+    /** The upgrade request, so a test can assert on what the client did and did not send. */
+    @Volatile var lastUpgrade: RecordedRequest? = null
+        private set
 
-    /** Handshakes the client made that the player refused, with the code it refused them with. */
-    val rejected = LinkedBlockingQueue<Int>()
+    @Volatile private var socket: WebSocket? = null
+    @Volatile private var groups: JsonObject = reachableTopology()
 
     fun start() {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
-                // A real player's two refusals, both established the hard way against
-                // hardware. Encoding them here means the client keeps being held to them.
                 if (request.headers["Origin"] != null) {
                     rejected += 403
                     return MockResponse().setResponseCode(403)
@@ -98,14 +108,9 @@ class FakePlayer(
         server.start(InetAddress.getByName("127.0.0.1"), 0)
     }
 
-    /** The upgrade request, so a test can assert on what the client did and did not send. */
-    @Volatile var lastUpgrade: RecordedRequest? = null
-        private set
-
     /**
-     * MockWebServer's shutdown waits for its queue to drain and gives up — throwing — while
-     * a WebSocket is still open. Close ours first so teardown is quiet; a leftover "gave up
-     * waiting" would otherwise be reported against every test in the class.
+     * MockWebServer's shutdown waits for its queue to drain and throws while a WebSocket is
+     * still open, which would otherwise be reported against every test in the class.
      */
     fun shutdown() {
         runCatching { socket?.close(1000, null) }
@@ -116,30 +121,37 @@ class FakePlayer(
     /**
      * End the connection from the player's side.
      *
-     * This is a close, not a yank: MockWebServer's server-side socket has no Call behind it,
-     * so `cancel()` throws inside OkHttp. It still exercises what matters — the client did
-     * not ask for this, so it surfaces as a failure and drives a reconnect. What it cannot
-     * reproduce is the zombie case, where a socket stays open and simply stops answering;
-     * that is what the keepalive and [SonosHousehold.onNetworkChanged] exist for, and it
-     * remains untested here.
+     * A close, not a yank: MockWebServer's server-side socket has no Call behind it, so
+     * `cancel()` throws inside OkHttp. It still exercises what matters — the client did not
+     * ask for this, so it must surface as a failure and drive a reconnect. What it cannot
+     * reproduce is the zombie case, a socket that stays open and stops answering; that is
+     * what the keepalive and [SonosHousehold.onNetworkChanged] are for, and it stays
+     * untested here.
      */
     fun dropConnection() {
         socket?.close(1000, "player going away")
         socket = null
     }
 
+    /** Push a captured event body verbatim. */
+    fun pushFixture(type: String, groupId: String? = null) {
+        emit(namespaceFor(type), type, fixture("event.$type.json"), groupId)
+    }
+
     /** Push an unsolicited event — no `success`, which is what makes it an event. */
-    fun push(namespace: String, type: String, body: String, groupId: String? = null) {
+    fun push(namespace: String, type: String, body: String, groupId: String? = null) =
+        emit(namespace, type, JsonParser.parseString(body), groupId)
+
+    private fun emit(namespace: String, type: String, body: JsonElement, groupId: String?) {
         val header = JsonObject().apply {
             addProperty("namespace", namespace)
             addProperty("type", type)
             addProperty("householdId", householdId)
             groupId?.let { addProperty("groupId", it) }
         }
-        send(header, JsonParser.parseString(body))
+        val ws = socket ?: error("nothing connected to the fake player")
+        ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
     }
-
-    fun setGroups(groups: JsonObject) { this.groups = groups }
 
     /** Blocks until the client sends a command matching [predicate], or fails. */
     fun awaitCommand(timeoutMillis: Long = 2_000, predicate: (JsonObject) -> Boolean): JsonObject {
@@ -157,8 +169,7 @@ class FakePlayer(
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
-            val frame = JsonParser.parseString(text).asJsonArray
-            val header = frame[0].asJsonObject
+            val header = JsonParser.parseString(text).asJsonArray[0].asJsonObject
             received += header
             reply(webSocket, header)
         }
@@ -169,23 +180,17 @@ class FakePlayer(
         val command = request.get("command")?.asString
         val cmdId = request.get("cmdId")?.asString
 
-        // No namespace at all is the "what household am I?" probe: it fails by design, and
-        // the answer is in the header rather than the body.
+        // No namespace is the "what household am I?" probe: it fails by design, and the
+        // answer rides in the header rather than the body.
         if (namespace == null) {
-            respond(webSocket, cmdId, namespace = null, type = "none", success = false, body = JsonObject())
+            respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
             return
         }
-
-        when {
-            namespace == "groups:1" && command == "getGroups" ->
-                respond(webSocket, cmdId, namespace, "groups", true, groups)
-
-            command == "subscribe" ->
-                respond(webSocket, cmdId, namespace, "none", true, JsonObject())
-
-            else ->
-                respond(webSocket, cmdId, namespace, "none", true, JsonObject())
+        if (namespace == "groups:1" && command == "getGroups") {
+            respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
+            return
         }
+        respond(webSocket, cmdId, namespace, "none", success = true, body = JsonObject())
     }
 
     private fun respond(
@@ -194,7 +199,7 @@ class FakePlayer(
         namespace: String?,
         type: String,
         success: Boolean,
-        body: com.google.gson.JsonElement,
+        body: JsonElement,
     ) {
         val header = JsonObject().apply {
             namespace?.let { addProperty("namespace", it) }
@@ -206,29 +211,51 @@ class FakePlayer(
         webSocket.send(JsonArray(2).apply { add(header); add(body) }.toString())
     }
 
-    private fun send(header: JsonObject, body: com.google.gson.JsonElement) {
-        val ws = socket ?: error("nothing connected to the fake player")
-        ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
-    }
-
     companion object {
-        fun defaultGroups(playerId: String, roomName: String): JsonObject {
-            val group = JsonObject().apply {
-                addProperty("id", "$playerId:1")
-                addProperty("name", roomName)
-                addProperty("coordinatorId", playerId)
-                addProperty("playbackState", "PLAYBACK_STATE_PLAYING")
-                add("playerIds", JsonArray().apply { add(playerId) })
-            }
-            val player = JsonObject().apply {
-                addProperty("id", playerId)
-                addProperty("name", roomName)
-                addProperty("websocketUrl", "wss://127.0.0.1:1443/websocket/api")
-            }
-            return JsonObject().apply {
-                add("groups", JsonArray().apply { add(group) })
-                add("players", JsonArray().apply { add(player) })
-            }
+
+        /** Reads a verbatim capture from `src/test/resources/fixtures/`. */
+        fun fixture(name: String): JsonObject {
+            val stream = FakePlayer::class.java.getResourceAsStream("/fixtures/$name")
+                ?: error("missing fixture $name — capture it from a real player, do not write one")
+            return JsonParser.parseReader(stream.reader()).asJsonObject
+        }
+
+        fun fixtureCoordinatorId(): String =
+            fixture("getGroups.reply.json").getAsJsonArray("groups")[0]
+                .asJsonObject.get("coordinatorId").asString
+
+        /**
+         * Every coordinator the captured topology names, derived rather than listed so a
+         * re-captured fixture does not also require updating a hardcoded set.
+         */
+        fun coordinatorHostnames(): List<String> =
+            fixture("getGroups.reply.json").getAsJsonArray("groups")
+                .map { it.asJsonObject.get("coordinatorId").asString }
+                .mapNotNull { PlayerNames.localHostname(it) }
+                .distinct()
+
+        /**
+         * The captured topology with its `websocketUrl` hosts pointed at loopback.
+         *
+         * The fixture on disk keeps addresses as captured (rewritten to TEST-NET-1, so
+         * nothing real leaks), which is right for a record of what a player sends — but
+         * they are unroutable. The copy served here points at this server instead. It is
+         * the only change made to any captured payload, and it is made here rather than on
+         * disk so the fixture stays a faithful record.
+         */
+        fun reachableTopology(): JsonObject {
+            val rewritten = fixture("getGroups.reply.json").toString()
+                .replace(Regex("wss://[0-9.]+:[0-9]+/"), "wss://127.0.0.1:1443/")
+            return JsonParser.parseString(rewritten).asJsonObject
+        }
+
+        private fun namespaceFor(type: String) = when (type) {
+            "playbackStatus" -> "playback:1"
+            "metadataStatus" -> "playbackMetadata:1"
+            "groupVolume" -> "groupVolume:1"
+            "playerVolume" -> "playerVolume:1"
+            "groups" -> "groups:1"
+            else -> error("no namespace known for $type")
         }
     }
 }

@@ -1,0 +1,111 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "name": "Certified Bangers - 90s",
+    "type": "album",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "serviceId": "212",
+      "objectId": "c69ee188b0215613ed754152d214c16c2e89aeb5:63:66403:album",
+      "accountId": "sn_13"
+    },
+    "service": {
+      "_objectType": "service",
+      "name": "Plex",
+      "id": "212",
+      "images": []
+    },
+    "imageUrl": "https://sonos.plex.tv/img?height\u003d1\u0026minSize\u003d1\u0026upscale\u003d1\u0026url\u003dhttps%3A%2F%2F70-122-115-65.44c5df2f842d4f97803491252d9e5e0b.plex.direct%3A13502%2Flibrary%2Fmetadata%2F66403%2Fthumb%2F1784359571%3FX-Plex-Client-Identifier%3Dnull%26X-Plex-Token%3Dz8mPgbR9RQEbBatkru1V\u0026width\u003d300",
+    "images": [
+      {
+        "_objectType": "image",
+        "url": "https://sonos.plex.tv/img?height\u003d1\u0026minSize\u003d1\u0026upscale\u003d1\u0026url\u003dhttps%3A%2F%2F70-122-115-65.44c5df2f842d4f97803491252d9e5e0b.plex.direct%3A13502%2Flibrary%2Fmetadata%2F66403%2Fthumb%2F1784359571%3FX-Plex-Client-Identifier%3Dnull%26X-Plex-Token%3Dz8mPgbR9RQEbBatkru1V\u0026width\u003d300"
+      }
+    ]
+  },
+  "currentItem": {
+    "_objectType": "queueItem",
+    "track": {
+      "_objectType": "track",
+      "type": "track",
+      "name": "Ironic (2015 remaster)",
+      "imageUrl": "http://192.0.2.32:1400/getaa?s\u003d1\u0026u\u003dx-sonos-http%3ac69ee188b0215613ed754152d214c16c2e89aeb5%253a63%253a66404%253atrack.flac%3fsid%3d212%26flags%3d24616%26sn%3d13",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.32:1400/getaa?s\u003d1\u0026u\u003dx-sonos-http%3ac69ee188b0215613ed754152d214c16c2e89aeb5%253a63%253a66404%253atrack.flac%3fsid%3d212%26flags%3d24616%26sn%3d13"
+        }
+      ],
+      "album": {
+        "_objectType": "album",
+        "name": "Certified Bangers - 90s"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Alanis Morissette"
+      },
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "serviceId": "212",
+        "objectId": "c69ee188b0215613ed754152d214c16c2e89aeb5:63:66404:track",
+        "accountId": "sn_13"
+      },
+      "service": {
+        "_objectType": "service",
+        "name": "Plex",
+        "id": "212",
+        "images": []
+      },
+      "durationMillis": 230000,
+      "quality": {
+        "_objectType": "trackQuality"
+      }
+    },
+    "policies": {
+      "_objectType": "playbackPolicy"
+    }
+  },
+  "nextItem": {
+    "_objectType": "queueItem",
+    "track": {
+      "_objectType": "track",
+      "type": "track",
+      "name": "I’ll Be Missing You",
+      "imageUrl": "http://192.0.2.32:1400/getaa?s\u003d1\u0026u\u003dx-sonos-http%3ac69ee188b0215613ed754152d214c16c2e89aeb5%253a63%253a66405%253atrack.flac%3fsid%3d212%26flags%3d24616%26sn%3d13",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.32:1400/getaa?s\u003d1\u0026u\u003dx-sonos-http%3ac69ee188b0215613ed754152d214c16c2e89aeb5%253a63%253a66405%253atrack.flac%3fsid%3d212%26flags%3d24616%26sn%3d13"
+        }
+      ],
+      "album": {
+        "_objectType": "album",
+        "name": "Certified Bangers - 90s"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Diddy feat. 112 \u0026 Faith Evans"
+      },
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "serviceId": "212",
+        "objectId": "c69ee188b0215613ed754152d214c16c2e89aeb5:63:66405:track",
+        "accountId": "sn_13"
+      },
+      "service": {
+        "_objectType": "service",
+        "name": "Plex",
+        "id": "212",
+        "images": []
+      },
+      "durationMillis": 307000,
+      "quality": {
+        "_objectType": "trackQuality"
+      }
+    },
+    "policies": {
+      "_objectType": "playbackPolicy"
+    }
+  }
+}

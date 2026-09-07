@@ -1,0 +1,768 @@
+{
+  "_objectType": "groups",
+  "groups": [
+    {
+      "_objectType": "group",
+      "id": "RINCON_AA00BBCCDDEE01400:3519533545",
+      "name": "Dining Room",
+      "coordinatorId": "RINCON_AA00BBCCDDEE01400",
+      "playbackState": "PLAYBACK_STATE_IDLE",
+      "playerIds": [
+        "RINCON_AA00BBCCDDEE01400"
+      ]
+    },
+    {
+      "_objectType": "group",
+      "id": "RINCON_AA03BBCCDDEE01400:1646997338",
+      "name": "Living Room",
+      "coordinatorId": "RINCON_AA03BBCCDDEE01400",
+      "playbackState": "PLAYBACK_STATE_IDLE",
+      "playerIds": [
+        "RINCON_AA03BBCCDDEE01400"
+      ]
+    },
+    {
+      "_objectType": "group",
+      "id": "RINCON_AA04BBCCDDEE01400:3568936889",
+      "name": "Guest TV",
+      "coordinatorId": "RINCON_AA04BBCCDDEE01400",
+      "playbackState": "PLAYBACK_STATE_PLAYING",
+      "playerIds": [
+        "RINCON_AA04BBCCDDEE01400"
+      ]
+    },
+    {
+      "_objectType": "group",
+      "id": "RINCON_AA07BBCCDDEE01400:1137668569",
+      "name": "Bedroom",
+      "coordinatorId": "RINCON_AA07BBCCDDEE01400",
+      "playbackState": "PLAYBACK_STATE_IDLE",
+      "playerIds": [
+        "RINCON_AA07BBCCDDEE01400"
+      ]
+    },
+    {
+      "_objectType": "group",
+      "id": "RINCON_AA02BBCCDDEE01400:1546804709",
+      "name": "Kitchen",
+      "coordinatorId": "RINCON_AA02BBCCDDEE01400",
+      "playbackState": "PLAYBACK_STATE_IDLE",
+      "playerIds": [
+        "RINCON_AA02BBCCDDEE01400"
+      ]
+    }
+  ],
+  "players": [
+    {
+      "_objectType": "player",
+      "id": "RINCON_AA00BBCCDDEE01400",
+      "name": "Dining Room",
+      "websocketUrl": "wss://192.0.2.32:1443/websocket/api",
+      "softwareVersion": "86.8-78270",
+      "apiVersion": "1.53.1",
+      "minApiVersion": "1.1.0",
+      "isUnregistered": false,
+      "capabilities": [
+        "PLAYBACK",
+        "CLOUD",
+        "AIRPLAY",
+        "AUDIO_CLIP"
+      ],
+      "zoneInfo": {
+        "_objectType": "activeZone",
+        "zoneId": "00000000-0000-4000-8000-000000000001",
+        "name": "Dining Room",
+        "members": [
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA00BBCCDDEE01400",
+            "channelMap": [
+              "LF",
+              "LF"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA01BBCCDDEE01400",
+            "channelMap": [
+              "RF",
+              "RF"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          }
+        ]
+      },
+      "deviceIds": [
+        "RINCON_AA00BBCCDDEE01400",
+        "RINCON_AA01BBCCDDEE01400"
+      ],
+      "devices": [
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA00BBCCDDEE01400",
+          "serialNumber": "AA-00-BB-CC-DD-EE:7",
+          "deviceId": "AA00BBCCDDEE",
+          "model": "S21",
+          "modelDisplayName": "Bookshelf",
+          "capabilities": [
+            "PLAYBACK",
+            "CLOUD",
+            "AIRPLAY",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Dining Room",
+          "websocketUrl": "wss://192.0.2.32:1443/websocket/api",
+          "softwareVersion": "86.8-78270",
+          "hwVersion": "1.20.3.3-1.0",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA01BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA00BBCCDDEE01400",
+          "serialNumber": "AA-01-BB-CC-DD-EE:0",
+          "deviceId": "AA01BBCCDDEE",
+          "model": "S21",
+          "modelDisplayName": "Bookshelf",
+          "capabilities": [
+            "CLOUD",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Dining Room",
+          "websocketUrl": "wss://192.0.2.28:1443/websocket/api",
+          "softwareVersion": "86.8-78270",
+          "hwVersion": "1.20.3.3-1.0",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        }
+      ]
+    },
+    {
+      "_objectType": "player",
+      "id": "RINCON_AA03BBCCDDEE01400",
+      "name": "Living Room",
+      "websocketUrl": "wss://192.0.2.25:1443/websocket/api",
+      "softwareVersion": "96.1-79270",
+      "apiVersion": "1.53.1",
+      "minApiVersion": "1.1.0",
+      "isUnregistered": false,
+      "capabilities": [
+        "PLAYBACK",
+        "CLOUD",
+        "HT_PLAYBACK",
+        "HT_POWER_STATE",
+        "AIRPLAY",
+        "AUDIO_CLIP",
+        "VOICE",
+        "HDMI",
+        "IR_CONTROL"
+      ],
+      "zoneInfo": {
+        "_objectType": "activeZone",
+        "zoneId": "00000000-0000-4000-8000-000000000001",
+        "name": "Living Room",
+        "members": [
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA03BBCCDDEE01400",
+            "channelMap": [
+              "LF",
+              "RF"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA10BBCCDDEE01400",
+            "channelMap": [
+              "SW"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA08BBCCDDEE01400",
+            "channelMap": [
+              "LR"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA09BBCCDDEE01400",
+            "channelMap": [
+              "RR"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          }
+        ]
+      },
+      "deviceIds": [
+        "RINCON_AA03BBCCDDEE01400",
+        "RINCON_AA10BBCCDDEE01400",
+        "RINCON_AA08BBCCDDEE01400",
+        "RINCON_AA09BBCCDDEE01400"
+      ],
+      "devices": [
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA03BBCCDDEE01400",
+          "serialNumber": "AA-03-BB-CC-DD-EE:A",
+          "deviceId": "AA03BBCCDDEE",
+          "model": "S14",
+          "modelDisplayName": "Beam",
+          "color": "Black",
+          "capabilities": [
+            "PLAYBACK",
+            "CLOUD",
+            "HT_PLAYBACK",
+            "HT_POWER_STATE",
+            "AIRPLAY",
+            "AUDIO_CLIP",
+            "VOICE",
+            "HDMI",
+            "IR_CONTROL"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Living Room",
+          "websocketUrl": "wss://192.0.2.25:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.23.1.10-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA10BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA03BBCCDDEE01400",
+          "serialNumber": "AA-10-BB-CC-DD-EE:7",
+          "deviceId": "AA10BBCCDDEE",
+          "model": "Sub",
+          "modelDisplayName": "Sub",
+          "color": "Black",
+          "capabilities": [
+            "CLOUD"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Living Room",
+          "websocketUrl": "wss://192.0.2.34:1443/websocket/api",
+          "softwareVersion": "86.8-78270",
+          "hwVersion": "1.8.6.6-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA08BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA03BBCCDDEE01400",
+          "serialNumber": "AA-08-BB-CC-DD-EE:C",
+          "deviceId": "AA08BBCCDDEE",
+          "model": "S12",
+          "modelDisplayName": "Play:1",
+          "color": "White",
+          "capabilities": [
+            "CLOUD",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Living Room",
+          "websocketUrl": "wss://192.0.2.44:1443/websocket/api",
+          "softwareVersion": "86.8-78270",
+          "hwVersion": "1.20.1.7-1.1",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA09BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA03BBCCDDEE01400",
+          "serialNumber": "AA-09-BB-CC-DD-EE:G",
+          "deviceId": "AA09BBCCDDEE",
+          "model": "S12",
+          "modelDisplayName": "Play:1",
+          "color": "White",
+          "capabilities": [
+            "CLOUD",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Living Room",
+          "websocketUrl": "wss://192.0.2.39:1443/websocket/api",
+          "softwareVersion": "86.8-78270",
+          "hwVersion": "1.20.1.7-1.1",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        }
+      ]
+    },
+    {
+      "_objectType": "player",
+      "id": "RINCON_AA04BBCCDDEE01400",
+      "name": "Guest TV",
+      "websocketUrl": "wss://192.0.2.31:1443/websocket/api",
+      "softwareVersion": "96.1-79270",
+      "apiVersion": "1.53.1",
+      "minApiVersion": "1.1.0",
+      "isUnregistered": false,
+      "capabilities": [
+        "PLAYBACK",
+        "CLOUD",
+        "HT_PLAYBACK",
+        "HT_POWER_STATE",
+        "AIRPLAY",
+        "AUDIO_CLIP",
+        "VOICE",
+        "HDMI",
+        "IR_CONTROL"
+      ],
+      "zoneInfo": {
+        "_objectType": "activeZone",
+        "name": "Guest TV",
+        "members": [
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA04BBCCDDEE01400",
+            "channelMap": [],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          }
+        ]
+      },
+      "deviceIds": [
+        "RINCON_AA04BBCCDDEE01400"
+      ],
+      "devices": [
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA04BBCCDDEE01400",
+          "serialNumber": "AA-04-BB-CC-DD-EE:2",
+          "deviceId": "AA04BBCCDDEE",
+          "model": "S14",
+          "modelDisplayName": "Beam",
+          "color": "Black",
+          "capabilities": [
+            "PLAYBACK",
+            "CLOUD",
+            "HT_PLAYBACK",
+            "HT_POWER_STATE",
+            "AIRPLAY",
+            "AUDIO_CLIP",
+            "VOICE",
+            "HDMI",
+            "IR_CONTROL"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Guest TV",
+          "websocketUrl": "wss://192.0.2.31:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.23.1.10-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        }
+      ]
+    },
+    {
+      "_objectType": "player",
+      "id": "RINCON_AA07BBCCDDEE01400",
+      "name": "Bedroom",
+      "websocketUrl": "wss://192.0.2.24:1443/websocket/api",
+      "softwareVersion": "96.1-79270",
+      "apiVersion": "1.53.1",
+      "minApiVersion": "1.1.0",
+      "isUnregistered": false,
+      "capabilities": [
+        "PLAYBACK",
+        "CLOUD",
+        "HT_PLAYBACK",
+        "HT_POWER_STATE",
+        "AIRPLAY",
+        "AUDIO_CLIP",
+        "VOICE",
+        "HDMI",
+        "IR_CONTROL"
+      ],
+      "zoneInfo": {
+        "_objectType": "activeZone",
+        "zoneId": "00000000-0000-4000-8000-000000000001",
+        "name": "Bedroom",
+        "members": [
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA07BBCCDDEE01400",
+            "channelMap": [
+              "LF",
+              "RF"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA06BBCCDDEE01400",
+            "channelMap": [
+              "LR"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          },
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA05BBCCDDEE01400",
+            "channelMap": [
+              "RR"
+            ],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          }
+        ]
+      },
+      "deviceIds": [
+        "RINCON_AA07BBCCDDEE01400",
+        "RINCON_AA06BBCCDDEE01400",
+        "RINCON_AA05BBCCDDEE01400"
+      ],
+      "devices": [
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA07BBCCDDEE01400",
+          "serialNumber": "AA-07-BB-CC-DD-EE:C",
+          "deviceId": "AA07BBCCDDEE",
+          "model": "S14",
+          "modelDisplayName": "Beam",
+          "color": "Black",
+          "capabilities": [
+            "PLAYBACK",
+            "CLOUD",
+            "HT_PLAYBACK",
+            "HT_POWER_STATE",
+            "AIRPLAY",
+            "AUDIO_CLIP",
+            "VOICE",
+            "HDMI",
+            "IR_CONTROL"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Bedroom",
+          "websocketUrl": "wss://192.0.2.24:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.23.1.11-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA06BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA07BBCCDDEE01400",
+          "serialNumber": "AA-06-BB-CC-DD-EE:3",
+          "deviceId": "AA06BBCCDDEE",
+          "model": "S22",
+          "modelDisplayName": "One SL",
+          "color": "Black",
+          "capabilities": [
+            "CLOUD",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Bedroom",
+          "websocketUrl": "wss://192.0.2.33:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.28.1.6-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        },
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA05BBCCDDEE01400",
+          "primaryDeviceId": "RINCON_AA07BBCCDDEE01400",
+          "serialNumber": "AA-05-BB-CC-DD-EE:8",
+          "deviceId": "AA05BBCCDDEE",
+          "model": "S22",
+          "modelDisplayName": "One SL",
+          "color": "Black",
+          "capabilities": [
+            "CLOUD",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Bedroom",
+          "websocketUrl": "wss://192.0.2.35:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.28.1.6-1.2",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        }
+      ]
+    },
+    {
+      "_objectType": "player",
+      "id": "RINCON_AA02BBCCDDEE01400",
+      "name": "Kitchen",
+      "websocketUrl": "wss://192.0.2.26:1443/websocket/api",
+      "softwareVersion": "96.1-79270",
+      "apiVersion": "1.53.1",
+      "minApiVersion": "1.1.0",
+      "isUnregistered": false,
+      "capabilities": [
+        "PLAYBACK",
+        "CLOUD",
+        "AIRPLAY",
+        "AUDIO_CLIP"
+      ],
+      "zoneInfo": {
+        "_objectType": "activeZone",
+        "name": "Kitchen",
+        "members": [
+          {
+            "_objectType": "activeZoneMember",
+            "id": "RINCON_AA02BBCCDDEE01400",
+            "channelMap": [],
+            "state": {
+              "_objectType": "zoneMemberState",
+              "disconnected": false
+            }
+          }
+        ]
+      },
+      "deviceIds": [
+        "RINCON_AA02BBCCDDEE01400"
+      ],
+      "devices": [
+        {
+          "_objectType": "deviceInfo",
+          "id": "RINCON_AA02BBCCDDEE01400",
+          "serialNumber": "AA-02-BB-CC-DD-EE:E",
+          "deviceId": "AA02BBCCDDEE",
+          "model": "S22",
+          "modelDisplayName": "One SL",
+          "color": "White",
+          "capabilities": [
+            "PLAYBACK",
+            "CLOUD",
+            "AIRPLAY",
+            "AUDIO_CLIP"
+          ],
+          "apiVersion": "1.53.1",
+          "minApiVersion": "1.1.0",
+          "name": "Kitchen",
+          "websocketUrl": "wss://192.0.2.26:1443/websocket/api",
+          "softwareVersion": "96.1-79270",
+          "hwVersion": "1.28.1.6-1.1",
+          "swGen": 2,
+          "versions": {
+            "_objectType": "sdkVersions",
+            "controlAPI": [
+              "1.53.1",
+              "3.6.0"
+            ],
+            "trueplaySDK": [
+              "6"
+            ],
+            "audioTxProtocol": [
+              3
+            ],
+            "htAudioTxProtocol": [
+              7
+            ]
+          },
+          "quarantineReasons": []
+        }
+      ]
+    }
+  ],
+  "partial": false
+}

@@ -80,13 +80,14 @@ class SonosHouseholdTest {
     @Test fun `connects by the certificate hostname and learns the household`() {
         val state = connected()
         assertEquals(fake.householdId, state.householdId)
-        assertEquals(1, state.groups.size)
-        assertEquals("Kitchen", state.groups.single().name)
+        // The captured topology, five groups and all, not a convenient single one.
+        assertEquals(5, state.groups.size)
+        assertTrue(state.groups.any { it.name == "Dining Room" })
     }
 
     @Test fun `subscribes to the group-scoped namespaces on the coordinator`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.single().id
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
         listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
             val cmd = fake.awaitCommand {
                 it.get("namespace")?.asString == namespace && it.get("command")?.asString == "subscribe"
@@ -99,7 +100,7 @@ class SonosHouseholdTest {
 
     @Test fun `a pushed event with no success reaches the state flow`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.single().id
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
 
         fake.push("groupVolume:1", "groupVolume", """{"volume":37,"muted":false,"fixed":false}""", groupId)
         val volume = withTimeout(5_000) {
@@ -111,7 +112,7 @@ class SonosHouseholdTest {
     /** Regression: absent playModes used to reset shuffle and repeat to off. */
     @Test fun `a playback event without playModes leaves the play mode alone`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.single().id
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
 
         fake.push(
             "playback:1", "playbackStatus",
@@ -132,7 +133,7 @@ class SonosHouseholdTest {
     /** Regression: positionUpdatedAt used to move even with no position, rewinding the UI. */
     @Test fun `an event without a position does not restart the progress clock`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.single().id
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
 
         fake.push("playback:1", "playbackStatus", """{"positionMillis":5000}""", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.positionMillis == 5000L } }
@@ -154,14 +155,14 @@ class SonosHouseholdTest {
                 "players":[{"id":"${fake.id}","name":"Kitchen"}]}""",
         )
         val group = withTimeout(5_000) {
-            household.state.first { it.groups.singleOrNull()?.id == "G:2" }.groups.single()
+            household.state.first { st -> st.groups.any { it.id == "G:2" } }.groups.first { it.id == "G:2" }
         }
         assertNotNull(group.playbackState)
     }
 
     @Test fun `a command is addressed to the group and the player answers`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.single().id
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
         household.togglePlayPause(groupId)
         val cmd = fake.awaitCommand { it.get("command")?.asString == "togglePlayPause" }
         assertEquals("playback:1", cmd.get("namespace").asString)
@@ -190,7 +191,7 @@ class SonosHouseholdTest {
         // Backoff starts at a second, so allow for it.
         withTimeout(15_000) { household.state.first { !it.connected } }
         val state = withTimeout(15_000) { household.state.first { it.connected } }
-        assertEquals(1, state.groups.size)
+        assertEquals(5, state.groups.size)
 
         // And it is a real rebuild: the subscriptions are established again.
         fake.awaitCommand(timeoutMillis = 5_000) {

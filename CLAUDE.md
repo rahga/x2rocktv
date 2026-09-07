@@ -69,17 +69,42 @@ An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROI
 `local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
 you are working from a stale mental model of this project.
 
-`:core` is tested against `FakePlayer` (`core/src/test/.../FakePlayer.kt`), an in-process
-TLS WebSocket server that speaks the same protocol. It serves a certificate carrying the
-player's real `sonos-<MAC>.local` name, so the address book and hostname verification are
-exercised rather than switched off, and it enforces the two handshake rules a real player
-does — 403 for an `Origin` header, 400 for a missing API key. **Prefer it to hardware**: it
-runs anywhere, it catches regressions, and it already found a bug that live testing had
-missed (a player-initiated close going unnoticed).
+### Two test suites, and why both
 
-`:core` is also plain Kotlin/JVM, so a throwaway JUnit test *can* open a socket to a real
-speaker when a question is genuinely about a real speaker. Reach for the Shield only when
-the question is about *Android* — cleartext policy, permissions, lifecycle.
+**`./gradlew :core:test` — against `FakePlayer`, no hardware.** An in-process TLS WebSocket
+server replaying captured payloads. It exists for one reason that carries on its own: CI has
+no Sonos on its LAN, so without it there is *no* automated regression check and verification
+happens only when someone remembers. It catches bugs we introduce — parsing, the state
+machine, error handling.
+
+**`-Dx2rock.live=<ip|discover>` — against real speakers.** Opt-in, skipped otherwise. It
+catches what a fake cannot: a fake only knows what it was told, so it can never discover
+that the protocol behaves differently than assumed. Everything this project learned the hard
+way came from hardware.
+
+```sh
+./gradlew :core:test                                  # fake only; what CI runs
+./gradlew :core:test -Dx2rock.live=discover           # + real speakers, read-only
+./gradlew :core:test -Dx2rock.live=discover -Dx2rock.live.room=Kitchen
+```
+
+The live suite is **read-only unless a room is named**, because it may run against a
+household someone is listening to; what does change is restored afterwards. Its assertions
+are about the *protocol*, never about one house — they have to hold for a single Sonos One
+SL on a desk as much as for five rooms with a soundbar, so nothing asserts a room name, a
+group count, or a populated queue.
+
+**The discipline that makes the fake trustworthy: capture fixtures, never invent them.**
+Everything in `core/src/test/resources/fixtures/` was recorded verbatim off a real household
+and redacted for identifiers only. The invented payloads these replaced had no `_objectType`
+anywhere, no `queueVersion`, no `availablePlaybackActions`, and no stereo pair — a fake
+built from what one *assumes* the protocol looks like tests those assumptions against
+themselves and passes for the wrong reasons. `x2rock`'s `docs/architecture.md` holds more
+verbatim captures worth drawing on.
+
+And the check that stops a green CI quietly becoming a lie: the live suite compares the
+structure a real player sends *now* against the recorded fixtures, and fails when they
+diverge. That is the signal to re-capture.
 
 ### Households
 A household is discovered, not configured: SSDP's reply carries
