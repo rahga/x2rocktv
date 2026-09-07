@@ -105,6 +105,18 @@ class SonosSocket private constructor(
     /** `subscribe` answers with the current state, then pushes changes as [events]. */
     suspend fun subscribe(header: JsonObject): JsonElement = command(header)
 
+    /**
+     * Drops the connection without waiting for a close handshake.
+     *
+     * The right call when the peer may already be gone — after a network change or a wake,
+     * where [close] would block on a reply that is never coming.
+     */
+    fun cancel() {
+        closedByUs.set(true)
+        socket.cancel()
+        failPending(IOException("socket to $hostname cancelled"))
+    }
+
     /** Deliberate shutdown: no failure is emitted, because nothing broke. */
     fun close() {
         closedByUs.set(true)

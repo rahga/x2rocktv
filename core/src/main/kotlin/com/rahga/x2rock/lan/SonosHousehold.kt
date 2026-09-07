@@ -14,6 +14,7 @@ import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.Track
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -65,12 +66,19 @@ data class HouseholdState(
  * `playbackQueue:1` answer `ERROR_UNSUPPORTED_NAMESPACE`, so it goes over UPnP on port
  * 1400 instead — see [Upnp], and expect it to be stale until re-read.
  *
- * Reconnection and network-change handling are **not** implemented yet: [connect] is
- * one-shot. See the note in `CLAUDE.md` about "assume dead, reconnect from scratch".
+ * A lost connection is rebuilt with capped exponential backoff, and [onNetworkChanged]
+ * skips the wait when the ground has moved underneath it.
  */
 class SonosHousehold(
     private val scope: CoroutineScope,
     private val addressBook: PlayerAddressBook = PlayerAddressBook(),
+    /**
+     * Held across SSDP. On Wi-Fi, Android drops multicast to the app unless a
+     * `WifiManager.MulticastLock` is held, so discovery would silently find nothing; on
+     * Ethernet it is irrelevant. `:core` cannot take that lock itself, so the platform
+     * supplies it.
+     */
+    private val multicast: MulticastGate = MulticastGate.None,
     /**
      * Injected so the *same* client can be handed to the image loader: album art lives on
      * the players at cleartext `.local` URLs, and a loader with its own client would have
@@ -82,10 +90,20 @@ class SonosHousehold(
     private val gson = Gson()
     private val upnp = Upnp(client)
 
-    private val sockets = mutableMapOf<String, SonosSocket>()
-    private val socketJobs = mutableListOf<Job>()
+    private val sockets = java.util.concurrent.ConcurrentHashMap<String, SonosSocket>()
+    private val socketJobs = java.util.Collections.synchronizedList(mutableListOf<Job>())
     private val lock = Mutex()
     private var reconnectJob: Job? = null
+
+    /** Set once someone asks for a connection, cleared only by [disconnect]. */
+    @Volatile private var wantConnection = false
+
+    /**
+     * Bumped by every teardown. A socket opened concurrently with one belongs to a session
+     * that no longer exists, and closing it is the only way it does not leak past the
+     * rebuild and later trigger a spurious reconnect.
+     */
+    @Volatile private var generation = 0
 
     private val _state = MutableStateFlow(HouseholdState())
     val state: StateFlow<HouseholdState> = _state.asStateFlow()
@@ -110,6 +128,10 @@ class SonosHousehold(
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
         if (_state.value.connected || reconnectJob?.isActive == true) return
+        // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
+        // boots and starts this app before the LAN is up, and without this the network
+        // coming back would be ignored and the user left on the error screen.
+        wantConnection = true
         establish(seed)
     }
 
@@ -122,12 +144,12 @@ class SonosHousehold(
      * runs again rather than reusing what worked on the last network.
      */
     fun onNetworkChanged() {
-        if (_state.value.connected || reconnectJob?.isActive == true) reconnect(immediate = true)
+        if (wantConnection) reconnect(immediate = true)
     }
 
     private suspend fun establish(seed: Discovery.DiscoveredPlayer? = null) {
         try {
-            val entry = seed ?: Discovery.findPlayers().firstOrNull()
+            val entry = seed ?: multicast.around { Discovery.findPlayers() }.firstOrNull()
                 ?: error("no Sonos players answered on this network")
 
             // Discovery reports the player's id and address together, so even the very
@@ -198,10 +220,13 @@ class SonosHousehold(
         reconnect()
     }
 
-    private fun teardown() {
+    private suspend fun teardown() = lock.withLock {
+        generation++
         socketJobs.forEach { it.cancel() }
         socketJobs.clear()
-        sockets.values.forEach { runCatching { it.close() } }
+        // cancel(), not close(): this runs on the premise that the peer may be gone, and a
+        // graceful close waits for a handshake a dead peer will never send.
+        sockets.values.forEach { runCatching { it.cancel() } }
         sockets.clear()
         addressBook.clear()
         _state.update { it.copy(connected = false) }
@@ -210,8 +235,10 @@ class SonosHousehold(
     }
 
     fun disconnect() {
+        wantConnection = false
         reconnectJob?.cancel()
         reconnectJob = null
+        generation++
         socketJobs.forEach { it.cancel() }
         socketJobs.clear()
         sockets.values.forEach { it.close() }
@@ -355,18 +382,30 @@ class SonosHousehold(
 
     private suspend fun socketForHostname(hostname: String): SonosSocket = lock.withLock {
         sockets[hostname]?.let { return it }
-        SonosSocket.open(client, hostname).also {
-            sockets[hostname] = it
-            watch(it)
+        val opened = generation
+        val socket = SonosSocket.open(client, hostname)
+        // A teardown that happened while the handshake was in flight means this socket
+        // belongs to a dead session; adopting it would resurrect it into a just-cleared map.
+        if (opened != generation) {
+            socket.cancel()
+            throw java.io.IOException("connection torn down while opening $hostname")
         }
+        sockets[hostname] = socket
+        watch(socket)
+        return socket
     }
 
     /** Routes one socket's events into the state flows, and its death into a reconnect. */
     private fun watch(socket: SonosSocket) {
-        socketJobs += scope.launch {
-            socket.events.collect { event -> apply(event) }
+        // UNDISPATCHED so the collector is attached before this returns. `events` has no
+        // replay and drops when nobody is listening, so a dispatched launch could lose the
+        // race against a subscribe reply and its snapshot.
+        socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            // One malformed frame from one speaker must not take the process down: an
+            // uncaught throw here reaches the thread's default handler, not the scope.
+            socket.events.collect { event -> runCatching { apply(event) } }
         }
-        socketJobs += scope.launch {
+        socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
             socket.failures.collect { cause -> handleLoss(cause) }
         }
     }
@@ -414,13 +453,21 @@ class SonosHousehold(
                         )
                     }
                 }
+                val position = body.long("positionMillis")
                 update(groupId) {
                     it.copy(
                         playbackState = body.string("playbackState") ?: it.playbackState,
-                        positionMillis = body.long("positionMillis") ?: it.positionMillis,
-                        positionUpdatedAt = System.currentTimeMillis(),
+                        positionMillis = position ?: it.positionMillis,
+                        // Only move the clock when a position actually arrived. The UI keys
+                        // its extrapolation off this, so refreshing it regardless makes the
+                        // progress bar visibly jump back to the last reported position.
+                        positionUpdatedAt = if (position != null) System.currentTimeMillis() else it.positionUpdatedAt,
                         durationMillis = body.long("durationMillis") ?: it.durationMillis,
-                        playMode = PlayModes.fromJson(body.getAsJsonObject("playModes")),
+                        // Absent means unchanged, not off — every other field here falls
+                        // back the same way, and defaulting would silently clear shuffle.
+                        playMode = body.getAsJsonObject("playModes")
+                            ?.let { modes -> PlayModes.fromJson(modes) }
+                            ?: it.playMode,
                     )
                 }
             }

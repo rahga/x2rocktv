@@ -1,12 +1,16 @@
 package com.rahga.x2rock.di
 
+import android.util.Log
 import com.rahga.x2rock.lan.LanHttp
+import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import com.rahga.x2rock.net.WifiMulticastGate
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,11 +24,22 @@ object AppModule {
     /**
      * Outlives any ViewModel: the household's sockets and their subscriptions belong to the
      * application, not to whichever screen happens to be showing.
+     *
+     * The handler matters. Without one, an exception escaping any coroutine launched here
+     * reaches the thread's default handler and takes the process down — a `SupervisorJob`
+     * isolates children from each other, not from that.
      */
     @Provides
     @Singleton
-    fun provideApplicationScope(): CoroutineScope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    fun provideApplicationScope(): CoroutineScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e ->
+            Log.e("x2rock", "uncaught in application scope", e)
+        }
+    )
+
+    @Provides
+    @Singleton
+    fun provideMulticastGate(impl: WifiMulticastGate): MulticastGate = impl
 
     @Provides
     @Singleton
@@ -49,6 +64,7 @@ object AppModule {
     fun provideSonosHousehold(
         scope: CoroutineScope,
         addressBook: PlayerAddressBook,
+        multicast: MulticastGate,
         client: OkHttpClient,
-    ): SonosHousehold = SonosHousehold(scope, addressBook, client)
+    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, client)
 }
