@@ -181,12 +181,29 @@ class FakePlayer(
     fun push(namespace: String, type: String, body: String, groupId: String? = null) =
         emit(namespace, type, JsonParser.parseString(body), groupId)
 
-    private fun emit(namespace: String, type: String, body: JsonElement, groupId: String?) {
+    /**
+     * A speaker's own level, which a player addresses by `playerId` rather than by group —
+     * the only event here that is not group-scoped, and the reason [emit] takes both.
+     */
+    fun pushPlayerVolume(playerId: String, volume: Int? = null) {
+        val body = fixture("event.playerVolume.json").asJsonObject
+        volume?.let { body.addProperty("volume", it) }
+        emit("playerVolume:1", "playerVolume", body, groupId = null, playerId = playerId)
+    }
+
+    private fun emit(
+        namespace: String,
+        type: String,
+        body: JsonElement,
+        groupId: String?,
+        playerId: String? = null,
+    ) {
         val header = JsonObject().apply {
             addProperty("namespace", namespace)
             addProperty("type", type)
             addProperty("householdId", householdId)
             groupId?.let { addProperty("groupId", it) }
+            playerId?.let { addProperty("playerId", it) }
         }
         val ws = socket ?: error("nothing connected to the fake player")
         ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
