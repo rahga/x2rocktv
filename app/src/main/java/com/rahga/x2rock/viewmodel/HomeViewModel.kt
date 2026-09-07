@@ -28,18 +28,17 @@ import javax.inject.Inject
  * Sidebar order: the pinned room first, then favourites, then the rest, each alphabetical.
  * Pure, so the ordering is testable without standing the view model up.
  *
- * [tvPlayerId] is a fallback, not a competitor: it puts the television's own soundbar first
- * only when nothing has been pinned, which is the fresh-install case. An explicit choice
- * always wins, and picking a room by hand is how it is overridden.
+ * The television's own room is deliberately *not* hoisted here. Sonos lists rooms
+ * alphabetically and offers no ordering of its own, so reordering would make this list
+ * disagree with every other controller in the house for no gain. The TV room is where the
+ * app *opens* instead — see the selection below.
  */
 fun sortGroups(
     groups: List<Group>,
     primaryId: String?,
     favoriteIds: Set<String>,
-    tvPlayerId: String? = null,
 ): List<Group> {
     val pinned = groups.firstOrNull { it.id == primaryId }
-        ?: TvSoundbar.groupOf(tvPlayerId, groups)
     val pinnedId = pinned?.id
     val favorites = groups.filter { it.id != pinnedId && it.id in favoriteIds }.sortedBy { it.name }
     val rest = groups.filter { it.id != pinnedId && it.id !in favoriteIds }.sortedBy { it.name }
@@ -153,12 +152,11 @@ class HomeViewModel @Inject constructor(
                     .takeIf { it.isNotEmpty() }
                     ?.let { players -> groups.firstOrNull { g -> g.playerIds.any { it in players } } }
 
-                _selectedGroupId.value = (followed ?: sortGroups(
-                    groups,
-                    roomPrefsStore.primaryRoomId.value,
-                    roomPrefsStore.favoriteRoomIds.value,
-                    roomPrefsStore.tvPlayerId.value,
-                ).first()).id
+                _selectedGroupId.value = (
+                    followed
+                        ?: TvSoundbar.groupOf(roomPrefsStore.tvPlayerId.value, groups)
+                        ?: defaultSelection(groups)
+                    )?.id
             }
         }
 
@@ -176,8 +174,18 @@ class HomeViewModel @Inject constructor(
             combine(household.state, household.groupStates) { state, groupStates ->
                 TvSoundbar.detect(state, groupStates)
             }.collect { detected ->
-                if (detected != null && roomPrefsStore.tvPlayerId.value == null) {
-                    roomPrefsStore.setTvPlayer(detected)
+                if (detected == null || roomPrefsStore.tvPlayerId.value != null) return@collect
+                roomPrefsStore.setTvPlayer(detected)
+
+                // On a first run the room was picked before this was known, so move to the
+                // television's — but only if the selection is still the one this code chose
+                // for itself. Intent cannot be tracked through `selectGroup`, because the
+                // sidebar selects on *focus* and focusing the current row programmatically
+                // looks identical to a viewer pressing towards it.
+                val groups = household.state.value.groups
+                val untouched = _selectedGroupId.value == defaultSelection(groups)?.id
+                if (untouched) {
+                    TvSoundbar.groupOf(detected, groups)?.let { _selectedGroupId.value = it.id }
                 }
             }
         }
@@ -250,7 +258,6 @@ class HomeViewModel @Inject constructor(
             groups,
             roomPrefsStore.primaryRoomId.value,
             roomPrefsStore.favoriteRoomIds.value,
-            roomPrefsStore.tvPlayerId.value,
         )
         val host = sorted.first()
         val joiners = sorted.drop(1).flatMap { it.playerIds }
@@ -258,6 +265,13 @@ class HomeViewModel @Inject constructor(
             runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
         }
     }
+
+    /** What the app would choose with nothing else to go on. */
+    private fun defaultSelection(groups: List<Group>): Group? = sortGroups(
+        groups,
+        roomPrefsStore.primaryRoomId.value,
+        roomPrefsStore.favoriteRoomIds.value,
+    ).firstOrNull()
 
     private fun findGroup(id: String): Group? =
         (uiState.value as? UiState.Success)?.groups?.find { it.id == id }

@@ -215,10 +215,20 @@ televisions on) and absence (none on) both answer null rather than guessing, whi
 the answer is *remembered* once found: the device is bolted to one television.
 
 It stores a **player** id, never a group id, because a regroup mints new group ids and the
-soundbar is what actually stays put. And it only ever orders the list when nothing has been
-pinned — an explicit choice always wins. On the very first launch after install the list
-reorders but the selection does not, because detection completes just after the first room
-is chosen; every launch after that opens on the television's room.
+soundbar is what actually stays put.
+
+**It changes where the app opens, never the order of the list.** Sonos sorts rooms
+alphabetically and offers no ordering of its own, so hoisting a room here would make this
+list disagree with every other controller in the house to no purpose. The list matches
+Sonos; the television's room is simply what is selected.
+
+The first-launch case needs care, because detection lands a moment *after* the first room
+is auto-chosen. Moving the selection then is right, but only while it is still the app's
+own choice — and intent cannot be read from `selectGroup`, because the sidebar selects on
+*focus*, so focusing the current row programmatically is indistinguishable from a viewer
+pressing towards it. What is decidable is whether the selection is still what
+`defaultSelection` would have picked; if so it moves, and if the viewer has gone elsewhere
+it does not.
 
 ### Focus, and why it is handled as keys
 

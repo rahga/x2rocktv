@@ -97,7 +97,6 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
     val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
-    val tvPlayerId by homeViewModel.tvPlayerId.collectAsState()
     val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
@@ -164,7 +163,6 @@ fun HomeScreen(
                     selectedGroupId = selectedGroupId,
                     primaryRoomId = primaryRoomId,
                     favoriteRoomIds = favoriteRoomIds,
-                    tvPlayerId = tvPlayerId,
                     rooms = rooms,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
@@ -313,8 +311,6 @@ private fun RoomSidebar(
     selectedGroupId: String?,
     primaryRoomId: String?,
     favoriteRoomIds: Set<String>,
-    /** Puts the television's own soundbar first when nothing has been pinned. */
-    tvPlayerId: String?,
     rooms: Map<String, HomeViewModel.RoomInfo>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
@@ -327,7 +323,7 @@ private fun RoomSidebar(
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val sorted = remember(groups, primaryRoomId, favoriteRoomIds) {
-        sortGroups(groups, primaryRoomId, favoriteRoomIds, tvPlayerId)
+        sortGroups(groups, primaryRoomId, favoriteRoomIds)
     }
     val iconRowFocusRequester = remember { FocusRequester() }
 
