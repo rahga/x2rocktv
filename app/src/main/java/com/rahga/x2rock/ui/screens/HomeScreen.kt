@@ -98,6 +98,7 @@ fun HomeScreen(
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
     val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
     val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
+    val tvPlayerId by homeViewModel.tvPlayerId.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
@@ -256,6 +257,7 @@ fun HomeScreen(
                     playerVolumes = volumes,
                     isPrimary = liveGroup.id == primaryRoomId,
                     isFavorite = liveGroup.id in favoriteRoomIds,
+                    isTvRoom = tvPlayerId != null && tvPlayerId in liveGroup.playerIds,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
                         homeViewModel.partyMode(liveGroup.id)
@@ -276,6 +278,7 @@ fun HomeScreen(
                         )
                     },
                     onToggleFavorite = { homeViewModel.toggleFavorite(liveGroup.id) },
+                    onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {
                         homeViewModel.useTvInput(liveGroup.id)
                         panelGroup = null

@@ -66,6 +66,8 @@ fun RoomPanel(
     playerVolumes: Map<String, Int>,
     isPrimary: Boolean,
     isFavorite: Boolean,
+    /** Whether this is the room the viewer's own television plays through. */
+    isTvRoom: Boolean,
     /** One group holding the whole household, which is what party mode leaves behind. */
     isPartying: Boolean,
     onParty: () -> Unit,
@@ -75,6 +77,7 @@ fun RoomPanel(
     onJoin: (Group) -> Unit,
     onSetPrimary: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
 ) {
     val firstFocus = rememberAutoFocusRequester()
@@ -177,6 +180,14 @@ fun RoomPanel(
         }
         AppButton(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) {
             Text(if (isFavorite) "Remove from favorites" else "Add to favorites")
+        }
+        // Only where there is an HDMI socket for a television to be plugged into. Detection
+        // fills this in on its own but has been seen to answer wrongly and then keep the
+        // answer, so it has to be correctable by hand.
+        if (info.hasTvInput) {
+            AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
+                Text(if (isTvRoom) "Not my TV's room" else "This is my TV")
+            }
         }
 
         // Last, and only where there is an HDMI socket to switch to.

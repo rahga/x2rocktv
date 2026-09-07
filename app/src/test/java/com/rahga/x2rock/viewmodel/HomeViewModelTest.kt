@@ -11,6 +11,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -280,6 +282,56 @@ class HomeViewModelTest {
         viewModel.adjustPlayerVolume(fake.id, +5)
         delay(600)
         assertEquals(0, fake.commandsNamed("setVolume"))
+    }
+
+    // -------------------------------------------------- naming the TV's soundbar
+
+    /**
+     * Stating it by hand stores the *soundbar*, not the coordinator and not the group.
+     *
+     * Grouped first so the two differ: a soundbar that joined a speaker's group is a member,
+     * and storing the coordinator there would name a One SL as the television's. The group
+     * id would be worse still — a regroup mints a new one.
+     */
+    @Test fun `naming the TV room stores the soundbar, not the coordinator`() = runBlocking<Unit> {
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Bedroom"))
+        val grouped = withTimeout(10_000) {
+            viewModel.uiState.first {
+                it is HomeViewModel.UiState.Success &&
+                    it.groups.firstOrNull { g -> g.name == "Kitchen" }?.playerIds?.size == 2
+            } as HomeViewModel.UiState.Success
+        }
+        val group = grouped.groups.first { it.name == "Kitchen" }
+
+        viewModel.setTvSoundbar(group.id)
+
+        val stored = viewModel.tvPlayerId.value
+        assertTrue("nothing was stored", stored != null)
+        assertTrue("the group id was stored instead of a player", stored != group.id)
+        assertTrue(
+            "the coordinator was stored, but it is the One SL with no HDMI",
+            stored != group.coordinatorId,
+        )
+        assertEquals(TvSoundbar.soundbarOf(group, household.state.value), stored)
+    }
+
+    /** Pressing it again takes it back, so a mistake is not permanent. */
+    @Test fun `naming the same room again clears it`() = runBlocking<Unit> {
+        val state = connect()
+        val soundbarRoom = state.groups.first { state.rooms[it.id]?.hasTvInput == true }
+        viewModel.setTvSoundbar(soundbarRoom.id)
+        assertNotNull(viewModel.tvPlayerId.value)
+        viewModel.setTvSoundbar(soundbarRoom.id)
+        assertNull("a second press should take it back", viewModel.tvPlayerId.value)
+    }
+
+    /** A room with no soundbar has nothing to name, so the press does nothing. */
+    @Test fun `a room with no soundbar cannot be named as the TV's`() = runBlocking<Unit> {
+        val state = connect()
+        val noSoundbar = state.groups.first { state.rooms[it.id]?.hasTvInput != true }
+        viewModel.setTvSoundbar(noSoundbar.id)
+        assertNull(viewModel.tvPlayerId.value)
     }
 
     // ---------------------------------------------------------------- TV input
