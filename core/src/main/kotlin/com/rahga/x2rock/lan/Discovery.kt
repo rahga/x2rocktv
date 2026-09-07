@@ -31,6 +31,24 @@ object Discovery {
     private const val SSDP_PORT = 1900
     private const val ZONE_PLAYER = "urn:schemas-upnp-org:device:ZonePlayer:1"
 
+    /**
+     * A player, before anything has been connected to.
+     *
+     * This carries everything needed to open a properly verified socket: [id] gives the
+     * certificate hostname via [PlayerNames], [address] is where to point it, and
+     * [householdId] saves an extra round trip. Discovery answering with all three is what
+     * lets the first connection be made by name rather than by address — there is no
+     * moment where hostname verification has to be relaxed.
+     */
+    data class DiscoveredPlayer(
+        val id: String,
+        val address: InetAddress,
+        val householdId: String?,
+    ) {
+        /** Null only for a player id shaped unlike any this was verified against. */
+        val hostname: String? get() = PlayerNames.localHostname(id)
+    }
+
     private fun mSearch(mx: Int) =
         "M-SEARCH * HTTP/1.1\r\n" +
             "HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n" +
@@ -39,13 +57,13 @@ object Discovery {
             "ST: $ZONE_PLAYER\r\n\r\n"
 
     /**
-     * Addresses that answered, in the order they replied, deduplicated.
+     * Players that answered, in reply order, one entry per player id.
      *
      * Returns more hosts than there are rooms: surrounds and subs answer too, and they are
      * `Invisible` in group topology. Any of them is a usable entry point.
      */
-    suspend fun findPlayers(timeoutMillis: Int = 3_000): List<InetAddress> = withContext(Dispatchers.IO) {
-        val found = LinkedHashSet<InetAddress>()
+    suspend fun findPlayers(timeoutMillis: Int = 3_000): List<DiscoveredPlayer> = withContext(Dispatchers.IO) {
+        val found = LinkedHashMap<String, DiscoveredPlayer>()
         DatagramSocket().use { socket ->
             socket.soTimeout = timeoutMillis
             val payload = mSearch(mx = (timeoutMillis / 1000).coerceAtLeast(1)).toByteArray()
@@ -62,17 +80,48 @@ object Discovery {
                 } catch (_: SocketTimeoutException) {
                     break
                 }
-                // The LOCATION header is the authority on where the player is; the packet's
-                // source address is the same host but this survives any relaying.
-                val location = String(packet.data, 0, packet.length)
-                    .lineSequence()
-                    .firstOrNull { it.startsWith("LOCATION:", ignoreCase = true) }
-                    ?.substringAfter(':')
-                    ?.trim()
-                val host = location?.let { runCatching { URI(it).host }.getOrNull() }
-                found += if (host != null) InetAddress.getByName(host) else packet.address
+                parse(String(packet.data, 0, packet.length), packet.address)
+                    ?.let { found.putIfAbsent(it.id, it) }
             }
         }
-        found.toList()
+        found.values.toList()
+    }
+
+    /**
+     * Reads one M-SEARCH response.
+     *
+     * Three headers matter, and a Sonos player sends all three:
+     * ```
+     * USN: uuid:RINCON_48A6B8332C2E01400::urn:schemas-upnp-org:device:ZonePlayer:1
+     * LOCATION: http://192.168.86.31:1400/xml/device_description.xml
+     * HOUSEHOLD.SMARTSPEAKER.AUDIO: Sonos_Bgzk….Zv1x…
+     * ```
+     * Note it is `HOUSEHOLD.SMARTSPEAKER.AUDIO` that carries the household id the
+     * WebSocket wants — `X-RINCON-HOUSEHOLD` is a truncated form and will not do.
+     *
+     * `LOCATION` is preferred over the packet's source address because it is what the
+     * player says about itself, but the source address is a fine fallback.
+     */
+    internal fun parse(response: String, source: InetAddress?): DiscoveredPlayer? {
+        val headers = response.lineSequence()
+            .mapNotNull { line ->
+                val colon = line.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
+                line.substring(0, colon).trim().uppercase() to line.substring(colon + 1).trim()
+            }
+            .toMap()
+
+        val id = headers["USN"]
+            ?.substringAfter("uuid:", "")
+            ?.substringBefore("::")
+            ?.takeIf { it.startsWith("RINCON_") }
+            ?: return null
+
+        val address = headers["LOCATION"]
+            ?.let { runCatching { URI(it).host }.getOrNull() }
+            ?.let { runCatching { InetAddress.getByName(it) }.getOrNull() }
+            ?: source
+            ?: return null
+
+        return DiscoveredPlayer(id, address, headers["HOUSEHOLD.SMARTSPEAKER.AUDIO"])
     }
 }

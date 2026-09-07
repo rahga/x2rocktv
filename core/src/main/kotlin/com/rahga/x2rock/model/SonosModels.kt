@@ -19,7 +19,12 @@ data class Group(
 
 data class Player(
     val id: String,
-    val name: String
+    val name: String,
+    /**
+     * `wss://<ip>:1443/websocket/api`, and so the only place a player's address is
+     * reported. Present over the LAN transport, absent (null) over the cloud one.
+     */
+    val websocketUrl: String? = null
 )
 
 data class GroupsResponse(
