@@ -251,8 +251,10 @@ workarounds for having no event stream.
   let the chain validate normally. Not chased.
 - **Long-lived socket hosting.** No `Service` exists in `:app` today; `ChannelSyncReceiver`
   is a short-lived broadcast handler and the `MediaSession` is ViewModel-scoped. A persistent
-  WebSocket needs a lifecycle-appropriate home, and on API 34+ a foreground service must
-  declare `foregroundServiceType="mediaPlayback"`. Untested.
+  WebSocket needs a lifecycle-appropriate home. **Not `mediaPlayback`**, though: this app
+  plays nothing, the speakers do, and that foreground-service type is for apps that are
+  themselves playing. `connectedDevice` is the honest description of talking to speakers on
+  the network. Untested, and quite possibly unnecessary — see CLAUDE.md.
 - **Network-change handling.** The sibling project treats suspend/resume and network changes
   as "assume dead, reconnect from scratch" because a resumed TCP session can be a zombie that
   accepts writes and never surfaces failure. `ConnectivityManager.NetworkCallback` is the
