@@ -227,6 +227,26 @@ class SonosHouseholdTest {
         assertEquals(setOf("Living Room", "Bedroom", "Guest TV"), withTv)
     }
 
+    /**
+     * The HDMI socket belongs to a player, not to whichever one is coordinating: a soundbar
+     * that joins a speaker's group still has its input.
+     *
+     * Needs a group with more than one player, and every group in the capture has exactly
+     * one — so a check that only looked at the coordinator would pass the test above
+     * unchanged. Here the coordinator is a Sonos One SL with no HDMI and the *member* is a
+     * Beam, so only asking every member gets the right answer.
+     */
+    @Test fun `a soundbar that joined another room's group still offers its input`() = runBlocking<Unit> {
+        connected()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+
+        val state = withTimeout(5_000) {
+            household.state.first { s -> s.groups.firstOrNull { it.name == "Kitchen" }?.playerIds?.size == 2 }
+        }
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        assertTrue("the Beam's input was lost when it joined a speaker", state.hasTvInput(kitchen))
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

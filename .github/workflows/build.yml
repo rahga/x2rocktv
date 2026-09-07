@@ -22,7 +22,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       # No Sonos credentials, no speakers, no device. The transport is tested against
-      # FakePlayer, which is the point of it existing — see core/src/test/.../FakePlayer.kt.
+      # FakePlayer, which is the point of it existing — see core/src/testFixtures/.../FakePlayer.kt.
       - name: Test
         run: ./gradlew --no-daemon :core:test :app:testDebugUnitTest
 

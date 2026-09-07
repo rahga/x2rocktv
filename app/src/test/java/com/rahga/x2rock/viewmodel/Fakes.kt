@@ -17,7 +17,9 @@ class FakePreferences : Preferences {
 }
 
 class RecordingChannelSync : ChannelSync {
-    val synced = mutableListOf<Pair<List<Group>, Map<String, Track?>>>()
+    /** Appended from an IO collector, read from the test thread. */
+    val synced: MutableList<Pair<List<Group>, Map<String, Track?>>> =
+        java.util.Collections.synchronizedList(mutableListOf())
     override fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>) {
         synced += groups to nowPlaying
     }

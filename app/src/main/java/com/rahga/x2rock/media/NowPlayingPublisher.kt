@@ -41,6 +41,11 @@ interface NowPlayingPublisher {
      * one it replaces is cleared. An unconditional detach would let the outgoing one unhook
      * the incoming one, leaving a session that publishes state but answers no keys — which
      * is indistinguishable, from the outside, from the transport being broken.
+     *
+     * Detaching must also stand the session *down*. Left active while advertising its last
+     * state, it keeps being nominated as the system's media-button target while answering
+     * nothing — so keys do not reach it and do not fall through to another app either.
+     * That is worse than having no session at all.
      */
     fun detach(controls: Controls)
 }
@@ -58,19 +63,21 @@ class MediaSessionPublisher @Inject constructor(
 ) : NowPlayingPublisher {
 
     private val session = MediaSession(context, "x2rock").apply {
+        // Activated on attach, not here: an active session with no callback is worse than
+        // none, because the system still routes keys to it.
         // Without these the system never nominates this as the media button target:
         // `dumpsys media_session` reports flags=0 and a MEDIA_PAUSE key does nothing, which
         // also leaves voice transport with nowhere to land. Deprecated since API 26 on the
         // theory every session handles buttons; API 30 disagrees.
         @Suppress("DEPRECATION")
         setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
-        isActive = true
     }
 
     @Volatile private var attached: NowPlayingPublisher.Controls? = null
 
     override fun attach(controls: NowPlayingPublisher.Controls) {
         attached = controls
+        session.isActive = true
         session.setCallback(object : MediaSession.Callback() {
             override fun onPlay() = controls.togglePlayPause()
             override fun onPause() = controls.togglePlayPause()
@@ -113,5 +120,7 @@ class MediaSessionPublisher @Inject constructor(
         if (attached !== controls) return
         attached = null
         session.setCallback(null)
+        publishState(playing = false, idle = true, positionMillis = 0)
+        session.isActive = false
     }
 }
