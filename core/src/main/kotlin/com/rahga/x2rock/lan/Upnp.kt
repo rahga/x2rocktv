@@ -15,6 +15,7 @@ import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
@@ -34,7 +35,21 @@ import javax.xml.parsers.DocumentBuilderFactory
  * connection back to us. This is request/response only, so the queue is the one part of
  * the UI that still has to be asked rather than pushed.
  */
-class Upnp(private val client: OkHttpClient) {
+class Upnp(client: OkHttpClient) {
+
+    /**
+     * The shared client with a read timeout put back.
+     *
+     * It is built for the WebSocket, where `readTimeout(0)` is right because a subscription
+     * is meant to sit idle. Request/response is the opposite case: a player that goes quiet
+     * mid-answer would hang the caller forever. That is not hypothetical here — switching a
+     * soundbar's group to its HDMI input stalls AVTransport for about twelve seconds, and
+     * the queue calls share the same fate whenever a player is busy. Derived rather than
+     * separate, so the connection pool and dispatcher stay shared.
+     */
+    private val client = client.newBuilder()
+        .readTimeout(READ_TIMEOUT, TimeUnit.SECONDS)
+        .build()
 
     suspend fun browseQueue(hostname: String, start: Int = 0, count: Int = MAX_ITEMS): QueueResponse =
         withContext(Dispatchers.IO) {
@@ -70,6 +85,33 @@ class Upnp(private val client: OkHttpClient) {
         soap(
             hostname, Service.AV_TRANSPORT, "Seek",
             listOf("InstanceID" to "0", "Unit" to "TRACK_NR", "Target" to trackNumber.toString()),
+        )
+    }
+
+    /**
+     * Switch a soundbar's group to its HDMI input.
+     *
+     * The URI names the *soundbar*, but the call goes to the group's **coordinator**, as
+     * every AVTransport call does. The two differ whenever a soundbar has joined someone
+     * else's group, and that case does not answer: taking the TV hands coordination to the
+     * soundbar, and the old coordinator stops coordinating before it replies. Measured on
+     * the sibling project, both players go silent for about twelve seconds and the switch
+     * lands at roughly fourteen.
+     *
+     * Addressing the soundbar directly answers at once but means something else entirely —
+     * the soundbar leaves the group and takes the TV alone, rather than bringing the room
+     * with it. So the request stands as it is, and the caller decides what a lost answer
+     * means. [SonosHousehold.useTvInput] does: it waits for the pushed `htInputFormat`
+     * instead of the reply, which the sibling project could not do.
+     */
+    suspend fun useTvInput(hostname: String, soundbarId: String): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.AV_TRANSPORT, "SetAVTransportURI",
+            listOf(
+                "InstanceID" to "0",
+                "CurrentURI" to tvStreamUri(soundbarId),
+                "CurrentURIMetaData" to "",
+            ),
         )
     }
 
@@ -193,6 +235,17 @@ class Upnp(private val client: OkHttpClient) {
         .replace(">", "&gt;").replace("\"", "&quot;")
 
     companion object {
+        /**
+         * A soundbar's own HDMI stream, which is a URI rather than a mode: `spdif` is what
+         * Sonos calls the input on every model, optical and ARC alike.
+         */
+        fun tvStreamUri(soundbarId: String) = "x-sonos-htastream:$soundbarId:spdif"
+
+        /** Whether a transport URI is some soundbar's TV input. */
+        fun isTvStream(uri: String) = uri.startsWith("x-sonos-htastream:")
+
+        private const val READ_TIMEOUT = 10L
+
         const val PORT = 1400
 
         /** Queues run to tens of thousands of tracks; listing stops here and says so. */

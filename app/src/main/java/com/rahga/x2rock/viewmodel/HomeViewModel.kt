@@ -13,6 +13,8 @@ import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -109,6 +112,25 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
+
+    // What a press just asked for, per speaker, until the player confirms it. Without this
+    // the level would snap back to the pushed one between the press and the event, and a
+    // second press inside the debounce window would aim from the stale value — the same bug
+    // the group volume had, one scope down.
+    private val _pendingPlayerVolumes = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val playerVolumeJobs = mutableMapOf<String, Job>()
+
+    /**
+     * Each speaker's own level, for the room panel's "playing together" list.
+     *
+     * Pushed off `playerVolume:1`, so it follows someone turning a speaker up from the
+     * Sonos app rather than needing a re-read. Overlaid with whatever a press just asked
+     * for, until the speaker confirms it — see [adjustPlayerVolume].
+     */
+    val playerVolumes: StateFlow<Map<String, Int>> =
+        combine(household.playerVolumes, _pendingPlayerVolumes) { pushed, pending ->
+            pushed.mapValues { it.value.volume } + pending
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
     val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
@@ -250,19 +272,49 @@ class HomeViewModel @Inject constructor(
     fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
         group.playerIds.map { it to household.playerName(it) }
 
-    /** Still here because party mode is moving to the room view, not going away. */
-    fun partyMode() {
+    /**
+     * Every other room joins [hostGroupId] and plays what it plays.
+     *
+     * The host is named rather than chosen, because party mode hinges on a source: the room
+     * whose panel this was opened from is the one the house follows. Passing nothing keeps
+     * the old behaviour of hosting from the top of the list.
+     */
+    fun partyMode(hostGroupId: String? = null) {
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
-        val sorted = sortGroups(
-            groups,
-            roomPrefsStore.primaryRoomId.value,
-            roomPrefsStore.favoriteRoomIds.value,
-        )
-        val host = sorted.first()
-        val joiners = sorted.drop(1).flatMap { it.playerIds }
+        val host = hostGroupId?.let { id -> groups.firstOrNull { it.id == id } }
+            ?: sortGroups(
+                groups,
+                roomPrefsStore.primaryRoomId.value,
+                roomPrefsStore.favoriteRoomIds.value,
+            ).first()
+        val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
+        if (joiners.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
+        }
+    }
+
+    /**
+     * Override whatever this room is playing with its soundbar's HDMI input.
+     *
+     * Nothing is observed here: the switch comes back as a metadata event like any other
+     * change, so the row that offered it lights up on its own.
+     */
+    fun useTvInput(groupId: String) {
+        viewModelScope.launch { runCatching { household.useTvInput(groupId) } }
+    }
+
+    /** One speaker's own level, accumulating presses the way the group volume does. */
+    fun adjustPlayerVolume(playerId: String, delta: Int) {
+        val current = playerVolumes.value[playerId] ?: return
+        val target = (current + delta).coerceIn(0, 100)
+        _pendingPlayerVolumes.update { it + (playerId to target) }
+        playerVolumeJobs[playerId]?.cancel()
+        playerVolumeJobs[playerId] = viewModelScope.launch {
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            runCatching { household.setPlayerVolume(playerId, target) }
+            _pendingPlayerVolumes.update { it - playerId }
         }
     }
 
@@ -275,4 +327,9 @@ class HomeViewModel @Inject constructor(
 
     private fun findGroup(id: String): Group? =
         (uiState.value as? UiState.Success)?.groups?.find { it.id == id }
+
+    private companion object {
+        /** The same window the player pane uses, so a held key behaves the same in both. */
+        const val VOLUME_DEBOUNCE_MILLIS = 300L
+    }
 }

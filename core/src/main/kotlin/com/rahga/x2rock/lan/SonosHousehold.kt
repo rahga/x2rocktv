@@ -29,6 +29,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
+import java.io.IOException
 import java.net.InetAddress
 import java.net.URI
 
@@ -370,6 +371,32 @@ class SonosHousehold(
             ?: error("no group $groupId")
         return PlayerNames.localHostname(group.coordinatorId)
             ?: error("cannot derive a hostname for ${group.coordinatorId}")
+    }
+
+    /**
+     * Put this room on its soundbar's HDMI input, overriding whatever music it is playing.
+     *
+     * Fails only if the room has no soundbar in it. Everything else is deliberately not
+     * awaited: when the soundbar is a *member* rather than the coordinator, taking the TV
+     * hands coordination over, and the player we asked stops coordinating before it can
+     * answer — so a lost reply there is the normal case, not a failure.
+     *
+     * Nothing needs to be polled to find out. The switch arrives as a `playbackMetadata:1`
+     * event carrying `htInputFormat`, which is what [GroupState.onTvInput] already reads,
+     * so the UI learns it the same way it learns everything else.
+     */
+    suspend fun useTvInput(groupId: String) {
+        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        val soundbar = TvSoundbar.soundbarOf(group, _state.value)
+            ?: error("${group.name} has no speaker with a TV input")
+        try {
+            upnp.useTvInput(coordinatorHostname(groupId), soundbar)
+        } catch (e: IOException) {
+            // A soundbar that already coordinates hands nothing over, so its answer is the
+            // answer and an error from it is a real one. Caught narrowly: cancellation must
+            // still propagate, and a room with no soundbar is a caller's mistake either way.
+            if (soundbar == group.coordinatorId) throw e
+        }
     }
 
     suspend fun favorites(): FavoritesResponse {

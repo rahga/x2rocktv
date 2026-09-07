@@ -100,9 +100,7 @@ fun HomeScreen(
     val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
-    var contextMenuGroup by remember { mutableStateOf<Group?>(null) }
-    var groupPickerSource by remember { mutableStateOf<Group?>(null) }
-    var separateRoomSource by remember { mutableStateOf<Group?>(null) }
+    var panelGroup by remember { mutableStateOf<Group?>(null) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
@@ -131,9 +129,7 @@ fun HomeScreen(
     }
 
     BackHandler(enabled = showSettings) { showSettings = false }
-    BackHandler(enabled = separateRoomSource != null) { separateRoomSource = null }
-    BackHandler(enabled = groupPickerSource != null) { groupPickerSource = null }
-    BackHandler(enabled = contextMenuGroup != null) { contextMenuGroup = null }
+    BackHandler(enabled = panelGroup != null) { panelGroup = null }
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
@@ -142,8 +138,7 @@ fun HomeScreen(
 
     // Modals trap focus, so closing one has to hand it back explicitly — otherwise focus is left
     // on a node that just left the composition and the remote goes dead until a direction press.
-    val modalVisible = showSettings || contextMenuGroup != null ||
-        groupPickerSource != null || separateRoomSource != null
+    val modalVisible = showSettings || panelGroup != null
     LaunchedEffect(modalVisible) {
         if (!modalVisible) {
             if (sidebarVisible) sidebarFocusRequester.requestFocusSafely()
@@ -167,7 +162,7 @@ fun HomeScreen(
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
                     onFocused = { homeViewModel.selectGroup(it.id) },
-                    onLongPress = { contextMenuGroup = it },
+                    onOpenPanel = { panelGroup = it },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
                     onRetry = { homeViewModel.setActive(true) }
@@ -235,69 +230,56 @@ fun HomeScreen(
             )
         }
 
-        val menuGroup = contextMenuGroup
-        if (menuGroup != null) {
-            val playerNames = remember(menuGroup) { homeViewModel.playerNamesForGroup(menuGroup) }
-            Overlay {
-                RoomContextMenu(
-                    group = menuGroup,
-                    playerNames = playerNames,
-                    isPrimary = menuGroup.id == primaryRoomId,
-                    isFavorite = menuGroup.id in favoriteRoomIds,
-                    otherGroups = groups.filter { it.id != menuGroup.id },
-                    onSetPrimary = {
-                        homeViewModel.setPrimaryRoom(if (menuGroup.id == primaryRoomId) null else menuGroup.id)
-                        contextMenuGroup = null
-                    },
-                    onToggleFavorite = {
-                        homeViewModel.toggleFavorite(menuGroup.id)
-                        contextMenuGroup = null
-                    },
-                    onJoinGroup = {
-                        groupPickerSource = menuGroup
-                        contextMenuGroup = null
-                    },
-                    onSeparateRoom = {
-                        separateRoomSource = menuGroup
-                        contextMenuGroup = null
-                    },
-                    onSeparateAll = {
-                        homeViewModel.soloGroup(menuGroup.id)
-                        contextMenuGroup = null
-                    },
-                    onDismiss = { contextMenuGroup = null }
-                )
-            }
+        val panel = panelGroup
+        // Re-read from the live list rather than the captured group: a regroup mints new
+        // ids, and this panel is the surface most likely to be open while one happens —
+        // including one performed from it. Following the speakers keeps it on the room.
+        val liveGroup = panel?.let { captured ->
+            groups.firstOrNull { it.id == captured.id }
+                ?: groups.firstOrNull { g -> g.playerIds.any { it in captured.playerIds } }
         }
-
-        val pickerSource = groupPickerSource
-        if (pickerSource != null) {
+        if (panel != null && liveGroup == null) {
+            // Its speakers went somewhere this can no longer name.
+            LaunchedEffect(panel.id) { panelGroup = null }
+        }
+        if (liveGroup != null) {
+            val playerNames = remember(liveGroup) { homeViewModel.playerNamesForGroup(liveGroup) }
+            val volumes by homeViewModel.playerVolumes.collectAsState()
             Overlay {
-                GroupPickerDialog(
-                    sourceGroup = pickerSource,
-                    availableGroups = groups.filter { it.id != pickerSource.id },
+                RoomPanel(
+                    group = liveGroup,
+                    info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
+                    otherGroups = sortGroups(groups, primaryRoomId, favoriteRoomIds)
+                        .filter { it.id != liveGroup.id },
                     rooms = rooms,
-                    onPick = { target ->
-                        homeViewModel.joinGroup(pickerSource.id, target.id)
-                        groupPickerSource = null
-                    },
-                    onDismiss = { groupPickerSource = null }
-                )
-            }
-        }
-
-        val separateSource = separateRoomSource
-        if (separateSource != null) {
-            val playerNames = remember(separateSource) { homeViewModel.playerNamesForGroup(separateSource) }
-            Overlay {
-                SeparateRoomDialog(
-                    group = separateSource,
                     playerNames = playerNames,
-                    onSeparate = { playerId ->
-                        homeViewModel.removePlayerFromGroup(separateSource.id, playerId)
-                        separateRoomSource = null
+                    playerVolumes = volumes,
+                    isPrimary = liveGroup.id == primaryRoomId,
+                    isFavorite = liveGroup.id in favoriteRoomIds,
+                    isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
+                    onParty = {
+                        homeViewModel.partyMode(liveGroup.id)
+                        panelGroup = null
                     },
-                    onDismiss = { separateRoomSource = null }
+                    onStopParty = {
+                        homeViewModel.soloGroup(liveGroup.id)
+                        panelGroup = null
+                    },
+                    // Grouping stays open: building a group is several presses, and closing
+                    // after each one would mean reopening the panel to make the next.
+                    onRemovePlayer = { homeViewModel.removePlayerFromGroup(liveGroup.id, it) },
+                    onAdjustPlayerVolume = homeViewModel::adjustPlayerVolume,
+                    onJoin = { homeViewModel.joinGroup(it.id, liveGroup.id) },
+                    onSetPrimary = {
+                        homeViewModel.setPrimaryRoom(
+                            if (liveGroup.id == primaryRoomId) null else liveGroup.id
+                        )
+                    },
+                    onToggleFavorite = { homeViewModel.toggleFavorite(liveGroup.id) },
+                    onUseTvInput = {
+                        homeViewModel.useTvInput(liveGroup.id)
+                        panelGroup = null
+                    },
                 )
             }
         }
@@ -315,7 +297,7 @@ private fun RoomSidebar(
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
-    onLongPress: (Group) -> Unit,
+    onOpenPanel: (Group) -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
     onRetry: () -> Unit
@@ -397,7 +379,7 @@ private fun RoomSidebar(
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
-                            onLongPress = { onLongPress(group) }
+                            onOpenPanel = { onOpenPanel(group) }
                         )
                     }
                 }
@@ -418,10 +400,12 @@ private fun RoomListItem(
     /** Right from a room crosses into the room view, at its primary control. */
     detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
-    onLongPress: () -> Unit
+    onOpenPanel: () -> Unit
 ) {
     Card(
-        onClick = {},
+        // Click was doing nothing at all, and it is the press a remote makes on a list.
+        // Long-press stays as a synonym rather than the only way in.
+        onClick = onOpenPanel,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
@@ -438,7 +422,7 @@ private fun RoomListItem(
                 } else false
             }
             .onFocusChanged { if (it.isFocused) onFocused() }
-            .dpadLongPress(onLongPress)
+            .dpadLongPress(onOpenPanel)
     ) {
         Row(
             modifier = Modifier
@@ -512,160 +496,6 @@ private fun RoomListItem(
                     )
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun RoomContextMenu(
-    group: Group,
-    playerNames: List<Pair<String, String>>,
-    isPrimary: Boolean,
-    isFavorite: Boolean,
-    otherGroups: List<Group>,
-    onSetPrimary: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onJoinGroup: () -> Unit,
-    onSeparateRoom: () -> Unit,
-    onSeparateAll: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    val firstFocus = rememberAutoFocusRequester()
-    val roomCount = group.playerIds.size
-
-    Column(
-        modifier = Modifier
-            .width(340.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(group.name, style = MaterialTheme.typography.titleMedium)
-        if (roomCount > 1) {
-            Text(
-                text = playerNames.joinToString(" · ") { it.second },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Spacer(Modifier.height(4.dp))
-        AppButton(
-            onClick = onSetPrimary,
-            modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
-        ) {
-            Text(if (isPrimary) "Remove as Primary" else "Set as Primary")
-        }
-        AppButton(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) {
-            Text(if (isFavorite) "Remove from Favorites" else "Add to Favorites")
-        }
-        if (otherGroups.isNotEmpty()) {
-            AppButton(onClick = onJoinGroup, modifier = Modifier.fillMaxWidth()) {
-                Text("Join Group…")
-            }
-        }
-        if (roomCount >= 3) {
-            AppButton(onClick = onSeparateRoom, modifier = Modifier.fillMaxWidth()) {
-                Text("Separate a Room…")
-            }
-        }
-        if (roomCount >= 2) {
-            AppButton(onClick = onSeparateAll, modifier = Modifier.fillMaxWidth()) {
-                Text(if (roomCount == 2) "Separate Rooms" else "Separate All Rooms")
-            }
-        }
-        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun GroupPickerDialog(
-    sourceGroup: Group,
-    availableGroups: List<Group>,
-    rooms: Map<String, HomeViewModel.RoomInfo>,
-    onPick: (Group) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val firstFocus = rememberAutoFocusRequester()
-
-    Column(
-        modifier = Modifier
-            .width(340.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Join \"${sourceGroup.name}\" with…", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(4.dp))
-        availableGroups.forEachIndexed { index, group ->
-            AppButton(
-                onClick = { onPick(group) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-            ) {
-                Column(horizontalAlignment = Alignment.Start) {
-                    Text(group.name, style = MaterialTheme.typography.bodyLarge)
-                    val track = rooms[group.id]?.track
-                    val subtitle = track?.name ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SeparateRoomDialog(
-    group: Group,
-    playerNames: List<Pair<String, String>>,
-    onSeparate: (playerId: String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val firstFocus = rememberAutoFocusRequester()
-    val removable = playerNames.filter { (id, _) -> id != group.coordinatorId }
-
-    Column(
-        modifier = Modifier
-            .width(340.dp)
-            .background(MaterialTheme.colorScheme.surface)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text("Separate a room from \"${group.name}\"", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "The remaining rooms will stay grouped.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-        )
-        Spacer(Modifier.height(4.dp))
-        removable.forEachIndexed { index, (id, name) ->
-            AppButton(
-                onClick = { onSeparate(id) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-            ) {
-                Text(name)
-            }
-        }
-        AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-            Text("Cancel")
         }
     }
 }
