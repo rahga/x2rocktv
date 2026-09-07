@@ -137,6 +137,15 @@ class PlayerViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
     private val mediaSession = MediaSession(context, "x2rock").also { session ->
+        // Without these the system never nominates this session as the media button
+        // target — `dumpsys media_session` shows "Media button session is null" and a
+        // MEDIA_PAUSE key does nothing, which also means voice transport ("pause") has
+        // nowhere to land. Deprecated since API 26 on the theory that every session
+        // handles buttons, but this device (API 30) reports flags=0 without them.
+        @Suppress("DEPRECATION")
+        session.setFlags(
+            MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+        )
         session.setCallback(object : MediaSession.Callback() {
             override fun onPlay() { togglePlayPause() }
             override fun onPause() { togglePlayPause() }
