@@ -42,7 +42,13 @@ data class PlayerUiState(
     val positionMillis: Long = 0,
     val durationMillis: Long = 0,
     val positionUpdatedAt: Long = 0,
-    val volume: Int = 0,
+    /**
+     * Null until the group's `groupVolume:1` snapshot arrives — which is a moment or two
+     * after launch, and is not the same thing as zero. Rendering it as 0 in the meantime
+     * both told the user something false and made a Vol+ press compute from 0, quietly
+     * turning a speaker *down*.
+     */
+    val volume: Int? = null,
     val isMuted: Boolean = false,
     val shuffle: Boolean = false,
     val repeat: String = RepeatModes.NONE,
@@ -114,7 +120,7 @@ class PlayerViewModel @Inject constructor(
                     positionMillis = state.positionMillis,
                     durationMillis = state.durationMillis,
                     positionUpdatedAt = state.positionUpdatedAt,
-                    volume = state.volume?.volume ?: 0,
+                    volume = state.volume?.volume,
                     isMuted = state.volume?.muted ?: false,
                     shuffle = state.playMode.shuffle,
                     repeat = state.playMode.repeat,
@@ -233,6 +239,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun toggleMute() {
+        if (uiState.value.volume == null) return
         val muted = !uiState.value.isMuted
         command { household.setGroupMute(it, muted) }
     }
@@ -240,7 +247,9 @@ class PlayerViewModel @Inject constructor(
     /** Debounced: a held D-pad key would otherwise send one command per repeat. */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
-        val target = ((pendingVolume ?: uiState.value.volume) + delta).coerceIn(0, 100)
+        // Nothing to adjust relative to until the speaker has told us where it is.
+        val current = pendingVolume ?: uiState.value.volume ?: return
+        val target = (current + delta).coerceIn(0, 100)
         pendingVolume = target
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
