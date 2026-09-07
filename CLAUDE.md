@@ -69,10 +69,17 @@ An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROI
 `local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
 you are working from a stale mental model of this project.
 
-Much of `:core` can be tested without a device at all: it is plain Kotlin/JVM, so a JUnit
-test can open a real socket to a real speaker. That is how the transport was built, and it
-is far faster than a build-install-logcat cycle. Reach for the Shield when the question is
-about *Android* — cleartext policy, permissions, lifecycle — not about the protocol.
+`:core` is tested against `FakePlayer` (`core/src/test/.../FakePlayer.kt`), an in-process
+TLS WebSocket server that speaks the same protocol. It serves a certificate carrying the
+player's real `sonos-<MAC>.local` name, so the address book and hostname verification are
+exercised rather than switched off, and it enforces the two handshake rules a real player
+does — 403 for an `Origin` header, 400 for a missing API key. **Prefer it to hardware**: it
+runs anywhere, it catches regressions, and it already found a bug that live testing had
+missed (a player-initiated close going unnoticed).
+
+`:core` is also plain Kotlin/JVM, so a throwaway JUnit test *can* open a socket to a real
+speaker when a question is genuinely about a real speaker. Reach for the Shield only when
+the question is about *Android* — cleartext policy, permissions, lifecycle.
 
 ### Households
 A household is discovered, not configured: SSDP's reply carries

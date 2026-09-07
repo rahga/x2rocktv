@@ -87,6 +87,8 @@ class SonosHousehold(
     private val client: OkHttpClient = LanHttp.client(addressBook),
     /** Where the last reachable player is remembered, to skip discovery on a warm start. */
     private val seeds: SeedStore = SeedStore.None,
+    /** Overridden only by tests, which reach a fake player on an ephemeral port. */
+    private val port: Int = SonosSocket.PORT,
 ) {
 
     private val gson = Gson()
@@ -412,7 +414,7 @@ class SonosHousehold(
     private suspend fun socketForHostname(hostname: String): SonosSocket = lock.withLock {
         sockets[hostname]?.let { return it }
         val opened = generation
-        val socket = SonosSocket.open(client, hostname)
+        val socket = SonosSocket.open(client, hostname, port)
         // A teardown that happened while the handshake was in flight means this socket
         // belongs to a dead session; adopting it would resurrect it into a just-cleared map.
         if (opened != generation) {

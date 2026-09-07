@@ -75,6 +75,12 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 
 # Testing
 junit = { group = "junit", name = "junit", version.ref = "junit" }
+# A fake Sonos player: MockWebServer speaks WebSocket, okhttp-tls issues a certificate
+# carrying the sonos-<MAC>.local name so hostname verification is exercised rather than
+# bypassed. Same OkHttp version as the client, deliberately.
+mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver", version.ref = "okhttp" }
+okhttp-tls = { group = "com.squareup.okhttp3", name = "okhttp-tls", version.ref = "okhttp" }
+kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 
 # Navigation
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
