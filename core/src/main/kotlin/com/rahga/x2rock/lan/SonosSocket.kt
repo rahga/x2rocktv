@@ -145,9 +145,13 @@ class SonosSocket private constructor(
          * present and 400 if the API key is missing — both verified. OkHttp adds no
          * Origin of its own, which is precisely why a WebView could not do this.
          */
-        suspend fun open(client: OkHttpClient, hostname: String): SonosSocket {
+        suspend fun open(
+            client: OkHttpClient,
+            hostname: String,
+            port: Int = PORT,
+        ): SonosSocket {
             val request = Request.Builder()
-                .url("wss://$hostname:$PORT/websocket/api")
+                .url("wss://$hostname:$port/websocket/api")
                 .header("X-Sonos-Api-Key", API_KEY)
                 .header("Sec-WebSocket-Protocol", SUBPROTOCOL)
                 .build()
@@ -189,6 +193,20 @@ class SonosSocket private constructor(
                         pending.values.forEach { it.completeExceptionally(cause) }
                         pending.clear()
                         if (cont.isActive) cont.resumeWithException(cause) else failures.tryEmit(cause)
+                    }
+
+                    /**
+                     * The peer is closing. Acknowledge it, or OkHttp never completes the
+                     * handshake and `onClosed` never arrives — which meant a player that
+                     * shut the connection down went entirely unnoticed and no reconnect
+                     * was ever attempted. Found by a test, not by hardware.
+                     */
+                    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                        webSocket.close(1000, null)
+                        val cause = IOException("websocket to $hostname closing ($code $reason)")
+                        pending.values.forEach { it.completeExceptionally(cause) }
+                        pending.clear()
+                        if (!closedByUs.get()) failures.tryEmit(cause)
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
