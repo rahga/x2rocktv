@@ -55,11 +55,14 @@ claim in it was run against real hardware.
 
 ## Building
 
-If Java/Gradle aren't present, the project pins Gradle 8.7 (`gradle/wrapper/gradle-wrapper.properties`);
-install a JDK (17+ is safe, 21 is what's been tested) via the system package manager or `mise`. If
-`gradle-wrapper.jar` is missing (has happened on a fresh clone in the past — check `.gitignore`
-isn't excluding it unintentionally), regenerate it with `gradle wrapper --gradle-version 8.7` using
-any locally installed Gradle before running `./gradlew`.
+If Java isn't present, install a JDK (17+ is safe, 21 is what's been tested) via the system
+package manager or `mise`. Gradle itself does not need installing — the project pins 8.7 and
+`./gradlew` fetches it.
+
+`gradle-wrapper.jar` used to be missing from fresh clones, which broke `./gradlew` for anyone
+who did not already have a Gradle to regenerate it with. The cause was the blanket `*.jar` in
+`.gitignore`'s "Package Files" block; there is now an explicit negation for it. If it goes
+missing again, look there first.
 
 An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
 **There are no credentials to supply** — no client id, no secret, nothing in
