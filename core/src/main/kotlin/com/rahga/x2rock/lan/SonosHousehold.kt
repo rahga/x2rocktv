@@ -9,6 +9,7 @@ import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.Track
 import kotlinx.coroutines.CoroutineScope
@@ -56,10 +57,9 @@ data class HouseholdState(
  * One socket is opened per group coordinator, because group-scoped namespaces are only
  * answered by the coordinator. Player-scoped calls open that player's own socket.
  *
- * **Not covered here: the queue.** `queue:1` / `playbackQueue:1` answer
- * `ERROR_UNSUPPORTED_NAMESPACE` — the Control API has no queue at all, cloud or LAN. That
- * lives behind UPnP/SOAP on port 1400 and needs a separate module; see
- * `docs/lan-transport.md`.
+ * The **queue is the exception** and is asked for rather than pushed: `queue:1` and
+ * `playbackQueue:1` answer `ERROR_UNSUPPORTED_NAMESPACE`, so it goes over UPnP on port
+ * 1400 instead — see [Upnp], and expect it to be stale until re-read.
  *
  * Reconnection and network-change handling are **not** implemented yet: [connect] is
  * one-shot. See the note in `CLAUDE.md` about "assume dead, reconnect from scratch".
@@ -71,6 +71,7 @@ class SonosHousehold(
 
     private val gson = Gson()
     private val client = LanHttp.client(addressBook)
+    private val upnp = Upnp(client)
 
     private val sockets = mutableMapOf<String, SonosSocket>()
     private val socketJobs = mutableListOf<Job>()
@@ -143,6 +144,27 @@ class SonosHousehold(
 
     fun playerName(playerId: String): String =
         _state.value.players.firstOrNull { it.id == playerId }?.name ?: playerId
+
+    // ---------------------------------------------------------------- queue
+    //
+    // The one part of the UI that is asked rather than pushed: the Control API has no
+    // queue at all, so this goes over UPnP on port 1400. See [Upnp].
+
+    suspend fun queue(groupId: String): QueueResponse =
+        upnp.browseQueue(coordinatorHostname(groupId))
+
+    suspend fun removeFromQueue(groupId: String, trackNumber: Int) =
+        upnp.removeFromQueue(coordinatorHostname(groupId), trackNumber)
+
+    suspend fun skipToQueueItem(groupId: String, trackNumber: Int) =
+        upnp.skipToQueueItem(coordinatorHostname(groupId), trackNumber)
+
+    private fun coordinatorHostname(groupId: String): String {
+        val group = _state.value.groups.firstOrNull { it.id == groupId }
+            ?: error("no group $groupId")
+        return PlayerNames.localHostname(group.coordinatorId)
+            ?: error("cannot derive a hostname for ${group.coordinatorId}")
+    }
 
     suspend fun favorites(): JsonObject {
         val household = _state.value.householdId ?: error("not connected")
