@@ -215,6 +215,7 @@ Run 2026-09-07 against a Shield (`ro.build.version.sdk=30`, `eth0`) and five Son
 | Default hostname verifier via `.local` | passes (`http=101`) |
 | Cleartext, raw IP | blocked, with and without the config |
 | Cleartext, `.local` + scoped config | HTTP 200, `TotalMatches=21`, titles match the CLI |
+| Album art off a player, via the LAN client | HTTP 200, `image/jpeg` |
 
 The probe used is a throwaway standalone project, not part of this repo.
 
