@@ -21,6 +21,20 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
         _primaryRoomId.value = id
     }
 
+    /**
+     * The soundbar this television is plugged into, remembered as a *player* id.
+     *
+     * Not a group id: a regroup mints new ones, so a group remembered today may name
+     * nothing tomorrow. The speaker itself does not move.
+     */
+    private val _tvPlayerId = MutableStateFlow(prefs.getString(KEY_TV_PLAYER))
+    val tvPlayerId: StateFlow<String?> = _tvPlayerId.asStateFlow()
+
+    fun setTvPlayer(playerId: String?) {
+        prefs.putString(KEY_TV_PLAYER, playerId)
+        _tvPlayerId.value = playerId
+    }
+
     fun toggleFavorite(id: String) {
         val updated = if (id in _favoriteRoomIds.value) {
             _favoriteRoomIds.value - id
@@ -34,5 +48,6 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
     private companion object {
         const val KEY_PRIMARY_ROOM = "primary_room_id"
         const val KEY_FAVORITE_ROOMS = "favorite_room_ids"
+        const val KEY_TV_PLAYER = "tv_player_id"
     }
 }

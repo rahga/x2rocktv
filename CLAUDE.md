@@ -196,10 +196,29 @@ drive that one room over CEC and the two could disagree.
 Party mode belongs in the room view, not the rooms panel: it hinges on a *source* player
 that the others join, so it needs a room already chosen. Grouping generally goes with it.
 
-Where the sidebar's control row (leave party, settings, collapse) belongs is **undecided**.
-Moving it to the bottom would make a room the first thing the panel offers; keeping it at
-the top matches what most Android apps and Plex do. Not a settled question — do not move it
-without asking.
+The sidebar's control row **stays at the top**, matching what most Android apps and Plex do.
+The party button has been removed from it already, since party mode is moving to the room
+view; `HomeViewModel.partyMode()` is deliberately kept for that.
+
+Reordering rooms will live inside the group/party selector — out of the main view, where it
+costs no clutter.
+
+### The television's own soundbar
+
+`TvSoundbar.detect` finds it: among the rooms that *have* an HDMI input, the one currently
+*on* it. In this household three rooms have a Beam and only one is fed by the Shield, so
+"has a TV input" is not the answer by itself.
+
+It is a heuristic and cannot be otherwise — Android will say an HDMI output exists but not
+what is on the other end, and CEC is not available to an ordinary app. Ambiguity (two
+televisions on) and absence (none on) both answer null rather than guessing, which is why
+the answer is *remembered* once found: the device is bolted to one television.
+
+It stores a **player** id, never a group id, because a regroup mints new group ids and the
+soundbar is what actually stays put. And it only ever orders the list when nothing has been
+pinned — an explicit choice always wins. On the very first launch after install the list
+reorders but the selection does not, because detection completes just after the first room
+is chosen; every launch after that opens on the television's room.
 
 ### Focus, and why it is handled as keys
 

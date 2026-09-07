@@ -7,6 +7,7 @@ import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
@@ -24,14 +25,25 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Sidebar order: the primary room pinned first, then favourites, then the rest, each alphabetical.
+ * Sidebar order: the pinned room first, then favourites, then the rest, each alphabetical.
  * Pure, so the ordering is testable without standing the view model up.
+ *
+ * [tvPlayerId] is a fallback, not a competitor: it puts the television's own soundbar first
+ * only when nothing has been pinned, which is the fresh-install case. An explicit choice
+ * always wins, and picking a room by hand is how it is overridden.
  */
-fun sortGroups(groups: List<Group>, primaryId: String?, favoriteIds: Set<String>): List<Group> {
-    val primary = groups.filter { it.id == primaryId }
-    val favorites = groups.filter { it.id != primaryId && it.id in favoriteIds }.sortedBy { it.name }
-    val rest = groups.filter { it.id != primaryId && it.id !in favoriteIds }.sortedBy { it.name }
-    return primary + favorites + rest
+fun sortGroups(
+    groups: List<Group>,
+    primaryId: String?,
+    favoriteIds: Set<String>,
+    tvPlayerId: String? = null,
+): List<Group> {
+    val pinned = groups.firstOrNull { it.id == primaryId }
+        ?: TvSoundbar.groupOf(tvPlayerId, groups)
+    val pinnedId = pinned?.id
+    val favorites = groups.filter { it.id != pinnedId && it.id in favoriteIds }.sortedBy { it.name }
+    val rest = groups.filter { it.id != pinnedId && it.id !in favoriteIds }.sortedBy { it.name }
+    return listOfNotNull(pinned) + favorites + rest
 }
 
 @HiltViewModel
@@ -101,6 +113,7 @@ class HomeViewModel @Inject constructor(
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
     val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
+    val tvPlayerId: StateFlow<String?> = roomPrefsStore.tvPlayerId
     val favoriteRoomIds: StateFlow<Set<String>> = roomPrefsStore.favoriteRoomIds
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
@@ -144,6 +157,7 @@ class HomeViewModel @Inject constructor(
                     groups,
                     roomPrefsStore.primaryRoomId.value,
                     roomPrefsStore.favoriteRoomIds.value,
+                    roomPrefsStore.tvPlayerId.value,
                 ).first()).id
             }
         }
@@ -154,6 +168,20 @@ class HomeViewModel @Inject constructor(
                 state.groups.firstOrNull { it.id == id }?.playerIds.orEmpty()
             }.collect { players -> if (players.isNotEmpty()) lastSelectedPlayers = players.toSet() }
         }
+        // Which soundbar this television feeds, learned once and then remembered. Only
+        // detectable while that room is on its TV input, so this watches rather than asking
+        // at startup — and never overwrites an answer, because a second television coming on
+        // makes the signal ambiguous rather than wrong.
+        viewModelScope.launch {
+            combine(household.state, household.groupStates) { state, groupStates ->
+                TvSoundbar.detect(state, groupStates)
+            }.collect { detected ->
+                if (detected != null && roomPrefsStore.tvPlayerId.value == null) {
+                    roomPrefsStore.setTvPlayer(detected)
+                }
+            }
+        }
+
         // The TV home-screen channels follow whatever the household last said.
         viewModelScope.launch(Dispatchers.IO) {
             uiState.collect { state ->
@@ -214,10 +242,16 @@ class HomeViewModel @Inject constructor(
     fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
         group.playerIds.map { it to household.playerName(it) }
 
+    /** Still here because party mode is moving to the room view, not going away. */
     fun partyMode() {
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
-        val sorted = sortGroups(groups, roomPrefsStore.primaryRoomId.value, roomPrefsStore.favoriteRoomIds.value)
+        val sorted = sortGroups(
+            groups,
+            roomPrefsStore.primaryRoomId.value,
+            roomPrefsStore.favoriteRoomIds.value,
+            roomPrefsStore.tvPlayerId.value,
+        )
         val host = sorted.first()
         val joiners = sorted.drop(1).flatMap { it.playerIds }
         viewModelScope.launch {
