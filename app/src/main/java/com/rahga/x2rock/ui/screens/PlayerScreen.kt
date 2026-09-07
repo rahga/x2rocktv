@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
@@ -29,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
@@ -61,6 +63,14 @@ import kotlinx.coroutines.delay
 fun PlayerPane(
     viewModel: PlayerViewModel,
     detailFocusRequester: FocusRequester,
+    /**
+     * Where a left-press from the leftmost control of any row goes.
+     *
+     * Declared on those controls rather than on the pane, because a `left` property on an
+     * ancestor does not reliably redirect a search starting inside it — the search escaped
+     * instead and focus was lost altogether, which on a remote leaves nothing to press.
+     */
+    sidebarFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit
 ) {
@@ -101,6 +111,7 @@ fun PlayerPane(
                     state = state,
                     viewModel = viewModel,
                     playPauseFocusRequester = detailFocusRequester,
+                    exitLeftFocusRequester = sidebarFocusRequester,
                     onOpenQueue = onOpenQueue,
                     onOpenFavorites = onOpenFavorites,
                     onOpenSleepTimer = { showSleepTimerPicker = true }
@@ -225,12 +236,27 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
     }
 }
 
+/**
+ * A left-press here leaves the room view for the rooms panel.
+ *
+ * Put on the leftmost control of each row. Declaring `left` on the pane instead does not
+ * work: a focus search starting inside it escapes rather than being redirected, and focus
+ * is lost altogether — which on a remote leaves nothing to press but Back.
+ */
+private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = onKeyEvent { event ->
+    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+        target.requestFocusSafely()
+        true
+    } else false
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PlaybackControls(
     state: PlayerUiState,
     viewModel: PlayerViewModel,
     playPauseFocusRequester: FocusRequester,
+    exitLeftFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit
@@ -244,18 +270,26 @@ private fun PlaybackControls(
         Spacer(modifier = Modifier.height(24.dp))
 
         Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            // Tighter than the rows below it: with a duration this row grows from three
+            // buttons to five, and at 24.dp the last one overflowed and wrapped its label
+            // down the screen a letter at a time.
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
-            AppButton(onClick = { viewModel.skipToPreviousTrack() }) { Text("⏮  Prev") }
+            AppButton(
+                onClick = { viewModel.skipToPreviousTrack() },
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) { Text("⏮  Prev") }
             if (state.durationMillis > 0) {
                 AppButton(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
             }
             AppButton(
                 onClick = { viewModel.togglePlayPause() },
+                // Wide enough that Play and Pause do not shuffle the row as it toggles,
+                // but no longer a fixed width that the seek buttons have to fit around.
                 modifier = Modifier
-                    .width(160.dp)
+                    .widthIn(min = 148.dp)
                     .focusRequester(playPauseFocusRequester)
             ) {
                 Text(if (state.playbackState.isPlaying()) "⏸  Pause" else "▶  Play")
@@ -273,7 +307,10 @@ private fun PlaybackControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
-            AppButton(onClick = { viewModel.toggleShuffle() }) {
+            AppButton(
+                onClick = { viewModel.toggleShuffle() },
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) {
                 Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
             }
             AppButton(onClick = { viewModel.cycleRepeat() }) {
@@ -310,6 +347,7 @@ private fun PlaybackControls(
             AppButton(
                 onClick = { viewModel.adjustVolume(-5) },
                 enabled = volumeKnown && !state.isMuted,
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Vol −") }
             Text(
                 text = when {

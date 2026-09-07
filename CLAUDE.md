@@ -160,10 +160,35 @@ a soundbar, three lines rather than two (room and state, then the input format, 
 Audio").
 
 The room list now carries art and the soundbar's three lines. Still missing against the
-reference: inline transport and a volume slider per row, a TV badge (`hasTvInput` is
-modelled and plumbed as far as `RoomInfo`, but nothing draws it), and a placeholder for a
-TV input, which has no art of its own — the player really does send `images: []` for
-`TV Audio`, so anything shown there is the app's invention rather than data.
+reference: a TV badge (`hasTvInput` is modelled and plumbed as far as `RoomInfo`, but
+nothing draws it), and a placeholder for a TV input, which has no art of its own — the
+player really does send `images: []` for `TV Audio`, so anything shown there is the app's
+invention rather than data.
+
+**Not** a per-row volume slider: every remote has volume keys. The mechanism that makes
+them work is `MediaSession.setPlaybackToRemote(VolumeProvider)`, which tells the system to
+send volume keys to the selected room instead of local output. Worth knowing before
+building it that the Living Room Beam is on HDMI ARC, so the Shield's remote may already
+drive that one room over CEC and the two could disagree.
+
+### Planned rework: party mode and grouping
+
+Party mode belongs in the room view, not the rooms panel: it hinges on a *source* player
+that the others join, so it needs a room already chosen. Grouping generally goes with it.
+
+The sidebar's control row (leave party, settings, collapse) then moves to the **bottom** of
+the panel, so a room is what the panel offers first and DOWN from the last room reaches the
+controls rather than them sitting between the user and the list.
+
+### Focus, and why it is handled as keys
+
+`RoomSidebar` ⇄ `PlayerScreen` traversal is wired with explicit `onKeyEvent` handlers, not
+`focusProperties`. Declaring `right`/`left` on the pane or the room `Card` does not govern
+the search, because each wraps its own focusable inside the modifier chain it is given:
+right-press landed on whichever control lined up geometrically (the rightmost transport
+button), and left-press escaped the pane entirely and **lost focus**, which on a remote
+leaves nothing to press but Back. Right from a room enters at Play/Pause; left from the
+leftmost control of any row returns to the room list.
 
 The household this was developed against is a good test of that layout, because bonded and
 soundbar cut across each other: Living Room (Beam + Sub + 2x Play:1), Bedroom (Beam + 2x One

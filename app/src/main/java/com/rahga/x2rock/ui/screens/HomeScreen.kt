@@ -200,6 +200,7 @@ fun HomeScreen(
                     PlayerPane(
                         viewModel = playerViewModel,
                         detailFocusRequester = detailFocusRequester,
+                        sidebarFocusRequester = sidebarFocusRequester,
                         onOpenQueue = { onOpenQueue(selectedGroupId!!) },
                         onOpenFavorites = { onOpenFavorites(selectedGroupId!!) }
                     )
@@ -414,6 +415,7 @@ private fun RoomSidebar(
                             isPrimary = group.id == primaryRoomId,
                             isFavorite = group.id in favoriteRoomIds,
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
+                            detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
                             onLongPress = { onLongPress(group) }
                         )
@@ -433,6 +435,8 @@ private fun RoomListItem(
     isPrimary: Boolean,
     isFavorite: Boolean,
     focusRequester: FocusRequester,
+    /** Right from a room crosses into the room view, at its primary control. */
+    detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
     onLongPress: () -> Unit
 ) {
@@ -442,6 +446,17 @@ private fun RoomListItem(
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
             .focusRequester(focusRequester)
+            // Handled as a key rather than declared as a focus property: `focusProperties`
+            // on this Card does not govern the search, because the Card's own focusable
+            // sits inside the modifier chain it is given. Left to geometry the press lands
+            // on whichever control happens to line up — in practice the rightmost transport
+            // button, which is a strange place to arrive.
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+                    detailFocusRequester.requestFocusSafely()
+                    true
+                } else false
+            }
             .onFocusChanged { if (it.isFocused) onFocused() }
             .dpadLongPress(onLongPress)
     ) {
