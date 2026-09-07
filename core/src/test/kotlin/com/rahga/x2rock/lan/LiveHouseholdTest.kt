@@ -121,19 +121,33 @@ class LiveHouseholdTest {
     @Test fun `subscriptions push a snapshot for every group`() = runBlocking<Unit> {
         connected()
         val groups = household.state.value.groups
-        withTimeout(15_000) {
-            household.groupStates.first { pushed -> groups.all { it.id in pushed.keys } }
+        // Wait for the volume itself, not merely for the group's key to exist: a playback
+        // snapshot creates the entry with a null volume, so waiting on key presence raced
+        // the groupVolume snapshot and failed intermittently.
+        withTimeout(20_000) {
+            household.groupStates.first { pushed -> groups.all { pushed[it.id]?.volume != null } }
         }
         groups.forEach { assertNotNull("no volume for ${it.name}", household.groupState(it.id).volume) }
     }
 
     /** The scoping rule, on hardware: a player-scoped command needs a real player id. */
-    @Test fun `a player-scoped command with a bad id is refused, not ignored`() = runBlocking<Unit> {
-        connected()
-        val thrown = runCatching {
-            household.setPlayerVolume("RINCON_000000000000" + "01400", 10)
-        }.exceptionOrNull()
-        assertNotNull("a bad playerId was accepted", thrown)
+    @Test fun `a player-scoped command with a bad id is refused by the player`() = runBlocking<Unit> {
+        val player = seed!!
+        val book = PlayerAddressBook().apply { register(player.hostname!!, player.address) }
+        val socket = withTimeout(10_000) { SonosSocket.open(LanHttp.client(book), player.hostname!!) }
+        val thrown = try {
+            runCatching {
+                // Sent over a socket to a real player, naming an id it does not have. Going
+                // through the household instead would fail in the address book before the
+                // command ever left this machine — proving only that our resolver works.
+                withTimeout(10_000) {
+                    socket.command(Frames.onPlayer("playerVolume:1", "getVolume", "RINCON_NOTAPLAYER"))
+                }
+            }.exceptionOrNull()
+        } finally {
+            socket.close()
+        }
+        assertTrue("expected the player to refuse, got $thrown", thrown is SonosCommandException)
     }
 
     // ------------------------------------------------------------ fixture drift
@@ -162,14 +176,26 @@ class LiveHouseholdTest {
         val recorded = shapeOf(FakePlayer.fixture("getGroups.reply.json"))
         val live = shapeOf(topology)
 
-        val missing = recorded - live
+        // Only *new* fields are drift. Fields the fixture has and this household does not
+        // are expected: the fixture came from five rooms including a stereo pair, and these
+        // assertions must also hold for a single speaker on a desk, which legitimately has
+        // no `primaryDeviceId`, no second zone member, and so on.
         val added = live - recorded
         assertTrue(
-            "fixtures have drifted from what this player sends — re-capture them.\n" +
-                "  no longer sent: ${missing.sorted()}\n" +
-                "  newly sent:     ${added.sorted()}",
-            missing.isEmpty() && added.isEmpty(),
+            "this player sends fields the fixtures do not have — re-capture them:\n" +
+                added.sorted().joinToString("\n") { "    $it" },
+            added.isEmpty(),
         )
+
+        // Separately: the fields this code actually reads must be present, whatever the
+        // size of the household. This is the half that would catch a removal.
+        listOf(
+            ".groups[].id", ".groups[].name", ".groups[].coordinatorId",
+            ".groups[].playerIds", ".groups[].playbackState",
+            ".players[].id", ".players[].name", ".players[].websocketUrl",
+        ).forEach { required ->
+            assertTrue("this player no longer sends $required", required in live)
+        }
     }
 
     /**

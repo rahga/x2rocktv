@@ -16,9 +16,22 @@ package com.rahga.x2rock.lan
  * the same soundbar, the same room, the same network, almost always. The sibling Rust
  * project fingerprints the gateway MAC before trusting a cached address because it runs on
  * a laptop that wakes somewhere new; here the same guard would be complexity spent on a
- * rare case that is already cheap. Measured: a stale seed costs about 400ms over a cold
- * start before discovery takes over, and moves are handled by that plus
- * [SonosHousehold.onNetworkChanged].
+ * rare case.
+ *
+ * Two things bound the cost of a wrong memory, because "it self-corrects" is only true if
+ * it corrects *promptly*:
+ *
+ * - A **network change** skips the memory entirely and goes straight to discovery. The
+ *   address is not merely unverified at that point, it is probably wrong, and trying it
+ *   first would spend the connect timeout before discovery ever ran.
+ * - Otherwise the memory is probed under a timeout of its own, so a host that accepts a
+ *   TCP connect and then says nothing cannot stall startup indefinitely — the client has
+ *   no call timeout and a zero read timeout by design, because a subscription is meant to
+ *   sit idle for hours.
+ *
+ * A memory is dropped when the *session* fails, not merely when the socket does. A player
+ * that answers on the remembered address but no longer belongs to the remembered household
+ * — after a factory reset and re-setup — would otherwise be retried on every launch forever.
  */
 interface SeedStore {
 

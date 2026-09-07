@@ -44,8 +44,10 @@ import java.util.concurrent.TimeUnit
  *   address book and OkHttp's default hostname verifier are exercised rather than switched
  *   off. A test that passed by disabling verification would prove nothing about the design
  *   it exists to protect.
- * - It refuses handshakes the way a player does: 403 with an `Origin` header, 400 without
- *   the API key. Both cost real effort to establish against hardware.
+ * - It refuses the way a player does: 403 on a handshake carrying an `Origin` header, 400
+ *   without the API key, and `ERROR_INVALID_OBJECT_ID` for a player-scoped command naming
+ *   an id this household does not have. All three cost real effort to establish against
+ *   hardware, and a fake that said yes to everything made any test of a refusal vacuous.
  */
 class FakePlayer(
     /** The fixture's first coordinator, so the topology it serves is self-consistent. */
@@ -62,14 +64,14 @@ class FakePlayer(
     val rejected = LinkedBlockingQueue<Int>()
 
     /**
-     * One certificate covering every coordinator in the captured topology.
+     * One certificate covering every *player* in the captured topology.
      *
-     * That topology has five groups on five different players, so the household opens a
-     * socket per coordinator. This answers for all of them rather than flattening the
-     * fixture into something more convenient.
+     * The household opens a socket per coordinator for group state and per player for
+     * `playerVolume:1`, so covering only coordinators would work by luck of this fixture
+     * and break silently on one captured with rooms grouped.
      */
     private val certificate = HeldCertificate.Builder()
-        .apply { coordinatorHostnames().forEach { addSubjectAlternativeName(it) } }
+        .apply { playerHostnames().forEach { addSubjectAlternativeName(it) } }
         .commonName("fake-player")
         .build()
 
@@ -190,6 +192,20 @@ class FakePlayer(
             respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
             return
         }
+        // A player-scoped command naming an id this household does not have is refused,
+        // the way a real player refuses one: ERROR_INVALID_OBJECT_ID. Without this the
+        // fake said yes to everything and any test of a refusal passed vacuously.
+        val playerId = request.get("playerId")?.asString
+        if (playerId != null && playerId !in knownPlayerIds()) {
+            respond(
+                webSocket, cmdId, namespace, "globalError", success = false,
+                body = JsonObject().apply {
+                    addProperty("errorCode", "ERROR_INVALID_OBJECT_ID")
+                    addProperty("reason", "Incorrect playerId")
+                },
+            )
+            return
+        }
         respond(webSocket, cmdId, namespace, "none", success = true, body = JsonObject())
     }
 
@@ -220,17 +236,28 @@ class FakePlayer(
             return JsonParser.parseReader(stream.reader()).asJsonObject
         }
 
+        fun knownPlayerIds(): Set<String> =
+            fixture("getGroups.reply.json").getAsJsonArray("players")
+                .map { it.asJsonObject.get("id").asString }
+                .toSet()
+
         fun fixtureCoordinatorId(): String =
             fixture("getGroups.reply.json").getAsJsonArray("groups")[0]
                 .asJsonObject.get("coordinatorId").asString
 
         /**
-         * Every coordinator the captured topology names, derived rather than listed so a
-         * re-captured fixture does not also require updating a hardcoded set.
+         * Every *player* the captured topology names, derived rather than listed.
+         *
+         * Players, not just coordinators: the household opens a socket per player for
+         * `playerVolume:1`, inside a `runCatching` that swallows failures. A fixture
+         * captured with rooms grouped would have fewer coordinators than players, and the
+         * non-coordinators' names would be missing from the certificate — so those
+         * subscriptions would fail hostname verification and the suite would quietly stop
+         * covering them.
          */
-        fun coordinatorHostnames(): List<String> =
-            fixture("getGroups.reply.json").getAsJsonArray("groups")
-                .map { it.asJsonObject.get("coordinatorId").asString }
+        fun playerHostnames(): List<String> =
+            fixture("getGroups.reply.json").getAsJsonArray("players")
+                .map { it.asJsonObject.get("id").asString }
                 .mapNotNull { PlayerNames.localHostname(it) }
                 .distinct()
 
