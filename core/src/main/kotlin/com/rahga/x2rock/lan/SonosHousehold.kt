@@ -43,7 +43,18 @@ data class GroupState(
     val container: ContainerMetadata? = null,
     val volume: GroupVolume? = null,
     val playMode: PlayModeState = PlayModeState(),
-)
+) {
+    /**
+     * Whether this group is on a soundbar's TV input right now.
+     *
+     * The *presence* of the format is the signal, never its wording: with the television
+     * off a player still reports the input, naming no codec and no channels.
+     */
+    val onTvInput: Boolean get() = container?.htInputFormat != null
+
+    /** e.g. "Silence 2.0", "Dolby Digital 5.1", or "No Signal" with the television off. */
+    val inputFormat: String get() = container?.htInputFormat?.summary().orEmpty()
+}
 
 /** The household as a whole. */
 data class HouseholdState(
@@ -53,7 +64,22 @@ data class HouseholdState(
     val players: List<Player> = emptyList(),
     /** Set when the household is unreachable. Withdraw the UI rather than showing stale state. */
     val error: String? = null,
-)
+) {
+    /**
+     * Whether this group has a TV input to switch to at all.
+     *
+     * The HDMI socket belongs to a *player*, which need not be the one coordinating: a
+     * soundbar that joined a speaker's group still has its own input, so every member is
+     * asked, not just the coordinator.
+     */
+    fun hasTvInput(group: Group): Boolean {
+        val byId = players.associateBy { it.id }
+        return group.playerIds.any { HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) }
+    }
+}
+
+/** The capability a soundbar reports, and the only way to know a room can take a TV input. */
+const val HT_PLAYBACK = "HT_PLAYBACK"
 
 /**
  * A live view of one Sonos household over the LAN, and the commands that change it.
@@ -542,11 +568,16 @@ class SonosHousehold(
             "playbackMetadata:1" -> {
                 if (groupId == null) return
                 val meta = gson.fromJson(event.body, PlaybackMetadata::class.java) ?: return
+                val coordinator = _state.value.groups.firstOrNull { it.id == groupId }?.coordinatorId
+                val track = meta.currentItem?.track
+                    ?.let { t -> t.copy(imageUrl = reachableArt(t.imageUrl, coordinator)) }
+                val container = meta.container
+                    ?.let { c -> c.copy(imageUrl = reachableArt(c.imageUrl, coordinator)) }
                 update(groupId) {
                     it.copy(
-                        track = meta.currentItem?.track,
-                        container = meta.container,
-                        durationMillis = meta.currentItem?.track?.durationMillis ?: it.durationMillis,
+                        track = track,
+                        container = container,
+                        durationMillis = track?.durationMillis ?: it.durationMillis,
                     )
                 }
             }
@@ -567,6 +598,42 @@ class SonosHousehold(
 
     private fun fillPlaybackState(groups: List<Group>): List<Group> =
         fillPlaybackState(groups, _groupStates.value, _state.value.groups)
+
+    /**
+     * Points player-served art at the player's `.local` name.
+     *
+     * Album art for LAN content is served by the speaker itself, and the Control API gives
+     * it as `http://<ip>:1400/getaa?…`. That is cleartext to a bare address, which Android
+     * refuses: the exemption in `network_security_config.xml` covers `.local` names only,
+     * deliberately. Left alone, every piece of album art fails to load with nothing on
+     * screen to say why.
+     *
+     * Service-hosted art (`https://…`) is returned untouched — it needs none of this.
+     *
+     * @param coordinatorId the player that reported the art, needed to resolve a relative
+     *   path. Without one a relative path cannot be reached at all, so it becomes null
+     *   rather than a URL that will quietly fail.
+     */
+    internal fun reachableArt(url: String?, coordinatorId: String? = null): String? {
+        if (url.isNullOrEmpty()) return url
+
+        // Some art arrives as a bare path — "/getaa?s=1&u=…" — which is served by the
+        // player that reported it, not by anything the app can resolve on its own.
+        if (url.startsWith("/")) {
+            val host = coordinatorId?.let { PlayerNames.localHostname(it) } ?: return null
+            return "http://$host:${Upnp.PORT}$url"
+        }
+
+        if (!url.startsWith("http://")) return url
+        val host = runCatching { URI(url).host }.getOrNull() ?: return url
+        val hostname = _state.value.players
+            .firstOrNull { player ->
+                player.websocketUrl?.let { runCatching { URI(it).host }.getOrNull() } == host
+            }
+            ?.let { PlayerNames.localHostname(it.id) }
+            ?: return url
+        return url.replaceFirst(host, hostname)
+    }
 
     private fun update(groupId: String, block: (GroupState) -> GroupState) {
         _groupStates.update { all ->

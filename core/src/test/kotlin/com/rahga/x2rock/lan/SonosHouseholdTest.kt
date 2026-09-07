@@ -178,6 +178,31 @@ class SonosHouseholdTest {
         assertEquals(groupId, cmd.get("groupId").asString)
     }
 
+    /**
+     * Album art for LAN content is served by the speaker as `http://<ip>:1400/getaa?…`.
+     * Android's cleartext exemption covers `.local` names only — deliberately — so left as
+     * an address every image silently fails to load.
+     */
+    @Test fun `player-served art is pointed at the local name`() {
+        connected()
+        val player = household.state.value.players.first()
+        val address = java.net.URI(player.websocketUrl!!).host
+        val hostname = PlayerNames.localHostname(player.id)!!
+
+        val rewritten = household.reachableArt("http://$address:1400/getaa?s=1&u=track")
+        assertEquals("http://$hostname:1400/getaa?s=1&u=track", rewritten)
+    }
+
+    @Test fun `art hosted anywhere else is left alone`() {
+        connected()
+        val service = "https://sonos.plex.tv/img?width=300"
+        assertEquals(service, household.reachableArt(service))
+        // An address belonging to no player is not ours to rewrite.
+        val stranger = "http://198.51.100.7:1400/getaa?s=1"
+        assertEquals(stranger, household.reachableArt(stranger))
+        assertEquals(null, household.reachableArt(null))
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()
