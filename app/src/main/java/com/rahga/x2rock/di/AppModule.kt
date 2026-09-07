@@ -4,11 +4,13 @@ import android.util.Log
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
+import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import com.rahga.x2rock.net.PrefsSeedStore
 import com.rahga.x2rock.net.WifiMulticastGate
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,10 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideSeedStore(impl: PrefsSeedStore): SeedStore = impl
+
+    @Provides
+    @Singleton
     fun providePlayerAddressBook(): PlayerAddressBook = PlayerAddressBook()
 
     /**
@@ -66,5 +72,6 @@ object AppModule {
         addressBook: PlayerAddressBook,
         multicast: MulticastGate,
         client: OkHttpClient,
-    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, client)
+        seeds: SeedStore,
+    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, client, seeds)
 }

@@ -85,6 +85,8 @@ class SonosHousehold(
      * neither the address book nor permission to fetch them.
      */
     private val client: OkHttpClient = LanHttp.client(addressBook),
+    /** Where the last reachable player is remembered, to skip discovery on a warm start. */
+    private val seeds: SeedStore = SeedStore.None,
 ) {
 
     private val gson = Gson()
@@ -147,10 +149,33 @@ class SonosHousehold(
         if (wantConnection) reconnect(immediate = true)
     }
 
+    /**
+     * A remembered player first, discovery second.
+     *
+     * The remembered one is tried without verifying it beyond opening a socket, because
+     * that *is* the verification: if it has moved or this is a different network entirely,
+     * the connect fails and discovery runs, which is both simpler and more reliable than
+     * trying to decide in advance whether the memory is still good.
+     */
+    private suspend fun findEntryPoint(): Discovery.DiscoveredPlayer {
+        seeds.load()?.let { remembered ->
+            val hostname = remembered.hostname
+            if (hostname != null) {
+                addressBook.register(hostname, remembered.address)
+                val reachable = runCatching { socketForHostname(hostname) }.isSuccess
+                if (reachable) return remembered
+                // Stale. Forget it rather than retrying it on every start from now on.
+                seeds.clear()
+                addressBook.forget(hostname)
+            }
+        }
+        return multicast.around { Discovery.findPlayers(stopAfterFirst = true) }.firstOrNull()
+            ?: error("no Sonos players answered on this network")
+    }
+
     private suspend fun establish(seed: Discovery.DiscoveredPlayer? = null) {
         try {
-            val entry = seed ?: multicast.around { Discovery.findPlayers() }.firstOrNull()
-                ?: error("no Sonos players answered on this network")
+            val entry = seed ?: findEntryPoint()
 
             // Discovery reports the player's id and address together, so even the very
             // first connection is made to the name on the certificate. There is no point
@@ -176,6 +201,10 @@ class SonosHousehold(
             // The socket is already being watched — socketForHostname does that on open,
             // before any subscribe, so no snapshot can be missed.
             seedSocket.subscribe(Frames.onHousehold("groups:1", "subscribe", householdId))
+
+            // Worth remembering only once the whole session stood up, not merely because a
+            // socket opened.
+            seeds.save(entry.copy(householdId = householdId))
 
             groups.groups.forEach { subscribeGroup(it) }
             // Per-speaker volume only matters once rooms are grouped, but subscribing up
