@@ -184,9 +184,11 @@ fun RoomPanel(
             PanelSection("Source")
             AppButton(
                 onClick = onUseTvInput,
-                // Already the source: the row stays visible so the state is legible, but
-                // there is nothing left for it to do.
-                enabled = !info.onTvInput,
+                // Deliberately *not* disabled while it is already the source. A disabled
+                // button here still takes focus and draws no highlight, so pressing down
+                // onto it left the remote sitting on an invisible row — seen on the
+                // Streamer. Re-selecting the input it is already on is harmless anyway, and
+                // is the obvious thing to press when the TV audio has dropped out.
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")

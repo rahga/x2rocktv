@@ -652,7 +652,13 @@ class SonosHousehold(
                     it.copy(
                         track = track,
                         container = container,
-                        durationMillis = track?.durationMillis ?: it.durationMillis,
+                        // No carry-over here, unlike `playback:1` above: a metadata event is
+                        // the whole statement of what is loaded, so no track means no
+                        // duration. Keeping the last one left a soundbar switched to its TV
+                        // input still showing the progress bar of the song it interrupted —
+                        // seen on hardware, because a TV input has no track at all.
+                        durationMillis = track?.durationMillis ?: 0,
+                        positionMillis = if (track == null) 0 else it.positionMillis,
                     )
                 }
             }

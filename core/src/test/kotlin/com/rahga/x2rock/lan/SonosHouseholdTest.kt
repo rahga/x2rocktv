@@ -152,6 +152,37 @@ class SonosHouseholdTest {
         assertEquals(stampedAt, household.groupState(groupId).positionUpdatedAt)
     }
 
+    /**
+     * Regression, seen on the Google TV Streamer: switching a room to its TV input left the
+     * player pane showing the progress bar of the song it had just interrupted, counting up
+     * towards a duration nothing was playing.
+     *
+     * A TV input carries no track at all — the captured fixture below has no `currentItem`
+     * — and the duration was being carried over from the previous metadata rather than
+     * cleared. Unlike a `playback:1` event, a metadata event states the whole of what is
+     * loaded, so absent means gone.
+     */
+    @Test fun `switching to a TV input clears the interrupted track's duration`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
+        fake.push("playback:1", "playbackStatus", """{"positionMillis":42000}""", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.positionMillis == 42_000L } }
+        assertTrue(
+            "the fixture must carry a duration, or this proves nothing",
+            household.groupState(groupId).durationMillis > 0,
+        )
+
+        fake.pushFixture("tvMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.onTvInput == true } }
+
+        val state = household.groupState(groupId)
+        assertEquals("a TV input has no track to have a duration", 0L, state.durationMillis)
+        assertEquals("nor a position in one", 0L, state.positionMillis)
+    }
+
     /** Regression: a groups event omits playbackState, which used to arrive as null. */
     @Test fun `a groups event without playbackState never yields null`() = runBlocking {
         connected()
