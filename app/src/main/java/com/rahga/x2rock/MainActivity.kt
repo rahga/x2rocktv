@@ -6,10 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import com.rahga.x2rock.auth.PendingAuthState
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.ThemeStore
-import com.rahga.x2rock.repository.SonosAuthRepository
 import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -19,18 +17,17 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var themeStore: ThemeStore
-    @Inject lateinit var pendingAuthState: PendingAuthState
     @Inject lateinit var pendingRoomDeepLink: PendingRoomDeepLink
-    @Inject lateinit var authRepository: SonosAuthRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleIntent(intent)
-        val startDestination = if (authRepository.isAuthenticated) "home" else "login"
+        // There is no sign-in step any more: the speakers are on the LAN and answer
+        // without an account, so the app opens straight onto the rooms.
         setContent {
             val theme by themeStore.theme.collectAsState()
             X2RockTheme(colorTheme = theme) {
-                X2RockNavGraph(startDestination = startDestination)
+                X2RockNavGraph(startDestination = "home")
             }
         }
     }
@@ -42,16 +39,8 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(intent: Intent) {
         val data = intent.data ?: return
-        when {
-            data.scheme == "x2rock" && data.host == "callback" -> {
-                val code = data.getQueryParameter("code") ?: return
-                val state = data.getQueryParameter("state") ?: return
-                pendingAuthState.set(code, state)
-            }
-            data.scheme == "x2rock" && data.host == "room" -> {
-                val groupId = data.lastPathSegment ?: return
-                pendingRoomDeepLink.set(groupId)
-            }
+        if (data.scheme == "x2rock" && data.host == "room") {
+            pendingRoomDeepLink.set(data.lastPathSegment ?: return)
         }
     }
 }

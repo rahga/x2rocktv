@@ -4,10 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Favorite
-import com.rahga.x2rock.repository.SonosRepository
+import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +14,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class FavoritesViewModel @Inject constructor(
-    private val repository: SonosRepository,
+    private val household: SonosHousehold,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -42,7 +40,7 @@ class FavoritesViewModel @Inject constructor(
     fun loadFavorite(favoriteId: String, onDone: () -> Unit) {
         viewModelScope.launch {
             loadingFavoriteId.value = favoriteId
-            repository.loadFavorite(groupId, favoriteId)
+            runCatching { household.loadFavorite(groupId, favoriteId) }
             loadingFavoriteId.value = null
             onDone()
         }
@@ -52,14 +50,11 @@ class FavoritesViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             runCatching {
-                coroutineScope {
-                    val favsDeferred = async { repository.getFavorites().getOrThrow() }
-                    val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
-                    val favs = favsDeferred.await()
-                    val containerName = metaDeferred.await()?.container?.name
-                    val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
-                    UiState.Success(favs.items, activeId)
-                }
+                val favs = household.favorites()
+                // What is playing comes from the subscription, so only the list is fetched.
+                val containerName = household.groupState(groupId).container?.name
+                val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
+                UiState.Success(favs.items, activeId)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }

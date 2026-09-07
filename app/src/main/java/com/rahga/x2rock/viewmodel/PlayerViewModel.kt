@@ -6,25 +6,20 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.repository.SonosRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -60,22 +55,70 @@ data class PlayerUiState(
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    private val repository: SonosRepository,
+    private val household: SonosHousehold,
     @ApplicationContext context: Context
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
-    private val pollingActive = MutableStateFlow(false)
+    private val _groupName = MutableStateFlow("")
+    private val _sleepRemaining = MutableStateFlow<Long?>(null)
+
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
     private var sleepTimerJob: Job? = null
 
-    private val _uiState = MutableStateFlow(PlayerUiState())
-    val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
-
     private var lastMetadataKey = ""
     private var lastPbStateCode = -1
     private var lastPbPositionMillis = -1L
+
+    /**
+     * Everything visible is derived from pushed state. There is no refresh: a command's
+     * effect arrives as an event, which is why nothing here waits 300ms and re-reads.
+     */
+    val uiState: StateFlow<PlayerUiState> =
+        combine(
+            _groupId,
+            _groupName,
+            household.state,
+            household.groupStates,
+            household.playerVolumes,
+        ) { groupId, groupName, householdState, groupStates, playerVolumes ->
+            val group = householdState.groups.firstOrNull { it.id == groupId }
+            val state = groupStates[groupId]
+            if (groupId == null || state == null) {
+                PlayerUiState(groupName = groupName, isLoading = !householdState.connected)
+            } else {
+                PlayerUiState(
+                    groupName = group?.name ?: groupName,
+                    playbackState = state.playbackState,
+                    trackName = state.track?.name,
+                    artistName = state.track?.artist?.name,
+                    albumName = state.track?.album?.name,
+                    albumArtUrl = state.track?.imageUrl,
+                    positionMillis = state.positionMillis,
+                    durationMillis = state.durationMillis,
+                    positionUpdatedAt = state.positionUpdatedAt,
+                    volume = state.volume?.volume ?: 0,
+                    isMuted = state.volume?.muted ?: false,
+                    shuffle = state.playMode.shuffle,
+                    repeat = state.playMode.repeat,
+                    crossfade = state.playMode.crossfade,
+                    // Per-speaker rows only mean anything once a group has more than one.
+                    playerVolumes = group?.playerIds
+                        ?.takeIf { it.size > 1 }
+                        ?.mapNotNull { id ->
+                            playerVolumes[id]?.let {
+                                PlayerVolumeEntry(id, household.playerName(id), it.volume, it.muted)
+                            }
+                        }
+                        .orEmpty(),
+                    isLoading = false,
+                    error = householdState.error,
+                )
+            }
+        }.combine(_sleepRemaining) { state, remaining ->
+            state.copy(sleepTimerRemainingMillis = remaining)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
     private val mediaSession = MediaSession(context, "x2rock").also { session ->
         session.setCallback(object : MediaSession.Callback() {
@@ -84,7 +127,7 @@ class PlayerViewModel @Inject constructor(
             override fun onSkipToNext() { skipToNextTrack() }
             override fun onSkipToPrevious() { skipToPreviousTrack() }
             override fun onSeekTo(pos: Long) {
-                val state = _uiState.value
+                val state = uiState.value
                 val elapsed = if (state.playbackState.isPlaying())
                     System.currentTimeMillis() - state.positionUpdatedAt else 0L
                 seekBy(pos - state.positionMillis - elapsed)
@@ -94,21 +137,12 @@ class PlayerViewModel @Inject constructor(
     }
 
     init {
-        viewModelScope.launch {
-            _uiState.collect { updateMediaSession(it) }
-        }
-        viewModelScope.launch {
-            combine(_groupId, pollingActive) { id, active -> if (active) id else null }
-                .distinctUntilChanged()
-                .collectLatest { id ->
-                    if (id != null) pollLoop(POLL_INTERVAL_MILLIS, ::onRefreshFailed) { refresh(id) }
-                }
-        }
+        viewModelScope.launch { uiState.collect { updateMediaSession(it) } }
     }
 
-    /** Driven by the nav graph's lifecycle observer so nothing polls while the app is hidden. */
-    fun setPollingActive(active: Boolean) {
-        pollingActive.value = active
+    fun selectGroup(id: String, name: String) {
+        _groupId.value = id
+        _groupName.value = name
     }
 
     private fun updateMediaSession(state: PlayerUiState) {
@@ -136,231 +170,106 @@ class PlayerViewModel @Inject constructor(
         mediaSession.setPlaybackState(
             PlaybackState.Builder()
                 .setActions(
-                    PlaybackState.ACTION_PLAY or
-                    PlaybackState.ACTION_PAUSE or
-                    PlaybackState.ACTION_PLAY_PAUSE or
-                    PlaybackState.ACTION_SKIP_TO_NEXT or
-                    PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-                    PlaybackState.ACTION_SEEK_TO
+                    PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
+                        PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
+                        PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_SEEK_TO
                 )
-                .setState(pbState, state.positionMillis, 1f)
+                .setState(pbState, state.positionMillis, 1.0f)
                 .build()
         )
     }
 
-    override fun onCleared() {
-        mediaSession.release()
-        super.onCleared()
-    }
+    // ------------------------------------------------------------ transport
+    //
+    // Fire and forget. The player answers with an event, and the flows above pick it up.
 
-    fun selectGroup(id: String, name: String) {
-        if (_groupId.value == id) {
-            // Same room, but the name may only just have resolved (deep link, or groups still loading).
-            if (_uiState.value.groupName != name) _uiState.update { it.copy(groupName = name) }
-            return
-        }
-        lastMetadataKey = ""
-        lastPbStateCode = -1
-        lastPbPositionMillis = -1L
-        _uiState.value = PlayerUiState(groupName = name, isLoading = true)
-        cancelSleepTimer()
-        // Set last: this is what restarts the poll loop, and it must see the reset state.
-        _groupId.value = id
-    }
-
-    private suspend fun refresh(id: String) = coroutineScope {
-        // These are independent endpoints; issuing them serially cost one round trip each,
-        // every tick, and a grouped room added one more per speaker on top.
-        val playbackDeferred = async { repository.getPlaybackState(id) }
-        val metadataDeferred = async { repository.getPlaybackMetadata(id) }
-        val volumeDeferred = async { repository.getGroupVolume(id) }
-        val playModeDeferred = async { repository.getPlayMode(id) }
-
-        val playerIds = repository.getPlayerIdsForGroup(id)
-        val playerVolumeDeferreds = if (playerIds.size > 1) {
-            playerIds.map { pid -> async { pid to repository.getPlayerVolume(pid).getOrNull() } }
-        } else {
-            emptyList()
-        }
-
-        val playback = playbackDeferred.await().getOrThrow()
-        val metadata = metadataDeferred.await().getOrNull()
-        val vol = volumeDeferred.await().getOrThrow()
-        val playMode = playModeDeferred.await().getOrNull()
-        val playerVols = playerVolumeDeferreds.awaitAll().mapNotNull { (pid, volume) ->
-            volume?.let { PlayerVolumeEntry(pid, repository.getPlayerName(pid), it.volume, it.muted) }
-        }
-
-        val track = metadata?.currentItem?.track
-        _uiState.update {
-            it.copy(
-                isLoading = false,
-                error = null,
-                playbackState = playback.playbackState,
-                trackName = track?.name,
-                artistName = track?.artist?.name,
-                albumName = track?.album?.name,
-                albumArtUrl = track?.imageUrl,
-                durationMillis = track?.durationMillis ?: 0,
-                positionMillis = playback.positionMillis,
-                positionUpdatedAt = System.currentTimeMillis(),
-                volume = vol.volume,
-                isMuted = vol.muted,
-                shuffle = playMode?.playMode?.shuffle ?: it.shuffle,
-                repeat = playMode?.playMode?.repeat ?: it.repeat,
-                crossfade = playMode?.playMode?.crossfade ?: it.crossfade,
-                playerVolumes = playerVols
-            )
-        }
-    }
-
-    private fun onRefreshFailed(e: Throwable) {
-        _uiState.update { it.copy(isLoading = false, error = e.message) }
-    }
-
-    /** Post-command re-read: a failure here shouldn't blank the screen, the poll will catch up. */
-    private suspend fun refreshQuietly(id: String) {
-        try {
-            refresh(id)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Throwable) {
-            onRefreshFailed(e)
-        }
-    }
-
-    fun togglePlayPause() {
-        val id = _groupId.value ?: return
-        viewModelScope.launch {
-            repository.togglePlayPause(id)
-            delay(300L)
-            refreshQuietly(id)
-        }
-    }
-
-    fun skipToNextTrack() {
-        val id = _groupId.value ?: return
-        viewModelScope.launch {
-            repository.skipToNextTrack(id)
-            delay(300L)
-            refreshQuietly(id)
-        }
-    }
-
-    fun skipToPreviousTrack() {
-        val id = _groupId.value ?: return
-        viewModelScope.launch {
-            repository.skipToPreviousTrack(id)
-            delay(300L)
-            refreshQuietly(id)
-        }
-    }
+    fun togglePlayPause() = command { household.togglePlayPause(it) }
+    fun skipToNextTrack() = command { household.skipToNextTrack(it) }
+    fun skipToPreviousTrack() = command { household.skipToPreviousTrack(it) }
 
     fun seekBy(deltaMillis: Long) {
-        val id = _groupId.value ?: return
-        val state = _uiState.value
+        val state = uiState.value
         val elapsed = if (state.playbackState.isPlaying())
             System.currentTimeMillis() - state.positionUpdatedAt else 0L
-        val current = state.positionMillis + elapsed
-        val target = (current + deltaMillis).coerceIn(0, state.durationMillis)
-        _uiState.update { it.copy(positionMillis = target, positionUpdatedAt = System.currentTimeMillis()) }
-        viewModelScope.launch {
-            repository.seek(id, target)
-            delay(300L)
-            refreshQuietly(id)
-        }
+        val target = (state.positionMillis + elapsed + deltaMillis)
+            .coerceIn(0, state.durationMillis.takeIf { it > 0 } ?: Long.MAX_VALUE)
+        command { household.seek(it, target) }
     }
 
     fun toggleMute() {
-        val id = _groupId.value ?: return
-        val newMuted = !_uiState.value.isMuted
-        _uiState.update { it.copy(isMuted = newMuted) }
-        viewModelScope.launch {
-            repository.setGroupMute(id, newMuted)
-        }
+        val muted = !uiState.value.isMuted
+        command { household.setGroupMute(it, muted) }
     }
 
+    /** Debounced: a held D-pad key would otherwise send one command per repeat. */
     fun adjustVolume(delta: Int) {
-        val id = _groupId.value ?: return
-        val newVol = (_uiState.value.volume + delta).coerceIn(0, 100)
-        _uiState.update { it.copy(volume = newVol) }
+        val groupId = _groupId.value ?: return
+        val target = (uiState.value.volume + delta).coerceIn(0, 100)
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
-            delay(300L)
-            repository.setGroupVolume(id, newVol)
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            runCatching { household.setGroupVolume(groupId, target) }
         }
     }
 
     fun toggleShuffle() = updatePlayMode { it.copy(shuffle = !it.shuffle) }
 
     fun cycleRepeat() = updatePlayMode { mode ->
-        val next = when (mode.repeat) {
-            RepeatModes.NONE -> RepeatModes.ALL
-            RepeatModes.ALL -> RepeatModes.ONE
-            else -> RepeatModes.NONE
-        }
-        mode.copy(repeat = next)
+        mode.copy(
+            repeat = when (mode.repeat) {
+                RepeatModes.NONE -> RepeatModes.ALL
+                RepeatModes.ALL -> RepeatModes.ONE
+                else -> RepeatModes.NONE
+            }
+        )
     }
 
     fun toggleCrossfade() = updatePlayMode { it.copy(crossfade = !it.crossfade) }
 
     private fun updatePlayMode(transform: (PlayModeState) -> PlayModeState) {
-        val id = _groupId.value ?: return
-        val cur = _uiState.value
-        val newMode = transform(PlayModeState(repeat = cur.repeat, shuffle = cur.shuffle, crossfade = cur.crossfade))
-        _uiState.update { it.copy(repeat = newMode.repeat, shuffle = newMode.shuffle, crossfade = newMode.crossfade) }
-        viewModelScope.launch { repository.setPlayMode(id, newMode) }
+        val groupId = _groupId.value ?: return
+        val current = PlayModeState(
+            repeat = uiState.value.repeat,
+            shuffle = uiState.value.shuffle,
+            crossfade = uiState.value.crossfade,
+        )
+        viewModelScope.launch { runCatching { household.setPlayMode(groupId, transform(current)) } }
     }
 
     fun adjustPlayerVolume(playerId: String, delta: Int) {
-        _groupId.value ?: return
-        val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
-        val newVol = (entry.volume + delta).coerceIn(0, 100)
-        _uiState.update {
-            it.copy(playerVolumes = it.playerVolumes.map { e ->
-                if (e.playerId == playerId) e.copy(volume = newVol) else e
-            })
-        }
+        val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
+        val target = (current.volume + delta).coerceIn(0, 100)
         playerVolumeDebounceJobs[playerId]?.cancel()
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
-            delay(300L)
-            repository.setPlayerVolume(playerId, newVol)
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            runCatching { household.setPlayerVolume(playerId, target) }
         }
     }
 
     fun togglePlayerMute(playerId: String) {
-        _groupId.value ?: return
-        val entry = _uiState.value.playerVolumes.find { it.playerId == playerId } ?: return
-        val newMuted = !entry.muted
-        _uiState.update {
-            it.copy(playerVolumes = it.playerVolumes.map { e ->
-                if (e.playerId == playerId) e.copy(muted = newMuted) else e
-            })
-        }
-        viewModelScope.launch {
-            repository.setPlayerMute(playerId, newMuted)
-        }
+        val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
+        viewModelScope.launch { runCatching { household.setPlayerMute(playerId, !current.muted) } }
     }
+
+    // ------------------------------------------------------------ sleep timer
 
     fun setSleepTimer(minutes: Int) {
         val groupId = _groupId.value ?: return
         sleepTimerJob?.cancel()
         val endMs = System.currentTimeMillis() + minutes * 60_000L
-        _uiState.update { it.copy(sleepTimerRemainingMillis = minutes * 60_000L) }
+        _sleepRemaining.value = minutes * 60_000L
         sleepTimerJob = viewModelScope.launch {
             while (isActive) {
                 val remaining = endMs - System.currentTimeMillis()
                 if (remaining <= 0) {
-                    _uiState.update { it.copy(sleepTimerRemainingMillis = null) }
+                    _sleepRemaining.value = null
                     sleepTimerJob = null
-                    if (_uiState.value.playbackState.isPlaying()) {
-                        repository.togglePlayPause(groupId)
-                        delay(300L)
-                        refreshQuietly(groupId)
+                    if (uiState.value.playbackState.isPlaying()) {
+                        runCatching { household.pause(groupId) }
                     }
                     break
                 }
-                _uiState.update { it.copy(sleepTimerRemainingMillis = remaining) }
+                _sleepRemaining.value = remaining
                 delay(1_000L)
             }
         }
@@ -369,10 +278,20 @@ class PlayerViewModel @Inject constructor(
     fun cancelSleepTimer() {
         sleepTimerJob?.cancel()
         sleepTimerJob = null
-        _uiState.update { it.copy(sleepTimerRemainingMillis = null) }
+        _sleepRemaining.value = null
+    }
+
+    override fun onCleared() {
+        mediaSession.release()
+        super.onCleared()
+    }
+
+    private fun command(block: suspend (String) -> Unit) {
+        val groupId = _groupId.value ?: return
+        viewModelScope.launch { runCatching { block(groupId) } }
     }
 
     private companion object {
-        const val POLL_INTERVAL_MILLIS = 5_000L
+        const val VOLUME_DEBOUNCE_MILLIS = 300L
     }
 }

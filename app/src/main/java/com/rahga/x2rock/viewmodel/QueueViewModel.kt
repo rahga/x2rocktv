@@ -4,10 +4,8 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.QueueItem
-import com.rahga.x2rock.repository.SonosRepository
+import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +26,7 @@ fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
 
 @HiltViewModel
 class QueueViewModel @Inject constructor(
-    private val repository: SonosRepository,
+    private val household: SonosHousehold,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -51,13 +49,17 @@ class QueueViewModel @Inject constructor(
 
     fun playItem(trackNumber: Int) {
         viewModelScope.launch {
-            repository.skipToQueueItem(groupId, trackNumber)
+            runCatching { household.skipToQueueItem(groupId, trackNumber) }
         }
     }
 
-    fun removeItem(itemId: String) {
+    /**
+     * Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`), and
+     * the queue has no event to tell us it changed, so it is re-read after.
+     */
+    fun removeItem(trackNumber: Int) {
         viewModelScope.launch {
-            repository.deleteQueueItems(groupId, listOf(itemId)).onSuccess { load() }
+            runCatching { household.removeFromQueue(groupId, trackNumber) }.onSuccess { load() }
         }
     }
 
@@ -65,13 +67,10 @@ class QueueViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             runCatching {
-                coroutineScope {
-                    val queueDeferred = async { repository.getQueue(groupId).getOrThrow() }
-                    val metaDeferred = async { repository.getPlaybackMetadata(groupId).getOrNull() }
-                    val queue = queueDeferred.await()
-                    val currentTrackName = metaDeferred.await()?.currentItem?.track?.name
-                    UiState.Success(queueEntries(queue.items), currentTrackName)
-                }
+                // The queue is the one thing still asked for rather than pushed; what is
+                // playing is already known from the household's subscriptions.
+                val queue = household.queue(groupId)
+                UiState.Success(queueEntries(queue.items), household.groupState(groupId).track?.name)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }

@@ -110,7 +110,7 @@ private fun QueueList(
     currentTrackName: String?,
     onBack: () -> Unit,
     onPlayItem: (Int) -> Unit,
-    onRemoveItem: (String) -> Unit
+    onRemoveItem: (Int) -> Unit
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -169,7 +169,7 @@ private fun QueueList(
         if (menuEntry != null) {
             QueueItemContextMenu(
                 item = menuEntry.item,
-                onRemove = { onRemoveItem(menuEntry.item.id); contextMenuEntry = null },
+                onRemove = { onRemoveItem(menuEntry.trackNumber); contextMenuEntry = null },
                 onDismiss = { contextMenuEntry = null }
             )
         }

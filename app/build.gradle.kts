@@ -1,16 +1,9 @@
-import java.util.Properties
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
-}
-
-val localProps = Properties().apply {
-    val f = rootProject.file("local.properties")
-    if (f.exists()) load(f.inputStream())
 }
 
 android {
@@ -23,11 +16,6 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
-        buildConfigField("String", "SONOS_CLIENT_ID",
-            "\"${localProps.getProperty("SONOS_CLIENT_ID", "")}\"")
-        buildConfigField("String", "SONOS_CLIENT_SECRET",
-            "\"${localProps.getProperty("SONOS_CLIENT_SECRET", "")}\"")
     }
 
     buildTypes {
@@ -92,15 +80,12 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Network (retrofit/okhttp come through :core; AppModule still builds the clients here)
-    implementation(libs.retrofit.converter.gson)
-    implementation(libs.okhttp.logging)
+    // Network: OkHttp comes through :core, which is where the player client is built.
 
     // Image loading
     implementation(libs.coil.compose)
 
     // Security
-    implementation(libs.androidx.security.crypto)
 
     // Hilt
     implementation(libs.hilt.android)

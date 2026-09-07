@@ -16,13 +16,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
-import com.rahga.x2rock.ui.screens.LoginScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
-import com.rahga.x2rock.ui.screens.SonosAuthWebViewScreen
 import com.rahga.x2rock.viewmodel.HomeViewModel
-import com.rahga.x2rock.viewmodel.LoginViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
-import kotlinx.coroutines.awaitCancellation
 
 @Composable
 fun X2RockNavGraph(startDestination: String) {
@@ -30,20 +26,13 @@ fun X2RockNavGraph(startDestination: String) {
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
 
-    // Both view models poll the Sonos cloud API on a timer. Gate them here, once, so nothing
-    // keeps hitting the network while the TV is on another input — and so PlayerViewModel keeps
-    // polling on the queue and favorites screens, which show its now-playing bar.
+    // Connect once the UI is on screen. This used to gate two poll timers; there is no
+    // timer now, so there is nothing to switch off when the TV moves to another input —
+    // the subscriptions simply sit idle, and state is already current on the way back.
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            homeViewModel.setPollingActive(true)
-            playerViewModel.setPollingActive(true)
-            try {
-                awaitCancellation()
-            } finally {
-                homeViewModel.setPollingActive(false)
-                playerViewModel.setPollingActive(false)
-            }
+            homeViewModel.setActive(true)
         }
     }
 
@@ -55,64 +44,7 @@ fun X2RockNavGraph(startDestination: String) {
         }
     }
 
-    // The refresh token was rejected — drop back to login rather than looping on errors.
-    val sessionExpired by homeViewModel.sessionExpired.collectAsState()
-    LaunchedEffect(sessionExpired) {
-        if (sessionExpired) {
-            homeViewModel.signOut()
-            navController.navigate("login") { popUpTo(0) { inclusive = true } }
-        }
-    }
-
     NavHost(navController = navController, startDestination = startDestination) {
-        composable("login") { backStackEntry ->
-            val viewModel: LoginViewModel = hiltViewModel()
-
-            val savedStateHandle = backStackEntry.savedStateHandle
-            val code by savedStateHandle.getStateFlow<String?>("code", null).collectAsState()
-            val returnedState by savedStateHandle.getStateFlow<String?>("state", null).collectAsState()
-
-            LaunchedEffect(code, returnedState) {
-                val c = code
-                val s = returnedState
-                if (c != null && s != null) {
-                    savedStateHandle.remove<String>("code")
-                    savedStateHandle.remove<String>("state")
-                    viewModel.handleCallback(c, s)
-                }
-            }
-
-            LoginScreen(
-                onAuthenticated = {
-                    navController.navigate("home") {
-                        popUpTo("login") { inclusive = true }
-                    }
-                },
-                onConnect = { authUrl ->
-                    navController.navigate("auth-webview/${Uri.encode(authUrl)}")
-                },
-                viewModel = viewModel
-            )
-        }
-
-        composable(
-            route = "auth-webview/{authUrl}",
-            arguments = listOf(navArgument("authUrl") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val encodedUrl = backStackEntry.arguments?.getString("authUrl") ?: ""
-            SonosAuthWebViewScreen(
-                authUrl = Uri.decode(encodedUrl),
-                onCodeReceived = { code, state ->
-                    navController.previousBackStackEntry?.savedStateHandle?.apply {
-                        set("code", code)
-                        set("state", state)
-                    }
-                    navController.popBackStack()
-                },
-                onCancel = { navController.popBackStack() }
-            )
-        }
-
         composable("home") {
             HomeScreen(
                 onOpenQueue = { groupId ->
@@ -120,11 +52,6 @@ fun X2RockNavGraph(startDestination: String) {
                 },
                 onOpenFavorites = { groupId ->
                     navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
-                },
-                onSignedOut = {
-                    navController.navigate("login") {
-                        popUpTo(0) { inclusive = true }
-                    }
                 },
                 homeViewModel = homeViewModel,
                 playerViewModel = playerViewModel

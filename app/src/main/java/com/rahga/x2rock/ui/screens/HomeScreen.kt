@@ -67,6 +67,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
@@ -86,7 +87,6 @@ import com.rahga.x2rock.viewmodel.sortGroups
 fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit = {},
     onOpenFavorites: (groupId: String) -> Unit = {},
-    onSignedOut: () -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -171,7 +171,7 @@ fun HomeScreen(
                     onPartyModeClick = { showPartyConfirmation = true },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onRetry = { homeViewModel.loadGroups() }
+                    onRetry = { homeViewModel.setActive(true) }
                 )
             }
 
@@ -231,8 +231,7 @@ fun HomeScreen(
             SettingsPanel(
                 currentTheme = selectedTheme,
                 firstFocus = settingsFocus,
-                onThemeSelected = { homeViewModel.setTheme(it) },
-                onSignOut = { homeViewModel.signOut(); onSignedOut() }
+                onThemeSelected = { homeViewModel.setTheme(it) }
             )
         }
 
@@ -460,7 +459,7 @@ private fun RoomListItem(
                 val roomCount = group.playerIds.size
                 val statusLine = when {
                     track?.name != null -> track.name
-                    else -> group.playbackState.toPlaybackLabel()
+                    else -> (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
                 } + if (roomCount > 1) " · $roomCount rooms" else ""
                 Text(
                     text = statusLine,
@@ -470,7 +469,7 @@ private fun RoomListItem(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (group.playbackState.isPlaying()) {
+                if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
                     Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
                 if (isPrimary) {
@@ -589,7 +588,7 @@ private fun GroupPickerDialog(
                 Column(horizontalAlignment = Alignment.Start) {
                     Text(group.name, style = MaterialTheme.typography.bodyLarge)
                     val track = nowPlaying[group.id]
-                    val subtitle = track?.name ?: group.playbackState.toPlaybackLabel()
+                    val subtitle = track?.name ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
@@ -686,8 +685,7 @@ private fun PartyConfirmationDialog(
 private fun SettingsPanel(
     currentTheme: AppColorTheme,
     firstFocus: FocusRequester,
-    onThemeSelected: (AppColorTheme) -> Unit,
-    onSignOut: () -> Unit
+    onThemeSelected: (AppColorTheme) -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -711,15 +709,6 @@ private fun SettingsPanel(
                 onThemeSelected = onThemeSelected,
                 modifier = Modifier.focusRequester(firstFocus)
             )
-
-            Spacer(Modifier.weight(1f))
-
-            AppButton(
-                onClick = onSignOut,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Sign Out")
-            }
         }
     }
 }

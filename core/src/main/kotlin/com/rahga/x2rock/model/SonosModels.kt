@@ -14,7 +14,13 @@ data class Group(
     val name: String,
     val coordinatorId: String,
     val playerIds: List<String>,
-    val playbackState: String
+    /**
+     * Nullable because the wire really does omit it: a `groups:1` *subscribe event* carries
+     * no `playbackState`, though the `getGroups` *reply* does. Declaring it non-null let
+     * Gson write null straight past the Kotlin type and crash the first recomposition after
+     * a group formed. `SonosHousehold` fills it in, so consumers normally see a value.
+     */
+    val playbackState: String? = null
 )
 
 data class Player(
