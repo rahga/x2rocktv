@@ -19,23 +19,34 @@ reintroduce a CLI here without deciding what it does that `x2rock` does not.
 
 ## Sonos Integration
 
-> **The cloud transport is on its way out.** As of 2026-09-07 the LAN Control API is proven
-> on real Android TV hardware — same API, no account, no OAuth, push instead of polling —
-> and the cloud OAuth flow *cannot be completed with a TV remote at all*, so the current
-> `:app` login path cannot ship. **Read `docs/lan-transport.md` before touching the network
-> layer**; it records the verified handshake, protocol, discovery and Android specifics.
-> The description below documents what `:core` does *today*, not what it should do.
+**Read `docs/lan-transport.md` before touching anything network-related.** It records the
+verified handshake, wire protocol, discovery, trust model and Android specifics, and every
+claim in it was run against real hardware.
 
-- Uses the **Sonos cloud Control API** (OAuth 2.0 + REST, `api.ws.sonos.com`) — not local
-  UPnP/SOAP. A Sonos account can have more than one *household*; nothing in the API assumes one.
-- Docs are in `/docs/` — read them before implementing Sonos features, especially
-  `docs/sonos-control-api.md` (mirrors Sonos's own reference, including its WebSocket
-  subscription support, which nothing here uses yet — see the Known Gaps section below).
+- The app speaks the Sonos **Control API over the LAN**, directly to the speakers:
+  `wss://sonos-<MAC>.local:1443/websocket/api`. **No account, no OAuth, no tokens.** The
+  cloud transport was removed in 2026-09 — it offered nothing the LAN does not, and its
+  consent page cannot be completed with a TV remote, so it could never have shipped here.
+- It is **push, not poll**. Subscribe and the speakers send changes; a command's effect
+  arrives as an event, so nothing re-fetches after acting. If you find yourself adding a
+  timer or a `delay()` before a re-read, something is wrong.
+- **Scope matters.** Group-scoped namespaces go to that group's *coordinator's* socket,
+  player-scoped ones to that *player's own* socket; anything else answers
+  `ERROR_INVALID_OBJECT_ID`.
+- The **queue is not in the Control API at all** (`ERROR_UNSUPPORTED_NAMESPACE`). It lives
+  behind UPnP on cleartext port 1400 — see `Upnp` — and is the one thing still asked for
+  rather than pushed.
+- Docs in `/docs/` mirror Sonos's own reference for the namespaces and body shapes, which
+  are the same over either transport. `docs/sonos-auth.md` describes the account flow this
+  project no longer uses; it is kept for reference only.
 
 ## Architecture
-- MVVM with clean architecture in `:app`
-- Repository pattern for Sonos API calls (`SonosRepository`, `SonosAuthRepository` in `:core`)
-- Kotlin Coroutines + Flow for async/reactive state
+- MVVM in `:app`; `:core`'s `lan` package is everything that talks to a speaker
+- `SonosHousehold` is the single live view of the household — two `StateFlow`s fed by
+  subscriptions, plus the commands. ViewModels derive their UI state from it and hold no
+  timers of their own.
+- `:core` is pure Kotlin/JVM on purpose: it can be exercised against real speakers from a
+  plain JVM test, which is how the transport was developed and how it should stay.
 
 ## Code Style
 - Idiomatic Kotlin
@@ -51,26 +62,33 @@ isn't excluding it unintentionally), regenerate it with `gradle wrapper --gradle
 any locally installed Gradle before running `./gradlew`.
 
 An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
-`SONOS_CLIENT_ID` / `SONOS_CLIENT_SECRET` are read from `local.properties` but default to empty
-strings, so **the project builds without Sonos credentials** — useful when working on the LAN
-transport, which needs none.
+**There are no credentials to supply** — no client id, no secret, nothing in
+`local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
+you are working from a stale mental model of this project.
 
-**Do not guess or reuse Sonos client-id/secret from memory** — always ask the user; signing in
-requires an interactive browser step only the user can complete (and see the note above about
-that step being impossible on a TV remote).
+Much of `:core` can be tested without a device at all: it is plain Kotlin/JVM, so a JUnit
+test can open a real socket to a real speaker. That is how the transport was built, and it
+is far faster than a build-install-logcat cycle. Reach for the Shield when the question is
+about *Android* — cleartext policy, permissions, lifecycle — not about the protocol.
 
-### Multiple households
-A Sonos account can have more than one household — e.g. a standalone speaker set up separately
-from the rest of the system — and a room missing from a listing is more often that than a
-network or discovery problem. Nothing in the API assumes a single household.
+### Households
+A household is discovered, not configured: SSDP's reply carries
+`HOUSEHOLD.SMARTSPEAKER.AUDIO`, which is the full id the WebSocket needs (note
+`X-RINCON-HOUSEHOLD` is a truncated form and will not work). One network, one household in
+practice; a room missing from a listing is more likely a player that did not answer
+discovery than a second household.
 
 ## Known Gaps / Deferred Work
-- Everything polls the REST API on an interval; the Control API supports WebSocket push
-  subscriptions that nothing here uses yet. **This is no longer just an efficiency gap** — the
-  same API is served by the speakers themselves over the LAN with no account, and that is now
-  verified working on Android TV. See `docs/lan-transport.md`. Fixing it in `:core` removes
-  the OAuth layer entirely.
-- Untested pieces of that port, in likely order of surprise: hosting a long-lived socket (no
-  `Service` exists in `:app` yet; API 34+ needs `foregroundServiceType="mediaPlayback"`),
-  network-change and wake handling via `ConnectivityManager.NetworkCallback`, and the Google TV
-  Streamer (Android 14) as the stricter device target.
+- **No foreground service.** The sockets are held by an application-scoped `CoroutineScope`,
+  which survives Activity changes but not the process being reclaimed. A long-lived
+  connection wants a `Service`; on API 34+ it must declare
+  `foregroundServiceType="mediaPlayback"`. Nothing has needed it yet on a TV that rarely
+  sleeps, but it is the next real gap.
+- **Only tested on one device.** An NVIDIA Shield (Android 11, Ethernet). The Google TV
+  Streamer (Android 14) is the stricter target and would surface newer local-network policy
+  first.
+- **A custom `X509TrustManager` is still required**, because players present a leaf-only
+  chain whose root is not in any store. Hostname verification is *not* relaxed — see
+  `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
+- The queue does not update by itself: UPnP eventing needs the player to connect back to us,
+  which is deliberately not used, so the queue screen re-reads instead.

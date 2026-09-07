@@ -2,19 +2,17 @@
 
 A Sonos controller for Google TV / Android TV, written in Kotlin with Jetpack Compose.
 
-> **This document describes the code as it stands, which is built on the Sonos cloud API.**
-> That transport is being replaced: the same Control API is served by the speakers over the
-> LAN with no account, it pushes instead of polling, and the cloud OAuth flow cannot be
-> completed with a TV remote — so the login path described below cannot ship on the target
-> device. The replacement is proven on hardware and specified in
-> [`docs/lan-transport.md`](docs/lan-transport.md). Read that first if you are touching the
-> network layer, `:core`, or anything auth-related.
+> **The app talks to the speakers over the LAN, with no Sonos account.** The cloud Control
+> API and its OAuth flow were removed in 2026-09: the same API is served by the players
+> themselves, it pushes instead of polling, and Sonos's consent page cannot be completed
+> with a TV remote anyway. The protocol, and the evidence behind every claim about it, is
+> in [`docs/lan-transport.md`](docs/lan-transport.md) — read that before touching `:core`.
 
 ---
 
 ## What it does
 
-x2rock lets you control Sonos speakers from a TV remote. You authenticate with your Sonos account via OAuth, then see all your rooms in a sidebar. Selecting a room shows the now-playing track, playback controls, queue, and favorites. Rooms can be grouped/ungrouped, volume adjusted per-player, and a sleep timer set. There are five dark color themes.
+x2rock lets you control Sonos speakers from a TV remote. There is no sign-in: the speakers are found on the local network and answer without an account. Rooms appear in a sidebar. Selecting a room shows the now-playing track, playback controls, queue, and favorites. Rooms can be grouped/ungrouped, volume adjusted per-player, and a sleep timer set. There are five dark color themes.
 
 ---
 
@@ -32,56 +30,46 @@ the Rust project `rahga/x2rock` covers that ground on the desktop.
 ## File Map
 
 ```
-core/src/main/kotlin/com/rahga/x2rock/          (pure JVM)
+core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it is
+│                                                testable against real speakers)
 ├── model/
-│   ├── SonosModels.kt             All data classes (API requests/responses, UI state)
+│   ├── SonosModels.kt             Control API shapes, shared by every layer
 │   └── AppColorTheme.kt           Enum: DEFAULT, OCEAN, EMBER, FOREST, ORCHID
 │
-├── network/
-│   ├── SonosApiService.kt         Retrofit interface — 20 suspend endpoints
-│   ├── AuthInterceptor.kt         OkHttp interceptor: injects Bearer token
-│   └── RateLimitedException.kt    Surfaces 429 + Retry-After to the pollers
-│
-├── repository/
-│   ├── SonosRepository.kt         Wraps all Sonos Control API calls; handles 401 retry
-│   └── SonosAuthRepository.kt     OAuth 2.0 flow; token exchange, refresh, storage
-│
-├── auth/
-│   ├── TokenStore.kt              Interface: where tokens persist (platform supplies the impl)
-│   └── SonosClientConfig.kt       OAuth client id + secret (platform supplies the values)
-│
-├── viewmodel/
-│   └── Polling.kt                 pollLoop() with exponential backoff and Retry-After
-│
-└── di/
-    └── TokenClient.kt             Qualifier for the token-exchange OkHttp client
+└── lan/
+    ├── Frame.kt                   [header, body] wire format; reply vs event
+    ├── PlayerNames.kt             RINCON id → sonos-<MAC>.local
+    ├── LanHttp.kt                 the player-only OkHttp client + address book
+    ├── SonosSocket.kt             one socket to one player
+    ├── Discovery.kt               SSDP: id, address and household in one reply
+    ├── SonosHousehold.kt          state flows, commands, reconnection
+    ├── Upnp.kt                    the queue, over cleartext 1400
+    └── PlayModes.kt               repeat flags ↔ the app's enum
 
 app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── X2RockApp.kt                   Hilt application entry point
 ├── MainActivity.kt                Single activity; sets Compose content + theme
 │
 ├── auth/
-│   ├── EncryptedTokenStore.kt     TokenStore impl: EncryptedSharedPreferences + keystore
 │   ├── ThemeStore.kt              StateFlow-backed theme preference
 │   └── RoomPreferencesStore.kt    StateFlow-backed favorites + primary room
 │
+├── net/
+│   └── NetworkMonitor.kt          ConnectivityManager → household.onNetworkChanged()
+│
 ├── di/
-│   ├── AppModule.kt               Hilt @Provides: OkHttp, Retrofit, SonosClientConfig from BuildConfig
-│   └── StoreModule.kt             Hilt @Binds: TokenStore → EncryptedTokenStore
+│   └── AppModule.kt               Hilt @Provides: app scope, address book, LAN client, household
 │
 ├── ui/
 │   ├── NavGraph.kt                Navigation graph — 5 routes
 │   ├── theme/Theme.kt             5 Material 3 dark color schemes; AppButton component
 │   └── screens/
-│       ├── LoginScreen.kt         OAuth entry point (Idle → Loading → Authenticated)
-│       ├── SonosAuthWebViewScreen.kt  WebView for Sonos OAuth; intercepts callback
 │       ├── HomeScreen.kt          Main UI: room sidebar + player detail pane
 │       ├── PlayerScreen.kt        Playback controls (embedded in HomeScreen)
 │       ├── QueueScreen.kt         Track queue — tap to jump, long-press to delete
 │       └── FavoritesScreen.kt     Saved favorites — tap to load
 │
 └── viewmodel/
-    ├── LoginViewModel.kt
     ├── HomeViewModel.kt
     ├── PlayerViewModel.kt
     ├── QueueViewModel.kt
@@ -93,18 +81,16 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ## Screens & Navigation
 
 ```
-login  ──────────────────────────────────────────────── start (if no tokens)
-  └─→ auth-webview/{authUrl}
-        └─→ (deep link: x2rock://callback?code=…&state=…)
-              └─→ login (exchanges code) → home
-
-home  ───────────────────────────────────────────────── start (if authenticated)
+home  ───────────────────────────────────────────────── start, always
   ├─→ queue?groupId={id}
   └─→ favorites?groupId={id}
 ```
 
+There is no login route. `x2rock://room/{groupId}` still deep-links from the TV
+home-screen channel tiles.
+
 **HomeScreen** is a split-pane layout:
-- Left: 320dp `RoomSidebar` — room list, party mode button, settings slide-in (theme, sign out)
+- Left: 320dp `RoomSidebar` — room list, party mode button, settings slide-in (theme)
 - Right: `PlayerScreen` — album art, track info, progress bar, playback buttons, volume
 
 **PlayerScreen controls** are three rows:
@@ -116,38 +102,40 @@ home  ────────────────────────�
 
 ## Data Flow
 
+**Nothing polls.** The speakers push, and every link above them is already reactive:
+
 ```
-Compose UI
-    │  collectAsState()
-    ▼
-ViewModel  (StateFlow<UiState>)
-    │  viewModelScope.launch { withContext(Dispatchers.IO) }
-    ▼
-Repository  (singleton, Result<T>)
-    │  Retrofit suspend call
-    ▼
-SonosApiService  →  https://api.ws.sonos.com/control/api/v1/
+speakers  ──push──▶  SonosSocket        wss://sonos-<MAC>.local:1443
+                         │  events
+                         ▼
+                     SonosHousehold     StateFlow<HouseholdState>
+                         │              StateFlow<Map<String, GroupState>>
+                         ▼
+                     ViewModel          combine(...) → StateFlow<UiState>
+                         │  collectAsState()
+                         ▼
+                     Compose            recomposes only on real change
 ```
 
-State in each ViewModel is a sealed interface: `Loading | Success(...) | Error`.
+State in each ViewModel is derived rather than assembled by hand, so it recomputes when
+something actually changes and at no other time. A command's effect arrives as an event
+like any other, which is why nothing re-fetches after acting.
 
-Polling is simple `while(true) { fetch(); delay(5_000) }` loops scoped to `viewModelScope`. When the user navigates away or selects a different group the old job is cancelled.
+The **queue is the exception**: the Control API has no queue at all, so it is read over
+UPnP on port 1400 and is stale until re-read. See `Upnp`.
 
 ---
 
 ## ViewModels
 
-### LoginViewModel
-Manages the OAuth dance. `buildAuthUrl()` generates the Sonos URL; `handleCallback(code, state)` calls the auth repository to exchange the code for tokens.
-
 ### HomeViewModel
-Polls the groups list every 5 seconds. Tracks `selectedGroupId`, `sidebarVisible`, `primaryRoomId`, and `favoriteRoomIds`. Handles party mode, room grouping/ungrouping, and theme selection. Broadcasts the selected group ID to PlayerViewModel via a shared `MutableStateFlow` in the repository.
+Derives the room list from the household's flows, and connects on first display. Tracks `selectedGroupId`, `sidebarVisible`, `primaryRoomId`, and `favoriteRoomIds`. Handles party mode, room grouping/ungrouping, and theme selection. Broadcasts the selected group ID to PlayerViewModel via a shared `MutableStateFlow` in the repository.
 
 ### PlayerViewModel
-Polls playback state, metadata, volume, and play mode every 5 seconds for the current group. Manages:
-- Optimistic seek: updates the local position immediately, then calls the API
-- Volume debouncing: 300ms debounce on group and per-player volume adjustments
-- Sleep timer: a local countdown coroutine that calls `togglePlayPause` when it expires
+Derives everything visible for the selected group from pushed state, and owns the
+`MediaSession` so media keys and the TV's own transport controls work. Manages:
+- Volume debouncing: 300ms, so a held D-pad key sends one command rather than one per repeat
+- Sleep timer: a local countdown coroutine that pauses the group when it expires
 
 ### QueueViewModel
 Loads once on entry. `playItem(trackNumber)` seeks to that position. `removeItem(id)` deletes and reloads.
@@ -157,69 +145,69 @@ Loads once on entry. Determines the active favorite by matching the current cont
 
 ---
 
-## Repository Layer
+## Transport Layer (`:core`, package `lan`)
 
-### SonosRepository
-Singleton. Caches `householdId`, `players`, and `groups` so the household lookup only happens once per session.
+Everything that talks to a speaker. Pure Kotlin/JVM with no Android dependency, which is
+what lets it be exercised against real hardware from a plain JVM test — that is how it was
+developed, and it is worth keeping that way.
 
-All methods return `Result<T>`. Internally, every call goes through `fetchWithRefresh()`:
-1. Calls `authRepository.ensureValidToken()` (refreshes if expiring in <60s)
-2. Makes the HTTP request
-3. If 401 → calls `refreshAccessToken()` and retries once
+| File | What it is |
+|---|---|
+| `Frame.kt` | the `[header, body]` wire format. `success` is the only thing separating a reply from an unsolicited event |
+| `PlayerNames.kt` | derives `sonos-<MAC>.local` from a RINCON player id |
+| `LanHttp.kt` | the player-only OkHttp client, and the address book standing in for the mDNS Android has no resolver for |
+| `SonosSocket.kt` | one socket to one player: handshake, `cmdId` correlation, event flow, keepalive, failure reporting |
+| `Discovery.kt` | SSDP. The reply carries the player id *and* household id, which is why the first connection can be made to a verified name |
+| `SonosHousehold.kt` | the live view: connections, subscriptions, state flows, commands, reconnection |
+| `Upnp.kt` | the queue, over cleartext port 1400 — the one thing the Control API lacks |
+| `PlayModes.kt` | Sonos's two repeat booleans ↔ the app's three-way enum |
 
-### SonosAuthRepository
-OAuth 2.0 with Basic auth (client credentials). Tokens go through the `TokenStore` interface — on Android that is `EncryptedTokenStore` (AES256-GCM). A `Mutex` prevents concurrent refresh calls. Client credentials arrive via `SonosClientConfig` rather than `BuildConfig`, so the repository has no build-system coupling.
+### SonosHousehold
 
-**OAuth redirect URI:** `https://rahga.github.io/x2rock/callback.html`  
-The hosted page redirects to the deep link `x2rock://callback`, which the WebView intercepts.
+Holds `StateFlow<HouseholdState>` (groups, players) and `StateFlow<Map<String, GroupState>>`
+(playback, metadata, volume, play mode per group), plus per-player volumes. One socket per
+group coordinator, because group-scoped namespaces are answered by coordinators only;
+player-scoped calls open that player's own socket. Both are pooled.
 
-Note this whole flow is a dead end on the target device — see the banner at the top of this
-file and `docs/lan-transport.md`.
+Reconnection is capped exponential backoff, 1s doubling to 60s. It rebuilds from scratch
+rather than repairing in place: subscriptions do not survive a reconnect and there is no
+replay buffer, so the fresh snapshot is truth. `onNetworkChanged()` skips the wait entirely,
+because a resumed socket can accept writes and never report failure.
 
----
+### Authentication
 
-## Key Sonos API Endpoints Used
-
-| Method | Path | What it does |
-|--------|------|--------------|
-| GET | `/households` | List households |
-| GET | `/households/{id}/groups` | List groups + players |
-| GET | `/groups/{id}/playback` | Current play state + position |
-| GET | `/groups/{id}/playbackMetadata` | Track name, artist, album art |
-| POST | `/groups/{id}/playback/togglePlayPause` | Play / pause |
-| POST | `/groups/{id}/playback/skipToNextTrack` | Next |
-| POST | `/groups/{id}/playback/skipToPreviousTrack` | Previous |
-| POST | `/groups/{id}/playback/seek` | Seek to position or track |
-| GET/POST | `/groups/{id}/groupVolume` | Get / set group volume |
-| POST | `/groups/{id}/groupVolume/mute` | Mute group |
-| GET/POST | `/groups/{id}/playMode` | Get / set shuffle, repeat, crossfade |
-| GET | `/groups/{id}/queue` | Track queue (up to 500) |
-| POST | `/groups/{id}/queue/delete` | Delete queue items |
-| GET | `/households/{id}/favorites` | List favorites |
-| POST | `/groups/{id}/favorites/loadFavorite` | Load a favorite |
-| GET/POST | `/players/{id}/playerVolume` | Per-player volume |
-| POST | `/households/{id}/groups/{id}/modifyGroupMembers` | Group/ungroup players |
+There is none, and that is the point. No account, no OAuth, no tokens, no stored secrets.
 
 ---
 
--------|-----------|---------------|
-| `EncryptedTokenStore` | EncryptedSharedPreferences (AES256-GCM) | Access token, refresh token, expiry, pending OAuth state |
-| `ThemeStore` | Plain SharedPreferences + StateFlow | Selected theme enum |
-| `RoomPreferencesStore` | Plain SharedPreferences + StateFlow | Primary room ID, Set of favorite room IDs |
+## Namespaces Used
 
-No local database — all content state is remote.
+Commands and events are `[header, body]` frames over the WebSocket, not REST paths.
+
+| Namespace | Scope | Used for |
+|---|---|---|
+| `groups:1` | household | topology, `getGroups`, `modifyGroupMembers` |
+| `playback:1` | group (coordinator) | transport, seek, play modes |
+| `playbackMetadata:1` | group (coordinator) | track, album art, container |
+| `groupVolume:1` | group (coordinator) | group volume and mute |
+| `playerVolume:1` | **that player's own socket** | per-speaker volume |
+| `favorites:1` | household / group | listing and loading favourites |
+
+`queue:1`, `playbackQueue:1` and `cloudQueue:1` all answer `ERROR_UNSUPPORTED_NAMESPACE`;
+the queue lives in `Upnp` instead.
 
 ---
 
 ## Dependency Injection
 
 Dagger Hilt in `:app` only. `AppModule` provides:
-- `SonosClientConfig` from `BuildConfig` (which reads `local.properties`)
-- Two `OkHttpClient` instances: one plain (for token exchange), one with `AuthInterceptor` + logging
-- `Retrofit` instance backed by the authenticated client, using `GsonConverterFactory`
+- an application-scoped `CoroutineScope` — the sockets outlive any one screen
+- a `PlayerAddressBook`, and the single `OkHttpClient` allowed to reach players
+- `SonosHousehold`, as a singleton
 
-`StoreModule` binds `TokenStore` to `EncryptedTokenStore`. The `:core` repositories and
-`AuthInterceptor` have `@Inject` constructors and are picked up without explicit bindings.
+**The image loader must use that same client.** Album art is served by the players at
+cleartext `.local` URLs, so a loader with its own client has neither the address book to
+resolve the name nor permission to fetch it.
 
 All ViewModels are `@HiltViewModel` and injected automatically.
 
@@ -241,4 +229,4 @@ All ViewModels are `@HiltViewModel` and injected automatically.
 - Min SDK: 23 / Compile & Target SDK: 35
 - Build system: Gradle with Kotlin DSL (`build.gradle.kts`); modules `:core` (Kotlin/JVM) and `:app` (Android)
 - Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
-- Key dependencies: Jetpack Compose TV, Dagger Hilt, Retrofit 2, OkHttp, Gson, Jetpack Navigation, AndroidX Security Crypto
+- Key dependencies: Jetpack Compose TV, Dagger Hilt, OkHttp, Gson, Jetpack Navigation
