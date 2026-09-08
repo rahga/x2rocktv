@@ -9,6 +9,7 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.model.toPlaybackLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -36,6 +37,10 @@ data class PlayerUiState(
     val artistName: String? = null,
     val albumName: String? = null,
     val albumArtUrl: String? = null,
+    /** On a soundbar's HDMI input, which carries no track at all. */
+    val onTvInput: Boolean = false,
+    /** e.g. "Dolby Digital 5.1"; empty unless on a TV input with a signal. */
+    val inputFormat: String = "",
     val positionMillis: Long = 0,
     val durationMillis: Long = 0,
     val positionUpdatedAt: Long = 0,
@@ -117,6 +122,8 @@ class PlayerViewModel @Inject constructor(
                     // a listener recognises — so fall back to the container rather than
                     // showing an empty pane.
                     albumArtUrl = state.track?.imageUrl ?: state.container?.imageUrl,
+                    onTvInput = state.onTvInput,
+                    inputFormat = state.inputFormat,
                     positionMillis = state.positionMillis,
                     durationMillis = state.durationMillis,
                     positionUpdatedAt = state.positionUpdatedAt,
@@ -171,10 +178,25 @@ class PlayerViewModel @Inject constructor(
     private fun publish(state: PlayerUiState) {
         if (state.isLoading) return
 
-        val metadataKey = "${state.trackName}|${state.artistName}|${state.albumName}|${state.durationMillis}"
+        // A soundbar on its HDMI input is not something to advertise as playing media: the
+        // television is the source. Everything else is, idle rooms included — a play key
+        // needs somewhere to land.
+        nowPlaying.setPresenting(!state.onTvInput)
+
+        // Never blank. An empty title renders as "Unknown" on the Google TV home screen —
+        // its media card showed "Unknown · x2rock · Unknown" for any room without track
+        // metadata, which is every idle room and every soundbar on TV audio. The room is
+        // what this session is *about*, so it is the honest fallback for both lines.
+        val title = state.trackName ?: state.groupName.takeIf { it.isNotBlank() }
+        val subtitle = state.artistName ?: when {
+            state.onTvInput -> state.inputFormat.takeIf { it.isNotBlank() } ?: "TV Audio"
+            else -> state.playbackState.toPlaybackLabel()
+        }
+
+        val metadataKey = "$title|$subtitle|${state.albumName}|${state.durationMillis}"
         if (metadataKey != lastMetadataKey) {
             lastMetadataKey = metadataKey
-            nowPlaying.publish(state.trackName, state.artistName, state.albumName, state.durationMillis)
+            nowPlaying.publish(title, subtitle, state.albumName, state.durationMillis)
         }
 
         val playing = state.playbackState.isPlaying()

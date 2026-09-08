@@ -212,6 +212,47 @@ class PlayerViewModelTest {
         assertFalse("a playing room with no title was published as idle", published.idle)
     }
 
+    /**
+     * A soundbar on its HDMI input is not media this app is playing, so it advertises no
+     * session at all.
+     *
+     * The Google TV home screen carries a card for every active session, and for a room with
+     * no track it read "Unknown · x2rock · Unknown" — a row on the launcher saying nothing,
+     * for a source the television already controls.
+     */
+    @Test fun `a room on its TV input advertises no session`() = runBlocking<Unit> {
+        assertTrue("should start out presenting", publisher.presenting)
+        fake.pushFixture("tvMetadataStatus", groupId)
+        withTimeout(5_000) {
+            viewModel.uiState.first { it.onTvInput }
+        }
+        withTimeout(5_000) {
+            while (publisher.presenting) delay(20)
+        }
+    }
+
+    /**
+     * Idle is a different case and must keep its session: a play key, or a voice "play in the
+     * living room", has to land somewhere, and idle is exactly when one is worth acting on.
+     */
+    @Test fun `an idle room still advertises a session`() = runBlocking<Unit> {
+        fake.push("playback:1", "playbackStatus", """{"playbackState":"PLAYBACK_STATE_IDLE"}""", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { !it.isLoading } }
+        delay(300)
+        assertTrue("an idle room dropped its session", publisher.presenting)
+    }
+
+    /** And the title is never blank, which is what the launcher rendered as "Unknown". */
+    @Test fun `a room with no track publishes its own name, not an empty title`() = runBlocking<Unit> {
+        fake.push("playback:1", "playbackStatus", """{"playbackState":"PLAYBACK_STATE_IDLE"}""", groupId)
+        withTimeout(5_000) {
+            while (publisher.metadata.isEmpty()) delay(20)
+        }
+        val published = publisher.metadata.last()
+        assertEquals("Test Room", published.title)
+        assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
+    }
+
     // ---------------------------------------------------------------- failure
 
     /**
