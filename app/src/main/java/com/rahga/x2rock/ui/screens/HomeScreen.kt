@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
@@ -420,19 +421,46 @@ private fun RoomListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Cover art, or the station logo for radio. Absent for an idle room and for a
-            // TV input, which have nothing to show.
-            if (info.artUrl != null) {
-                AsyncImage(
-                    model = info.artUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                )
-                Spacer(Modifier.width(12.dp))
+            // The art slot is always occupied, even when there is nothing to put in it, so
+            // every room name starts at the same x. Rows used to shift left without art,
+            // which at three metres reads as a different list rather than a missing image.
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    // Tinted only when something sits on it. An idle room leaves the slot
+                    // transparent: it still holds the column, without putting an empty grey
+                    // square beside every room that happens not to be playing.
+                    .then(
+                        if (info.artUrl == null && info.onTvInput) {
+                            Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+                        } else Modifier
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                when {
+                    // Cover art, or the station logo for radio.
+                    info.artUrl != null -> AsyncImage(
+                        model = info.artUrl,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // A TV input has no art of its own — the player really does send
+                    // `images: []` for `TV Audio` — so this glyph is the app's invention.
+                    // It is an honest one: it says what the source is, which is data we have.
+                    info.onTvInput -> Icon(
+                        imageVector = Icons.Default.Tv,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    // And nothing at all for an idle room: an empty tile holds the column
+                    // without claiming something is playing.
+                    else -> Unit
+                }
             }
+            Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 val roomCount = group.playerIds.size
@@ -465,8 +493,26 @@ private fun RoomListItem(
                     )
                 }
             }
-            if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
-                Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Which rooms even have a television attached — modelled and plumbed this
+                // far for a long time with nothing drawing it. Shown only while the room is
+                // *not* on that input: once it is, the art tile carries the same glyph and
+                // the third line says "TV Audio", so a badge here would be the third telling
+                // of one fact. Dim, because it is a capability rather than a state.
+                if (info.hasTvInput && !info.onTvInput) {
+                    Icon(
+                        imageVector = Icons.Default.Tv,
+                        contentDescription = "Has a TV input",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    )
+                }
+                if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
+                    Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
