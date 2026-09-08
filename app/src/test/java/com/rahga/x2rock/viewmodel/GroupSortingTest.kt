@@ -5,6 +5,13 @@ import com.rahga.x2rock.model.PlaybackStates
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
+/**
+ * The sidebar's order: the pinned room, then Sonos's own alphabetical order.
+ *
+ * There was a second tier here — favourites, between the two — and it is gone. Pinning a
+ * primary room already does the useful version of it, and a room list that disagrees with
+ * every other controller in the house needs a better reason than a rarely-touched star.
+ */
 class GroupSortingTest {
 
     private fun group(id: String, name: String) =
@@ -18,32 +25,23 @@ class GroupSortingTest {
 
     @Test
     fun `sorts alphabetically when nothing is pinned`() {
-        assertEquals(
-            listOf(attic, bedroom, kitchen, study),
-            sortGroups(all, primaryId = null, favoriteIds = emptySet())
-        )
+        assertEquals(listOf(attic, bedroom, kitchen, study), sortGroups(all, primaryId = null))
     }
 
     @Test
-    fun `primary is pinned first, then favourites, then the rest`() {
-        assertEquals(
-            listOf(study, bedroom, kitchen, attic),
-            sortGroups(all, primaryId = "s", favoriteIds = setOf("b", "k"))
-        )
+    fun `the pinned room comes first, the rest stay alphabetical`() {
+        assertEquals(listOf(study, attic, bedroom, kitchen), sortGroups(all, primaryId = "s"))
     }
 
     @Test
-    fun `primary that is also a favourite is not listed twice`() {
-        val sorted = sortGroups(all, primaryId = "k", favoriteIds = setOf("k", "b"))
+    fun `the pinned room is not listed twice`() {
+        val sorted = sortGroups(all, primaryId = "k")
         assertEquals(all.size, sorted.size)
-        assertEquals(listOf(kitchen, bedroom, attic, study), sorted)
+        assertEquals(listOf(kitchen, attic, bedroom, study), sorted)
     }
 
     @Test
     fun `a primary id that no longer matches any group is ignored`() {
-        assertEquals(
-            listOf(attic, bedroom, kitchen, study),
-            sortGroups(all, primaryId = "gone", favoriteIds = emptySet())
-        )
+        assertEquals(listOf(attic, bedroom, kitchen, study), sortGroups(all, primaryId = "gone"))
     }
 }

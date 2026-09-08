@@ -13,8 +13,6 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
     private val _primaryRoomId = MutableStateFlow(prefs.getString(KEY_PRIMARY_ROOM))
     val primaryRoomId: StateFlow<String?> = _primaryRoomId.asStateFlow()
 
-    private val _favoriteRoomIds = MutableStateFlow(prefs.getStringSet(KEY_FAVORITE_ROOMS))
-    val favoriteRoomIds: StateFlow<Set<String>> = _favoriteRoomIds.asStateFlow()
 
     fun setPrimaryRoom(id: String?) {
         prefs.putString(KEY_PRIMARY_ROOM, id)
@@ -35,19 +33,9 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
         _tvPlayerId.value = playerId
     }
 
-    fun toggleFavorite(id: String) {
-        val updated = if (id in _favoriteRoomIds.value) {
-            _favoriteRoomIds.value - id
-        } else {
-            _favoriteRoomIds.value + id
-        }
-        prefs.putStringSet(KEY_FAVORITE_ROOMS, updated)
-        _favoriteRoomIds.value = updated
-    }
 
     private companion object {
         const val KEY_PRIMARY_ROOM = "primary_room_id"
-        const val KEY_FAVORITE_ROOMS = "favorite_room_ids"
         const val KEY_TV_PLAYER = "tv_player_id"
     }
 }

@@ -28,7 +28,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Sidebar order: the pinned room first, then favourites, then the rest, each alphabetical.
+ * Sidebar order: the pinned room first, then the rest, alphabetical.
  * Pure, so the ordering is testable without standing the view model up.
  *
  * The television's own room is deliberately *not* hoisted here. Sonos lists rooms
@@ -36,16 +36,10 @@ import javax.inject.Inject
  * disagree with every other controller in the house for no gain. The TV room is where the
  * app *opens* instead — see the selection below.
  */
-fun sortGroups(
-    groups: List<Group>,
-    primaryId: String?,
-    favoriteIds: Set<String>,
-): List<Group> {
+fun sortGroups(groups: List<Group>, primaryId: String?): List<Group> {
     val pinned = groups.firstOrNull { it.id == primaryId }
-    val pinnedId = pinned?.id
-    val favorites = groups.filter { it.id != pinnedId && it.id in favoriteIds }.sortedBy { it.name }
-    val rest = groups.filter { it.id != pinnedId && it.id !in favoriteIds }.sortedBy { it.name }
-    return listOfNotNull(pinned) + favorites + rest
+    val rest = groups.filter { it.id != pinned?.id }.sortedBy { it.name }
+    return listOfNotNull(pinned) + rest
 }
 
 @HiltViewModel
@@ -120,6 +114,22 @@ class HomeViewModel @Inject constructor(
     private val _pendingPlayerVolumes = MutableStateFlow<Map<String, Int>>(emptyMap())
     private val playerVolumeJobs = mutableMapOf<String, Job>()
 
+    // The same, for whole groups: a row in the panel's "add another" list stands for a
+    // group rather than a speaker, so it carries the group's level.
+    private val _pendingGroupVolumes = MutableStateFlow<Map<String, Int>>(emptyMap())
+    private val groupVolumeJobs = mutableMapOf<String, Job>()
+
+    /**
+     * Each group's level, for the rooms a panel offers to join.
+     *
+     * Pushed off `groupVolume:1`, and overlaid with whatever a press just asked for the same
+     * way [playerVolumes] is.
+     */
+    val groupVolumes: StateFlow<Map<String, Int>> =
+        combine(household.groupStates, _pendingGroupVolumes) { states, pending ->
+            states.mapNotNull { (id, state) -> state.volume?.let { id to it.volume } }.toMap() + pending
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     /**
      * Each speaker's own level, for the room panel's "playing together" list.
      *
@@ -135,7 +145,6 @@ class HomeViewModel @Inject constructor(
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
     val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
     val tvPlayerId: StateFlow<String?> = roomPrefsStore.tvPlayerId
-    val favoriteRoomIds: StateFlow<Set<String>> = roomPrefsStore.favoriteRoomIds
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
@@ -249,8 +258,6 @@ class HomeViewModel @Inject constructor(
 
     fun setPrimaryRoom(id: String?) = roomPrefsStore.setPrimaryRoom(id)
 
-    fun toggleFavorite(id: String) = roomPrefsStore.toggleFavorite(id)
-
     // Grouping changes arrive back as a groups:1 event, so none of these re-fetch.
 
     fun joinGroup(sourceGroupId: String, targetGroupId: String) {
@@ -276,8 +283,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** This group's speakers, coordinator first: it is the room the panel is *about*. */
     fun playerNamesForGroup(group: Group): List<Pair<String, String>> =
-        group.playerIds.map { it to household.playerName(it) }
+        group.playerIds.sortedByDescending { it == group.coordinatorId }
+            .map { it to household.playerName(it) }
 
     /**
      * Every other room joins [hostGroupId] and plays what it plays.
@@ -290,11 +299,7 @@ class HomeViewModel @Inject constructor(
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
         val host = hostGroupId?.let { id -> groups.firstOrNull { it.id == id } }
-            ?: sortGroups(
-                groups,
-                roomPrefsStore.primaryRoomId.value,
-                roomPrefsStore.favoriteRoomIds.value,
-            ).first()
+            ?: sortGroups(groups, roomPrefsStore.primaryRoomId.value).first()
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
         viewModelScope.launch {
@@ -340,6 +345,20 @@ class HomeViewModel @Inject constructor(
         roomPrefsStore.setTvPlayer(soundbar)
     }
 
+    /** A whole group's level, from a row that offers to join it. */
+    fun adjustGroupVolume(groupId: String, delta: Int) {
+        val current = groupVolumes.value[groupId] ?: return
+        val target = (current + delta).coerceIn(0, 100)
+        _pendingGroupVolumes.update { it + (groupId to target) }
+        groupVolumeJobs[groupId]?.cancel()
+        groupVolumeJobs[groupId] = viewModelScope.launch {
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            runCatching { household.setGroupVolume(groupId, target) }
+            // Only if it is still ours — see [adjustPlayerVolume].
+            _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
+        }
+    }
+
     /** One speaker's own level, accumulating presses the way the group volume does. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
         val current = playerVolumes.value[playerId] ?: return
@@ -359,11 +378,7 @@ class HomeViewModel @Inject constructor(
     }
 
     /** What the app would choose with nothing else to go on. */
-    private fun defaultSelection(groups: List<Group>): Group? = sortGroups(
-        groups,
-        roomPrefsStore.primaryRoomId.value,
-        roomPrefsStore.favoriteRoomIds.value,
-    ).firstOrNull()
+    private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups, roomPrefsStore.primaryRoomId.value).firstOrNull()
 
     private fun findGroup(id: String): Group? =
         (uiState.value as? UiState.Success)?.groups?.find { it.id == id }
