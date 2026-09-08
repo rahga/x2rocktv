@@ -29,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -95,7 +94,6 @@ fun HomeScreen(
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
-    val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
@@ -154,7 +152,6 @@ fun HomeScreen(
                 RoomSidebar(
                     state = state,
                     selectedGroupId = selectedGroupId,
-                    primaryRoomId = primaryRoomId,
                     rooms = rooms,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
@@ -252,13 +249,12 @@ fun HomeScreen(
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
-                    otherGroups = sortGroups(groups, primaryRoomId)
+                    otherGroups = sortGroups(groups)
                         .filter { it.id != liveGroup.id },
                     rooms = rooms,
                     playerNames = playerNames,
                     playerVolumes = volumes,
                     groupVolumes = groupVolumes,
-                    isPrimary = liveGroup.id == primaryRoomId,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
                         homeViewModel.partyMode(liveGroup.id)
@@ -274,11 +270,6 @@ fun HomeScreen(
                     onAdjustPlayerVolume = homeViewModel::adjustPlayerVolume,
                     onAdjustGroupVolume = homeViewModel::adjustGroupVolume,
                     onJoin = { homeViewModel.joinGroup(it.id, liveGroup.id) },
-                    onSetPrimary = {
-                        homeViewModel.setPrimaryRoom(
-                            if (liveGroup.id == primaryRoomId) null else liveGroup.id
-                        )
-                    },
                     onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {
                         homeViewModel.useTvInput(liveGroup.id)
@@ -295,7 +286,6 @@ fun HomeScreen(
 private fun RoomSidebar(
     state: HomeViewModel.UiState,
     selectedGroupId: String?,
-    primaryRoomId: String?,
     rooms: Map<String, HomeViewModel.RoomInfo>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
@@ -307,8 +297,8 @@ private fun RoomSidebar(
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val sorted = remember(groups, primaryRoomId) {
-        sortGroups(groups, primaryRoomId)
+    val sorted = remember(groups) {
+        sortGroups(groups)
     }
     val iconRowFocusRequester = remember { FocusRequester() }
 
@@ -377,7 +367,6 @@ private fun RoomSidebar(
                             group = group,
                             info = rooms[group.id] ?: HomeViewModel.RoomInfo(),
                             isSelected = isSelected,
-                            isPrimary = group.id == primaryRoomId,
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
@@ -396,7 +385,6 @@ private fun RoomListItem(
     group: Group,
     info: HomeViewModel.RoomInfo,
     isSelected: Boolean,
-    isPrimary: Boolean,
     focusRequester: FocusRequester,
     /** Right from a room crosses into the room view, at its primary control. */
     detailFocusRequester: FocusRequester,
@@ -477,18 +465,8 @@ private fun RoomListItem(
                     )
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
-                    Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                }
-                if (isPrimary) {
-                    Icon(
-                        imageVector = Icons.Filled.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
+            if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
+                Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
         }
     }

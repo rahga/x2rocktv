@@ -10,14 +10,8 @@ import javax.inject.Singleton
 @Singleton
 class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
 
-    private val _primaryRoomId = MutableStateFlow(prefs.getString(KEY_PRIMARY_ROOM))
-    val primaryRoomId: StateFlow<String?> = _primaryRoomId.asStateFlow()
 
 
-    fun setPrimaryRoom(id: String?) {
-        prefs.putString(KEY_PRIMARY_ROOM, id)
-        _primaryRoomId.value = id
-    }
 
     /**
      * The soundbar this television is plugged into, remembered as a *player* id.
@@ -35,7 +29,6 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
 
 
     private companion object {
-        const val KEY_PRIMARY_ROOM = "primary_room_id"
         const val KEY_TV_PLAYER = "tv_player_id"
     }
 }

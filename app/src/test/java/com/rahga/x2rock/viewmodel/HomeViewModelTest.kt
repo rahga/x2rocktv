@@ -102,25 +102,12 @@ class HomeViewModelTest {
         assertTrue(state.groups.any { it.name == "Dining Room" })
     }
 
-    /** Picked once the household is known, honouring the stored primary room. */
+    /** Picked once the household is known: alphabetically first, with nothing else set. */
     @Test fun `a room is selected on arrival`() = runBlocking<Unit> {
         connect()
         val selected = withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } }
         assertNotNull(selected)
         assertTrue(household.state.value.groups.any { it.id == selected })
-    }
-
-    @Test fun `the stored primary room is selected ahead of the rest`() = runBlocking<Unit> {
-        val preferred = FakePlayer.reachableTopology()
-            .getAsJsonArray("groups").last().asJsonObject.get("id").asString
-        RoomPreferencesStore(prefs).setPrimaryRoom(preferred)
-
-        // A fresh view model, so it reads the preference on the way up.
-        viewModel = HomeViewModel(
-            household, ThemeStore(prefs), RoomPreferencesStore(prefs), channels, PendingRoomDeepLink(),
-        )
-        connect()
-        assertEquals(preferred, withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } })
     }
 
     @Test fun `now playing follows the pushed metadata`() = runBlocking<Unit> {
@@ -159,7 +146,7 @@ class HomeViewModelTest {
         val command = fake.awaitCommand(timeoutMillis = 5_000) {
             it.get("command")?.asString == "modifyGroupMembers"
         }
-        val host = sortGroups(state.groups, null).first()
+        val host = sortGroups(state.groups).first()
         assertEquals(host.id, command.get("groupId").asString)
 
         val added = fake.lastCommandBody("modifyGroupMembers")!!
@@ -220,7 +207,7 @@ class HomeViewModelTest {
      */
     @Test fun `party mode hosts from the room it was asked for`() = runBlocking<Unit> {
         val state = connect()
-        val sorted = sortGroups(state.groups, null)
+        val sorted = sortGroups(state.groups)
         val host = sorted.last()
         assertTrue("the chosen host must differ from the default", host.id != sorted.first().id)
         fake.clearHistory()
@@ -409,10 +396,10 @@ class HomeViewModelTest {
 
     @Test fun `preferences survive a new store over the same storage`() {
         viewModel.setTheme(AppColorTheme.EMBER)
-        viewModel.setPrimaryRoom("room-1")
+        roomPrefs.setTvPlayer("RINCON_TEST")
 
         assertEquals(AppColorTheme.EMBER, ThemeStore(prefs).theme.value)
-        assertEquals("room-1", RoomPreferencesStore(prefs).primaryRoomId.value)
+        assertEquals("RINCON_TEST", RoomPreferencesStore(prefs).tvPlayerId.value)
     }
 
     @Test fun `losing the household surfaces an error`() = runBlocking<Unit> {

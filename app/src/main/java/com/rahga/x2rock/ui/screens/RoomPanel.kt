@@ -85,7 +85,6 @@ fun RoomPanel(
     playerVolumes: Map<String, Int>,
     /** Each joinable group's own level, keyed by group id. */
     groupVolumes: Map<String, Int>,
-    isPrimary: Boolean,
     /** One group holding the whole household, which is what party mode leaves behind. */
     isPartying: Boolean,
     onParty: () -> Unit,
@@ -94,7 +93,6 @@ fun RoomPanel(
     onAdjustPlayerVolume: (playerId: String, delta: Int) -> Unit,
     onAdjustGroupVolume: (groupId: String, delta: Int) -> Unit,
     onJoin: (Group) -> Unit,
-    onSetPrimary: () -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
 ) {
@@ -195,15 +193,12 @@ fun RoomPanel(
             )
         }
 
-        PanelSection("Room settings")
-        AppButton(onClick = onSetPrimary, modifier = Modifier.fillMaxWidth()) {
-            Text(if (isPrimary) "Remove as primary" else "Set as primary")
-        }
         // Only where there is an HDMI socket for a television to be plugged into. Detection
         // fills this in on its own but has been seen to answer wrongly and then keep the
         // answer, so it has to be correctable by hand. There is no un-naming: the crown
         // simply moves to whichever room is named next.
         if (info.hasTvInput) {
+            PanelSection("Room settings")
             AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
                 Text("This is my TV")
             }
