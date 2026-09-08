@@ -222,12 +222,31 @@ led to `GroupPickerDialog` and `SeparateRoomDialog` — so three surfaces became
 The shape follows the sibling project's Quickshell group selector (`BarWidget.qml`, the
 `groupingPanel`), which is worth reading before changing this:
 
-- **Playing together** — drawn only when the group has more than one room. Every member
-  carries its own level on left/right, and a `leave` target except the coordinator: the
-  coordinator *is* the group, so removing it would dissolve the group rather than free the
-  room.
+- **This room** / **Playing together** — the room itself, plus whatever is grouped with it.
+  Drawn even when it is alone, because its level belongs here either way. A `leave` target
+  on every member except the coordinator: the coordinator *is* the group, so removing it
+  would dissolve the group rather than free the room.
 - **Add another** (or **Play together with** when the room is solo) — every other group,
   joining this one. "Every room is in this group." when there is nothing left.
+
+**Every room row carries a level, on left and right.** Nothing else in the panel uses those
+directions, so they were free to take. A member row moves that *speaker* (`playerVolume:1`);
+a joinable row moves that whole *group* (`groupVolume:1`), because a row in that list stands
+for a group and may be several rooms. The two stay in step with no arithmetic here: Sonos
+scales a group's members when the group moves and moves the group's average when a member
+does, and both come back as events. Draw the bar in `LocalContentColor`, not a fixed colour
+— a focused button's container *is* the primary colour, so a primary bar vanished on the one
+row being adjusted.
+
+The panel opens focused on **the room's own row**, not on Party: the row most likely to be
+wanted, and one press from either neighbour.
+
+There was a **favourites** tier — a second sort rank between the pinned room and the rest,
+with a star in the list. It is gone: pinning a primary room already does the useful version,
+and the owner's verdict on the Sonos feature it mirrored was "probably the least used Sonos
+feature on the planet". If it ever comes back it belongs as a star off to the side, not as a
+row in this panel. Sonos *content* favourites (`favorites:1`, the Favorites screen) are a
+different thing entirely and remain.
 
 Two things sit outside the widget's version, in the order asked for:
 

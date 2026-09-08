@@ -30,7 +30,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -97,7 +96,6 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
     val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
-    val favoriteRoomIds by homeViewModel.favoriteRoomIds.collectAsState()
     val tvPlayerId by homeViewModel.tvPlayerId.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
@@ -158,7 +156,6 @@ fun HomeScreen(
                     state = state,
                     selectedGroupId = selectedGroupId,
                     primaryRoomId = primaryRoomId,
-                    favoriteRoomIds = favoriteRoomIds,
                     rooms = rooms,
                     sidebarFocusRequester = sidebarFocusRequester,
                     detailFocusRequester = detailFocusRequester,
@@ -251,17 +248,18 @@ fun HomeScreen(
         if (liveGroup != null) {
             val playerNames = remember(liveGroup) { homeViewModel.playerNamesForGroup(liveGroup) }
             val volumes by homeViewModel.playerVolumes.collectAsState()
+            val groupVolumes by homeViewModel.groupVolumes.collectAsState()
             Overlay {
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
-                    otherGroups = sortGroups(groups, primaryRoomId, favoriteRoomIds)
+                    otherGroups = sortGroups(groups, primaryRoomId)
                         .filter { it.id != liveGroup.id },
                     rooms = rooms,
                     playerNames = playerNames,
                     playerVolumes = volumes,
+                    groupVolumes = groupVolumes,
                     isPrimary = liveGroup.id == primaryRoomId,
-                    isFavorite = liveGroup.id in favoriteRoomIds,
                     isTvRoom = tvPlayerId != null && tvPlayerId in liveGroup.playerIds,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
@@ -276,13 +274,13 @@ fun HomeScreen(
                     // after each one would mean reopening the panel to make the next.
                     onRemovePlayer = { homeViewModel.removePlayerFromGroup(liveGroup.id, it) },
                     onAdjustPlayerVolume = homeViewModel::adjustPlayerVolume,
+                    onAdjustGroupVolume = homeViewModel::adjustGroupVolume,
                     onJoin = { homeViewModel.joinGroup(it.id, liveGroup.id) },
                     onSetPrimary = {
                         homeViewModel.setPrimaryRoom(
                             if (liveGroup.id == primaryRoomId) null else liveGroup.id
                         )
                     },
-                    onToggleFavorite = { homeViewModel.toggleFavorite(liveGroup.id) },
                     onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {
                         homeViewModel.useTvInput(liveGroup.id)
@@ -300,7 +298,6 @@ private fun RoomSidebar(
     state: HomeViewModel.UiState,
     selectedGroupId: String?,
     primaryRoomId: String?,
-    favoriteRoomIds: Set<String>,
     rooms: Map<String, HomeViewModel.RoomInfo>,
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
@@ -312,8 +309,8 @@ private fun RoomSidebar(
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val sorted = remember(groups, primaryRoomId, favoriteRoomIds) {
-        sortGroups(groups, primaryRoomId, favoriteRoomIds)
+    val sorted = remember(groups, primaryRoomId) {
+        sortGroups(groups, primaryRoomId)
     }
     val iconRowFocusRequester = remember { FocusRequester() }
 
@@ -383,7 +380,6 @@ private fun RoomSidebar(
                             info = rooms[group.id] ?: HomeViewModel.RoomInfo(),
                             isSelected = isSelected,
                             isPrimary = group.id == primaryRoomId,
-                            isFavorite = group.id in favoriteRoomIds,
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
@@ -403,7 +399,6 @@ private fun RoomListItem(
     info: HomeViewModel.RoomInfo,
     isSelected: Boolean,
     isPrimary: Boolean,
-    isFavorite: Boolean,
     focusRequester: FocusRequester,
     /** Right from a room crosses into the room view, at its primary control. */
     detailFocusRequester: FocusRequester,
@@ -494,13 +489,6 @@ private fun RoomListItem(
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.primary
-                    )
-                } else if (isFavorite) {
-                    Icon(
-                        imageVector = Icons.Outlined.Star,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                     )
                 }
             }

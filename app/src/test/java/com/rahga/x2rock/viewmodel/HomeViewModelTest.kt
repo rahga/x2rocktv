@@ -159,7 +159,7 @@ class HomeViewModelTest {
         val command = fake.awaitCommand(timeoutMillis = 5_000) {
             it.get("command")?.asString == "modifyGroupMembers"
         }
-        val host = sortGroups(state.groups, null, emptySet()).first()
+        val host = sortGroups(state.groups, null).first()
         assertEquals(host.id, command.get("groupId").asString)
 
         val added = fake.lastCommandBody("modifyGroupMembers")!!
@@ -220,7 +220,7 @@ class HomeViewModelTest {
      */
     @Test fun `party mode hosts from the room it was asked for`() = runBlocking<Unit> {
         val state = connect()
-        val sorted = sortGroups(state.groups, null, emptySet())
+        val sorted = sortGroups(state.groups, null)
         val host = sorted.last()
         assertTrue("the chosen host must differ from the default", host.id != sorted.first().id)
         fake.clearHistory()
@@ -430,12 +430,12 @@ class HomeViewModelTest {
 
     // ---------------------------------------------------------------- preferences
 
-    @Test fun `theme and favourites survive a new store over the same storage`() {
+    @Test fun `preferences survive a new store over the same storage`() {
         viewModel.setTheme(AppColorTheme.EMBER)
-        viewModel.toggleFavorite("room-1")
+        viewModel.setPrimaryRoom("room-1")
 
         assertEquals(AppColorTheme.EMBER, ThemeStore(prefs).theme.value)
-        assertEquals(setOf("room-1"), RoomPreferencesStore(prefs).favoriteRoomIds.value)
+        assertEquals("room-1", RoomPreferencesStore(prefs).primaryRoomId.value)
     }
 
     @Test fun `losing the household surfaces an error`() = runBlocking<Unit> {

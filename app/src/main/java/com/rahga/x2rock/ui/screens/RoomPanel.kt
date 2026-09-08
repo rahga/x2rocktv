@@ -34,6 +34,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
@@ -58,8 +59,18 @@ import com.rahga.x2rock.viewmodel.HomeViewModel
  * the room is *playing* rather than which rooms are listening, and it is a way out of
  * whatever music the house is on rather than a thing to do to the house.
  *
- * Volume lives on the member rows, on left and right, because that is where a level belongs
- * once a group has more than one speaker in it — the room view's slider stays the group's.
+ * **Every room row carries a level, on left and right.** Nothing else in this panel uses
+ * those directions, so they were free to take, and it means a level is reachable for any
+ * room the panel names rather than only for the ones already grouped. A member row adjusts
+ * that *speaker* (`playerVolume:1`); a joinable row adjusts that whole *group*
+ * (`groupVolume:1`), because a row in that list stands for a group and may be several rooms.
+ *
+ * The two scopes stay in step without this app doing any arithmetic: Sonos scales a group's
+ * members proportionally when the group's level moves, and moves the group's average when a
+ * member's does. Both come back as pushed events, so the sliders simply follow.
+ *
+ * The panel opens focused on **the room itself**, not on Party — the row a viewer most
+ * likely came to touch, and one press away from either.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -72,8 +83,9 @@ fun RoomPanel(
     /** This group's speakers, id to name, coordinator first. */
     playerNames: List<Pair<String, String>>,
     playerVolumes: Map<String, Int>,
+    /** Each joinable group's own level, keyed by group id. */
+    groupVolumes: Map<String, Int>,
     isPrimary: Boolean,
-    isFavorite: Boolean,
     /** Whether this is the room the viewer's own television plays through. */
     isTvRoom: Boolean,
     /** One group holding the whole household, which is what party mode leaves behind. */
@@ -82,21 +94,14 @@ fun RoomPanel(
     onStopParty: () -> Unit,
     onRemovePlayer: (playerId: String) -> Unit,
     onAdjustPlayerVolume: (playerId: String, delta: Int) -> Unit,
+    onAdjustGroupVolume: (groupId: String, delta: Int) -> Unit,
     onJoin: (Group) -> Unit,
     onSetPrimary: () -> Unit,
-    onToggleFavorite: () -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
-
-    // Whichever row is drawn first takes the focus, rather than a fixed one: every section
-    // below is conditional, and a panel that opened with nothing focused would leave the
-    // remote dead but for Back. Reset on each composition, claimed in draw order.
-    var focusClaimed = false
-    fun Modifier.claimFirstFocus(): Modifier =
-        if (focusClaimed) this else this.also { focusClaimed = true }.focusRequester(firstFocus)
 
     // Rescue focus when the row holding it leaves the composition. The panel deliberately
     // stays open while grouping — building a group is several presses — so the section under
@@ -124,12 +129,17 @@ fun RoomPanel(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(group.name, style = MaterialTheme.typography.titleMedium)
+        // One line, not two. The panel opens focused on the room's own row rather than the
+        // top, so anything above it is scrolled past — and a two-line header pushed that row
+        // far enough down to clip the title on open. The room is named again just below.
         Text(
-            text = if (info.onTvInput) info.source ?: "TV Audio"
-            else (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            text = group.name + " · " + (
+                if (info.onTvInput) info.source ?: "TV Audio"
+                else (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
+                ),
+            style = MaterialTheme.typography.titleSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
 
         // Party mode. Nothing to gather in a one-room household, and nothing to stop
@@ -138,58 +148,46 @@ fun RoomPanel(
             PanelSection("Everywhere")
             AppButton(
                 onClick = if (isPartying) onStopParty else onParty,
-                modifier = Modifier.fillMaxWidth().claimFirstFocus(),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (isPartying) "Stop party" else "Party — play this in every room")
             }
         }
 
-        // The rooms already playing with this one. A room on its own is not a group to
-        // list the members of, so nothing is drawn for it.
-        if (members > 1) {
-            PanelSection("Playing together")
-            playerNames.forEach { (playerId, name) ->
-                val coordinator = playerId == group.coordinatorId
-                MemberRow(
-                    modifier = Modifier.claimFirstFocus(),
-                    name = name,
-                    volume = playerVolumes[playerId],
-                    // The coordinator *is* the group; removing it would dissolve the group
-                    // rather than free the room, so it has nothing to leave.
-                    canLeave = !coordinator,
-                    onLeave = { onRemovePlayer(playerId) },
-                    onAdjust = { delta -> onAdjustPlayerVolume(playerId, delta) },
-                )
-            }
+        // This room, and whatever is grouped with it. Drawn even when it is alone, because
+        // its level belongs here either way and it is what the panel opens onto.
+        PanelSection(if (members > 1) "Playing together" else "This room")
+        playerNames.forEachIndexed { index, (playerId, name) ->
+            val coordinator = playerId == group.coordinatorId
+            RoomRow(
+                // Coordinator first, so this is the room the panel is named after.
+                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                name = name,
+                volume = playerVolumes[playerId],
+                // The coordinator *is* the group; removing it would dissolve the group
+                // rather than free the room, so it has nothing to leave.
+                action = if (coordinator) null else "leave",
+                onActivate = { if (!coordinator) onRemovePlayer(playerId) },
+                onAdjust = { delta -> onAdjustPlayerVolume(playerId, delta) },
+            )
         }
 
         // And the rooms that could join it.
         if (otherGroups.isNotEmpty()) {
             PanelSection(if (members > 1) "Add another" else "Play together with")
             otherGroups.forEach { other ->
-                AppButton(
-                    onClick = { onJoin(other) },
-                    modifier = Modifier.fillMaxWidth().claimFirstFocus(),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(other.name, style = MaterialTheme.typography.bodyLarge)
-                            val subtitle = rooms[other.id]?.track?.name
-                                ?: (other.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
-                            Text(
-                                text = subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                        Text("join", style = MaterialTheme.typography.bodySmall)
-                    }
-                }
+                RoomRow(
+                    modifier = Modifier,
+                    name = if (other.playerIds.size > 1) "${other.name} · ${other.playerIds.size} rooms"
+                    else other.name,
+                    subtitle = rooms[other.id]?.track?.name
+                        ?: (other.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
+                    // A row here stands for a whole group, so its level is the group's.
+                    volume = groupVolumes[other.id],
+                    action = "join",
+                    onActivate = { onJoin(other) },
+                    onAdjust = { delta -> onAdjustGroupVolume(other.id, delta) },
+                )
             }
         } else if (members > 1) {
             Text(
@@ -199,12 +197,9 @@ fun RoomPanel(
             )
         }
 
-        PanelSection("This room")
-        AppButton(onClick = onSetPrimary, modifier = Modifier.fillMaxWidth().claimFirstFocus()) {
+        PanelSection("Room settings")
+        AppButton(onClick = onSetPrimary, modifier = Modifier.fillMaxWidth()) {
             Text(if (isPrimary) "Remove as primary" else "Set as primary")
-        }
-        AppButton(onClick = onToggleFavorite, modifier = Modifier.fillMaxWidth()) {
-            Text(if (isFavorite) "Remove from favorites" else "Add to favorites")
         }
         // Only where there is an HDMI socket for a television to be plugged into. Detection
         // fills this in on its own but has been seen to answer wrongly and then keep the
@@ -245,24 +240,26 @@ private fun PanelSection(title: String) {
 }
 
 /**
- * One speaker in the group: its level on left and right, and Enter to send it home.
+ * One room, in either list: its level on left and right, and Enter for what [action] says.
  *
- * The volume is read from the row rather than shown as a slider because a remote has no
- * drag — left and right are the whole gesture, and the bar is there to be watched while
- * they are held rather than to be aimed at.
+ * The level is a read-out rather than something to aim at, because a remote has no drag —
+ * left and right are the whole gesture, and the bar is there to be watched while they are
+ * held. Both lists use this so a level is never somewhere a room is not.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun MemberRow(
+private fun RoomRow(
     modifier: Modifier,
     name: String,
     volume: Int?,
-    canLeave: Boolean,
-    onLeave: () -> Unit,
+    /** "join", "leave", or none — the coordinator has nothing to leave. */
+    action: String?,
+    onActivate: () -> Unit,
     onAdjust: (Int) -> Unit,
+    subtitle: String? = null,
 ) {
     AppButton(
-        onClick = { if (canLeave) onLeave() },
+        onClick = onActivate,
         modifier = modifier
             .fillMaxWidth()
             .onKeyEvent { event ->
@@ -285,26 +282,39 @@ private fun MemberRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge)
+                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+                if (subtitle != null) {
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis)
+                }
                 VolumeBar(volume)
             }
             Text(
-                text = if (canLeave) "leave  ${volume ?: "—"}" else "${volume ?: "—"}",
+                text = listOfNotNull(action, volume?.toString() ?: "—").joinToString("  "),
                 style = MaterialTheme.typography.bodySmall,
             )
         }
     }
 }
 
+/**
+ * Painted in the row's *content* colour rather than a fixed one.
+ *
+ * A focused button's container is already the primary colour, so a primary fill on it was
+ * very nearly invisible — on the one row a viewer is actually adjusting. Taking the content
+ * colour makes the bar invert along with the label.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun VolumeBar(volume: Int?) {
+    val ink = LocalContentColor.current
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(4.dp)
             .clip(RoundedCornerShape(2.dp))
-            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)),
+            .background(ink.copy(alpha = 0.25f)),
     ) {
         if (volume != null && volume > 0) {
             Box(
@@ -312,7 +322,7 @@ private fun VolumeBar(volume: Int?) {
                     .fillMaxWidth(volume / 100f)
                     .height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.primary),
+                    .background(ink),
             )
         }
     }
