@@ -98,6 +98,43 @@ Strip the `RINCON_` prefix and the trailing `01400`. Verified against all five p
 the household. `groups:1 getGroups` returns both the player id and its `websocketUrl`
 (carrying the IP), so one call yields everything the `Dns` mapping needs.
 
+### The household id has three names, and two of them are wrong
+
+Whatever the source, the id the Control API accepts is the **long** form: two segments
+either side of a dot, `Sonos_xxxxx.yyyyy`. The short `Sonos_xxxxx` is a different string
+rather than a prefix, and a command scoped with it is refused `ERROR_INVALID_OBJECT_ID` —
+observed against a player that accepted the long form seconds later on the same socket.
+
+| Source | Field | Form |
+|---|---|---|
+| SSDP `M-SEARCH` reply | `HOUSEHOLD.SMARTSPEAKER.AUDIO` | **long** |
+| SSDP `M-SEARCH` reply | `X-RINCON-HOUSEHOLD` | short — refused |
+| mDNS `_sonos._tcp` TXT | `mhhid` | **long** |
+| mDNS `_sonos._tcp` TXT | `hhid` | short — refused |
+| TLS certificate SAN | `URI:urn:sonos:hhid:` | short — refused |
+| `http://<ip>:1400/status/zp` | in the body | **long** |
+
+The last row is the useful one: a player at a known address can yield both its id
+(`/xml/device_description.xml`, `<UDN>uuid:RINCON_…</UDN>`) and its household (`/status/zp`)
+over cleartext 1400, with no multicast involved at all.
+
+### Asking a player for its household does not always work
+
+`SonosSocket.householdId()` sends a frame with no namespace and reads the household out of
+the resulting error reply — "the cheapest question is a deliberately invalid one". A Sonos
+One SL on firmware `p20.96.1-79270` **ignored it entirely**: no reply, no error, the socket
+otherwise healthy and answering a properly-scoped `getGroups` on the same connection a
+moment later. Do not rely on it. It is only reached when a seed carries no household, which
+SSDP always supplies — which is why the weakness went unnoticed.
+
+### Discovery: SSDP is not guaranteed
+
+On one office LAN a raw `M-SEARCH` to `239.255.255.250:1900`, sent from the correct source
+address, drew **zero replies**, while mDNS resolved the same speaker normally and TCP 1443
+was reachable throughout. Multicast filtering of that group is real and the app has no
+fallback, so a first run on such a network finds nothing. mDNS is the natural answer: one
+`_sonos._tcp` TXT record carries `uuid`, `location` and `mhhid` — a complete seed.
+
 ---
 
 ## The message protocol

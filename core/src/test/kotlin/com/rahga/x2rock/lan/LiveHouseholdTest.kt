@@ -27,7 +27,7 @@ import java.net.InetAddress
  *
  * ```sh
  * ./gradlew :core:test -Dx2rock.live=discover          # find a player, read-only
- * ./gradlew :core:test -Dx2rock.live=192.168.86.25     # a specific player
+ * ./gradlew :core:test -Dx2rock.live=192.168.86.25     # a specific player, no SSDP needed
  * ./gradlew :core:test -Dx2rock.live=discover -Dx2rock.live.room=Kitchen
  * ```
  *
@@ -64,13 +64,58 @@ class LiveHouseholdTest {
     private suspend fun locate(): Discovery.DiscoveredPlayer {
         if (target == "discover") {
             return Discovery.findPlayers(3_000).firstOrNull()
-                ?: error("no players answered; is this machine on the speakers' network?")
+                ?: error(
+                    "no players answered SSDP. Some networks drop it — one office LAN was " +
+                        "found to forward mDNS and block 239.255.255.250:1900 outright, with " +
+                        "port 1443 reachable the whole time. Name an address instead: " +
+                        "-Dx2rock.live=<ip>"
+                )
         }
-        // A named address still needs its id, and SSDP is how that is learned.
+        // A named address needs its id, and SSDP is *not* the only way to learn it: the
+        // player publishes it in its device description on cleartext 1400, which is reachable
+        // wherever the speaker is. That matters because a named address is the fallback for
+        // exactly the networks where discovery does not work, so routing it back through
+        // SSDP made the escape hatch useless. Household id is left null — the socket learns
+        // it from the first reply header.
         val address = InetAddress.getByName(target)
-        return Discovery.findPlayers(3_000).firstOrNull { it.address == address }
-            ?: error("$target did not answer discovery")
+        return Discovery.DiscoveredPlayer(
+            id = describe(address),
+            address = address,
+            // Asked for here rather than left null. `SonosSocket.householdId()` is the
+            // fallback when a seed carries none, and it does not work everywhere: it sends a
+            // deliberately malformed frame and reads the household out of the error reply,
+            // and one One SL on p20.96.1 simply ignored the frame — no reply at all, so the
+            // connect hung its timeout and failed. That path is never reached at home
+            // because SSDP always supplies the household, which is why it went unnoticed.
+            householdId = household(address),
+        )
     }
+
+    /** The `<UDN>uuid:RINCON_…</UDN>` a player serves at `/xml/device_description.xml`. */
+    private fun describe(address: InetAddress): String =
+        Regex("<UDN>uuid:(RINCON_[0-9A-Fa-f]+)</UDN>")
+            .find(fetch(address, "/xml/device_description.xml"))?.groupValues?.get(1)
+            ?: error("$address served no player id at /xml/device_description.xml")
+
+    /**
+     * The household id, in the **full** form the Control API accepts.
+     *
+     * There are at least three names for this and only one works. `/status/zp` serves the
+     * long one — `Sonos_xxx.yyy`, two segments either side of a dot — which is what
+     * `HOUSEHOLD.SMARTSPEAKER.AUDIO` carries over SSDP and what mDNS calls `mhhid`. The
+     * short `Sonos_xxx` (SSDP's `X-RINCON-HOUSEHOLD`, mDNS's `hhid`) is refused with
+     * `ERROR_INVALID_OBJECT_ID` — verified against a player that answered the long one in
+     * the same session.
+     */
+    private fun household(address: InetAddress): String =
+        Regex("(Sonos_[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)")
+            .find(fetch(address, "/status/zp"))?.groupValues?.get(1)
+            ?: error("$address served no household id at /status/zp")
+
+    private fun fetch(address: InetAddress, path: String): String =
+        java.net.URL("http://${address.hostAddress}:${Upnp.PORT}$path")
+            .openConnection().apply { connectTimeout = 5_000; readTimeout = 5_000 }
+            .getInputStream().use { it.readBytes().decodeToString() }
 
     private fun connected() = runBlocking {
         household.connect(seed)
@@ -80,6 +125,7 @@ class LiveHouseholdTest {
     // ------------------------------------------------------------ invariants
 
     @Test fun `discovery reports an id, an address and a household`() {
+        assumeTrue("only SSDP promises a household id in the seed", target == "discover")
         val player = seed!!
         assertTrue("player id is not a RINCON id: ${player.id}", player.id.startsWith("RINCON_"))
         assertNotNull("no hostname derivable from ${player.id}", player.hostname)

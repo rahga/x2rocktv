@@ -106,7 +106,15 @@ way came from hardware.
 ./gradlew :core:test                                  # fake only; what CI runs
 ./gradlew :core:test -Dx2rock.live=discover           # + real speakers, read-only
 ./gradlew :core:test -Dx2rock.live=discover -Dx2rock.live.room=Kitchen
+./gradlew :core:test -Dx2rock.live=192.168.1.20       # a named address, no SSDP at all
 ```
+
+The named-address form does not touch SSDP: it reads the player id from
+`/xml/device_description.xml` and the household from `/status/zp`, both cleartext on 1400.
+That is the form to use on a network where discovery does not work — and it is how the suite
+was first run against a second household, a single One SL on an office LAN that drops SSDP.
+Everything passed there, fixture drift included, which is the first evidence that these
+assertions really are about the protocol rather than about one house.
 
 The live suite is **read-only unless a room is named**, because it may run against a
 household someone is listening to; what does change is restored afterwards. Its assertions
@@ -135,10 +143,33 @@ and confirm it fails; nothing else reliably catches this.
 
 ### Households
 A household is discovered, not configured: SSDP's reply carries
-`HOUSEHOLD.SMARTSPEAKER.AUDIO`, which is the full id the WebSocket needs (note
-`X-RINCON-HOUSEHOLD` is a truncated form and will not work). One network, one household in
-practice; a room missing from a listing is more likely a player that did not answer
-discovery than a second household.
+`HOUSEHOLD.SMARTSPEAKER.AUDIO`, which is the full id the WebSocket needs. One network, one
+household in practice; a room missing from a listing is more likely a player that did not
+answer discovery than a second household.
+
+**There are at least three names for the household id and only the long one works.** It has
+two segments either side of a dot — `Sonos_xxxxx.yyyyy`. The short `Sonos_xxxxx` is a
+different string, not a prefix to be completed, and the Control API answers it with
+`ERROR_INVALID_OBJECT_ID`. Verified against a player that accepted the long form seconds
+later in the same session.
+
+| Source | Field | Form |
+|---|---|---|
+| SSDP | `HOUSEHOLD.SMARTSPEAKER.AUDIO` | long — use this |
+| SSDP | `X-RINCON-HOUSEHOLD` | short — refused |
+| mDNS `_sonos._tcp` TXT | `mhhid` | long — use this |
+| mDNS `_sonos._tcp` TXT | `hhid` | short — refused |
+| TLS cert SAN | `urn:sonos:hhid:` | short — refused |
+| `http://<ip>:1400/status/zp` | in the body | long — use this |
+
+That last row matters: the long id is available over cleartext 1400 from a bare address, so
+a player found by any means at all can be connected to without SSDP.
+
+**`SonosSocket.householdId()` is not a reliable fallback.** It sends a deliberately
+malformed frame and reads the household out of the error reply, and a One SL on p20.96.1
+simply ignored it — no reply at all, so a connect that depended on it hung its timeout and
+failed. It is only reached when a seed carries no household, which never happens via SSDP,
+which is why this went unnoticed for so long. Prefer a real source from the table above.
 
 ## Anything on the network can change this household
 
@@ -196,6 +227,17 @@ look right while testing nothing, because a household that never re-subscribes p
   on demand — deep links, `MEDIA_PLAY_FROM_SEARCH`, a broadcast receiver like
   `ChannelSyncReceiver` — needs none. Only hosting a listener the outside world calls into
   does, and that is a design decision, not a gap to be filled by default.
+- **SSDP is not always available, and there is no fallback.** Discovery is SSDP-only. On an
+  office LAN this app was carried to, a raw `M-SEARCH` from the right source address drew
+  **zero replies** while mDNS worked normally and TCP 1443 was reachable throughout — so a
+  first run there would find nothing and never connect, even though every speaker was
+  perfectly usable. `Discovery`'s own note calls a blocked-multicast network unlikely and
+  names a port-1443 connect-scan as the documented fallback; the sibling Rust project
+  implements exactly that and found the speaker on the same network in seconds. **mDNS is
+  the better fallback**: the `_sonos._tcp` TXT record carries `uuid` (the player id),
+  `location` (the address) and `mhhid` (the long household id) — a complete
+  `DiscoveredPlayer` in one record, with no scanning. Android has `NsdManager` for it, so it
+  would live in `:app` behind an interface like `MulticastGate` does.
 - **Tested on two devices**, and the stricter one raised nothing. An NVIDIA Shield
   (Android 11, Ethernet) and a Google TV Streamer (Android 14, API 34, **Wi-Fi**). The
   Streamer was expected to surface newer local-network policy first and did not: the
