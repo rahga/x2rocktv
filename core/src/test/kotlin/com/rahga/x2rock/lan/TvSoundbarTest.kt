@@ -88,6 +88,38 @@ class TvSoundbarTest {
     }
 
     /** The HDMI belongs to a member, which need not be the coordinator. */
+    /**
+     * A group holding two soundbars names the *coordinator's*, not whichever the topology
+     * listed first.
+     *
+     * Reached by party mode in a household with three Beams. The coordinator is the room the
+     * group is named after and the one the panel is titled with, so it is the answer a
+     * viewer pressing "this is my TV" means — and the alternative is an arbitrary pick that
+     * gets written to storage and then decides which room every later TV Input press
+     * switches.
+     */
+    @Test fun `a group with two soundbars names the coordinator's`() {
+        val partied = household.copy(
+            groups = listOf(group("party", "beam-guest", "beam-living", "onesl-kitchen"))
+        )
+        // The coordinator is listed first here, so make the point with the other order too.
+        assertEquals("beam-guest", TvSoundbar.soundbarOf(partied.groups[0], partied))
+
+        val reordered = partied.copy(
+            groups = listOf(
+                Group(
+                    id = "party", name = "party", coordinatorId = "beam-guest",
+                    playerIds = listOf("beam-living", "onesl-kitchen", "beam-guest"),
+                )
+            )
+        )
+        assertEquals(
+            "the first soundbar in the list won over the coordinator",
+            "beam-guest",
+            TvSoundbar.soundbarOf(reordered.groups[0], reordered),
+        )
+    }
+
     @Test fun `the soundbar is found among members, not only the coordinator`() {
         val joined = group("kitchen-9931", "onesl-kitchen", "beam-living")
         val state = household.copy(groups = listOf(joined))

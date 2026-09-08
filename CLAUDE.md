@@ -152,6 +152,14 @@ Two things this costs, both of which were wrong once:
   afterwards listed but permanently frozen — no playback, metadata or volume subscription
   at all. `SonosHousehold` tracks group id to the coordinator it subscribed on, and brings
   subscriptions back in line on every `groups:1` event; unchanged groups are left alone.
+
+  Two things that catch-up must keep doing. It is **serialised under a lock and reads the
+  topology itself** rather than taking the event's copy: it suspends for three round-trips
+  per group, so two events close together used to interleave, and whichever run held the
+  older snapshot would see the newer group ids as "gone" and drop them. And a failed
+  subscribe is **retried once** rather than swallowed, because leaving a group unsubscribed
+  recreates the frozen-room bug with nothing to retry it until the next topology change,
+  which may never come.
 - **A selected group can simply cease to exist.** `HomeViewModel` follows the *speakers*
   rather than the id: whichever group now holds them is the same room to a listener, even
   though it is a different group. Only if that fails does it fall back to the sorted first.

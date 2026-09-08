@@ -44,6 +44,15 @@ data class GroupState(
     val container: ContainerMetadata? = null,
     val volume: GroupVolume? = null,
     val playMode: PlayModeState = PlayModeState(),
+    /**
+     * Whether a `playbackMetadata:1` event has arrived for this group yet.
+     *
+     * Not the same as having an entry in the map at all: any of the three subscriptions
+     * creates one, and [onTvInput] is derived from metadata alone. Anything waiting to judge
+     * whether a room is on a TV input has to wait for *this*, or it reads "no" from a group
+     * that has merely not answered yet.
+     */
+    val metadataSeen: Boolean = false,
 ) {
     /**
      * Whether this group is on a soundbar's TV input right now.
@@ -144,6 +153,7 @@ class SonosHousehold(
      * the wrong one to have subscribed on.
      */
     private val subscribedGroups = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val resubscribeLock = Mutex()
 
     /**
      * Bumped by every teardown. A socket opened concurrently with one belongs to a session
@@ -562,22 +572,41 @@ class SonosHousehold(
      * regroup elsewhere in the house costs nothing here. Vanished groups are forgotten so
      * that an id reappearing later — Sonos reuses them — is treated as new.
      */
-    private suspend fun resubscribe(groups: GroupsResponse) {
-        val live = groups.groups.associateBy { it.id }
+    private suspend fun resubscribe() = resubscribeLock.withLock {
+        // Read the topology here rather than taking it as a parameter, and under the lock.
+        // These runs used to be launched per `groups:1` event with no ordering between them,
+        // and each one suspends for three round-trips per group — so two events arriving
+        // close together (which the room panel invites: "join" leaves it open for several
+        // presses) could interleave. Whichever run held the *older* snapshot would then see
+        // the newer group ids as "gone", drop their subscriptions and blank their rows.
+        // `_state` is written before this is scheduled, so it is never older than the event.
+        val current = _state.value
+        val live = current.groups.associateBy { it.id }
 
         subscribedGroups.keys.filter { it !in live }.forEach { gone ->
             subscribedGroups.remove(gone)
             _groupStates.update { it - gone }
         }
 
-        live.values.forEach { group ->
-            if (subscribedGroups[group.id] != group.coordinatorId) {
-                runCatching { subscribeGroup(group) }
+        // Best-effort, but not once-only: a group left unsubscribed here would sit in the
+        // sidebar permanently frozen — no playback, metadata or volume — which is the very
+        // failure this function exists to prevent, and nothing else would retry it until the
+        // next topology change, which may never come.
+        val failed = live.values.filter { group ->
+            subscribedGroups[group.id] != group.coordinatorId &&
+                runCatching { subscribeGroup(group) }.isFailure
+        }
+        if (failed.isNotEmpty()) {
+            delay(RESUBSCRIBE_RETRY_MILLIS)
+            failed.forEach { group ->
+                if (subscribedGroups[group.id] != group.coordinatorId) {
+                    runCatching { subscribeGroup(group) }
+                }
             }
         }
 
         // A player can arrive with a regroup — a speaker taken out of standby, say.
-        groups.players.forEach { player ->
+        current.players.forEach { player ->
             runCatching {
                 socketForPlayer(player.id)
                     .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
@@ -614,7 +643,7 @@ class SonosHousehold(
                 _state.update { it.copy(groups = fillPlaybackState(groups.groups), players = groups.players) }
                 // Someone regrouped. Catch up rather than sit on subscriptions for groups
                 // that no longer exist.
-                scope.launch { runCatching { resubscribe(groups) } }
+                scope.launch { runCatching { resubscribe() } }
             }
 
             "playback:1" -> {
@@ -663,6 +692,7 @@ class SonosHousehold(
                     it.copy(
                         track = track,
                         container = container,
+                        metadataSeen = true,
                         // No carry-over here, unlike `playback:1` above: a metadata event is
                         // the whole statement of what is loaded, so no track means no
                         // duration. Keeping the last one left a soundbar switched to its TV
@@ -773,6 +803,9 @@ internal fun fillPlaybackState(
 /** Matches the Rust daemon's curve: start at a second, double, stop at a minute. */
 internal const val MIN_BACKOFF_MILLIS = 1_000L
 internal const val MAX_BACKOFF_MILLIS = 60_000L
+
+/** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
+internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
 
 /** A remembered address gets this long to prove itself before discovery takes over. */
 internal const val PROBE_TIMEOUT_MILLIS = 3_000L

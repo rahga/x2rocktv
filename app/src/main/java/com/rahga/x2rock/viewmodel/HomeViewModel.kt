@@ -213,8 +213,14 @@ class HomeViewModel @Inject constructor(
                 // before the second's, `detect` sees exactly one room on a TV input and
                 // answers confidently — and the answer is then kept. The ambiguity guard
                 // only means anything once every group has said what it is doing.
+                //
+                // Keyed on metadata specifically, not on having *an* entry: any of the three
+                // subscriptions creates one, and `onTvInput` comes from metadata alone — so a
+                // group holding only its playback snapshot would satisfy a weaker guard while
+                // still reporting "not on a TV input".
                 val state = household.state.value
-                if (state.groups.any { it.id !in household.groupStates.value }) return@collect
+                val groupStates = household.groupStates.value
+                if (state.groups.any { groupStates[it.id]?.metadataSeen != true }) return@collect
                 roomPrefsStore.setTvPlayer(detected)
 
                 // On a first run the room was picked before this was known, so move to the
