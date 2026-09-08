@@ -193,18 +193,9 @@ fun RoomPanel(
             )
         }
 
-        // Only where there is an HDMI socket for a television to be plugged into. Detection
-        // fills this in on its own but has been seen to answer wrongly and then keep the
-        // answer, so it has to be correctable by hand. There is no un-naming: the crown
-        // simply moves to whichever room is named next.
-        if (info.hasTvInput) {
-            PanelSection("Room settings")
-            AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
-                Text("This is my TV")
-            }
-        }
-
-        // Last, and only where there is an HDMI socket to switch to.
+        // Both of these need an HDMI socket to mean anything, so a room without one ends at
+        // the lists above. The source comes first: it is a thing to *do*, and the setting
+        // below it is a thing to state once and never touch again.
         if (info.hasTvInput) {
             PanelSection("Source")
             AppButton(
@@ -217,6 +208,14 @@ fun RoomPanel(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
+            }
+
+            // Detection fills this in on its own but has been seen to answer wrongly and
+            // then keep the answer, so it has to be correctable by hand. There is no
+            // un-naming: the crown simply moves to whichever room is named next.
+            PanelSection("Room settings")
+            AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
+                Text("This is my TV")
             }
         }
     }
