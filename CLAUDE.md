@@ -262,8 +262,10 @@ Two things sit outside the widget's version, in the order asked for:
 - **Party is first**, because it is the one press that answers "put this everywhere". It
   hosts from *the room the panel was opened on* — `partyMode(hostGroupId)` — since party
   mode hinges on a source, which is the whole reason it moved off the sidebar.
-- **TV Input is last**, and only for a room with a soundbar in it. It is the one row that
-  changes what the room is *playing* rather than which rooms are listening.
+- **Source, then Room settings**, both only for a room with a soundbar in it. TV Input is
+  the one row that changes what the room is *playing* rather than which rooms are listening,
+  and it sits above "This is my TV" because it is a thing to do where that is a thing to
+  state once and never touch again.
 
 The sidebar's control row **stays at the top**, matching what most Android apps and Plex do.
 Reordering rooms would live here too, if Sonos had an order to reorder — it does not.
