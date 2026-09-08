@@ -263,11 +263,20 @@ cover art, room name, state, what is playing, inline transport and a volume slid
 a soundbar, three lines rather than two (room and state, then the input format, then "TV
 Audio").
 
-The room list now carries art and the soundbar's three lines. Still missing against the
-reference: a TV badge (`hasTvInput` is modelled and plumbed as far as `RoomInfo`, but
-nothing draws it), and a placeholder for a TV input, which has no art of its own — the
-player really does send `images: []` for `TV Audio`, so anything shown there is the app's
-invention rather than data.
+The room list carries art, the soundbar's three lines, a TV badge and a placeholder for the
+TV input.
+
+**The art slot is always 48dp wide, occupied or not**, so every room name starts at the same
+x — rows used to shift left without art, which at three metres reads as a different list
+rather than a missing image. It holds the cover (or a station logo for radio); for a TV input
+it holds a television glyph, which is the app's invention because the player really does send
+`images: []` for `TV Audio` — an honest invention, since it names a source we do know. An
+idle room leaves it transparent rather than showing an empty grey square.
+
+**The TV badge appears only while the room is *not* on that input.** It answers "which rooms
+have a television attached", which nothing else says; once the room is actually on the input,
+the art tile carries the same glyph and the third line reads "TV Audio", so a badge would be
+the third telling of one fact. Dim, because it is a capability rather than a state.
 
 ### The remote's volume keys are not ours to take
 
