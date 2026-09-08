@@ -14,6 +14,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import com.rahga.x2rock.ui.theme.requestFocusSafely
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -90,10 +98,27 @@ fun RoomPanel(
     fun Modifier.claimFirstFocus(): Modifier =
         if (focusClaimed) this else this.also { focusClaimed = true }.focusRequester(firstFocus)
 
+    // Rescue focus when the row holding it leaves the composition. The panel deliberately
+    // stays open while grouping — building a group is several presses — so the section under
+    // the cursor can vanish beneath it: take the last other member out and "Playing
+    // together" goes with it, join the last remaining room and "Add another" does. The
+    // requester from `rememberAutoFocusRequester` has already fired and will not fire again,
+    // and `Overlay`'s trap refuses focus *exit*, so nothing would hold it and the remote
+    // would be dead but for Back.
+    //
+    // Keyed on having no focus rather than on the structure, so ordinary navigation between
+    // rows is never yanked back to the top.
+    var panelHasFocus by remember { mutableStateOf(false) }
+    LaunchedEffect(panelHasFocus) {
+        if (!panelHasFocus) firstFocus.requestFocusSafely()
+    }
+
     Column(
         modifier = Modifier
             .width(420.dp)
             .heightIn(max = 520.dp)
+            .focusGroup()
+            .onFocusChanged { panelHasFocus = it.hasFocus }
             .background(MaterialTheme.colorScheme.surface)
             .padding(24.dp)
             .verticalScroll(rememberScrollState()),

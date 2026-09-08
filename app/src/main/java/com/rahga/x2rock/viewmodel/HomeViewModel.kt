@@ -197,6 +197,13 @@ class HomeViewModel @Inject constructor(
                 TvSoundbar.detect(state, groupStates)
             }.collect { detected ->
                 if (detected == null || roomPrefsStore.tvPlayerId.value != null) return@collect
+                // Not while the household is still arriving. Subscription snapshots land one
+                // group at a time, so in the instant after the first soundbar's metadata and
+                // before the second's, `detect` sees exactly one room on a TV input and
+                // answers confidently — and the answer is then kept. The ambiguity guard
+                // only means anything once every group has said what it is doing.
+                val state = household.state.value
+                if (state.groups.any { it.id !in household.groupStates.value }) return@collect
                 roomPrefsStore.setTvPlayer(detected)
 
                 // On a first run the room was picked before this was known, so move to the
@@ -302,7 +309,8 @@ class HomeViewModel @Inject constructor(
      * change, so the row that offered it lights up on its own.
      */
     fun useTvInput(groupId: String) {
-        viewModelScope.launch { runCatching { household.useTvInput(groupId) } }
+        val named = roomPrefsStore.tvPlayerId.value
+        viewModelScope.launch { runCatching { household.useTvInput(groupId, preferSoundbar = named) } }
     }
 
     /**
@@ -319,8 +327,17 @@ class HomeViewModel @Inject constructor(
      */
     fun setTvSoundbar(groupId: String) {
         val group = findGroup(groupId) ?: return
+        // Cleared on the same condition the row is *labelled* from — the stored player being
+        // anywhere in this group — not on it matching whichever soundbar `soundbarOf` picks
+        // first. A group can hold two Beams, and then those differ, so "Not my TV's room"
+        // would quietly name the other one instead of clearing.
+        val stored = roomPrefsStore.tvPlayerId.value
+        if (stored != null && stored in group.playerIds) {
+            roomPrefsStore.setTvPlayer(null)
+            return
+        }
         val soundbar = TvSoundbar.soundbarOf(group, household.state.value) ?: return
-        roomPrefsStore.setTvPlayer(if (roomPrefsStore.tvPlayerId.value == soundbar) null else soundbar)
+        roomPrefsStore.setTvPlayer(soundbar)
     }
 
     /** One speaker's own level, accumulating presses the way the group volume does. */
@@ -332,7 +349,12 @@ class HomeViewModel @Inject constructor(
         playerVolumeJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
-            _pendingPlayerVolumes.update { it - playerId }
+            // Only if it is still ours. `runCatching` catches the CancellationException a
+            // newer press throws in here, and this line is not a suspension point, so
+            // clearing unconditionally would delete the target that press just wrote —
+            // leaving the row on the stale pushed level and the press after it aiming from
+            // there, which is the very accumulation this exists to prevent.
+            _pendingPlayerVolumes.update { if (it[playerId] == target) it - playerId else it }
         }
     }
 

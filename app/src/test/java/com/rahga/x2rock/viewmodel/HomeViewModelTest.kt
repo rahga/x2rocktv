@@ -32,6 +32,8 @@ import org.junit.Before
 import org.junit.Test
 import java.net.InetAddress
 
+private const val VOLUME_DEBOUNCE = 300L
+
 /**
  * The room list, against a [FakePlayer] serving the captured five-group topology.
  *
@@ -46,6 +48,7 @@ class HomeViewModelTest {
     private lateinit var household: SonosHousehold
     private lateinit var channels: RecordingChannelSync
     private lateinit var prefs: FakePreferences
+    private lateinit var roomPrefs: RoomPreferencesStore
     private lateinit var viewModel: HomeViewModel
 
     @Before fun setUp() {
@@ -62,11 +65,12 @@ class HomeViewModelTest {
             port = fake.port,
         )
         prefs = FakePreferences()
+        roomPrefs = RoomPreferencesStore(prefs)
         channels = RecordingChannelSync()
         viewModel = HomeViewModel(
             household = household,
             themeStore = ThemeStore(prefs),
-            roomPrefsStore = RoomPreferencesStore(prefs),
+            roomPrefsStore = roomPrefs,
             channelSync = channels,
             pendingRoomDeepLink = PendingRoomDeepLink(),
         )
@@ -326,12 +330,85 @@ class HomeViewModelTest {
         assertNull("a second press should take it back", viewModel.tvPlayerId.value)
     }
 
+    /**
+     * Clearing must work on a group holding *two* soundbars, where "the stored player" and
+     * "the first player with an HDMI socket" are different speakers.
+     *
+     * The row is labelled from the former and used to clear on the latter, so pressing
+     * "Not my TV's room" silently named the other Beam as the television's instead. Reached
+     * easily enough: party mode across this household groups three of them.
+     */
+    @Test fun `clearing works when the group holds more than one soundbar`() = runBlocking<Unit> {
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Guest TV", memberRoom = "Bedroom"))
+        val grouped = withTimeout(10_000) {
+            viewModel.uiState.first {
+                it is HomeViewModel.UiState.Success &&
+                    it.groups.firstOrNull { g -> g.name == "Guest TV" }?.playerIds?.size == 2
+            } as HomeViewModel.UiState.Success
+        }
+        val group = grouped.groups.first { it.name == "Guest TV" }
+        val soundbars = group.playerIds.filter { TvSoundbar.hasHdmi(it, household.state.value) }
+        assertEquals("this test needs a group with two soundbars in it", 2, soundbars.size)
+
+        // Name the one `soundbarOf` would *not* pick, as a viewer with two Beams grouped may.
+        val theirs = soundbars.first { it != TvSoundbar.soundbarOf(group, household.state.value) }
+        // Through the store the view model itself holds: a second instance over the same
+        // storage would update the file and not the flow it reads.
+        roomPrefs.setTvPlayer(theirs)
+
+        viewModel.setTvSoundbar(group.id)
+
+        assertNull(
+            "pressing it named the other soundbar instead of clearing",
+            viewModel.tvPlayerId.value,
+        )
+    }
+
     /** A room with no soundbar has nothing to name, so the press does nothing. */
     @Test fun `a room with no soundbar cannot be named as the TV's`() = runBlocking<Unit> {
         val state = connect()
         val noSoundbar = state.groups.first { state.rooms[it.id]?.hasTvInput != true }
         viewModel.setTvSoundbar(noSoundbar.id)
         assertNull(viewModel.tvPlayerId.value)
+    }
+
+    /**
+     * A press landing while the previous one's command is in flight must not lose a step.
+     *
+     * The newer press cancels the debounced job, and `runCatching` swallows the
+     * `CancellationException` that throws inside it — so the clear that followed used to
+     * delete the target the newer press had just written. The row fell back to the level the
+     * speaker last stated, and the press after it aimed from there: 20 → 25 → 30 → **25**.
+     *
+     * The fake is told to hold its reply, because in-process it answers far too fast for
+     * that window to be reachable by waiting.
+     */
+    @Test fun `a press during the previous command keeps accumulating`() = runBlocking<Unit> {
+        connect()
+        fake.pushPlayerVolume(fake.id, volume = 20)
+        awaitPlayerVolume(fake.id, 20)
+        fake.clearHistory()
+        fake.holdRepliesTo("setVolume")
+
+        viewModel.adjustPlayerVolume(fake.id, +5)                        // 25
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        // Now suspended inside that command, which is the only place the bug lives.
+        viewModel.adjustPlayerVolume(fake.id, +5)                        // 30, cancels it
+        delay(60)
+
+        assertEquals(
+            "the cancelled job cleared the newer press's target",
+            30,
+            viewModel.playerVolumes.value[fake.id],
+        )
+
+        // And the press after it must aim from 30, not from the 20 the speaker stated.
+        viewModel.adjustPlayerVolume(fake.id, +5)                        // 35
+        fake.releaseReplies()
+        withTimeout(5_000) {
+            while (fake.lastCommandBody("setVolume")?.get("volume")?.asInt != 35) delay(20)
+        }
     }
 
     // ---------------------------------------------------------------- TV input

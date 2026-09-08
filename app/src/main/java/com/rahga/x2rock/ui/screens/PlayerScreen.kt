@@ -371,7 +371,7 @@ private fun PlaybackControls(
             Text("Speakers", style = MaterialTheme.typography.titleSmall)
             Spacer(modifier = Modifier.height(8.dp))
             state.playerVolumes.forEach { entry ->
-                PlayerVolumeRow(entry, viewModel)
+                PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
             }
         }
     }
@@ -379,7 +379,11 @@ private fun PlaybackControls(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel) {
+private fun PlayerVolumeRow(
+    entry: PlayerVolumeEntry,
+    viewModel: PlayerViewModel,
+    exitLeftFocusRequester: FocusRequester,
+) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -394,7 +398,11 @@ private fun PlayerVolumeRow(entry: PlayerVolumeEntry, viewModel: PlayerViewModel
         )
         AppButton(
             onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
-            enabled = !entry.muted
+            enabled = !entry.muted,
+            // The leftmost control of this row, and these rows appear whenever the room is
+            // grouped. Without it a left press falls through to the pane's `focusProperties`,
+            // which does not govern the search — so focus left the pane and was lost.
+            modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
         ) { Text("−") }
         Text(
             text = if (entry.muted) "Muted" else "${entry.volume}",

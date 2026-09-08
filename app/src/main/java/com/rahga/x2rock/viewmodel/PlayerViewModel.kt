@@ -212,7 +212,8 @@ class PlayerViewModel @Inject constructor(
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.seek(groupId, target) }
-            pendingSeekMillis = null
+            // Only if it is still ours — see `pendingVolume` below.
+            if (pendingSeekMillis == target) pendingSeekMillis = null
         }
     }
 
@@ -233,7 +234,11 @@ class PlayerViewModel @Inject constructor(
         volumeDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setGroupVolume(groupId, target) }
-            pendingVolume = null
+            // Only if it is still ours. `runCatching` catches the CancellationException a
+            // newer press throws in here, and this is not a suspension point, so clearing
+            // unconditionally would delete the target that press just wrote — and the press
+            // after it would aim from the stale pushed level, losing a step.
+            if (pendingVolume == target) pendingVolume = null
         }
     }
 
@@ -269,7 +274,8 @@ class PlayerViewModel @Inject constructor(
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
-            pendingPlayerVolumes.remove(playerId)
+            // Only if it is still ours — see `pendingVolume` above.
+            if (pendingPlayerVolumes[playerId] == target) pendingPlayerVolumes.remove(playerId)
         }
     }
 
