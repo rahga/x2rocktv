@@ -10,6 +10,13 @@ import javax.inject.Singleton
 
 /** What the system is told about the current track, and the commands it sends back. */
 interface NowPlayingPublisher {
+    // Transport only, deliberately. There is no member here for volume and there must not
+    // be one: `MediaSession.setPlaybackToRemote(VolumeProvider)` would route the remote's
+    // volume keys to the selected room instead of the device's own output, and audio
+    // reaching the speakers over HDMI/ARC is already what those keys control. Someone must
+    // be able to mute what they are hearing without this app in the way. See CLAUDE.md,
+    // "The remote's volume keys are not ours to take".
+
 
     /** Play/pause, next, previous and seek, arriving from media keys or voice. */
     interface Controls {
