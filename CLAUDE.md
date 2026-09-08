@@ -241,12 +241,21 @@ row being adjusted.
 The panel opens focused on **the room's own row**, not on Party: the row most likely to be
 wanted, and one press from either neighbour.
 
-There was a **favourites** tier — a second sort rank between the pinned room and the rest,
-with a star in the list. It is gone: pinning a primary room already does the useful version,
-and the owner's verdict on the Sonos feature it mirrored was "probably the least used Sonos
-feature on the planet". If it ever comes back it belongs as a star off to the side, not as a
-row in this panel. Sonos *content* favourites (`favorites:1`, the Favorites screen) are a
-different thing entirely and remain.
+**Two hoists have been removed from `sortGroups`, and nothing should reintroduce one.** The
+list is now strictly alphabetical, which is Sonos's own order and the only order there is —
+Sonos has playback, EQ and home-theatre settings but nothing positional. "If it doesn't let
+us reorder in the Sonos app, I don't think we should either."
+
+- **Favourites**, a second sort rank with a star in the list. The owner's verdict on the
+  feature it mirrored: "probably the least used Sonos feature on the planet." If it returns
+  it belongs as a star off to the side, not a row in this panel. Sonos *content* favourites
+  (`favorites:1`, the Favorites screen) are a different thing entirely and remain.
+- **A pinned "primary room"**, which had quietly become the second of two answers to "which
+  room does this device belong to" — and the louder one, because `defaultSelection` is just
+  the top of this list and [TvSoundbar] detection only moves a selection still equal to it.
+  Setting a primary therefore *switched TV detection off* for good, silently. Naming the
+  television's room says the same thing better and without disagreeing with Sonos, so
+  "This is my TV" is the only such control left.
 
 Two things sit outside the widget's version, in the order asked for:
 

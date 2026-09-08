@@ -6,11 +6,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The sidebar's order: the pinned room, then Sonos's own alphabetical order.
+ * The sidebar's order: Sonos's own, which is alphabetical and nothing else.
  *
- * There was a second tier here — favourites, between the two — and it is gone. Pinning a
- * primary room already does the useful version of it, and a room list that disagrees with
- * every other controller in the house needs a better reason than a rarely-touched star.
+ * Two hoists have been removed from above this — favourites, then a pinned primary room.
+ * Sonos offers no ordering of its own, so there is nothing to reorder *to*, and a list that
+ * disagrees with every other controller in the house needs a better reason than either had.
  */
 class GroupSortingTest {
 
@@ -25,23 +25,11 @@ class GroupSortingTest {
 
     @Test
     fun `sorts alphabetically when nothing is pinned`() {
-        assertEquals(listOf(attic, bedroom, kitchen, study), sortGroups(all, primaryId = null))
+        assertEquals(listOf(attic, bedroom, kitchen, study), sortGroups(all))
     }
 
     @Test
-    fun `the pinned room comes first, the rest stay alphabetical`() {
-        assertEquals(listOf(study, attic, bedroom, kitchen), sortGroups(all, primaryId = "s"))
-    }
-
-    @Test
-    fun `the pinned room is not listed twice`() {
-        val sorted = sortGroups(all, primaryId = "k")
-        assertEquals(all.size, sorted.size)
-        assertEquals(listOf(kitchen, attic, bedroom, study), sorted)
-    }
-
-    @Test
-    fun `a primary id that no longer matches any group is ignored`() {
-        assertEquals(listOf(attic, bedroom, kitchen, study), sortGroups(all, primaryId = "gone"))
+    fun `order does not depend on the order the household reported them in`() {
+        assertEquals(sortGroups(all), sortGroups(all.reversed()))
     }
 }

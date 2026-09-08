@@ -28,19 +28,22 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
- * Sidebar order: the pinned room first, then the rest, alphabetical.
- * Pure, so the ordering is testable without standing the view model up.
+ * Sidebar order: Sonos's own, which is alphabetical and nothing else.
  *
- * The television's own room is deliberately *not* hoisted here. Sonos lists rooms
- * alphabetically and offers no ordering of its own, so reordering would make this list
- * disagree with every other controller in the house for no gain. The TV room is where the
- * app *opens* instead — see the selection below.
+ * Sonos sorts rooms alphabetically and offers no ordering of its own — it has playback, EQ
+ * and home-theatre settings but nothing positional — so there is no shared order to match
+ * and nothing to reorder *to*. Hoisting a room here would make this list disagree with every
+ * other controller in the house for no gain.
+ *
+ * There were two hoists once. Favourites went first, then a pinned "primary room", which had
+ * quietly become the second of two answers to "which room does this device belong to" — and
+ * the louder one: setting it stopped [TvSoundbar] detection from ever choosing where the app
+ * opens, because that only moves a selection still equal to the default. Naming the
+ * television's room says the same thing better, and without disagreeing with Sonos.
+ *
+ * Kept as a function rather than inlined so the decision has somewhere to live.
  */
-fun sortGroups(groups: List<Group>, primaryId: String?): List<Group> {
-    val pinned = groups.firstOrNull { it.id == primaryId }
-    val rest = groups.filter { it.id != pinned?.id }.sortedBy { it.name }
-    return listOfNotNull(pinned) + rest
-}
+fun sortGroups(groups: List<Group>): List<Group> = groups.sortedBy { it.name }
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -143,7 +146,6 @@ class HomeViewModel @Inject constructor(
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
-    val primaryRoomId: StateFlow<String?> = roomPrefsStore.primaryRoomId
     val tvPlayerId: StateFlow<String?> = roomPrefsStore.tvPlayerId
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
@@ -256,8 +258,6 @@ class HomeViewModel @Inject constructor(
 
     fun toggleSidebar() { _sidebarVisible.value = !_sidebarVisible.value }
 
-    fun setPrimaryRoom(id: String?) = roomPrefsStore.setPrimaryRoom(id)
-
     // Grouping changes arrive back as a groups:1 event, so none of these re-fetch.
 
     fun joinGroup(sourceGroupId: String, targetGroupId: String) {
@@ -299,7 +299,7 @@ class HomeViewModel @Inject constructor(
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
         val host = hostGroupId?.let { id -> groups.firstOrNull { it.id == id } }
-            ?: sortGroups(groups, roomPrefsStore.primaryRoomId.value).first()
+            ?: sortGroups(groups).first()
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
         viewModelScope.launch {
@@ -373,7 +373,7 @@ class HomeViewModel @Inject constructor(
     }
 
     /** What the app would choose with nothing else to go on. */
-    private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups, roomPrefsStore.primaryRoomId.value).firstOrNull()
+    private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups).firstOrNull()
 
     private fun findGroup(id: String): Group? =
         (uiState.value as? UiState.Success)?.groups?.find { it.id == id }
