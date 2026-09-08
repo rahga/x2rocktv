@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -275,20 +276,54 @@ private fun RoomRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis)
+                // The level sits at the end of the last line of text, so it is always
+                // directly above the right end of its own bar rather than off beside the
+                // action — a number next to "join" read as part of the action.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = name,
+                        style = MaterialTheme.typography.bodyLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (subtitle == null) VolumeLevel(volume)
+                }
                 if (subtitle != null) {
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1,
-                        overflow = TextOverflow.Ellipsis)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        VolumeLevel(volume)
+                    }
                 }
                 VolumeBar(volume)
             }
-            Text(
-                text = listOfNotNull(action, volume?.toString() ?: "—").joinToString("  "),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            if (action != null) {
+                Spacer(Modifier.width(16.dp))
+                Text(action, style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VolumeLevel(volume: Int?) {
+    Text(
+        text = volume?.toString() ?: "—",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }
 
 /**
