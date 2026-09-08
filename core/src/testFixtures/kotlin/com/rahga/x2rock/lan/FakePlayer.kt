@@ -7,6 +7,7 @@ import com.google.gson.JsonParser
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.util.concurrent.CountDownLatch
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -209,6 +210,30 @@ class FakePlayer(
         ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
     }
 
+    /**
+     * Hold the reply to [command] until [releaseReplies], so a caller stays suspended in it.
+     *
+     * A real player answers across a network; this one answers in microseconds, which makes
+     * the window where a command is *in flight* impossible to aim at. Some behaviour lives
+     * only in that window — cancelling a debounced volume job while its command is
+     * outstanding, for one — so it has to be widened deliberately rather than slept at.
+     */
+    fun holdRepliesTo(command: String) {
+        releaseLatch.set(CountDownLatch(1))
+        heldCommand.set(command)
+    }
+
+    fun releaseReplies() {
+        heldCommand.set(null)
+        releaseLatch.get().countDown()
+    }
+
+    private fun awaitRelease(command: String?) {
+        if (command == null || command != heldCommand.get()) return
+        // Bounded, so a test that forgets to release fails rather than hanging the suite.
+        releaseLatch.get().await(10, TimeUnit.SECONDS)
+    }
+
     /** Blocks until the client sends a command matching [predicate], or fails. */
     fun awaitCommand(timeoutMillis: Long = 2_000, predicate: (JsonObject) -> Boolean): JsonObject {
         val deadline = System.currentTimeMillis() + timeoutMillis
@@ -218,6 +243,9 @@ class FakePlayer(
         }
         error("no matching command within ${timeoutMillis}ms")
     }
+
+    private val heldCommand = java.util.concurrent.atomic.AtomicReference<String?>(null)
+    private val releaseLatch = java.util.concurrent.atomic.AtomicReference(CountDownLatch(0))
 
     private fun upgrade() = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -238,6 +266,7 @@ class FakePlayer(
                 }
             }
             received += header
+            awaitRelease(header.get("command")?.asString)
             reply(webSocket, header)
         }
     })

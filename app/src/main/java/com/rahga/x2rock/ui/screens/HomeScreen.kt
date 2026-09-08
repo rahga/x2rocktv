@@ -237,6 +237,11 @@ fun HomeScreen(
         // including one performed from it. Following the speakers keeps it on the room.
         val liveGroup = panel?.let { captured ->
             groups.firstOrNull { it.id == captured.id }
+                // The coordinator before any member: if something else on the network splits
+                // this group, matching any shared player would take the panel to whichever
+                // fragment happens to come first in household order. It would keep its title
+                // while `onRemovePlayer` and `onUseTvInput` acted on a different room.
+                ?: groups.firstOrNull { captured.coordinatorId in it.playerIds }
                 ?: groups.firstOrNull { g -> g.playerIds.any { it in captured.playerIds } }
         }
         if (panel != null && liveGroup == null) {

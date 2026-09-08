@@ -45,6 +45,11 @@ object TvSoundbar {
         return group.playerIds.firstOrNull { HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) }
     }
 
+    /** Whether this particular player is the one holding an HDMI socket. */
+    fun hasHdmi(playerId: String, state: HouseholdState): Boolean =
+        state.players.firstOrNull { it.id == playerId }
+            ?.capabilities?.contains(HT_PLAYBACK) == true
+
     /** The group that currently holds [playerId], if any still does. */
     fun groupOf(playerId: String?, groups: List<Group>): Group? =
         playerId?.let { id -> groups.firstOrNull { id in it.playerIds } }

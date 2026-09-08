@@ -340,6 +340,11 @@ class SonosHousehold(
         sockets.values.forEach { it.close() }
         sockets.clear()
         addressBook.clear()
+        // Cleared for the same reason [teardown] clears it: nothing should go on believing
+        // it holds a subscription over a socket that no longer exists. `establish`
+        // re-subscribes unconditionally, so this is latent today — but `resubscribe` running
+        // against a stale map before a reconnect completes would skip every group in it.
+        subscribedGroups.clear()
         _state.value = HouseholdState()
         _groupStates.value = emptyMap()
         _playerVolumes.value = emptyMap()
@@ -385,9 +390,15 @@ class SonosHousehold(
      * event carrying `htInputFormat`, which is what [GroupState.onTvInput] already reads,
      * so the UI learns it the same way it learns everything else.
      */
-    suspend fun useTvInput(groupId: String) {
+    suspend fun useTvInput(groupId: String, preferSoundbar: String? = null) {
         val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
-        val soundbar = TvSoundbar.soundbarOf(group, _state.value)
+        // A group can hold more than one soundbar — party mode across a household with
+        // three Beams is enough — and then "the first player with an HDMI socket" is an
+        // arbitrary one. If the viewer has said which soundbar their television is, switch
+        // that one; picking a different Beam would put the wrong room on the wrong TV.
+        val soundbar = preferSoundbar
+            ?.takeIf { it in group.playerIds && TvSoundbar.hasHdmi(it, _state.value) }
+            ?: TvSoundbar.soundbarOf(group, _state.value)
             ?: error("${group.name} has no speaker with a TV input")
         try {
             upnp.useTvInput(coordinatorHostname(groupId), soundbar)
@@ -659,6 +670,12 @@ class SonosHousehold(
                         // seen on hardware, because a TV input has no track at all.
                         durationMillis = track?.durationMillis ?: 0,
                         positionMillis = if (track == null) 0 else it.positionMillis,
+                        // Stamped with the zero, not left on the old reading. Consumers
+                        // extrapolate as position + (now - positionUpdatedAt), so a fresh 0
+                        // against a minutes-old stamp reads as minutes elapsed — and a
+                        // `+30s` press would seek from there.
+                        positionUpdatedAt =
+                            if (track == null) System.currentTimeMillis() else it.positionUpdatedAt,
                     )
                 }
             }
