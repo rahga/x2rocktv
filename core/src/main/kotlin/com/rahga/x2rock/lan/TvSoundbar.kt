@@ -37,12 +37,21 @@ object TvSoundbar {
     }
 
     /**
-     * The member holding the HDMI socket, which need not be the coordinator: a soundbar
-     * that joined a speaker's group still has its input.
+     * The speaker holding the HDMI socket, which need not be the coordinator: a soundbar
+     * that joined another room's group still has its input.
+     *
+     * **The coordinator wins when it has one.** A group can hold several soundbars — party
+     * mode across a household with three Beams is enough — and "the first player with an
+     * HDMI socket" is then whichever way the topology happened to list them. The coordinator
+     * is the room the group is *named* after and the one a panel is titled with, so it is
+     * the answer a viewer pressing "this room's TV" means. Only when it has no socket of its
+     * own does this fall to a member, which is the Kitchen-coordinates-a-Beam case.
      */
     fun soundbarOf(group: Group, state: HouseholdState): String? {
         val byId = state.players.associateBy { it.id }
-        return group.playerIds.firstOrNull { HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) }
+        fun hasHdmi(id: String) = HT_PLAYBACK in (byId[id]?.capabilities ?: emptyList())
+        return group.coordinatorId.takeIf { hasHdmi(it) }
+            ?: group.playerIds.firstOrNull { hasHdmi(it) }
     }
 
     /** Whether this particular player is the one holding an HDMI socket. */

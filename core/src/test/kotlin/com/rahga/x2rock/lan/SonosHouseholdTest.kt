@@ -11,6 +11,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -181,6 +182,29 @@ class SonosHouseholdTest {
         val state = household.groupState(groupId)
         assertEquals("a TV input has no track to have a duration", 0L, state.durationMillis)
         assertEquals("nor a position in one", 0L, state.positionMillis)
+    }
+
+    /**
+     * `metadataSeen` says a group has actually reported, which having a map entry does not.
+     *
+     * Any of the three subscriptions creates the entry, and `onTvInput` is read from metadata
+     * alone — so anything judging "is this room on a TV input" from entry presence would read
+     * "no" from a group that had only sent its playback snapshot. That is enough to make the
+     * two-televisions ambiguity guard pass on a household where it should not.
+     */
+    @Test fun `a playback event alone does not count as metadata having arrived`() = runBlocking<Unit> {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.push("playback:1", "playbackStatus", """{"positionMillis":1000}""", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.positionMillis == 1000L } }
+        assertFalse(
+            "a playback event was taken for metadata",
+            household.groupState(groupId).metadataSeen,
+        )
+
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
     }
 
     /** Regression: a groups event omits playbackState, which used to arrive as null. */
