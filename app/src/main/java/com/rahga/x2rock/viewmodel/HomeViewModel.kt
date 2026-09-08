@@ -319,7 +319,7 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Say which soundbar this television is plugged into, or take it back.
+     * Say which soundbar this television is plugged into.
      *
      * Detection is a heuristic and cannot be otherwise — Android will not say what is on the
      * far end of its HDMI — and it has been seen to answer confidently and wrongly: any
@@ -327,20 +327,15 @@ class HomeViewModel @Inject constructor(
      * exactly like the answer. So the viewer can state it, and a stated answer wins: the
      * detector only ever fills this in while it is empty.
      *
+     * King of the hill: naming a room simply moves the crown off whichever room held it, so
+     * there is no un-naming to do and no row for it. The only way to be wrong is to have
+     * named nothing yet, which detection covers.
+     *
      * Stores the **player**, never the group, because a regroup mints new group ids while
      * the soundbar stays bolted to the same television.
      */
     fun setTvSoundbar(groupId: String) {
         val group = findGroup(groupId) ?: return
-        // Cleared on the same condition the row is *labelled* from — the stored player being
-        // anywhere in this group — not on it matching whichever soundbar `soundbarOf` picks
-        // first. A group can hold two Beams, and then those differ, so "Not my TV's room"
-        // would quietly name the other one instead of clearing.
-        val stored = roomPrefsStore.tvPlayerId.value
-        if (stored != null && stored in group.playerIds) {
-            roomPrefsStore.setTvPlayer(null)
-            return
-        }
         val soundbar = TvSoundbar.soundbarOf(group, household.state.value) ?: return
         roomPrefsStore.setTvPlayer(soundbar)
     }

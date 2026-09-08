@@ -96,7 +96,6 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
     val primaryRoomId by homeViewModel.primaryRoomId.collectAsState()
-    val tvPlayerId by homeViewModel.tvPlayerId.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
@@ -260,7 +259,6 @@ fun HomeScreen(
                     playerVolumes = volumes,
                     groupVolumes = groupVolumes,
                     isPrimary = liveGroup.id == primaryRoomId,
-                    isTvRoom = tvPlayerId != null && tvPlayerId in liveGroup.playerIds,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
                         homeViewModel.partyMode(liveGroup.id)
