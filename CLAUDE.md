@@ -170,6 +170,9 @@ look right while testing nothing, because a household that never re-subscribes p
   room", has to land somewhere, and idle is exactly when one is worth acting on. Its title is
   the room's own name, because an empty `METADATA_KEY_TITLE` is what the launcher renders as
   "Unknown" in the first place.
+
+  Note this session handles **transport only** — it never takes the volume keys. See "The
+  remote's volume keys are not ours to take".
 - **No foreground service, and probably no need of one.** The sockets are held by an
   application-scoped `CoroutineScope`, which survives Activity changes but not the process
   being reclaimed; the cost of reclaim is a reconnect on next launch, which works.
@@ -216,11 +219,29 @@ nothing draws it), and a placeholder for a TV input, which has no art of its own
 player really does send `images: []` for `TV Audio`, so anything shown there is the app's
 invention rather than data.
 
-**Not** a per-row volume slider: every remote has volume keys. The mechanism that makes
-them work is `MediaSession.setPlaybackToRemote(VolumeProvider)`, which tells the system to
-send volume keys to the selected room instead of local output. Worth knowing before
-building it that the Living Room Beam is on HDMI ARC, so the Shield's remote may already
-drive that one room over CEC and the two could disagree.
+### The remote's volume keys are not ours to take
+
+**Never call `MediaSession.setPlaybackToRemote(VolumeProvider)`.** It is the one API that
+would route the remote's volume keys to the selected room instead of the device's own
+output, and it must not be used here. An earlier version of this file proposed it as the way
+to do per-room volume; that was wrong.
+
+The case that settles it: audio playing through the streaming device reaches the speakers
+over HDMI/ARC, so the remote's volume keys are *already* controlling exactly what is audible.
+Someone must be able to pick up the remote and mute or turn down what they are hearing,
+immediately, without x2rock in the way. If the keys were routed to "the selected room" they
+would land on whatever this app happens to have highlighted — possibly a different room
+entirely, possibly the same room by a path that does not affect the ARC stream. Either way
+the volume key stops doing the one thing everybody expects it to do. This is the same
+principle as the household section above: other things drive this system and must not be
+prevented from doing so.
+
+`dumpsys media_session` is how to check the app is behaving. Ours should always read
+`volumeType=1` (`PLAYBACK_TYPE_LOCAL`). A `volumeType=2` there means someone added a
+`VolumeProvider` and the keys have been hijacked.
+
+Per-room volume lives in the room panel instead, on left/right, where it is asked for
+explicitly rather than intercepted.
 
 ### The room panel
 
