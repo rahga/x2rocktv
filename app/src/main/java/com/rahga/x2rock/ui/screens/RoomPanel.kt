@@ -86,8 +86,6 @@ fun RoomPanel(
     /** Each joinable group's own level, keyed by group id. */
     groupVolumes: Map<String, Int>,
     isPrimary: Boolean,
-    /** Whether this is the room the viewer's own television plays through. */
-    isTvRoom: Boolean,
     /** One group holding the whole household, which is what party mode leaves behind. */
     isPartying: Boolean,
     onParty: () -> Unit,
@@ -203,10 +201,11 @@ fun RoomPanel(
         }
         // Only where there is an HDMI socket for a television to be plugged into. Detection
         // fills this in on its own but has been seen to answer wrongly and then keep the
-        // answer, so it has to be correctable by hand.
+        // answer, so it has to be correctable by hand. There is no un-naming: the crown
+        // simply moves to whichever room is named next.
         if (info.hasTvInput) {
             AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
-                Text(if (isTvRoom) "Not my TV's room" else "This is my TV")
+                Text("This is my TV")
             }
         }
 

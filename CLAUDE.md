@@ -301,6 +301,10 @@ default; it does not get the last word. Like detection it stores a **player**, s
 it on a group names the soundbar in that group, not the coordinator, which on a grouped
 Kitchen+Bedroom would otherwise name a One SL as the television's.
 
+It is **king of the hill**: naming a room moves the crown off whichever room held it, so
+there is no un-naming row and the label never changes. A wrong answer is corrected by naming
+the right room, not by clearing the wrong one first.
+
 The first-launch case needs care, because detection lands a moment *after* the first room
 is auto-chosen. Moving the selection then is right, but only while it is still the app's
 own choice — and intent cannot be read from `selectGroup`, because the sidebar selects on

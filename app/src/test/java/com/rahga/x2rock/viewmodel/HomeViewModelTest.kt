@@ -320,49 +320,26 @@ class HomeViewModelTest {
         assertEquals(TvSoundbar.soundbarOf(group, household.state.value), stored)
     }
 
-    /** Pressing it again takes it back, so a mistake is not permanent. */
-    @Test fun `naming the same room again clears it`() = runBlocking<Unit> {
-        val state = connect()
-        val soundbarRoom = state.groups.first { state.rooms[it.id]?.hasTvInput == true }
-        viewModel.setTvSoundbar(soundbarRoom.id)
-        assertNotNull(viewModel.tvPlayerId.value)
-        viewModel.setTvSoundbar(soundbarRoom.id)
-        assertNull("a second press should take it back", viewModel.tvPlayerId.value)
-    }
-
     /**
-     * Clearing must work on a group holding *two* soundbars, where "the stored player" and
-     * "the first player with an HDMI socket" are different speakers.
+     * King of the hill: naming a second room moves the crown rather than adding to it.
      *
-     * The row is labelled from the former and used to clear on the latter, so pressing
-     * "Not my TV's room" silently named the other Beam as the television's instead. Reached
-     * easily enough: party mode across this household groups three of them.
+     * That is the whole reason there is no un-naming row — a wrong answer is corrected by
+     * naming the right room, not by clearing the wrong one first.
      */
-    @Test fun `clearing works when the group holds more than one soundbar`() = runBlocking<Unit> {
-        connect()
-        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Guest TV", memberRoom = "Bedroom"))
-        val grouped = withTimeout(10_000) {
-            viewModel.uiState.first {
-                it is HomeViewModel.UiState.Success &&
-                    it.groups.firstOrNull { g -> g.name == "Guest TV" }?.playerIds?.size == 2
-            } as HomeViewModel.UiState.Success
-        }
-        val group = grouped.groups.first { it.name == "Guest TV" }
-        val soundbars = group.playerIds.filter { TvSoundbar.hasHdmi(it, household.state.value) }
-        assertEquals("this test needs a group with two soundbars in it", 2, soundbars.size)
+    @Test fun `naming another room moves it off the first`() = runBlocking<Unit> {
+        val state = connect()
+        val withTv = state.groups.filter { state.rooms[it.id]?.hasTvInput == true }
+        assertTrue("this test needs two rooms with soundbars", withTv.size >= 2)
 
-        // Name the one `soundbarOf` would *not* pick, as a viewer with two Beams grouped may.
-        val theirs = soundbars.first { it != TvSoundbar.soundbarOf(group, household.state.value) }
-        // Through the store the view model itself holds: a second instance over the same
-        // storage would update the file and not the flow it reads.
-        roomPrefs.setTvPlayer(theirs)
+        viewModel.setTvSoundbar(withTv[0].id)
+        val first = viewModel.tvPlayerId.value
+        assertNotNull(first)
 
-        viewModel.setTvSoundbar(group.id)
+        viewModel.setTvSoundbar(withTv[1].id)
+        val second = viewModel.tvPlayerId.value
 
-        assertNull(
-            "pressing it named the other soundbar instead of clearing",
-            viewModel.tvPlayerId.value,
-        )
+        assertTrue("the crown did not move", second != first)
+        assertTrue("it did not land in the room that was named", second in withTv[1].playerIds)
     }
 
     /** A room with no soundbar has nothing to name, so the press does nothing. */
