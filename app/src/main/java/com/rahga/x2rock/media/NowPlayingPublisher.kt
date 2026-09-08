@@ -31,6 +31,19 @@ interface NowPlayingPublisher {
     fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long)
 
     /**
+     * Whether this room is something a media session should represent at all.
+     *
+     * False for a soundbar on its HDMI input. The television is the source there: transport
+     * means nothing, there is no track to name, and the Google TV home screen's media card
+     * would only add a row saying so — it rendered the empty title as "Unknown".
+     *
+     * Still true while a room is merely **idle**, which is not the same case. A play key or
+     * a voice "play in the living room" has to land somewhere, and idle is precisely when
+     * one is worth acting on.
+     */
+    fun setPresenting(presenting: Boolean)
+
+    /**
      * Stop routing controls to [controls], if they are still the ones attached.
      *
      * Deliberately *not* a release: the session belongs to the application, not to a view
@@ -75,9 +88,11 @@ class MediaSessionPublisher @Inject constructor(
 
     @Volatile private var attached: NowPlayingPublisher.Controls? = null
 
+    @Volatile private var presenting = true
+
     override fun attach(controls: NowPlayingPublisher.Controls) {
         attached = controls
-        session.isActive = true
+        session.isActive = presenting
         session.setCallback(object : MediaSession.Callback() {
             override fun onPlay() = controls.togglePlayPause()
             override fun onPause() = controls.togglePlayPause()
@@ -114,6 +129,14 @@ class MediaSessionPublisher @Inject constructor(
                 .setState(state, positionMillis, 1.0f)
                 .build()
         )
+    }
+
+    override fun setPresenting(presenting: Boolean) {
+        if (this.presenting == presenting) return
+        this.presenting = presenting
+        // Only ever active with a callback behind it: an active session that answers nothing
+        // is worse than none, because the system still routes keys to it.
+        session.isActive = presenting && attached != null
     }
 
     override fun detach(controls: NowPlayingPublisher.Controls) {

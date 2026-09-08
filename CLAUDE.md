@@ -161,6 +161,15 @@ just its membership — `FakePlayer.groupedTopology` does. Keeping the id made t
 look right while testing nothing, because a household that never re-subscribes passes it.
 
 ## Known Gaps / Deferred Work
+- **The media session is not advertised for a soundbar on its TV input.** The Google TV home
+  screen carries a card for every active session, and for a room with no track metadata it
+  rendered ours as "Unknown · x2rock · Unknown" — a launcher row saying nothing, for a source
+  the television already controls. `setPresenting(false)` deactivates the session there.
+
+  **Idle is not that case and keeps its session.** A play key, or a voice "play in the living
+  room", has to land somewhere, and idle is exactly when one is worth acting on. Its title is
+  the room's own name, because an empty `METADATA_KEY_TITLE` is what the launcher renders as
+  "Unknown" in the first place.
 - **No foreground service, and probably no need of one.** The sockets are held by an
   application-scoped `CoroutineScope`, which survives Activity changes but not the process
   being reclaimed; the cost of reclaim is a reconnect on next launch, which works.

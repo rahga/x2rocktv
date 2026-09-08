@@ -44,6 +44,12 @@ class RecordingNowPlaying : NowPlayingPublisher {
     override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long) {
         states += State(playing, idle, positionMillis)
     }
+
+    /** Whether a media session is being advertised at all; false on a soundbar's TV input. */
+    var presenting: Boolean = true
+        private set
+
+    override fun setPresenting(presenting: Boolean) { this.presenting = presenting }
     override fun detach(controls: NowPlayingPublisher.Controls) {
         if (this.controls !== controls) return
         detached = true
