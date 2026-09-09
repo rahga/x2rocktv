@@ -400,6 +400,7 @@ class LiveHouseholdTest {
         val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
             ?: error("no room named $mutableRoom in this household")
         println("metadataStatus for $mutableRoom: ${household.metadataStatusBody(group.id)}")
+        println("playbackStatus for $mutableRoom: ${household.playbackStatusBody(group.id)}")
     }
 
     /** A speaker with no HDMI socket is refused here rather than by a bare UPnP 402. */

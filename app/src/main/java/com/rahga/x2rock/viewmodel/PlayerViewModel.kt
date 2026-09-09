@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
+import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
@@ -63,6 +64,10 @@ data class PlayerUiState(
     val shuffle: Boolean = false,
     val repeat: String = RepeatModes.NONE,
     val crossfade: Boolean = false,
+    /** What the current source permits — which controls exist at all. */
+    val actions: PlaybackActions = PlaybackActions(),
+    /** A station rather than a queue: decides the artwork, not the controls. */
+    val isRadio: Boolean = false,
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -161,6 +166,8 @@ class PlayerViewModel @Inject constructor(
                     shuffle = state.playMode.shuffle,
                     repeat = state.playMode.repeat,
                     crossfade = state.playMode.crossfade,
+                    actions = state.actions,
+                    isRadio = state.isRadio,
                     // Per-speaker rows only mean anything once a group has more than one.
                     playerVolumes = group?.playerIds
                         ?.takeIf { it.size > 1 }
