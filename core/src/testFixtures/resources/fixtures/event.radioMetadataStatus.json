@@ -1,0 +1,20 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "name": "ice1.somafm.com",
+    "type": "station",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "objectId": "-1"
+    },
+    "images": []
+  },
+  "streamInfo": "Blancmange - Don't Tell Me",
+  "playbackSession": {
+    "_objectType": "directControl",
+    "clientId": "com.rahga.x2rock",
+    "isSuspended": false,
+    "accountId": ""
+  }
+}

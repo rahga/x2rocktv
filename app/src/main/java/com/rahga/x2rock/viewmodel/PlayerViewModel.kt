@@ -42,6 +42,13 @@ data class PlayerUiState(
     val onTvInput: Boolean = false,
     /** e.g. "Dolby Digital 5.1"; empty unless on a TV input with a signal. */
     val inputFormat: String = "",
+    /**
+     * What the station says is on, for a stream that carries no track. See
+     * `PlaybackMetadata.streamInfo` — it is one opaque string, never split into parts.
+     */
+    val streamInfo: String? = null,
+    /** The container's own name: a station, an album. What a stream has instead of an artist. */
+    val sourceName: String? = null,
     val positionMillis: Long = 0,
     val durationMillis: Long = 0,
     val positionUpdatedAt: Long = 0,
@@ -144,6 +151,8 @@ class PlayerViewModel @Inject constructor(
                     albumArtUrl = state.track?.imageUrl ?: state.container?.imageUrl,
                     onTvInput = state.onTvInput,
                     inputFormat = state.inputFormat,
+                    streamInfo = state.streamInfo,
+                    sourceName = state.container?.name,
                     positionMillis = state.positionMillis,
                     durationMillis = state.durationMillis,
                     positionUpdatedAt = state.positionUpdatedAt,

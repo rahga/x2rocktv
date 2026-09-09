@@ -390,6 +390,18 @@ class LiveHouseholdTest {
         }
     }
 
+    /**
+     * Records what a room is actually playing, so a fixture can be captured rather than
+     * invented. Read-only, and asserts nothing about content — it is a capture tool.
+     */
+    @Test fun `capture the metadata a room reports`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to name the room to capture", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        println("metadataStatus for $mutableRoom: ${household.metadataStatusBody(group.id)}")
+    }
+
     /** A speaker with no HDMI socket is refused here rather than by a bare UPnP 402. */
     @Test fun `night mode is refused for a speaker with no TV input`() = runBlocking<Unit> {
         connected()

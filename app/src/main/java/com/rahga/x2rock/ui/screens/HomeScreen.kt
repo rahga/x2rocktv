@@ -478,10 +478,18 @@ private fun RoomListItem(
                         info.inputFormat.ifEmpty { null } ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
                         info.source,
                     )
+                    // A track and a streamInfo are not exclusive — a service radio station
+                    // can carry both — so the second line prefers the artist and falls back
+                    // to what the station says, when that says something the title does not.
                     info.track?.name != null -> listOfNotNull(
                         info.track.name,
-                        info.track.artist?.name,
+                        info.track.artist?.name
+                            ?: info.streamInfo?.takeIf { it != info.track.name },
                     )
+                    // A stream loaded by URL has no track object at all, so this is the only
+                    // thing it can say it is playing — with the station beneath it, the same
+                    // shape as track-over-artist.
+                    info.streamInfo != null -> listOfNotNull(info.streamInfo, info.source)
                     else -> listOf((group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel())
                 }
                 lines.forEach { line ->

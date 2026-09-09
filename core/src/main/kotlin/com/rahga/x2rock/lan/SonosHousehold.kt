@@ -44,6 +44,8 @@ data class GroupState(
     val durationMillis: Long = 0,
     val track: Track? = null,
     val container: ContainerMetadata? = null,
+    /** See [PlaybackMetadata.streamInfo]: the now-playing of a stream that has no track. */
+    val streamInfo: String? = null,
     val volume: GroupVolume? = null,
     val playMode: PlayModeState = PlayModeState(),
     /**
@@ -430,6 +432,17 @@ class SonosHousehold(
     }
 
     /**
+     * The group's metadata as the coordinator has it, for recording a fixture verbatim.
+     *
+     * Everything the app uses arrives by subscription instead; this exists so the live suite
+     * can capture a shape rather than have someone write down what they assume it to be.
+     */
+    internal suspend fun metadataStatusBody(groupId: String): JsonElement =
+        coordinator(groupId).command(
+            Frames.onGroup("playbackMetadata:1", "getMetadataStatus", groupId),
+        )
+
+    /**
      * A soundbar's Night Sound and Speech Enhancement, which `playerVolume:1` does not
      * carry and which nothing pushes: `settings:1` takes a subscription and then stays
      * silent when the value changes, so this is the only way to learn one, and a write must
@@ -736,6 +749,9 @@ class SonosHousehold(
                     it.copy(
                         track = track,
                         container = container,
+                        // Blank is absent: a station between titles sends an empty string,
+                        // and an empty headline renders worse than the room's own state.
+                        streamInfo = meta.streamInfo?.trim()?.takeIf { info -> info.isNotEmpty() },
                         metadataSeen = true,
                         // No carry-over here, unlike `playback:1` above: a metadata event is
                         // the whole statement of what is loaded, so no track means no

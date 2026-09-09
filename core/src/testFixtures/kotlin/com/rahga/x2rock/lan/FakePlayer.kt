@@ -416,7 +416,10 @@ class FakePlayer(
             "playbackStatus" -> "playback:1"
             // The two TV captures are metadata too; they differ only in what they carry —
             // one a stereo input, one Dolby 5.1 — and both arrive on this namespace.
-            "metadataStatus", "tvMetadataStatus", "tvSurroundMetadataStatus" -> "playbackMetadata:1"
+            // radioMetadataStatus is a stream loaded by URL: no currentItem and no track
+            // object at all, which is the whole reason `streamInfo` has to be read.
+            "metadataStatus", "tvMetadataStatus", "tvSurroundMetadataStatus",
+            "radioMetadataStatus" -> "playbackMetadata:1"
             "groupVolume" -> "groupVolume:1"
             "playerVolume" -> "playerVolume:1"
             "groups" -> "groups:1"
