@@ -128,10 +128,13 @@ data class HomeTheaterOptions(
      * The strength behind [enhanceDialog], which the Sonos app itself shows only as on or
      * off.
      *
-     * Read, and reported, but **not preserved**: `SetEQ` takes only 0 or 1 for `DialogLevel`,
-     * so there is no way to write a 2 or a 3 back. Toggling enhancement off and on here
-     * therefore returns a speaker that was set higher elsewhere to level 1. That is a real
-     * limitation rather than an oversight, and the field is kept so it is at least visible.
+     * Read and reported, but not written back. `DialogLevel` is documented as 1-4 on devices
+     * that grade it, and on newer ones the on/off half moves to a separate
+     * `SpeechEnhanceEnabled`; a Beam does neither, reading level 1 while enhancement is on,
+     * which is why 0/1 is the right write *for this hardware* and the toggle is honest here.
+     * Widening it would need a device that grades the level, which is not one we have — so
+     * the field is kept visible rather than acted on. See `x2rock`'s `docs/architecture.md`,
+     * `DialogLevel` section, which is the more careful statement of this.
      */
     val enhanceDialogLevel: Int = 0,
 )
