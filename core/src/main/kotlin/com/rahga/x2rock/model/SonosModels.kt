@@ -151,7 +151,20 @@ data class ContainerMetadata(
     /** Present only while a soundbar is on its TV input — its presence *is* the signal. */
     val htInputFormat: HomeTheaterFormat? = null,
 )
-data class PlaybackMetadata(val currentItem: CurrentItem? = null, val container: ContainerMetadata? = null)
+data class PlaybackMetadata(
+    val currentItem: CurrentItem? = null,
+    val container: ContainerMetadata? = null,
+    /**
+     * What the station says is on right now — and the only now-playing a service-less stream
+     * has. A stream loaded by URL carries no `currentItem` and no track object at all, so
+     * without this a room playing internet radio can say nothing but its own state.
+     *
+     * Deliberately left whole. "Artist - Title" is an Icecast convention rather than a
+     * format — stations put a show name, a slogan, or nothing in the same field — so
+     * splitting it on a hyphen would invent an artist wherever the guess happened to fit.
+     */
+    val streamInfo: String? = null,
+)
 
 data class GroupVolume(
     val volume: Int,

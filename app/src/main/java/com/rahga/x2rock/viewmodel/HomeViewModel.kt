@@ -72,6 +72,11 @@ class HomeViewModel @Inject constructor(
         val hasTvInput: Boolean = false,
         /** The container: an album, a station, or "TV Audio". */
         val source: String? = null,
+        /**
+         * What the station says is playing, for a stream that carries no track of its own.
+         * See `PlaybackMetadata.streamInfo`.
+         */
+        val streamInfo: String? = null,
     )
 
     sealed interface UiState {
@@ -102,6 +107,7 @@ class HomeViewModel @Inject constructor(
                             artUrl = pushed?.track?.imageUrl ?: pushed?.container?.imageUrl,
                             onTvInput = pushed?.onTvInput == true,
                             inputFormat = pushed?.inputFormat.orEmpty(),
+                            streamInfo = pushed?.streamInfo,
                             hasTvInput = state.hasTvInput(group),
                             source = pushed?.container?.name,
                         )

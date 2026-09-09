@@ -199,6 +199,28 @@ private fun TrackInfo(state: PlayerUiState) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(subtitle, style = MaterialTheme.typography.bodyLarge)
                         }
+                        // A service radio station can carry a track *and* a streamInfo, so
+                        // show what the station says only when it says something the title
+                        // does not — otherwise the same line appears twice.
+                        state.streamInfo?.takeIf { it != state.trackName }?.let { info ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(info, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
+                    // A stream loaded by URL has no track object, so this is its only
+                    // now-playing. Shown whole: it is the station's own string, and what
+                    // looks like "Artist - Title" often is not.
+                    state.streamInfo != null -> {
+                        Text(
+                            text = state.streamInfo,
+                            style = MaterialTheme.typography.displaySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        state.sourceName?.let { station ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(station, style = MaterialTheme.typography.bodyLarge)
+                        }
                     }
                     else -> Text(
                         text = state.playbackState.toPlaybackLabel(),

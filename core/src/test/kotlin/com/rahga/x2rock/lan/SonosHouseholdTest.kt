@@ -92,6 +92,40 @@ class SonosHouseholdTest {
         assertTrue(state.groups.any { it.name == "Dining Room" })
     }
 
+    /**
+     * A stream loaded by URL, captured off SomaFM: no `currentItem`, no track object, and a
+     * `streamInfo` that is the only thing it can say it is playing.
+     */
+    @Test fun `a URL stream reports its now-playing through streamInfo`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("radioMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
+        val state = household.groupState(groupId)
+        assertEquals("Blancmange - Don't Tell Me", state.streamInfo)
+        // The premise of the whole field: the capture really does carry no track, so nothing
+        // else in the app could have named what is playing.
+        assertNull("the fixture must carry no track, or this proves nothing", state.track)
+        assertEquals("ice1.somafm.com", state.container?.name)
+    }
+
+    /** A station between titles sends an empty string, which must read as absent. */
+    @Test fun `a blank streamInfo is treated as absent`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("radioMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
+        fake.push(
+            "playbackMetadata:1", "metadataStatus",
+            """{"container":{"name":"ice1.somafm.com"},"streamInfo":"   "}""",
+            groupId,
+        )
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo == null } }
+        assertNull(household.groupState(groupId).streamInfo)
+    }
+
     @Test fun `a soundbar's home theatre options are read from the settings namespace`() = runBlocking {
         val state = connected()
         val soundbar = state.players.first { TvSoundbar.hasHdmi(it.id, state) }
