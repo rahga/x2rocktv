@@ -151,6 +151,27 @@ data class ContainerMetadata(
     /** Present only while a soundbar is on its TV input — its presence *is* the signal. */
     val htInputFormat: HomeTheaterFormat? = null,
 )
+/**
+ * What the *source* permits, which is not a property of the speaker: a queue of tracks allows
+ * skip, seek and shuffle, while a live stream refuses all three — and refuses pause too,
+ * offering only stop. Verified on hardware: pausing an internet radio stream leaves the room
+ * IDLE rather than PAUSED, so `canPause: false` is a statement of fact and not a hint.
+ *
+ * Defaults are permissive so that a payload without the block leaves every control drawn,
+ * which is what the app did before it read this at all.
+ */
+data class PlaybackActions(
+    val canPlay: Boolean = true,
+    val canPause: Boolean = true,
+    val canStop: Boolean = false,
+    val canSkip: Boolean = true,
+    val canSkipToPrevious: Boolean = true,
+    val canSeek: Boolean = true,
+    val canRepeat: Boolean = true,
+    val canShuffle: Boolean = true,
+    val canCrossfade: Boolean = true,
+)
+
 data class PlaybackMetadata(
     val currentItem: CurrentItem? = null,
     val container: ContainerMetadata? = null,

@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -432,7 +433,7 @@ private fun RoomListItem(
                     // transparent: it still holds the column, without putting an empty grey
                     // square beside every room that happens not to be playing.
                     .then(
-                        if (info.artUrl == null && info.onTvInput) {
+                        if (info.artUrl == null && (info.onTvInput || info.isRadio)) {
                             Modifier.background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
                         } else Modifier
                     ),
@@ -451,6 +452,14 @@ private fun RoomListItem(
                     // It is an honest one: it says what the source is, which is data we have.
                     info.onTvInput -> Icon(
                         imageVector = Icons.Default.Tv,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                    // A station with no logo of its own — the same invention as the TV glyph
+                    // and equally honest, since it names a source the player has told us about.
+                    info.isRadio -> Icon(
+                        imageVector = Icons.Default.Radio,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),

@@ -1,0 +1,30 @@
+{
+  "_objectType": "playbackStatus",
+  "playbackState": "PLAYBACK_STATE_PLAYING",
+  "isDucking": false,
+  "itemId": "gPU5TUkyPTgN2hdfboiZSws9FjY=",
+  "positionMillis": 208879,
+  "previousItemId": "gPU5TUkyPTgN2hdfboiZSws9FjY=",
+  "previousPositionMillis": 303752,
+  "playModes": {
+    "_objectType": "playMode",
+    "repeat": false,
+    "repeatOne": false,
+    "shuffle": false,
+    "crossfade": false
+  },
+  "availablePlaybackActions": {
+    "_objectType": "playbackAction",
+    "canPlay": true,
+    "canSkip": false,
+    "canSkipBack": false,
+    "canSkipToPrevious": false,
+    "canSeek": false,
+    "canPause": false,
+    "canStop": true,
+    "canRepeat": false,
+    "canRepeatOne": false,
+    "canCrossfade": false,
+    "canShuffle": false
+  }
+}

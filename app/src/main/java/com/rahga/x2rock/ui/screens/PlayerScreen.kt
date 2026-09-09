@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
@@ -183,6 +184,25 @@ private fun TrackInfo(state: PlayerUiState) {
                         .clip(RoundedCornerShape(8.dp))
                 )
                 Spacer(modifier = Modifier.width(32.dp))
+            } else if (state.isRadio) {
+                // A station logo is shown where there is one — many services carry it — and
+                // this stands in where there is not. A stream loaded by its URL really does
+                // send `images: []`, so there is nothing to fetch and nothing to wait for.
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Radio,
+                        contentDescription = null,
+                        modifier = Modifier.size(88.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    )
+                }
+                Spacer(modifier = Modifier.width(32.dp))
             }
             Column {
                 when {
@@ -330,11 +350,16 @@ private fun PlaybackControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
-            AppButton(
-                onClick = { viewModel.skipToPreviousTrack() },
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) { Text("⏮  Prev") }
-            if (state.durationMillis > 0) {
+            // Drawn only where the source permits them. A live stream refuses skip, seek
+            // and shuffle outright, and a row of controls that cannot act is worse on a
+            // remote than a shorter row: each is still a focus stop that does nothing.
+            if (state.actions.canSkipToPrevious) {
+                AppButton(
+                    onClick = { viewModel.skipToPreviousTrack() },
+                    modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+                ) { Text("⏮  Prev") }
+            }
+            if (state.durationMillis > 0 && state.actions.canSeek) {
                 AppButton(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
             }
             AppButton(
@@ -344,13 +369,31 @@ private fun PlaybackControls(
                 modifier = Modifier
                     .widthIn(min = 148.dp)
                     .focusRequester(playPauseFocusRequester)
+                    // The leftmost control when nothing precedes it, which is the case for a
+                    // live stream — otherwise a left-press from here finds nothing.
+                    .then(
+                        if (state.actions.canSkipToPrevious) Modifier
+                        else Modifier.exitLeftTo(exitLeftFocusRequester)
+                    )
             ) {
-                Text(if (state.playbackState.isPlaying()) "⏸  Pause" else "▶  Play")
+                // A live stream cannot be paused, only stopped: pausing one leaves the room
+                // IDLE rather than PAUSED, verified on hardware. The command is the same
+                // either way — the player does the right thing — so only the word changes,
+                // to the one that describes what will actually happen.
+                Text(
+                    when {
+                        !state.playbackState.isPlaying() -> "▶  Play"
+                        state.actions.canPause -> "⏸  Pause"
+                        else -> "⏹  Stop"
+                    }
+                )
             }
-            if (state.durationMillis > 0) {
+            if (state.durationMillis > 0 && state.actions.canSeek) {
                 AppButton(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }
             }
-            AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
+            if (state.actions.canSkip) {
+                AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -360,19 +403,31 @@ private fun PlaybackControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
+            if (state.actions.canShuffle) {
+                AppButton(
+                    onClick = { viewModel.toggleShuffle() },
+                    modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+                ) {
+                    Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
+                }
+            }
+            if (state.actions.canRepeat) {
+                AppButton(onClick = { viewModel.cycleRepeat() }) {
+                    Text(state.repeat.toRepeatLabel())
+                }
+            }
+            if (state.actions.canCrossfade) {
+                AppButton(onClick = { viewModel.toggleCrossfade() }) {
+                    Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
+                }
+            }
+            // Queue keeps its place whatever the source permits: it is a way to look at what
+            // is loaded rather than an action on the current item.
             AppButton(
-                onClick = { viewModel.toggleShuffle() },
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) {
-                Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
-            }
-            AppButton(onClick = { viewModel.cycleRepeat() }) {
-                Text(state.repeat.toRepeatLabel())
-            }
-            AppButton(onClick = { viewModel.toggleCrossfade() }) {
-                Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
-            }
-            AppButton(onClick = onOpenQueue) { Text("Queue") }
+                onClick = onOpenQueue,
+                modifier = if (state.actions.canShuffle) Modifier
+                    else Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) { Text("Queue") }
             AppButton(onClick = onOpenFavorites) { Text("Favorites") }
             AppButton(onClick = {
                 if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()

@@ -77,6 +77,8 @@ class HomeViewModel @Inject constructor(
          * See `PlaybackMetadata.streamInfo`.
          */
         val streamInfo: String? = null,
+        /** A station rather than a queue of tracks — it gets a radio glyph for its art. */
+        val isRadio: Boolean = false,
     )
 
     sealed interface UiState {
@@ -108,6 +110,7 @@ class HomeViewModel @Inject constructor(
                             onTvInput = pushed?.onTvInput == true,
                             inputFormat = pushed?.inputFormat.orEmpty(),
                             streamInfo = pushed?.streamInfo,
+                            isRadio = pushed?.isRadio == true,
                             hasTvInput = state.hasTvInput(group),
                             source = pushed?.container?.name,
                         )

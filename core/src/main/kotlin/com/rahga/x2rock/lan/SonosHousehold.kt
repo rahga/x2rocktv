@@ -9,6 +9,7 @@ import com.rahga.x2rock.model.GroupVolume
 import com.rahga.x2rock.model.FavoritesResponse
 import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.PlayModeState
+import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.PlayerSettings
@@ -48,6 +49,8 @@ data class GroupState(
     val streamInfo: String? = null,
     val volume: GroupVolume? = null,
     val playMode: PlayModeState = PlayModeState(),
+    /** What the current source permits. See [PlaybackActions]. */
+    val actions: PlaybackActions = PlaybackActions(),
     /**
      * Whether a `playbackMetadata:1` event has arrived for this group yet.
      *
@@ -65,6 +68,13 @@ data class GroupState(
      * off a player still reports the input, naming no codec and no channels.
      */
     val onTvInput: Boolean get() = container?.htInputFormat != null
+
+    /**
+     * A station rather than a queue of tracks — internet radio, or a service's own station.
+     * Kept separate from [PlaybackActions] on purpose: what a source *is* decides the artwork,
+     * what it *permits* decides the controls, and the two are different questions.
+     */
+    val isRadio: Boolean get() = container?.type == "station"
 
     /** e.g. "Silence 2.0", "Dolby Digital 5.1", or "No Signal" with the television off. */
     val inputFormat: String get() = container?.htInputFormat?.summary().orEmpty()
@@ -437,6 +447,12 @@ class SonosHousehold(
      * Everything the app uses arrives by subscription instead; this exists so the live suite
      * can capture a shape rather than have someone write down what they assume it to be.
      */
+    /** Companion to [metadataStatusBody], for capturing what a source says it permits. */
+    internal suspend fun playbackStatusBody(groupId: String): JsonElement =
+        coordinator(groupId).command(
+            Frames.onGroup("playback:1", "getPlaybackStatus", groupId),
+        )
+
     internal suspend fun metadataStatusBody(groupId: String): JsonElement =
         coordinator(groupId).command(
             Frames.onGroup("playbackMetadata:1", "getMetadataStatus", groupId),
@@ -733,6 +749,10 @@ class SonosHousehold(
                         playMode = body.getAsJsonObject("playModes")
                             ?.let { modes -> PlayModes.fromJson(modes) }
                             ?: it.playMode,
+                        // Absent means unchanged, for the same reason as playModes above.
+                        actions = body.getAsJsonObject("availablePlaybackActions")
+                            ?.let { a -> gson.fromJson(a, PlaybackActions::class.java) }
+                            ?: it.actions,
                     )
                 }
             }

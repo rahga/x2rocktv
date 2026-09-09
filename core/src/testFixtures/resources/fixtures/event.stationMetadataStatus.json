@@ -1,0 +1,48 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "name": "Love Songs Radio",
+    "type": "station",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "serviceId": "6",
+      "objectId": "live_stations.6790",
+      "accountId": "sn_15"
+    },
+    "service": {
+      "_objectType": "service",
+      "name": "iHeartRadio",
+      "id": "6",
+      "images": []
+    },
+    "imageUrl": "https://i.iheart.com/v3/re/assets.streams/67b0d43da19ce5cf02ee9dba",
+    "images": [
+      {
+        "_objectType": "image",
+        "url": "https://i.iheart.com/v3/re/assets.streams/67b0d43da19ce5cf02ee9dba"
+      }
+    ]
+  },
+  "currentItem": {
+    "_objectType": "queueItem",
+    "track": {
+      "_objectType": "track",
+      "type": "track",
+      "name": "You're Still The One",
+      "images": [],
+      "artist": {
+        "_objectType": "artist",
+        "name": "Shania Twain"
+      },
+      "quality": {
+        "_objectType": "trackQuality",
+        "bitDepth": 16,
+        "sampleRate": 24000,
+        "lossless": false,
+        "immersive": false
+      }
+    },
+    "policies": { "_objectType": "playbackPolicy" }
+  }
+}

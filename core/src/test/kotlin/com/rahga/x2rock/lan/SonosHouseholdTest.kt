@@ -93,6 +93,78 @@ class SonosHouseholdTest {
     }
 
     /**
+     * Both captures are real: the first off a queue of tracks, the second off a live stream.
+     * Contrasted deliberately — asserting the stream's falses alone would pass just as well
+     * against a parser that returned false for everything.
+     */
+    @Test fun `a live stream permits neither skipping nor pausing`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.actions?.canSkip == true } }
+        assertTrue("the queue capture must permit skipping, or the rest proves nothing",
+            household.groupState(groupId).actions.canSkip)
+        assertTrue(household.groupState(groupId).actions.canPause)
+
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.actions?.canSkip == false } }
+        val actions = household.groupState(groupId).actions
+        assertFalse(actions.canSkip)
+        assertFalse(actions.canSkipToPrevious)
+        assertFalse(actions.canSeek)
+        assertFalse(actions.canShuffle)
+        assertFalse(actions.canRepeat)
+        assertFalse(actions.canCrossfade)
+        // The one that is easy to miss: a live stream stops, it does not pause.
+        assertFalse(actions.canPause)
+        assertTrue(actions.canStop)
+    }
+
+    /**
+     * The two kinds of radio are not the same shape, which is why the artwork and the
+     * controls are decided separately.
+     *
+     * A service station — captured off iHeartRadio — carries a real track, an artist and a
+     * station logo, and no `streamInfo` whatever. A stream loaded by URL carries the
+     * opposite: `streamInfo` and no track at all. Both are stations, and both refuse to
+     * skip; only one of them has anything to draw.
+     */
+    @Test fun `a service station carries a track and a logo where a URL stream carries neither`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("stationMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
+        val station = household.groupState(groupId)
+        assertEquals("You're Still The One", station.track?.name)
+        assertEquals("Shania Twain", station.track?.artist?.name)
+        assertNotNull("a service station has a logo to draw", station.container?.imageUrl)
+        assertNull("and says nothing in streamInfo", station.streamInfo)
+
+        fake.pushFixture("radioMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
+        val stream = household.groupState(groupId)
+        assertTrue("a URL stream is radio too", stream.isRadio)
+        assertNull("but has no track", stream.track)
+        assertNull("and nothing to draw", stream.container?.imageUrl)
+    }
+
+    /** What a source *is*, which decides its artwork rather than its controls. */
+    @Test fun `a station is recognised as radio`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
+        assertFalse("an album is not radio", household.groupState(groupId).isRadio)
+
+        fake.pushFixture("radioMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
+        assertTrue(household.groupState(groupId).isRadio)
+    }
+
+    /**
      * A stream loaded by URL, captured off SomaFM: no `currentItem`, no track object, and a
      * `streamInfo` that is the only thing it can say it is playing.
      */
