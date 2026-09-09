@@ -441,18 +441,18 @@ class SonosHousehold(
         return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
     }
 
-    /**
-     * The group's metadata as the coordinator has it, for recording a fixture verbatim.
-     *
-     * Everything the app uses arrives by subscription instead; this exists so the live suite
-     * can capture a shape rather than have someone write down what they assume it to be.
-     */
     /** Companion to [metadataStatusBody], for capturing what a source says it permits. */
     internal suspend fun playbackStatusBody(groupId: String): JsonElement =
         coordinator(groupId).command(
             Frames.onGroup("playback:1", "getPlaybackStatus", groupId),
         )
 
+    /**
+     * The group's metadata as the coordinator has it, for recording a fixture verbatim.
+     *
+     * Everything the app uses arrives by subscription instead; this exists so the live suite
+     * can capture a shape rather than have someone write down what they assume it to be.
+     */
     internal suspend fun metadataStatusBody(groupId: String): JsonElement =
         coordinator(groupId).command(
             Frames.onGroup("playbackMetadata:1", "getMetadataStatus", groupId),

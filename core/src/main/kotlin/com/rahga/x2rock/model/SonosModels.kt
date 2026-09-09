@@ -126,8 +126,12 @@ data class HomeTheaterOptions(
     val enhanceDialog: Boolean = false,
     /**
      * The strength behind [enhanceDialog], which the Sonos app itself shows only as on or
-     * off. Kept because it is real state set elsewhere, and a toggle that wrote back a flat
-     * on would discard it silently.
+     * off.
+     *
+     * Read, and reported, but **not preserved**: `SetEQ` takes only 0 or 1 for `DialogLevel`,
+     * so there is no way to write a 2 or a 3 back. Toggling enhancement off and on here
+     * therefore returns a speaker that was set higher elsewhere to level 1. That is a real
+     * limitation rather than an oversight, and the field is kept so it is at least visible.
      */
     val enhanceDialogLevel: Int = 0,
 )
