@@ -3,6 +3,7 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
@@ -58,7 +59,24 @@ data class PlayerUiState(
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
-    val sleepTimerRemainingMillis: Long? = null
+    val sleepTimerRemainingMillis: Long? = null,
+    /**
+     * The soundbar in this room, when it has one. Kept because the home-theatre writes are
+     * player-scoped and must name the soundbar itself — on a grouped room the coordinator
+     * may be an ordinary speaker, which would refuse them.
+     */
+    val soundbarId: String? = null,
+    /** Night Sound. Meaningful only alongside [soundbarId]; false when there is none. */
+    val nightMode: Boolean = false,
+    /** Speech Enhancement. The player carries a level too; the Sonos app shows on/off. */
+    val speechEnhancement: Boolean = false,
+)
+
+/** What one read of `settings:1` yielded, with the speaker it came from. */
+data class HomeTheaterUi(
+    val soundbarId: String,
+    val nightMode: Boolean,
+    val speechEnhancement: Boolean,
 )
 
 @HiltViewModel
@@ -70,11 +88,13 @@ class PlayerViewModel @Inject constructor(
     private val _groupId = MutableStateFlow<String?>(null)
     private val _groupName = MutableStateFlow("")
     private val _sleepRemaining = MutableStateFlow<Long?>(null)
+    private val _homeTheater = MutableStateFlow<HomeTheaterUi?>(null)
 
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
     private var sleepTimerJob: Job? = null
     private var seekDebounceJob: Job? = null
+    private var homeTheaterJob: Job? = null
 
     // What the last press asked for, before the speaker has said anything back.
     //
@@ -147,6 +167,14 @@ class PlayerViewModel @Inject constructor(
             }
         }.combine(_sleepRemaining) { state, remaining ->
             state.copy(sleepTimerRemainingMillis = remaining)
+        }.combine(_homeTheater) { state, ht ->
+            // Merged rather than derived: alone among everything here, these two are not
+            // pushed, so they cannot come out of `household.state` with the rest.
+            state.copy(
+                soundbarId = ht?.soundbarId,
+                nightMode = ht?.nightMode ?: false,
+                speechEnhancement = ht?.speechEnhancement ?: false,
+            )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
     private val controls = object : NowPlayingPublisher.Controls {
@@ -172,6 +200,46 @@ class PlayerViewModel @Inject constructor(
     fun selectGroup(id: String, name: String) {
         _groupId.value = id
         _groupName.value = name
+        // Cleared rather than left standing: the previous room's answer would otherwise sit
+        // on screen against the new room's name until this read came back.
+        _homeTheater.value = null
+        loadHomeTheater()
+    }
+
+    /**
+     * `settings:1` accepts a subscription and then never mentions these again — verified on
+     * a Beam — so this is the one thing in the app that is read rather than pushed, once per
+     * room and again after each write.
+     */
+    private fun loadHomeTheater() {
+        val groupId = _groupId.value ?: return
+        homeTheaterJob?.cancel()
+        homeTheaterJob = viewModelScope.launch {
+            val householdState = household.state.value
+            val group = householdState.groups.firstOrNull { it.id == groupId }
+            val soundbar = group?.let { TvSoundbar.soundbarOf(it, householdState) }
+            _homeTheater.value = soundbar?.let { id ->
+                runCatching { household.playerSettings(id).homeTheater }.getOrNull()?.let {
+                    HomeTheaterUi(id, it.nightMode, it.enhanceDialog)
+                }
+            }
+        }
+    }
+
+    fun toggleNightMode() {
+        val ht = _homeTheater.value ?: return
+        viewModelScope.launch {
+            runCatching { household.setNightMode(ht.soundbarId, !ht.nightMode) }
+            loadHomeTheater()
+        }
+    }
+
+    fun toggleSpeechEnhancement() {
+        val ht = _homeTheater.value ?: return
+        viewModelScope.launch {
+            runCatching { household.setSpeechEnhancement(ht.soundbarId, !ht.speechEnhancement) }
+            loadHomeTheater()
+        }
     }
 
     /** Metadata and state are pushed separately, and only when they actually change. */

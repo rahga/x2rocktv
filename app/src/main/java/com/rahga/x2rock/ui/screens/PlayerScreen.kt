@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +44,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -76,6 +79,24 @@ fun PlayerPane(
 ) {
     val state by viewModel.uiState.collectAsState()
     var showSleepTimerPicker by remember { mutableStateOf(false) }
+    var paneHasFocus by remember { mutableStateOf(false) }
+
+    // Where focus starts, once, for the life of this pane.
+    //
+    // Deliberately not inside the controls themselves. The music pane and the TV pane are
+    // separate composables, so every change of source re-enters one of them — and a grab
+    // there pulls focus out of the room list while the viewer is still arrowing through it.
+    // HomeScreen owns the policy otherwise: it requests this pane on a right-press, when the
+    // sidebar hides, and on resume.
+    LaunchedEffect(Unit) { detailFocusRequester.requestFocusSafely() }
+
+    // The one case that does have to re-request: a source change while this pane holds focus.
+    // The focused control leaves composition with its branch, and on a remote that leaves
+    // nothing to press but Back. Guarded on the pane actually having focus, so a room list
+    // change never pulls it across.
+    LaunchedEffect(state.onTvInput) {
+        if (paneHasFocus) detailFocusRequester.requestFocusSafely()
+    }
 
     // The picker traps focus, so closing it has to hand focus back explicitly.
     LaunchedEffect(showSleepTimerPicker) {
@@ -86,6 +107,7 @@ fun PlayerPane(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
+                .onFocusChanged { paneHasFocus = it.hasFocus }
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
@@ -106,16 +128,29 @@ fun PlayerPane(
                     .padding(horizontal = 64.dp, vertical = 48.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                TrackInfo(state)
-                PlaybackControls(
-                    state = state,
-                    viewModel = viewModel,
-                    playPauseFocusRequester = detailFocusRequester,
-                    exitLeftFocusRequester = sidebarFocusRequester,
-                    onOpenQueue = onOpenQueue,
-                    onOpenFavorites = onOpenFavorites,
-                    onOpenSleepTimer = { showSleepTimerPicker = true }
-                )
+                // A television input is a different source, not the music pane with pieces
+                // missing, so it gets its own header and its own controls.
+                if (state.onTvInput) {
+                    TvInfo(state)
+                    TvControls(
+                        state = state,
+                        viewModel = viewModel,
+                        firstFocusRequester = detailFocusRequester,
+                        exitLeftFocusRequester = sidebarFocusRequester,
+                        onOpenSleepTimer = { showSleepTimerPicker = true },
+                    )
+                } else {
+                    TrackInfo(state)
+                    PlaybackControls(
+                        state = state,
+                        viewModel = viewModel,
+                        playPauseFocusRequester = detailFocusRequester,
+                        exitLeftFocusRequester = sidebarFocusRequester,
+                        onOpenQueue = onOpenQueue,
+                        onOpenFavorites = onOpenFavorites,
+                        onOpenSleepTimer = { showSleepTimerPicker = true }
+                    )
+                }
             }
         }
 
@@ -261,10 +296,6 @@ private fun PlaybackControls(
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit
 ) {
-    LaunchedEffect(Unit) {
-        playPauseFocusRequester.requestFocusSafely()
-    }
-
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         ProgressBar(state, onSeekBy = { viewModel.seekBy(it) })
         Spacer(modifier = Modifier.height(24.dp))
@@ -335,34 +366,173 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        VolumeRow(state, viewModel, exitLeftFocusRequester)
+
+        if (state.playerVolumes.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Speakers", style = MaterialTheme.typography.titleSmall)
+            Spacer(modifier = Modifier.height(8.dp))
+            state.playerVolumes.forEach { entry ->
+                PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
+            }
+        }
+    }
+}
+
+/**
+ * The group's level, identical on the music pane and the TV one.
+ *
+ * Shared rather than duplicated on purpose: volume is the one control that means the same
+ * thing whatever the room is playing, and it has to sit in the same place and answer the
+ * same presses when the source changes. A separate copy for the TV pane would drift.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VolumeRow(
+    state: PlayerUiState,
+    viewModel: PlayerViewModel,
+    exitLeftFocusRequester: FocusRequester,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.focusGroup()
+    ) {
+        // Disabled until the speaker's volume is known, not merely while muted: the
+        // view model declines to act without a baseline, so an enabled button in that
+        // window would take focus and then do nothing at all.
+        val volumeKnown = state.volume != null
+        AppButton(
+            onClick = { viewModel.adjustVolume(-5) },
+            enabled = volumeKnown && !state.isMuted,
+            modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+        ) { Text("Vol \u2212") }
+        Text(
+            text = when {
+                state.volume == null -> "Volume: \u2014"
+                state.isMuted -> "Muted"
+                else -> "Volume: ${state.volume}"
+            },
+            style = MaterialTheme.typography.bodyLarge
+        )
+        AppButton(
+            onClick = { viewModel.adjustVolume(+5) },
+            enabled = volumeKnown && !state.isMuted,
+        ) { Text("Vol +") }
+        AppButton(onClick = { viewModel.toggleMute() }, enabled = volumeKnown) {
+            Text(if (state.isMuted) "Unmute" else "Mute")
+        }
+    }
+}
+
+/**
+ * The header for a room on its television input, in place of [TrackInfo].
+ *
+ * There is no track to name and the player sends `images: []`, so the art slot carries a
+ * television glyph — the same invention the room list makes, for the same reason. "TV" and
+ * "HDMI" name the source the way the Sonos app does, and the format sits out to the right
+ * where a duration would be.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TvInfo(state: PlayerUiState) {
+    Column {
+        Text(state.groupName, style = MaterialTheme.typography.titleMedium)
+        Spacer(modifier = Modifier.height(24.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Tv,
+                    contentDescription = null,
+                    modifier = Modifier.size(88.dp),
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+            }
+            Spacer(modifier = Modifier.width(32.dp))
+            Column {
+                Text("TV", style = MaterialTheme.typography.displaySmall)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("HDMI", style = MaterialTheme.typography.bodyLarge)
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            // Empty while the television is off or between sources, where the player reports
+            // no signal at all — an empty string reads better than "No Signal 0.0".
+            if (state.inputFormat.isNotEmpty()) {
+                Text(state.inputFormat, style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+    }
+}
+
+/**
+ * What a room on its television input can be told to do.
+ *
+ * Not the music controls with the inapplicable ones removed: skip, shuffle, repeat and the
+ * queue have nothing to act on here, and a grid that loses buttons when the source changes
+ * is worse on a remote than a different grid. So this is its own surface, sharing only
+ * [VolumeRow] — which is the one control that does mean the same thing either way.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TvControls(
+    state: PlayerUiState,
+    viewModel: PlayerViewModel,
+    firstFocusRequester: FocusRequester,
+    exitLeftFocusRequester: FocusRequester,
+    onOpenSleepTimer: () -> Unit,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
-            // Disabled until the speaker's volume is known, not merely while muted: the
-            // view model declines to act without a baseline, so an enabled button in that
-            // window would take focus and then do nothing at all.
-            val volumeKnown = state.volume != null
-            AppButton(
-                onClick = { viewModel.adjustVolume(-5) },
-                enabled = volumeKnown && !state.isMuted,
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) { Text("Vol −") }
-            Text(
-                text = when {
-                    state.volume == null -> "Volume: —"
-                    state.isMuted -> "Muted"
-                    else -> "Volume: ${state.volume}"
-                },
-                style = MaterialTheme.typography.bodyLarge
+            // Both are soundbar settings read from `settings:1` and written over UPnP, and
+            // neither is pushed — so the label is whatever the last read said, and a press
+            // re-reads rather than assuming it landed.
+            TwoLineButton(
+                title = "Night Sound",
+                value = if (state.nightMode) "On" else "Off",
+                enabled = state.soundbarId != null,
+                onClick = { viewModel.toggleNightMode() },
+                modifier = Modifier
+                    .focusRequester(firstFocusRequester)
+                    .exitLeftTo(exitLeftFocusRequester),
             )
+            TwoLineButton(
+                title = "Speech Enhancement",
+                value = if (state.speechEnhancement) "On" else "Off",
+                enabled = state.soundbarId != null,
+                onClick = { viewModel.toggleSpeechEnhancement() },
+            )
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        VolumeRow(state, viewModel, exitLeftFocusRequester)
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(modifier = Modifier.focusGroup()) {
             AppButton(
-                onClick = { viewModel.adjustVolume(+5) },
-                enabled = volumeKnown && !state.isMuted,
-            ) { Text("Vol +") }
-            AppButton(onClick = { viewModel.toggleMute() }, enabled = volumeKnown) {
-                Text(if (state.isMuted) "Unmute" else "Mute")
+                onClick = {
+                    if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                    else onOpenSleepTimer()
+                },
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) {
+                Text(
+                    if (state.sleepTimerRemainingMillis != null)
+                        "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                    else "Sleep Timer"
+                )
             }
         }
 
@@ -373,6 +543,24 @@ private fun PlaybackControls(
             state.playerVolumes.forEach { entry ->
                 PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
             }
+        }
+    }
+}
+
+/** A setting and the value it currently holds, the way the Sonos app draws these two. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun TwoLineButton(
+    title: String,
+    value: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AppButton(onClick = onClick, enabled = enabled, modifier = modifier.widthIn(min = 220.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(value, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
