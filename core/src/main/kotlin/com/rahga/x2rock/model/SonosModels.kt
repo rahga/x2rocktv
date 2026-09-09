@@ -110,6 +110,37 @@ data class HomeTheaterFormat(
     }
 }
 
+/**
+ * The two soundbar settings the Sonos app puts on its TV screen: Night Sound and Speech
+ * Enhancement.
+ *
+ * `playerVolume:1` does not carry them and no event announces them, so they are read from
+ * `settings:1 getPlayerSettings` and nowhere else. Read-only over the Control API — writing
+ * answers `ERROR_NO_PERMISSION` and goes over UPnP instead; see `Upnp.setEq`.
+ *
+ * The block is present on every player and inert on anything without an HDMI socket, so it
+ * is worth reading only for a soundbar.
+ */
+data class HomeTheaterOptions(
+    val nightMode: Boolean = false,
+    val enhanceDialog: Boolean = false,
+    /**
+     * The strength behind [enhanceDialog], which the Sonos app itself shows only as on or
+     * off. Kept because it is real state set elsewhere, and a toggle that wrote back a flat
+     * on would discard it silently.
+     */
+    val enhanceDialogLevel: Int = 0,
+)
+
+/**
+ * `settings:1 getPlayerSettings` — player-scoped, and answered without an account, unlike
+ * `getSettings`, which wants a `userId` this account-less model has no way to supply.
+ *
+ * Only the home-theatre block is read; the object carries more (room name, volume mode,
+ * spatial audio) that nothing here has a use for.
+ */
+data class PlayerSettings(val homeTheater: HomeTheaterOptions? = null)
+
 data class ContainerMetadata(
     val name: String? = null,
     /** e.g. `album`, `station`, `linein.homeTheater.hdmi`. */

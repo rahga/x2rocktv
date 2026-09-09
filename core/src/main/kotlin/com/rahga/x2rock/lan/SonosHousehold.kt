@@ -1,6 +1,7 @@
 package com.rahga.x2rock.lan
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.rahga.x2rock.model.ContainerMetadata
 import com.rahga.x2rock.model.Group
@@ -10,6 +11,7 @@ import com.rahga.x2rock.model.GroupsResponse
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.model.PlayerSettings
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.Track
@@ -425,6 +427,48 @@ class SonosHousehold(
         val socket = sockets.values.firstOrNull() ?: error("not connected")
         val body = socket.command(Frames.onHousehold("favorites:1", "getFavorites", household))
         return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
+    }
+
+    /**
+     * A soundbar's Night Sound and Speech Enhancement, which `playerVolume:1` does not
+     * carry and which nothing pushes: `settings:1` takes a subscription and then stays
+     * silent when the value changes, so this is the only way to learn one, and a write must
+     * be followed by a re-read rather than awaited as an event.
+     *
+     * Player-scoped, so it goes to the soundbar's *own* socket rather than its coordinator's
+     * — on a grouped room those are different players, and the coordinator answers
+     * `ERROR_INVALID_OBJECT_ID`. Reading it for a speaker with no HDMI socket is not an
+     * error, merely pointless: the block comes back inert.
+     */
+    suspend fun playerSettings(playerId: String): PlayerSettings =
+        gson.fromJson(playerSettingsBody(playerId), PlayerSettings::class.java) ?: PlayerSettings()
+
+    /**
+     * The body as the player sent it. Split out so the live suite can record a fixture
+     * verbatim rather than someone writing down what they assume the shape to be.
+     */
+    internal suspend fun playerSettingsBody(playerId: String): JsonElement =
+        socketForPlayer(playerId).command(
+            Frames.onPlayer("settings:1", "getPlayerSettings", playerId),
+        )
+
+    /** Night Sound, as the Sonos app names it. Leaves the Control API — see [Upnp.setEq]. */
+    suspend fun setNightMode(playerId: String, on: Boolean) = setEq(playerId, "NightMode", on)
+
+    /** Speech Enhancement, as the Sonos app names it. `DialogLevel` on the wire. */
+    suspend fun setSpeechEnhancement(playerId: String, on: Boolean) = setEq(playerId, "DialogLevel", on)
+
+    /**
+     * Gated on the HDMI capability rather than left to the player, because the failure is
+     * otherwise a bare UPnP 402 from a One SL with nothing to say which setting was refused.
+     */
+    private suspend fun setEq(playerId: String, eqType: String, on: Boolean) {
+        require(TvSoundbar.hasHdmi(playerId, _state.value)) {
+            "$eqType is a soundbar setting and $playerId has no TV input"
+        }
+        val hostname = PlayerNames.localHostname(playerId)
+            ?: error("cannot derive a hostname for $playerId")
+        upnp.setEq(hostname, eqType, on)
     }
 
     // ---------------------------------------------------------------- commands

@@ -116,6 +116,33 @@ class Upnp(client: OkHttpClient) {
     }
 
     /**
+     * One of the extended-EQ toggles — `NightMode` and `DialogLevel`, which the Sonos app
+     * calls Night Sound and Speech Enhancement.
+     *
+     * The Control API *reads* these, in `settings:1 getPlayerSettings`, but refuses to write
+     * them: `ERROR_NO_PERMISSION`. So this is the only door to them and it is UPnP, which
+     * makes these the second thing here reached over UPnP, alongside the queue — and, like
+     * the queue, asked for rather than pushed. Verified on a Beam: `settings:1` accepts a
+     * subscription and then sends nothing at all for a `SetEQ` write, while a re-read sees
+     * it at once. So the caller re-reads; there is no event coming.
+     *
+     * Boolean on the hardware, despite `DialogLevel` naming a level: the level is readable
+     * but only 0 and 1 are writable here. Addressed to the *soundbar itself*, never a
+     * coordinator, because it is a property of that one speaker. A player with no HDMI
+     * socket answers UPnP 402, so callers gate on the TV-input capability first.
+     */
+    suspend fun setEq(hostname: String, eqType: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.RENDERING_CONTROL, "SetEQ",
+            listOf(
+                "InstanceID" to "0",
+                "EQType" to eqType,
+                "DesiredValue" to if (on) "1" else "0",
+            ),
+        )
+    }
+
+    /**
      * A removal is rejected with UPnP 1028 if the queue moved since the version we quote,
      * which is exactly what should happen when someone else is editing it — so the id is
      * read immediately before use rather than cached.
@@ -136,6 +163,7 @@ class Upnp(client: OkHttpClient) {
     private enum class Service(val path: String, val urn: String) {
         AV_TRANSPORT("/MediaRenderer/AVTransport/Control", "urn:schemas-upnp-org:service:AVTransport:1"),
         CONTENT_DIRECTORY("/MediaServer/ContentDirectory/Control", "urn:schemas-upnp-org:service:ContentDirectory:1"),
+        RENDERING_CONTROL("/MediaRenderer/RenderingControl/Control", "urn:schemas-upnp-org:service:RenderingControl:1"),
     }
 
     private fun soap(hostname: String, service: Service, action: String, args: List<Pair<String, String>>): String {
