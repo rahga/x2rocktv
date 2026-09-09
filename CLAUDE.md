@@ -270,8 +270,16 @@ TV input.
 x — rows used to shift left without art, which at three metres reads as a different list
 rather than a missing image. It holds the cover (or a station logo for radio); for a TV input
 it holds a television glyph, which is the app's invention because the player really does send
-`images: []` for `TV Audio` — an honest invention, since it names a source we do know. An
-idle room leaves it transparent rather than showing an empty grey square.
+`images: []` for `TV Audio` — an honest invention, since it names a source we do know. A
+station with no logo of its own gets a radio glyph on the same principle.
+
+**Idle is not one state, and the slot follows the source rather than the transport.** A room
+that is idle because it was paused or stopped keeps whatever its source earns — the station
+logo, the radio glyph, the television glyph — because that room still *has* a source and
+saying so is useful. What leaves the slot transparent is a room with nothing loaded at all,
+where a grey square would assert something that is not there. The rule was originally written
+as "an idle room leaves it transparent", which was true when idle and sourceless were the same
+thing and is too broad now that `isRadio` and `onTvInput` outlive playback.
 
 **The TV badge appears only while the room is *not* on that input.** It answers "which rooms
 have a television attached", which nothing else says; once the room is actually on the input,
