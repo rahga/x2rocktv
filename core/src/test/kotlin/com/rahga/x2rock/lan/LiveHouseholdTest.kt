@@ -4,7 +4,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -12,6 +14,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -284,6 +287,118 @@ class LiveHouseholdTest {
             assertEquals(target, observed[group.id]!!.volume!!.volume)
         } finally {
             runCatching { household.setGroupVolume(group.id, before) }
+        }
+    }
+
+    /**
+     * Read-only, and about the protocol rather than this house: a soundbar answers
+     * `settings:1 getPlayerSettings` with a `homeTheater` block. Nothing asserts which way
+     * the toggles are set — a household where both happen to be off must pass too.
+     *
+     * Skipped where no player has an HDMI socket, which is the single-One-SL case.
+     */
+    @Test fun `a soundbar reports its home theatre options`() = runBlocking<Unit> {
+        connected()
+        val soundbar = household.state.value.players.firstOrNull {
+            TvSoundbar.hasHdmi(it.id, household.state.value)
+        }
+        assumeTrue("no player in this household has an HDMI input", soundbar != null)
+
+        val body = household.playerSettingsBody(soundbar!!.id)
+        println("getPlayerSettings body for a soundbar: $body")
+        assertTrue("no homeTheater block in $body", body.asJsonObject.has("homeTheater"))
+
+        val settings = household.playerSettings(soundbar.id)
+        assertNotNull("homeTheater did not deserialize", settings.homeTheater)
+    }
+
+    /**
+     * Only with `-Dx2rock.live.room=<room>`, and restored afterwards.
+     *
+     * The write leaves the Control API for UPnP `SetEQ`, so this is the one command whose
+     * effect is *not* pushed — which is exactly what makes it worth running: the re-read is
+     * the only way to know it landed, and if a future firmware starts announcing it this
+     * test is where that shows up.
+     */
+    @Test fun `night mode is written over UPnP and read back over the Control API`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val soundbar = group.playerIds.firstOrNull { TvSoundbar.hasHdmi(it, household.state.value) }
+        assumeTrue("$mutableRoom has no speaker with an HDMI input", soundbar != null)
+
+        val before = household.playerSettings(soundbar!!).homeTheater!!.nightMode
+        try {
+            household.setNightMode(soundbar, !before)
+            assertEquals(!before, household.playerSettings(soundbar).homeTheater!!.nightMode)
+        } finally {
+            runCatching { household.setNightMode(soundbar, before) }
+        }
+    }
+
+    /**
+     * The open question the write test cannot answer: `SetEQ` goes over UPnP, so does
+     * `settings:1` announce the result to a subscriber, or must it be re-read?
+     *
+     * Written as an experiment rather than an assertion of either answer — it records what
+     * the player did, and only fails if the subscribe itself is refused, which would mean
+     * the question is not even well formed. A change of behaviour in a future firmware shows
+     * up here as a changed message, not a red build.
+     */
+    @Test fun `whether the settings namespace pushes a home theatre change`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val state = household.state.value
+        val group = state.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val soundbarId = group.playerIds.firstOrNull { TvSoundbar.hasHdmi(it, state) }
+        assumeTrue("$mutableRoom has no speaker with an HDMI input", soundbarId != null)
+        val player = state.players.first { it.id == soundbarId }
+
+        val hostname = PlayerNames.localHostname(player.id)!!
+        val address = java.net.URI(player.websocketUrl!!).host
+        val book = PlayerAddressBook().apply { register(hostname, address) }
+        val socket = withTimeout(10_000) { SonosSocket.open(LanHttp.client(book), hostname) }
+
+        val before = household.playerSettings(player.id).homeTheater!!.nightMode
+        try {
+            val subscribed = runCatching {
+                withTimeout(10_000) {
+                    socket.subscribe(Frames.onPlayer("settings:1", "subscribe", player.id))
+                }
+            }
+            assertTrue(
+                "settings:1 refused a subscription: ${subscribed.exceptionOrNull()}",
+                subscribed.isSuccess,
+            )
+
+            val pushed = async { runCatching { withTimeout(8_000) { socket.events.first() } } }
+            delay(500)
+            household.setNightMode(player.id, !before)
+            val event = pushed.await().getOrNull()
+
+            println(
+                if (event == null) "settings:1: no event in 8s after a SetEQ write — re-read is required"
+                else "settings:1 pushed ${event.namespace}/${event.type}: ${event.body}"
+            )
+            // The re-read must see it whatever the subscription did.
+            assertEquals(!before, household.playerSettings(player.id).homeTheater!!.nightMode)
+        } finally {
+            runCatching { household.setNightMode(player.id, before) }
+            socket.close()
+        }
+    }
+
+    /** A speaker with no HDMI socket is refused here rather than by a bare UPnP 402. */
+    @Test fun `night mode is refused for a speaker with no TV input`() = runBlocking<Unit> {
+        connected()
+        val plain = household.state.value.players.firstOrNull {
+            !TvSoundbar.hasHdmi(it.id, household.state.value)
+        }
+        assumeTrue("every player in this household has an HDMI input", plain != null)
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { household.setNightMode(plain!!.id, true) }
         }
     }
 }

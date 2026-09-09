@@ -1,0 +1,31 @@
+{
+  "_objectType": "playerSettings",
+  "volumeMode": "VARIABLE",
+  "volumeScalingFactor": 1.000000,
+  "monoMode": false,
+  "enableSpatialAudio": true,
+  "enableSemiSleep": false,
+  "enableHTSourceSleep": false,
+  "wifiDisable": false,
+  "meshDisable": false,
+  "voice": {
+    "_objectType": "localVoiceSettings",
+    "confirmationTone": true,
+    "allowMicrophone": false
+  },
+  "lineIn": { "_objectType": "lineInSettings" },
+  "homeTheater": {
+    "_objectType": "homeTheaterOptions",
+    "nightMode": false,
+    "enhanceDialog": true,
+    "enhanceDialogLevel": 1,
+    "groupingLatency": 75,
+    "enableTrueRoom": false,
+    "enableVirtualHeight": false
+  },
+  "eq": { "_objectType": "eqSettings", "treble": 0, "bass": 0, "loudness": false },
+  "bluetoothPolicy": { "_objectType": "bluetoothPolicySettings" },
+  "gainTrimDB": 0.000000,
+  "roomName": "Bedroom",
+  "sonosnetEnabled": true
+}

@@ -92,6 +92,30 @@ class SonosHouseholdTest {
         assertTrue(state.groups.any { it.name == "Dining Room" })
     }
 
+    @Test fun `a soundbar's home theatre options are read from the settings namespace`() = runBlocking {
+        val state = connected()
+        val soundbar = state.players.first { TvSoundbar.hasHdmi(it.id, state) }
+        val ht = household.playerSettings(soundbar.id).homeTheater
+        assertNotNull(ht)
+        // The values the captured Beam actually held, not a convenient pair: enhancement on
+        // with a level behind it, which is the case a plain Boolean would have flattened.
+        assertFalse(ht!!.nightMode)
+        assertTrue(ht.enhanceDialog)
+        assertEquals(1, ht.enhanceDialogLevel)
+    }
+
+    @Test fun `writing a home theatre setting is refused for a speaker with no TV input`() = runBlocking {
+        val state = connected()
+        val plain = state.players.first { !TvSoundbar.hasHdmi(it.id, state) }
+        var refused = false
+        try {
+            household.setNightMode(plain.id, true)
+        } catch (e: IllegalArgumentException) {
+            refused = true
+        }
+        assertTrue("a speaker with no HDMI socket was allowed to set night mode", refused)
+    }
+
     @Test fun `subscribes to the group-scoped namespaces on the coordinator`() = runBlocking {
         connected()
         val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
