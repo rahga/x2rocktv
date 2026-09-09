@@ -286,17 +286,6 @@ class FakePlayer(
             respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
             return
         }
-        // Captured off a real Beam, so it carries the whole object — spatial audio, the
-        // voice block, an `eq` the Control API will read but not write — and not merely the
-        // two fields this app looks at. A fixture trimmed to what the parser wants would
-        // stop being evidence of what the player sends.
-        if (namespace == "settings:1" && command == "getPlayerSettings") {
-            respond(
-                webSocket, cmdId, namespace, "playerSettings", success = true,
-                body = fixture("getPlayerSettings.reply.json"),
-            )
-            return
-        }
         // A player-scoped command naming an id this household does not have is refused,
         // the way a real player refuses one: ERROR_INVALID_OBJECT_ID. Without this the
         // fake said yes to everything and any test of a refusal passed vacuously.
@@ -308,6 +297,17 @@ class FakePlayer(
                     addProperty("errorCode", "ERROR_INVALID_OBJECT_ID")
                     addProperty("reason", "Incorrect playerId")
                 },
+            )
+            return
+        }
+        // Captured off a real Beam, so it carries the whole object — spatial audio, the
+        // voice block, an `eq` the Control API will read but not write — and not merely the
+        // two fields this app looks at. A fixture trimmed to what the parser wants would
+        // stop being evidence of what the player sends.
+        if (namespace == "settings:1" && command == "getPlayerSettings") {
+            respond(
+                webSocket, cmdId, namespace, "playerSettings", success = true,
+                body = fixture("getPlayerSettings.reply.json"),
             )
             return
         }

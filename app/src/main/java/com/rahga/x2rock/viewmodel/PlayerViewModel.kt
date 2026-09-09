@@ -214,8 +214,13 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun selectGroup(id: String, name: String) {
-        _groupId.value = id
         _groupName.value = name
+        // Re-selecting the same room must do nothing. The caller re-runs whenever the group
+        // *list* changes, and a `playback:1` event rewrites that list for any room in the
+        // house — so without this, a track boundary in another room would clear the home
+        // theatre reading and blank both toggles for a round-trip.
+        if (_groupId.value == id) return
+        _groupId.value = id
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
@@ -242,18 +247,31 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Applied locally before it is sent, then reconciled by the re-read.
+     *
+     * Necessary for the same reason as [pendingVolume]: nothing pushes these, so a second
+     * press inside the write-and-re-read window would otherwise read the same stale value and
+     * send the same command again — two presses landing on *on* rather than back where they
+     * started.
+     */
     fun toggleNightMode() {
         val ht = _homeTheater.value ?: return
+        val wanted = !ht.nightMode
+        _homeTheater.value = ht.copy(nightMode = wanted)
         viewModelScope.launch {
-            runCatching { household.setNightMode(ht.soundbarId, !ht.nightMode) }
+            runCatching { household.setNightMode(ht.soundbarId, wanted) }
             loadHomeTheater()
         }
     }
 
+    /** See [toggleNightMode]: applied locally first, then reconciled. */
     fun toggleSpeechEnhancement() {
         val ht = _homeTheater.value ?: return
+        val wanted = !ht.speechEnhancement
+        _homeTheater.value = ht.copy(speechEnhancement = wanted)
         viewModelScope.launch {
-            runCatching { household.setSpeechEnhancement(ht.soundbarId, !ht.speechEnhancement) }
+            runCatching { household.setSpeechEnhancement(ht.soundbarId, wanted) }
             loadHomeTheater()
         }
     }

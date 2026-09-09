@@ -91,10 +91,19 @@ fun PlayerPane(
     // sidebar hides, and on resume.
     LaunchedEffect(Unit) { detailFocusRequester.requestFocusSafely() }
 
-    // The one case that does have to re-request: a source change while this pane holds focus.
-    // The focused control leaves composition with its branch, and on a remote that leaves
-    // nothing to press but Back. Guarded on the pane actually having focus, so a room list
-    // change never pulls it across.
+    // The one case that might have to re-request: a source change while this pane holds
+    // focus. The focused control leaves composition with its branch, and on a remote that
+    // leaves nothing to press but Back. Guarded on the pane actually having focus, so a room
+    // list change never pulls it across.
+    //
+    // Both outcomes are verified on hardware — focus moved from Night Sound to Pause when a
+    // stream was started on a room sitting on its TV input, and stayed in the room list when
+    // the source changed while the sidebar had focus. What is *not* established is which
+    // mechanism produces the first one. Compose processes the focus invalidation from the
+    // removed node in onEndApplyChanges, before this coroutine is dispatched, so this flag
+    // may already read false and Compose's own handling may be doing the work. Settling that
+    // needs a device; until then this is kept because the behaviour it describes is correct,
+    // not because the guard is known to be what causes it.
     LaunchedEffect(state.onTvInput) {
         if (paneHasFocus) detailFocusRequester.requestFocusSafely()
     }
@@ -338,9 +347,19 @@ private fun PlaybackControls(
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit
 ) {
+    // The exit has to sit on whichever control is actually leftmost, and that now depends on
+    // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
+    // Repeat. Claimed by the first control drawn in each row rather than pinned to a
+    // particular one, because a row whose leftmost control has no exit loses focus entirely
+    // on a left-press — see the note on exitLeftTo.
+    fun Modifier.claimExit(claimed: BooleanArray): Modifier =
+        if (claimed[0]) this else { claimed[0] = true; this.exitLeftTo(exitLeftFocusRequester) }
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         ProgressBar(state, onSeekBy = { viewModel.seekBy(it) })
         Spacer(modifier = Modifier.height(24.dp))
+
+        val transportExit = booleanArrayOf(false)
 
         Row(
             // Tighter than the rows below it: with a duration this row grows from three
@@ -356,11 +375,14 @@ private fun PlaybackControls(
             if (state.actions.canSkipToPrevious) {
                 AppButton(
                     onClick = { viewModel.skipToPreviousTrack() },
-                    modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+                    modifier = Modifier.claimExit(transportExit),
                 ) { Text("⏮  Prev") }
             }
             if (state.durationMillis > 0 && state.actions.canSeek) {
-                AppButton(onClick = { viewModel.seekBy(-30_000L) }) { Text("−30s") }
+                AppButton(
+                    onClick = { viewModel.seekBy(-30_000L) },
+                    modifier = Modifier.claimExit(transportExit),
+                ) { Text("−30s") }
             }
             AppButton(
                 onClick = { viewModel.togglePlayPause() },
@@ -369,12 +391,7 @@ private fun PlaybackControls(
                 modifier = Modifier
                     .widthIn(min = 148.dp)
                     .focusRequester(playPauseFocusRequester)
-                    // The leftmost control when nothing precedes it, which is the case for a
-                    // live stream — otherwise a left-press from here finds nothing.
-                    .then(
-                        if (state.actions.canSkipToPrevious) Modifier
-                        else Modifier.exitLeftTo(exitLeftFocusRequester)
-                    )
+                    .claimExit(transportExit)
             ) {
                 // A live stream cannot be paused, only stopped: pausing one leaves the room
                 // IDLE rather than PAUSED, verified on hardware. The command is the same
@@ -403,21 +420,28 @@ private fun PlaybackControls(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
+            val modeExit = booleanArrayOf(false)
             if (state.actions.canShuffle) {
                 AppButton(
                     onClick = { viewModel.toggleShuffle() },
-                    modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+                    modifier = Modifier.claimExit(modeExit),
                 ) {
                     Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
                 }
             }
             if (state.actions.canRepeat) {
-                AppButton(onClick = { viewModel.cycleRepeat() }) {
+                AppButton(
+                    onClick = { viewModel.cycleRepeat() },
+                    modifier = Modifier.claimExit(modeExit),
+                ) {
                     Text(state.repeat.toRepeatLabel())
                 }
             }
             if (state.actions.canCrossfade) {
-                AppButton(onClick = { viewModel.toggleCrossfade() }) {
+                AppButton(
+                    onClick = { viewModel.toggleCrossfade() },
+                    modifier = Modifier.claimExit(modeExit),
+                ) {
                     Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
                 }
             }
@@ -425,8 +449,7 @@ private fun PlaybackControls(
             // is loaded rather than an action on the current item.
             AppButton(
                 onClick = onOpenQueue,
-                modifier = if (state.actions.canShuffle) Modifier
-                    else Modifier.exitLeftTo(exitLeftFocusRequester),
+                modifier = Modifier.claimExit(modeExit),
             ) { Text("Queue") }
             AppButton(onClick = onOpenFavorites) { Text("Favorites") }
             AppButton(onClick = {
@@ -576,10 +599,16 @@ private fun TvControls(
             // Both are soundbar settings read from `settings:1` and written over UPnP, and
             // neither is pushed — so the label is whatever the last read said, and a press
             // re-reads rather than assuming it landed.
+            // Never disabled, because this pane is only drawn for a room *on* its HDMI
+            // input, which means a soundbar exists — `soundbarId` is null only while the
+            // read is in flight or if it failed. A disabled tv-material Button still takes
+            // focus and draws no highlight, and this is where a right-press from the room
+            // list lands, so disabling it would park the remote on an invisible control.
+            // The unknown value is said rather than guessed instead.
+            val settingsKnown = state.soundbarId != null
             TwoLineButton(
                 title = "Night Sound",
-                value = if (state.nightMode) "On" else "Off",
-                enabled = state.soundbarId != null,
+                value = if (!settingsKnown) "—" else if (state.nightMode) "On" else "Off",
                 onClick = { viewModel.toggleNightMode() },
                 modifier = Modifier
                     .focusRequester(firstFocusRequester)
@@ -587,8 +616,7 @@ private fun TvControls(
             )
             TwoLineButton(
                 title = "Speech Enhancement",
-                value = if (state.speechEnhancement) "On" else "Off",
-                enabled = state.soundbarId != null,
+                value = if (!settingsKnown) "—" else if (state.speechEnhancement) "On" else "Off",
                 onClick = { viewModel.toggleSpeechEnhancement() },
             )
         }
@@ -630,11 +658,10 @@ private fun TvControls(
 private fun TwoLineButton(
     title: String,
     value: String,
-    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AppButton(onClick = onClick, enabled = enabled, modifier = modifier.widthIn(min = 220.dp)) {
+    AppButton(onClick = onClick, modifier = modifier.widthIn(min = 220.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(value, style = MaterialTheme.typography.bodySmall)
