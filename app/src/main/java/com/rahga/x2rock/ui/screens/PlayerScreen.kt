@@ -147,6 +147,7 @@ fun PlayerPane(
                         viewModel = viewModel,
                         firstFocusRequester = detailFocusRequester,
                         exitLeftFocusRequester = sidebarFocusRequester,
+                        onOpenFavorites = onOpenFavorites,
                         onOpenSleepTimer = { showSleepTimerPicker = true },
                     )
                 } else {
@@ -251,8 +252,12 @@ private fun TrackInfo(state: PlayerUiState) {
                             Text(station, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
+                    // "Idle" describes the transport; with nothing loaded at all it is the
+                    // wrong thing to say, because the room is not resting between tracks —
+                    // there are none. The Sonos app names this state, and so does this.
                     else -> Text(
-                        text = state.playbackState.toPlaybackLabel(),
+                        text = if (!state.actions.canPlay) "No Content"
+                            else state.playbackState.toPlaybackLabel(),
                         style = MaterialTheme.typography.headlineMedium
                     )
                 }
@@ -355,11 +360,19 @@ private fun PlaybackControls(
     fun Modifier.claimExit(claimed: BooleanArray): Modifier =
         if (claimed[0]) this else { claimed[0] = true; this.exitLeftTo(exitLeftFocusRequester) }
 
+    // Nothing is loaded at all — not paused, not stopped, but empty. The player says so
+    // itself: `canPlay` is false only here, and stays true even for a stream that is merely
+    // stopped. Sonos draws this room's transport greyed out; we leave it out, because a
+    // disabled tv-material button takes focus and draws nothing, and the row would be
+    // nothing but such buttons.
+    val hasContent = state.actions.canPlay
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         ProgressBar(state, onSeekBy = { viewModel.seekBy(it) })
-        Spacer(modifier = Modifier.height(24.dp))
+        if (hasContent) Spacer(modifier = Modifier.height(24.dp))
 
         val transportExit = booleanArrayOf(false)
+        if (hasContent)
 
         Row(
             // Tighter than the rows below it: with a duration this row grows from three
@@ -421,7 +434,10 @@ private fun PlaybackControls(
             modifier = Modifier.focusGroup()
         ) {
             val modeExit = booleanArrayOf(false)
-            if (state.actions.canShuffle) {
+            // Hidden with no content, even though the player reports all three as available.
+            // `availablePlaybackActions` answers "what may I do to this content", not "is
+            // there any" — and the Sonos app hides them here for the same reason.
+            if (hasContent && state.actions.canShuffle) {
                 AppButton(
                     onClick = { viewModel.toggleShuffle() },
                     modifier = Modifier.claimExit(modeExit),
@@ -429,7 +445,7 @@ private fun PlaybackControls(
                     Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
                 }
             }
-            if (state.actions.canRepeat) {
+            if (hasContent && state.actions.canRepeat) {
                 AppButton(
                     onClick = { viewModel.cycleRepeat() },
                     modifier = Modifier.claimExit(modeExit),
@@ -437,7 +453,7 @@ private fun PlaybackControls(
                     Text(state.repeat.toRepeatLabel())
                 }
             }
-            if (state.actions.canCrossfade) {
+            if (hasContent && state.actions.canCrossfade) {
                 AppButton(
                     onClick = { viewModel.toggleCrossfade() },
                     modifier = Modifier.claimExit(modeExit),
@@ -451,7 +467,14 @@ private fun PlaybackControls(
                 onClick = onOpenQueue,
                 modifier = Modifier.claimExit(modeExit),
             ) { Text("Queue") }
-            AppButton(onClick = onOpenFavorites) { Text("Favorites") }
+            // With no transport drawn there is nothing for a right-press from the room list
+            // to land on, so the entry point moves here — which is also the one control that
+            // helps, being how an empty room is given something to play.
+            AppButton(
+                onClick = onOpenFavorites,
+                modifier = if (hasContent) Modifier
+                    else Modifier.focusRequester(playPauseFocusRequester),
+            ) { Text("Favorites") }
             AppButton(onClick = {
                 if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
                 else onOpenSleepTimer()
@@ -588,6 +611,7 @@ private fun TvControls(
     viewModel: PlayerViewModel,
     firstFocusRequester: FocusRequester,
     exitLeftFocusRequester: FocusRequester,
+    onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -625,13 +649,22 @@ private fun TvControls(
         VolumeRow(state, viewModel, exitLeftFocusRequester)
 
         Spacer(modifier = Modifier.height(16.dp))
-        Row(modifier = Modifier.focusGroup()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            modifier = Modifier.focusGroup(),
+        ) {
+            // The way out of the television and back into music. Sonos's own TV screen has no
+            // such row, but a room on its HDMI input is exactly where wanting to put music on
+            // instead is a live thought, and nothing else here offers it.
+            AppButton(
+                onClick = onOpenFavorites,
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) { Text("Favorites") }
             AppButton(
                 onClick = {
                     if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
                     else onOpenSleepTimer()
                 },
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) {
                 Text(
                     if (state.sleepTimerRemainingMillis != null)
