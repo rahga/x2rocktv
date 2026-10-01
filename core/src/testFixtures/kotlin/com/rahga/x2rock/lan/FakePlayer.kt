@@ -147,6 +147,7 @@ class FakePlayer(
                 // MockWebServer serves each connection on its own thread, so this delays only
                 // the handshake to this one player.
                 stalledHandshakes[host]?.let { Thread.sleep(it) }
+                if (host in unreachable) return MockResponse().setResponseCode(503)
                 return upgrade(host)
             }
         }
@@ -194,6 +195,15 @@ class FakePlayer(
     }
 
     private val stalledHandshakes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val unreachable = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Refuse every future handshake to [playerId], as a speaker that has been unplugged while
+     * the topology still lists it does — Sonos goes on naming one for minutes.
+     */
+    fun makeUnreachable(playerId: String) {
+        unreachable += PlayerNames.localHostname(playerId)!!.lowercase()
+    }
 
     /** Make every future handshake to [playerId] take [millis], as an unreachable speaker's does. */
     fun stallHandshakesTo(playerId: String, millis: Long) {

@@ -373,7 +373,13 @@ class SonosHousehold(
             // socket opened.
             withContext(Dispatchers.IO) { seeds.save(entry.copy(householdId = householdId)) }
 
-            groups.groups.forEach { subscribeGroup(it) }
+            // Each on its own. Sonos goes on listing a speaker for minutes after it is unplugged,
+            // and one group whose coordinator cannot be reached used to throw out of here and
+            // sink the whole session — on the Shield, Kitchen pulled after a party broke up left
+            // every room behind "websocket to … failed", and every retry failed the same way
+            // until Sonos dropped it. A group left unsubscribed here is caught up by the next
+            // groups:1 event, which is how groups formed later are subscribed anyway.
+            groups.groups.forEach { group -> runCatching { subscribeGroup(group) } }
 
             // The UPnP switch: read once, then followed. A `settingsChanged` event names the
             // version each settings group is at, so a flip in the Sonos app is heard without
