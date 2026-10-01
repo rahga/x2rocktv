@@ -212,6 +212,31 @@ class FakePlayer(
         groups = topology
     }
 
+    @Volatile private var upnpAllowed = true
+    @Volatile private var securityVersion = 9
+
+    private fun security(): JsonObject = fixture("getSettingsGroup.security.reply.json").apply {
+        getAsJsonObject("attributes").addProperty("allowInsecureUPnP", upnpAllowed)
+        addProperty("timestamp", securityVersion.toString())
+    }
+
+    /**
+     * Flip the household's UPnP switch, the way the Sonos app does: the read answers the new
+     * value, and a `settingsChanged` on [playerId] announces `security` at a new version.
+     * Pass [announce] false to change it silently, as a missed event would leave it.
+     */
+    fun setUpnpAllowed(allowed: Boolean, playerId: String = id, announce: Boolean = true) {
+        upnpAllowed = allowed
+        securityVersion++
+        if (!announce) return
+        val event = fixture("event.settingsChanged.json")
+        event.getAsJsonArray("settingsGroupMetadata")
+            .map { it.asJsonObject }
+            .first { it.get("name").asString == "security" }
+            .addProperty("timestamp", securityVersion.toString())
+        emit("effectiveSettings:1", "settingsChanged", event, groupId = null, playerId = playerId)
+    }
+
     private val refused = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Refuse every [command] from now on, the way a real player says no: `globalError`. */
@@ -236,8 +261,8 @@ class FakePlayer(
     }
 
     /** Push an unsolicited event — no `success`, which is what makes it an event. */
-    fun push(namespace: String, type: String, body: String, groupId: String? = null) =
-        emit(namespace, type, JsonParser.parseString(body), groupId)
+    fun push(namespace: String, type: String, body: String, groupId: String? = null, playerId: String? = null) =
+        emit(namespace, type, JsonParser.parseString(body), groupId, playerId)
 
     /**
      * A speaker's own level, which a player addresses by `playerId` rather than by group —
@@ -381,6 +406,12 @@ class FakePlayer(
         // voice block, an `eq` the Control API will read but not write — and not merely the
         // two fields this app looks at. A fixture trimmed to what the parser wants would
         // stop being evidence of what the player sends.
+        // Captured off the office One SL with UPnP on; [setUpnpAllowed] flips the one
+        // attribute, as the switch in the Sonos app does.
+        if (namespace == "effectiveSettings:1" && command == "getSettingsGroup") {
+            respond(webSocket, cmdId, namespace, "settings", success = true, body = security())
+            return
+        }
         if (namespace == "settings:1" && command == "getPlayerSettings") {
             respond(
                 webSocket, cmdId, namespace, "playerSettings", success = true,
@@ -502,6 +533,7 @@ class FakePlayer(
             "groupVolume" -> "groupVolume:1"
             "playerVolume" -> "playerVolume:1"
             "groups" -> "groups:1"
+            "settingsChanged" -> "effectiveSettings:1"
             else -> error("no namespace known for $type")
         }
     }

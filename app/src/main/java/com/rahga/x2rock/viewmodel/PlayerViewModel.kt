@@ -78,6 +78,8 @@ data class PlayerUiState(
      * nothing it could play". Stands until the room plays again. See `GroupState.lastError`.
      */
     val playbackError: String? = null,
+    /** UPnP is switched off for the household: see `HouseholdState.upnpOff`. */
+    val upnpOff: Boolean = false,
     val sleepTimerRemainingMillis: Long? = null,
     /**
      * The soundbar in this room, when it has one. Kept because the home-theatre writes are
@@ -163,6 +165,8 @@ class PlayerViewModel @Inject constructor(
                     groupName = groupName,
                     isLoading = householdState.error == null && !householdState.connected,
                     error = householdState.error,
+                    // Household-wide, so known before any one room has said anything.
+                    upnpOff = householdState.upnpOff,
                 )
             } else {
                 PlayerUiState(
@@ -190,6 +194,7 @@ class PlayerViewModel @Inject constructor(
                     actions = state.actions,
                     isRadio = state.isRadio,
                     playbackError = state.lastError?.describe(),
+                    upnpOff = householdState.upnpOff,
                     // Per-speaker rows only mean anything once a group has more than one.
                     playerVolumes = group?.playerIds
                         ?.takeIf { it.size > 1 }

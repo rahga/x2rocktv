@@ -256,6 +256,36 @@ class LiveHouseholdTest {
      * order they arrive in is not stable, so sampling one made the comparison report
      * ordering as drift. That was this test's own first finding, about itself.
      */
+    /**
+     * Read-only. The household's UPnP switch, as `SonosHousehold` reads it off the seed:
+     * captured on the office One SL, 2026-10-01. Nothing asserts which way it is set.
+     */
+    @Test fun `the UPnP switch read still matches its fixture`() = runBlocking<Unit> {
+        val player = seed!!
+        val book = PlayerAddressBook().apply { register(player.hostname!!, player.address) }
+        val socket = withTimeout(10_000) { SonosSocket.open(LanHttp.client(book), player.hostname!!) }
+        val security = try {
+            withTimeout(10_000) {
+                socket.command(
+                    Frames.onPlayer("effectiveSettings:1", "getSettingsGroup", player.id),
+                    JsonObject().apply { addProperty("groupName", "security") },
+                )
+            }
+        } finally {
+            socket.close()
+        }
+        val live = shapeOf(security)
+        val added = live - shapeOf(FakePlayer.fixture("getSettingsGroup.security.reply.json"))
+        assertTrue(
+            "the security settings carry fields the fixture does not — re-capture it:\n" +
+                added.sorted().joinToString("\n") { "    $it" },
+            added.isEmpty(),
+        )
+        listOf(".attributes.allowInsecureUPnP", ".timestamp").forEach { required ->
+            assertTrue("this player no longer sends $required", required in live)
+        }
+    }
+
     private fun shapeOf(element: JsonElement, prefix: String = ""): Set<String> = when {
         element.isJsonObject -> element.asJsonObject.entrySet().flatMap { (key, value) ->
             listOf("$prefix.$key") + shapeOf(value, "$prefix.$key")

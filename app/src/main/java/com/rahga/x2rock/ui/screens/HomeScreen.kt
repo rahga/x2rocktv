@@ -248,6 +248,7 @@ fun HomeScreen(
             val playerNames = remember(liveGroup) { homeViewModel.playerNamesForGroup(liveGroup) }
             val volumes by homeViewModel.playerVolumes.collectAsState()
             val groupVolumes by homeViewModel.groupVolumes.collectAsState()
+            val upnpOff by homeViewModel.upnpOff.collectAsState()
             Overlay {
                 RoomPanel(
                     group = liveGroup,
@@ -278,6 +279,7 @@ fun HomeScreen(
                         homeViewModel.useTvInput(liveGroup.id)
                         panelGroup = null
                     },
+                    upnpOff = upnpOff,
                 )
             }
         }

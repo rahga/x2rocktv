@@ -124,6 +124,13 @@ data class HouseholdState(
      * is the fix, and a retry is all it takes.
      */
     val authenticationRequired: Boolean = false,
+    /**
+     * The household has UPnP switched off in the Sonos app's Connection Security, so every
+     * SOAP call on port 1400 answers 403: the queue, the TV input and the Night Sound and
+     * Speech Enhancement writes. True only once a player has said so; unknown reads as on,
+     * because a switch that could not be read must not withdraw anything.
+     */
+    val upnpOff: Boolean = false,
 ) {
     /**
      * Whether this group has a TV input to switch to at all.
@@ -232,6 +239,10 @@ class SonosHousehold(
 
     /** The socket `groups:1` is subscribed on. Losing it loses the topology itself. */
     @Volatile private var seedHostname: String? = null
+    /** The player the UPnP switch is read from and followed on: the seed. */
+    @Volatile private var seedPlayerId: String? = null
+    /** The `security` settings group's timestamp at the last read; an event naming another means re-read. */
+    @Volatile private var securityVersion: String? = null
 
     private val _state = MutableStateFlow(HouseholdState())
     val state: StateFlow<HouseholdState> = _state.asStateFlow()
@@ -350,6 +361,14 @@ class SonosHousehold(
             withContext(Dispatchers.IO) { seeds.save(entry.copy(householdId = householdId)) }
 
             groups.groups.forEach { subscribeGroup(it) }
+
+            // The UPnP switch: read once, then followed. A `settingsChanged` event names the
+            // version each settings group is at, so a flip in the Sonos app is heard without
+            // asking again (x2rock verified both directions on the office One SL, 2026-09-28).
+            // Best-effort: a firmware without the namespace leaves the switch unknown, read as on.
+            seedPlayerId = entry.id
+            runCatching { readUpnpSwitch() }
+            runCatching { seedSocket.subscribe(Frames.onPlayer("effectiveSettings:1", "subscribe", entry.id)) }
             // Per-speaker volume only matters once rooms are grouped, but subscribing up
             // front means the rows are already populated when a group forms.
             groups.players.forEach { player ->
@@ -455,6 +474,8 @@ class SonosHousehold(
         val dying = sockets.values.toList()
         sockets.clear()
         seedHostname = null
+        seedPlayerId = null
+        securityVersion = null
         dying.forEach { runCatching { it.cancel() } }
         subscribedGroups.clear()
         addressBook.clear()
@@ -832,6 +853,23 @@ class SonosHousehold(
         }
     }
 
+    /**
+     * The household's UPnP switch, as the seed applies it: `effectiveSettings:1
+     * getSettingsGroup {"groupName": "security"}`, player-scoped — the household-scoped form is
+     * refused. A failure keeps what was known.
+     */
+    private suspend fun readUpnpSwitch() {
+        val playerId = seedPlayerId ?: return
+        val body = socketForPlayer(playerId).command(
+            Frames.onPlayer("effectiveSettings:1", "getSettingsGroup", playerId),
+            JsonObject().apply { addProperty("groupName", "security") },
+        ).asJsonObject
+        val allowed = body.getAsJsonObject("attributes")?.get("allowInsecureUPnP")
+            ?.takeIf { it.isJsonPrimitive }?.asBoolean ?: return
+        securityVersion = body.string("timestamp")
+        _state.update { it.copy(upnpOff = !allowed) }
+    }
+
     /** The topology as the seed reports it now, for a check the pushed copy could not settle. */
     private suspend fun freshGroups(): List<Group> {
         val household = _state.value.householdId ?: error("not connected")
@@ -1055,6 +1093,18 @@ class SonosHousehold(
                             ?: it.actions,
                     )
                 }
+            }
+
+            // Which settings groups exist, each with its version, and no values. Only the seed's
+            // is followed, and only a moved `security` version is worth a read.
+            "effectiveSettings:1" -> {
+                if (event.header.playerId == null || event.header.playerId != seedPlayerId) return
+                val version = event.body.asJsonObject.getAsJsonArray("settingsGroupMetadata")
+                    ?.map { it.asJsonObject }
+                    ?.firstOrNull { it.string("name") == "security" }
+                    ?.string("timestamp")
+                    ?: return
+                if (version != securityVersion) scope.launch { runCatching { readUpnpSwitch() } }
             }
 
             "playbackMetadata:1" -> {

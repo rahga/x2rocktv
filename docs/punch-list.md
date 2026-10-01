@@ -109,7 +109,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   a remote, and the bearer token would ride in every command header, not the handshake. Cheap
   pre-check: REST `GET https://<ip>:1443/api/v1/players/local/info` stays open and
   `credentialTypeAllowed` flips `API_KEY` → `GUEST_TOKEN`.
-- [ ] **1.7 UPnP-off households.** With the UPnP switch off every SOAP call is 403: queue, TV
+- [x] **1.7 UPnP-off households.** *Done 2026-10-01: read off the seed and followed by
+  `settingsChanged`; `HouseholdState.upnpOff`; Queue and the panel's Source withdrawn, the
+  TV pane's toggles kept (they anchor focus) with a note naming the switch. Fixtures and a
+  read-only drift test from the office One SL. The CA fallback for a solo soundbar's TV input
+  was not built. Flip the switch at home to see the UI follow.* With the UPnP switch off every SOAP call is 403: queue, TV
   input, night/dialog writes. The app explains 403 only on the queue screen; TV input and EQ
   failures are swallowed. Read the switch via `effectiveSettings:1 getSettingsGroup
   {"groupName":"security"}` (player-scoped, no other parameters; household scope refuses) →

@@ -287,6 +287,7 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | `playerVolume:1` | **that player's own socket** | per-speaker volume and mute |
 | `favorites:1` | household / group | listing and loading favourites |
 | `settings:1` | player | `getPlayerSettings`: Night Sound and Speech Enhancement, read only |
+| `effectiveSettings:1` | player (the seed) | the UPnP switch: `getSettingsGroup {"groupName":"security"}`, followed by `settingsChanged`'s per-group timestamps |
 
 `queue:1`, `playbackQueue:1` and `cloudQueue:1` all answer `ERROR_UNSUPPORTED_NAMESPACE`.
 

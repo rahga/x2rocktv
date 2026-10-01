@@ -272,6 +272,10 @@ private fun TrackInfo(state: PlayerUiState) {
                 }
                 // Without this a failed stream is just an idle room: the player says why in
                 // an event of its own, and only once.
+                if (state.upnpOff) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    UpnpOffNote()
+                }
                 state.playbackError?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -485,11 +489,14 @@ private fun PlaybackControls(
                 }
             }
             // Queue keeps its place whatever the source permits: it is a way to look at what
-            // is loaded rather than an action on the current item.
-            AppButton(
-                onClick = onOpenQueue,
-                modifier = Modifier.claimExit(modeExit),
-            ) { Text("Queue") }
+            // is loaded rather than an action on the current item. Only UPnP being off takes
+            // it away, since the queue lives nowhere else; the pane says so below.
+            if (!state.upnpOff) {
+                AppButton(
+                    onClick = onOpenQueue,
+                    modifier = Modifier.claimExit(modeExit),
+                ) { Text("Queue") }
+            }
             // With no transport drawn there is nothing for a right-press from the room list
             // to land on, so the entry point moves here — which is also the one control that
             // helps, being how an empty room is given something to play.
@@ -668,6 +675,13 @@ private fun TvControls(
             )
         }
 
+        // The two toggles above stay drawn — they are where focus lands — and a press explains
+        // itself through the notice. This says it before anyone has to press.
+        if (state.upnpOff) {
+            Spacer(modifier = Modifier.height(12.dp))
+            UpnpOffNote()
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
         VolumeRow(state, viewModel, exitLeftFocusRequester)
 
@@ -837,4 +851,15 @@ private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
             },
         )
     }
+}
+
+/** One line for a household with UPnP switched off, naming what it costs and where to fix it. */
+@Composable
+private fun UpnpOffNote() {
+    Text(
+        "UPnP is off for this system, so the queue, the TV input and Night Sound and Speech " +
+            "Enhancement can't be used. Turn it on in the Sonos app: Account > Privacy and " +
+            "Security > Connection Security.",
+        style = MaterialTheme.typography.bodySmall,
+    )
 }

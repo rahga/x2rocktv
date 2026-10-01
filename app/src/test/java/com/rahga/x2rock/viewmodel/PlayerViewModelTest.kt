@@ -281,6 +281,14 @@ class PlayerViewModelTest {
         assertNull("a cancelled send was reported as a failure", viewModel.uiState.value.notice)
     }
 
+    /** UPnP off takes the queue away and puts the reason on the pane; on again restores it. */
+    @Test fun `the pane follows the household's UPnP switch`() = runBlocking<Unit> {
+        fake.setUpnpAllowed(false)
+        withTimeout(5_000) { viewModel.uiState.first { it.upnpOff } }
+        fake.setUpnpAllowed(true)
+        withTimeout(5_000) { viewModel.uiState.first { !it.upnpOff } }
+    }
+
     // ---------------------------------------------------------------- playback errors
 
     @Test fun `a room that failed to play says why on the pane`() = runBlocking<Unit> {
