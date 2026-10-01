@@ -773,6 +773,24 @@ class SonosHouseholdTest {
         withTimeout(5_000) { household.groupStates.first { it[dining]?.volume?.volume == 42 } }
     }
 
+    /**
+     * Plugged back in, with no topology change to announce it — Kitchen on the Shield was
+     * listed as its own group throughout — the group must still be subscribed, by retrying.
+     */
+    @Test fun `a coordinator that comes back is subscribed without a topology change`() = runBlocking<Unit> {
+        val groups = FakePlayer.reachableTopology().getAsJsonArray("groups").map { it.asJsonObject }
+        val kitchen = groups.first { it.get("name").asString == "Kitchen" }
+        val kitchenId = kitchen.get("id").asString
+        fake.makeUnreachable(kitchen.get("coordinatorId").asString)
+        connected()
+        fake.clearHistory()
+
+        fake.makeReachable(kitchen.get("coordinatorId").asString)
+        fake.awaitCommand(timeoutMillis = 10_000) {
+            it.get("command")?.asString == "subscribe" && it.get("groupId")?.asString == kitchenId
+        }
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

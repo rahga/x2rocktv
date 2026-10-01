@@ -205,6 +205,11 @@ class FakePlayer(
         unreachable += PlayerNames.localHostname(playerId)!!.lowercase()
     }
 
+    /** Plug it back in. */
+    fun makeReachable(playerId: String) {
+        unreachable -= PlayerNames.localHostname(playerId)!!.lowercase()
+    }
+
     /** Make every future handshake to [playerId] take [millis], as an unreachable speaker's does. */
     fun stallHandshakesTo(playerId: String, millis: Long) {
         stalledHandshakes[PlayerNames.localHostname(playerId)!!.lowercase()] = millis

@@ -171,7 +171,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    the pane says "Couldn't play this: found nothing it could play".
 3. **0.1** *Blocked — see 0.1a: iHeartRadio is DeviceLink here.* On an iHeartRadio Custom or Artist Radio track, the thumbs appear and a press fills
    one; on a Live station they do not appear at all.
-4. **1.2** Group two rooms, then pull the member's power: the other rooms stay as they are and
+4. **1.2** *Run 2026-10-01, but the party had broken up before the loss was seen, so Kitchen was
+   a coordinator by then — which found the two bugs above instead. A clean member-loss run is
+   still owed.* Group two rooms, then pull the member's power: the other rooms stay as they are and
    only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
 5. **1.3** Put a Beam on its TV input, then group another room onto it from the room panel:
    it either lands or a banner says it did not, within about 25s.
@@ -341,8 +343,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   for minutes, and setup subscribed every listed group in turn, so one coordinator that could
   not be reached threw out of it: on the Shield, Kitchen pulled after the party broke up left
   every room behind "websocket to … failed", each retry failing the same way. Groups are now
-  subscribed one by one at setup, a failure left for the next groups:1 event; verified on the
-  Shield with Kitchen still listed and still down.
+  subscribed one by one at setup; verified on the Shield with Kitchen still listed and down.
+  A group left unsubscribed is retried with the reconnect's backoff until it is subscribed or
+  leaves the topology, because its return need not change the topology: Kitchen, plugged back
+  in, was listed as its own group throughout, and sat frozen with no groups:1 event to retry
+  it. That half is unit-tested; the Shield went to sleep before it could be watched.
 - [x] **A grouped room's speaker rows were out of reach.** Neither pane scrolled, so with a
   five-room party on the TV input the Speakers rows were drawn below the screen and focus
   stopped at Favorites. The pane now scrolls, and focus brings each row into view; verified on
