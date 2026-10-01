@@ -50,9 +50,9 @@ internal fun failureNotice(what: String, e: Throwable): String? {
     if (e is CancellationException) return null
     val why = when (e) {
         // Every Control API command is refused this way with Authentication switched on in the
-        // Sonos app — getGroups first — and this app cannot sign in on a TV (punch list 1.6).
-        is SonosCommandException ->
-            if ("ERROR_NO_PERMISSION" in e.detail) AUTHENTICATION_ON else e.detail
+        // Sonos app, and this app cannot sign in on a TV. See `isPermissionRefusal` for the one
+        // command that says it otherwise, which this app never sends.
+        is SonosCommandException -> if (e.isPermissionRefusal) AUTHENTICATION_ON else e.detail
         is ReplyTimeoutException -> "the speaker did not answer"
         else -> e.message ?: e.toString()
     }

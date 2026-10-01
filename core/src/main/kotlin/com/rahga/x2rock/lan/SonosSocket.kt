@@ -238,4 +238,12 @@ class ReplyTimeoutException(hostname: String, millis: Long, cause: Throwable) :
 class SonosCommandException(
     val command: String,
     val detail: String,
-) : IOException("$command failed: $detail")
+) : IOException("$command failed: $detail") {
+    /**
+     * `ERROR_NO_PERMISSION`. From any command this app sends, that means the household has
+     * Authentication switched on. Not from every command a client *could* send:
+     * `settings:1 setPlayerSettings` answers it with the switch off too, which is why this app
+     * writes EQ over UPnP and never sends it.
+     */
+    val isPermissionRefusal: Boolean get() = detail.startsWith("ERROR_NO_PERMISSION")
+}

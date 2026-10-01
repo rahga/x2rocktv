@@ -117,6 +117,13 @@ data class HouseholdState(
     val players: List<Player> = emptyList(),
     /** Set when the household is unreachable. Withdraw the UI rather than showing stale state. */
     val error: String? = null,
+    /**
+     * The speakers answered and refused: the household has Authentication switched on in the
+     * Sonos app's Connection Security, and this app cannot sign in. [error] then says so,
+     * naming the switch. Cleared by the next session that stands up — turning the switch off
+     * is the fix, and a retry is all it takes.
+     */
+    val authenticationRequired: Boolean = false,
 ) {
     /**
      * Whether this group has a TV input to switch to at all.
@@ -327,7 +334,10 @@ class SonosHousehold(
             )
             registerAddresses(groups)
             _state.update {
-                it.copy(connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups), players = groups.players, error = null)
+                it.copy(
+                    connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups),
+                    players = groups.players, error = null, authenticationRequired = false,
+                )
             }
 
             // Topology changes arrive here: a group forming or breaking rewrites the list.
@@ -349,13 +359,25 @@ class SonosHousehold(
                 }
             }
         } catch (e: Exception) {
+            // With Authentication on, every Control API command is refused with
+            // ERROR_NO_PERMISSION, getGroups first, while UPnP keeps answering (x2rock, verified
+            // 2026-09-26). The player is right and reachable; only the switch is in the way. So
+            // the memory of it is kept, and the error names the switch rather than reading as a
+            // speaker that did not answer.
+            val refused = e is SonosCommandException && e.isPermissionRefusal
             // A remembered player whose socket opened but whose session did not stand up is
             // still unusable — a household id that no longer exists, say, after a re-setup.
             // Without this the same dead memory is retried on every launch, forever.
-            if (fromMemory) {
+            if (fromMemory && !refused) {
                 withContext(Dispatchers.IO) { seeds.clear() }
             }
-            _state.update { it.copy(connected = false, error = e.message ?: e.toString()) }
+            _state.update {
+                it.copy(
+                    connected = false,
+                    error = if (refused) AUTHENTICATION_REQUIRED else e.message ?: e.toString(),
+                    authenticationRequired = refused,
+                )
+            }
             throw e
         }
     }
@@ -1164,6 +1186,12 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/** What a household with Authentication on is told, in place of the bare refusal. */
+const val AUTHENTICATION_REQUIRED =
+    "The speakers refused this app: Authentication is turned on in the Sonos app's Connection " +
+        "Security, and this app cannot sign in from a TV. Turn it off in the Sonos app " +
+        "(Account > Privacy and Security > Connection Security > Authentication), then retry."
 
 /** See [SonosHousehold]'s `settleMillis`: the Beam stall's 14–20s, with the top of it. */
 internal const val UNANSWERED_SETTLE_MILLIS = 20_000L

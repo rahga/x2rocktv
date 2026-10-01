@@ -629,6 +629,31 @@ class SonosHouseholdTest {
         stalled.cancel()
     }
 
+    /**
+     * With Authentication on in the Sonos app, every Control API command is refused with
+     * ERROR_NO_PERMISSION, getGroups first (x2rock, verified 2026-09-26). The player is
+     * reachable and right, so its memory is kept, the error names the switch, and turning the
+     * switch off is all a retry needs.
+     *
+     * From the remembered seed, not a passed one: that is the path that clears a seed whose
+     * session failed, and the one a permission refusal must not take.
+     */
+    @Test fun `a household with Authentication on says so, and keeps the player it remembers`() = runBlocking<Unit> {
+        fake.refuse("getGroups", "ERROR_NO_PERMISSION")
+        val failure = runCatching { household.connect() }.exceptionOrNull()
+        assertTrue("expected the refusal, got $failure", failure is SonosCommandException)
+        val refused = household.state.value
+        assertTrue(refused.authenticationRequired)
+        assertEquals(AUTHENTICATION_REQUIRED, refused.error)
+        assertNotNull("a refusing player is still the right one to remember", seeds.peek())
+
+        fake.allow("getGroups")
+        household.connect()
+        val recovered = withTimeout(5_000) { household.state.first { it.connected } }
+        assertFalse(recovered.authenticationRequired)
+        assertNull(recovered.error)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()
