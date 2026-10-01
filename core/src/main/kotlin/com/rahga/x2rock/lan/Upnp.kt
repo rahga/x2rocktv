@@ -35,7 +35,15 @@ import javax.xml.parsers.DocumentBuilderFactory
  * connection back to us. This is request/response only, so the queue is the one part of
  * the UI that still has to be asked rather than pushed.
  */
-class Upnp(client: OkHttpClient) {
+
+/** `ListAvailableServices`'s reply — see [Upnp.listAvailableServices]. */
+data class ServiceListAnswer(val descriptors: String)
+
+class Upnp(
+    client: OkHttpClient,
+    /** Overridden only by tests, which answer SOAP from a fake on an ephemeral port. */
+    private val port: Int = PORT,
+) {
 
     /**
      * The shared client with a read timeout put back.
@@ -143,6 +151,18 @@ class Upnp(client: OkHttpClient) {
     }
 
     /**
+     * The music services this player knows about — where ratings start. Unlike the queue,
+     * nothing here caches the answer: it's a single cheap LAN call, so it's cheaper to ask
+     * fresh than to track whether `AvailableServiceListVersion` moved. What *is* worth
+     * caching (a service's presentation map, an internet round trip) lives in
+     * [com.rahga.x2rock.smapi.RatingsCatalogue] instead.
+     */
+    suspend fun listAvailableServices(hostname: String): ServiceListAnswer = withContext(Dispatchers.IO) {
+        val envelope = parse(soap(hostname, Service.MUSIC_SERVICES, "ListAvailableServices", emptyList()))
+        ServiceListAnswer(descriptors = envelope.text("AvailableServiceDescriptorList").orEmpty())
+    }
+
+    /**
      * A removal is rejected with UPnP 1028 if the queue moved since the version we quote,
      * which is exactly what should happen when someone else is editing it — so the id is
      * read immediately before use rather than cached.
@@ -164,6 +184,7 @@ class Upnp(client: OkHttpClient) {
         AV_TRANSPORT("/MediaRenderer/AVTransport/Control", "urn:schemas-upnp-org:service:AVTransport:1"),
         CONTENT_DIRECTORY("/MediaServer/ContentDirectory/Control", "urn:schemas-upnp-org:service:ContentDirectory:1"),
         RENDERING_CONTROL("/MediaRenderer/RenderingControl/Control", "urn:schemas-upnp-org:service:RenderingControl:1"),
+        MUSIC_SERVICES("/MusicServices/Control", "urn:schemas-upnp-org:service:MusicServices:1"),
     }
 
     private fun soap(hostname: String, service: Service, action: String, args: List<Pair<String, String>>): String {
@@ -178,7 +199,7 @@ class Upnp(client: OkHttpClient) {
             """</s:Body></s:Envelope>"""
 
         val request = Request.Builder()
-            .url("http://$hostname:$PORT${service.path}")
+            .url("http://$hostname:$port${service.path}")
             .header("SOAPAction", "\"${service.urn}#$action\"")
             .post(envelope.toRequestBody("text/xml; charset=utf-8".toMediaType()))
             .build()

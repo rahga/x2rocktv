@@ -165,6 +165,31 @@ class SonosHouseholdTest {
     }
 
     /**
+     * Both captures are real, contrasted deliberately — asserting the Live station's `false`
+     * alone would pass just as well against a parser that returned `false` for everything.
+     *
+     * A Plex queue track (`metadataStatus`) carries a real `id`; iHeartRadio's own "Love
+     * Songs Radio" (`stationMetadataStatus`) — a Live broadcast, the household's actual
+     * ordinary listening — has a track with a name and an artist but **no `id` field at
+     * all**, verified against the real household 2026-09-12. `hasTrackId` is where a rating
+     * check starts, so a fixture set with only the unrateable case could never fail it.
+     */
+    @Test fun `hasTrackId follows the track's own id, not whether it is radio`() = runBlocking {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
+        assertTrue("a real service track id must read as rateable",
+            household.groupState(groupId).hasTrackId)
+
+        fake.pushFixture("stationMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
+        assertFalse("a Live broadcast's track carries no id and cannot be rated",
+            household.groupState(groupId).hasTrackId)
+    }
+
+    /**
      * A stream loaded by URL, captured off SomaFM: no `currentItem`, no track object, and a
      * `streamInfo` that is the only thing it can say it is playing.
      */

@@ -53,6 +53,28 @@ data class PlaybackState(
 
 data class TrackArtist(val name: String?)
 data class TrackAlbum(val name: String?)
+
+/**
+ * How Sonos names a piece of a service's catalogue: which service, which of the household's
+ * accounts on it, and the item itself. Present on a queued track from a real service (a
+ * Custom/Artist-Radio track, a Plex library item); **absent, field and all, on a Live
+ * broadcast's track** — there is nothing dynamic to report about a song with no per-listener
+ * identity, only the station container has one. This is what a rating button gates on.
+ */
+data class MusicObjectId(
+    val objectId: String,
+    val serviceId: String? = null,
+    val accountId: String? = null,
+) {
+    /**
+     * A player reports `objectId: "-1"` for a container it has nothing to say about. Verified
+     * against a real household: a Live station's track carries no `id` at all (so this class
+     * is simply absent), while a Custom Station track carries a real one — the two cases this
+     * exists to tell apart.
+     */
+    val isReal: Boolean get() = objectId.isNotEmpty() && objectId != "-1"
+}
+
 data class Track(
     val name: String?,
     val artist: TrackArtist?,
@@ -60,7 +82,9 @@ data class Track(
     val imageUrl: String?,
     val durationMillis: Long = 0,
     /** Alternate art for the same track; `imageUrl` is the one to prefer. */
-    val images: List<SonosImage> = emptyList()
+    val images: List<SonosImage> = emptyList(),
+    /** See [MusicObjectId] — what `rateItem` needs, and absent wherever it cannot be sent. */
+    val id: MusicObjectId? = null,
 )
 data class CurrentItem(val track: Track?)
 data class SonosImage(val url: String? = null)

@@ -19,7 +19,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.ThumbDown
+import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
+import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
+import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -424,6 +429,18 @@ private fun PlaybackControls(
             if (state.actions.canSkip) {
                 AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
             }
+            // Drawn only where a press can succeed: the track has an id, its service needs no
+            // account and publishes ratings. A Live broadcast — this household's ordinary
+            // iHeartRadio listening — has no track id, so it never shows them.
+            state.rating?.let { rating ->
+                RateButton(up = true, selected = rating.current == Thumb.UP) { viewModel.rateUp() }
+                RateButton(up = false, selected = rating.current == Thumb.DOWN) { viewModel.rateDown() }
+            }
+        }
+
+        if (state.ratingResult != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(state.ratingResult, style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -793,4 +810,25 @@ private fun String.toRepeatLabel(): String = when (this) {
     RepeatModes.ALL -> "Repeat All"
     RepeatModes.ONE -> "Repeat One"
     else -> "Repeat OFF"
+}
+
+/** A thumb, filled once the track is already rated that way and outlined otherwise. */
+@Composable
+private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
+    AppButton(onClick = onClick) {
+        Icon(
+            imageVector = when {
+                up && selected -> Icons.Filled.ThumbUp
+                up -> Icons.Outlined.ThumbUpOutlined
+                selected -> Icons.Filled.ThumbDown
+                else -> Icons.Outlined.ThumbDownOutlined
+            },
+            contentDescription = when {
+                up && selected -> "Rated up"
+                up -> "Rate up"
+                selected -> "Rated down"
+                else -> "Rate down"
+            },
+        )
+    }
 }

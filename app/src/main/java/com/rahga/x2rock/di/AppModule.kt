@@ -6,6 +6,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.smapi.RatingsStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,7 +18,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+/** Distinguishes the plain internet [OkHttpClient] from the LAN one players get. */
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class InternetHttp
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -65,6 +72,17 @@ object AppModule {
     fun provideLanClient(addressBook: PlayerAddressBook): OkHttpClient =
         LanHttp.client(addressBook)
 
+    /**
+     * A plain client for anything that isn't a player — Sonos's CDN, a music service's own
+     * SMAPI endpoint. **Never share [provideLanClient]'s**: that one carries a trust manager
+     * built to accept a player's leaf-only certificate chain, which must not be extended to
+     * the rest of the internet.
+     */
+    @Provides
+    @Singleton
+    @InternetHttp
+    fun provideInternetClient(): OkHttpClient = OkHttpClient()
+
     @Provides
     @Singleton
     fun provideSonosHousehold(
@@ -73,5 +91,7 @@ object AppModule {
         multicast: MulticastGate,
         client: OkHttpClient,
         seeds: SeedStore,
-    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, client, seeds)
+        @InternetHttp internetClient: OkHttpClient,
+        ratingsStore: RatingsStore,
+    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, client, seeds, internetClient, ratingsStore)
 }

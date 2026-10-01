@@ -253,6 +253,21 @@ class PlayerViewModelTest {
         assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
     }
 
+    // ---------------------------------------------------------------- ratings
+
+    /**
+     * Nothing loaded at all is the deterministic case to test without a real music-service
+     * endpoint to talk to (there is no `FakePlayer` for UPnP/SMAPI, unlike the socket):
+     * `household.rate` fails before it ever leaves the LAN, and the point here is only that
+     * the failure reaches the UI as a message rather than vanishing into a swallowed
+     * exception the way the other transport commands' `runCatching` would let it.
+     */
+    @Test fun `a failed rating attempt surfaces a message rather than nothing`() = runBlocking<Unit> {
+        viewModel.rateUp()
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.ratingResult != null } }
+        assertEquals("nothing rateable is playing in this room", state.ratingResult)
+    }
+
     // ---------------------------------------------------------------- failure
 
     /**

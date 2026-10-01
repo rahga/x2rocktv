@@ -4,6 +4,8 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomsChannelSync
 import com.rahga.x2rock.media.MediaSessionPublisher
 import com.rahga.x2rock.media.NowPlayingPublisher
+import com.rahga.x2rock.smapi.PrefsRatingsStore
+import com.rahga.x2rock.smapi.RatingsStore
 import com.rahga.x2rock.store.Preferences
 import com.rahga.x2rock.store.SharedPreferencesStore
 import dagger.Binds
@@ -27,4 +29,6 @@ abstract class StoreModule {
     @Binds abstract fun bindChannelSync(impl: RoomsChannelSync): ChannelSync
 
     @Binds abstract fun bindNowPlayingPublisher(impl: MediaSessionPublisher): NowPlayingPublisher
+
+    @Binds abstract fun bindRatingsStore(impl: PrefsRatingsStore): RatingsStore
 }

@@ -200,6 +200,10 @@ just its membership — `FakePlayer.groupedTopology` does. Keeping the id made t
 look right while testing nothing, because a household that never re-subscribes passes it.
 
 ## Known Gaps / Deferred Work
+
+**The catch-up list is `docs/punch-list.md`** (2026-10-01): what the sibling Rust project learned
+or built since 2026-09-09 that this app does not yet reflect, tiered and ticked off as it lands.
+Start there before picking up new work; the items below are the standing notes it does not repeat.
 - **The media session is not advertised for a soundbar on its TV input.** The Google TV home
   screen carries a card for every active session, and for a room with no track metadata it
   rendered ours as "Unknown · x2rock · Unknown" — a launcher row saying nothing, for a source
