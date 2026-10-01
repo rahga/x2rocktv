@@ -214,6 +214,9 @@ class SonosHousehold(
      */
     @Volatile private var generation = 0
 
+    /** The socket `groups:1` is subscribed on. Losing it loses the topology itself. */
+    @Volatile private var seedHostname: String? = null
+
     private val _state = MutableStateFlow(HouseholdState())
     val state: StateFlow<HouseholdState> = _state.asStateFlow()
 
@@ -304,6 +307,7 @@ class SonosHousehold(
                 ?: error("cannot derive a certificate hostname for ${entry.id}")
             addressBook.register(hostname, entry.address)
             val seedSocket = socketForHostname(hostname)
+            seedHostname = hostname
 
             // SSDP already answered this; only ask a player if it somehow did not.
             val householdId = entry.householdId ?: seedSocket.householdId()
@@ -372,20 +376,55 @@ class SonosHousehold(
         }
     }
 
-    /** A socket died on its own. One loss is enough: the whole session is rebuilt. */
-    private fun handleLoss(cause: Throwable) {
-        if (reconnectJob?.isActive == true) return
-        _state.update { it.copy(connected = false, error = cause.message ?: "connection lost") }
-        reconnect()
+    /**
+     * A socket died on its own. Whether that costs the session depends on what it carried.
+     *
+     * The seed holds `groups:1`, and a coordinator's socket holds its group's playback,
+     * metadata and volume subscriptions; there is no replay, so losing either means
+     * rebuilding from a fresh snapshot. A socket that is neither — a member's, open only for
+     * that speaker's own volume — carried nothing anyone else needs. Rebuilding the household
+     * for it, as this once did, let one flaky portable blank every room in the house, again on
+     * each reconnect it failed. x2rock learned the same and treats member sockets as
+     * best-effort.
+     *
+     * So a member's socket is evicted, its speaker's level withdrawn rather than left showing
+     * a value nothing will update, and nothing else happens. It comes back with the next
+     * `groups:1` event, whose catch-up resubscribes every player — and a speaker dropping off
+     * or rejoining is itself a topology change. A loss from a socket no longer in the pool, a
+     * previous session's, is ignored.
+     */
+    private fun handleLoss(socket: SonosSocket, cause: Throwable) {
+        if (!sockets.remove(socket.hostname, socket)) return
+        if (carriesSession(socket.hostname)) {
+            if (reconnectJob?.isActive == true) return
+            _state.update { it.copy(connected = false, error = cause.message ?: "connection lost") }
+            reconnect()
+            return
+        }
+        val players = _state.value.players
+            .filter { PlayerNames.localHostname(it.id).equals(socket.hostname, ignoreCase = true) }
+            .map { it.id }
+        _playerVolumes.update { it - players.toSet() }
+    }
+
+    /** Whether [hostname] is the seed or any group's coordinator, by the topology as it is now. */
+    private fun carriesSession(hostname: String): Boolean {
+        if (hostname.equals(seedHostname, ignoreCase = true)) return true
+        val coordinators = _state.value.groups.map { it.coordinatorId } + subscribedGroups.values
+        return coordinators.any { PlayerNames.localHostname(it).equals(hostname, ignoreCase = true) }
     }
 
     private suspend fun teardown() = lock.withLock {
         generation++
         takeJobs().forEach { it.cancel() }
-        // cancel(), not close(): this runs on the premise that the peer may be gone, and a
-        // graceful close waits for a handshake a dead peer will never send.
-        sockets.values.forEach { runCatching { it.cancel() } }
+        // Out of the pool before they are cancelled, so the failures cancelling raises are
+        // recognised as a previous session's and ignored. cancel(), not close(): this runs on
+        // the premise that the peer may be gone, and a graceful close waits for a handshake a
+        // dead peer will never send.
+        val dying = sockets.values.toList()
         sockets.clear()
+        seedHostname = null
+        dying.forEach { runCatching { it.cancel() } }
         subscribedGroups.clear()
         addressBook.clear()
         _state.update { it.copy(connected = false) }
@@ -399,8 +438,10 @@ class SonosHousehold(
         reconnectJob = null
         generation++
         takeJobs().forEach { it.cancel() }
-        sockets.values.forEach { it.close() }
+        val closing = sockets.values.toList()
         sockets.clear()
+        seedHostname = null
+        closing.forEach { it.close() }
         addressBook.clear()
         // Cleared for the same reason [teardown] clears it: nothing should go on believing
         // it holds a subscription over a socket that no longer exists. `establish`
@@ -729,19 +770,37 @@ class SonosHousehold(
         return socketForHostname(name)
     }
 
-    private suspend fun socketForHostname(hostname: String): SonosSocket = lock.withLock {
-        sockets[hostname]?.let { return it }
-        val opened = generation
-        val socket = SonosSocket.open(client, hostname, port)
-        // A teardown that happened while the handshake was in flight means this socket
-        // belongs to a dead session; adopting it would resurrect it into a just-cleared map.
-        if (opened != generation) {
-            socket.cancel()
-            throw java.io.IOException("connection torn down while opening $hostname")
+    /**
+     * The pooled socket for [hostname], opened if there is none.
+     *
+     * The handshake runs **outside** the lock. Held across it, one unreachable speaker
+     * stalled every other socket for its whole connect timeout — at connect, each member's
+     * volume subscription queued behind the last, and a coordinator's command could not even
+     * reach its own, already open, socket. Two callers racing to open the same name both
+     * finish; the second to arrive keeps the first's socket and closes its own, which is
+     * x2rock's pool rule too.
+     */
+    private suspend fun socketForHostname(hostname: String): SonosSocket {
+        val opened = lock.withLock {
+            sockets[hostname]?.let { return it }
+            generation
         }
-        sockets[hostname] = socket
-        watch(socket)
-        return socket
+        val socket = SonosSocket.open(client, hostname, port)
+        return lock.withLock {
+            // A teardown while the handshake was in flight means this socket belongs to a
+            // dead session; adopting it would resurrect it into a just-cleared map.
+            if (opened != generation) {
+                socket.cancel()
+                throw java.io.IOException("connection torn down while opening $hostname")
+            }
+            sockets[hostname]?.let { winner ->
+                socket.close()
+                return@withLock winner
+            }
+            sockets[hostname] = socket
+            watch(socket)
+            socket
+        }
     }
 
     /**
@@ -767,7 +826,7 @@ class SonosHousehold(
             socket.events.collect { event -> runCatching { apply(event) } }
         }
         socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            socket.failures.collect { cause -> handleLoss(cause) }
+            socket.failures.collect { cause -> handleLoss(socket, cause) }
         }
     }
 

@@ -246,6 +246,12 @@ A `groups:1` event brings subscriptions back in line: a regroup mints new group 
 new since the last event are subscribed and vanished ones dropped, serialised under a lock and
 reading the topology itself. `CLAUDE.md` records the two bugs that shape this.
 
+Only the seed's socket and coordinators' sockets carry the session: the seed holds
+`groups:1`, a coordinator its group's subscriptions. Losing one of those rebuilds. A member's
+socket carries only that speaker's own volume, so losing it evicts it from the pool and
+withdraws that level, and the next `groups:1` catch-up brings it back. Sockets are opened
+outside the pool's lock, so one slow or unreachable speaker never holds up the rest.
+
 Reconnection is capped exponential backoff, 1s doubling to 60s. It rebuilds from scratch
 rather than repairing in place: subscriptions do not survive a reconnect and there is no
 replay buffer, so the fresh snapshot is truth. `onNetworkChanged()` skips the wait entirely,

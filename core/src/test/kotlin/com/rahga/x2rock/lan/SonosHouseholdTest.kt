@@ -7,6 +7,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -543,6 +544,89 @@ class SonosHouseholdTest {
         fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
         withTimeout(10_000) { household.groupStates.first { doomed.id !in it.keys } }
         assertTrue(doomed.id !in household.groupStates.value)
+    }
+
+    // ------------------------------------------------------------- losing one socket
+    //
+    // Guest TV joins Kitchen's group, so Guest TV's player is a member and nothing more: its
+    // socket carries only its own volume. Kitchen's is a coordinator's.
+
+    private fun guestTvJoinsKitchen(): Pair<String, String> = runBlocking {
+        connected()
+        val before = household.state.value
+        val member = before.groups.first { it.name == "Guest TV" }.coordinatorId
+        val coordinator = before.groups.first { it.name == "Kitchen" }.coordinatorId
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        withTimeout(10_000) {
+            household.state.first { s -> s.groups.none { it.coordinatorId == member } }
+        }
+        // The catch-up has finished once the new group is subscribed on Kitchen.
+        val joined = household.state.value.groups.first { it.coordinatorId == coordinator }.id
+        fake.push("groupVolume:1", "groupVolume", VOLUME_42, joined)
+        withTimeout(10_000) { household.groupStates.first { it[joined]?.volume != null } }
+        fake.pushPlayerVolume(member, volume = 9)
+        withTimeout(5_000) { household.playerVolumes.first { it[member]?.volume == 9 } }
+        member to coordinator
+    }
+
+    /**
+     * One speaker in a group losing power must cost that speaker's level and nothing else.
+     * It used to rebuild the household — every room blank, every subscription redone — and
+     * again on every reconnect it then failed.
+     */
+    @Test fun `a member's lost socket leaves the household standing`() = runBlocking<Unit> {
+        val (member, _) = guestTvJoinsKitchen()
+        val groupsBefore = household.groupStates.value.keys
+        assertTrue(fake.isConnected(member))
+
+        fake.dropConnection(member)
+
+        withTimeout(5_000) { household.playerVolumes.first { member !in it } }
+        val disconnected = kotlinx.coroutines.withTimeoutOrNull(3_000) {
+            household.state.first { !it.connected }
+        }
+        assertNull("losing a member's socket must not drop the session", disconnected)
+        assertEquals(groupsBefore, household.groupStates.value.keys)
+
+        // Evicted, not kept: the next command to that speaker opens a fresh socket rather
+        // than failing on the dead one.
+        household.setPlayerVolume(member, 10)
+        assertTrue("no new socket was opened to the member", fake.isConnected(member))
+    }
+
+    /** The other half: a coordinator's socket carries its group's subscriptions, so it rebuilds. */
+    @Test fun `a coordinator's lost socket still rebuilds the session`() = runBlocking<Unit> {
+        val (_, coordinator) = guestTvJoinsKitchen()
+        fake.clearHistory()
+
+        fake.dropConnection(coordinator)
+
+        withTimeout(15_000) { household.state.first { !it.connected } }
+        withTimeout(15_000) { household.state.first { it.connected } }
+        fake.awaitCommand(timeoutMillis = 5_000) {
+            it.get("command")?.asString == "subscribe" && it.get("namespace")?.asString == "playback:1"
+        }
+    }
+
+    /**
+     * A socket being opened to a speaker that is slow to answer must not hold up a command to
+     * one that is already open. The pool's lock used to be held across the handshake.
+     */
+    @Test fun `a slow handshake to one speaker does not block another`() = runBlocking<Unit> {
+        val (member, coordinator) = guestTvJoinsKitchen()
+        fake.dropConnection(member)
+        withTimeout(5_000) { household.playerVolumes.first { member !in it } }
+        fake.stallHandshakesTo(member, 4_000)
+
+        val stalled = launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { household.setPlayerVolume(member, 10) } }
+        // Long enough for the stalled open to be under way, well short of its stall.
+        delay(300)
+        val joined = household.state.value.groups.first { it.coordinatorId == coordinator }.id
+        val started = System.nanoTime()
+        withTimeout(2_000) { household.play(joined) }
+        val tookMillis = (System.nanoTime() - started) / 1_000_000
+        assertTrue("play waited ${tookMillis}ms behind another speaker's handshake", tookMillis < 1_500)
+        stalled.cancel()
     }
 
     /** The whole point of the seed store: a warm start skips discovery. */

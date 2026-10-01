@@ -121,6 +121,13 @@ class FakePlayer(
     @Volatile var lastUpgrade: RecordedRequest? = null
         private set
 
+    /**
+     * Every open connection, by the hostname the client asked for. One server answers for every
+     * player in the topology, so the `Host` of the upgrade is the only thing that says which
+     * player a connection is to — and so which one [dropConnection] can end on its own.
+     */
+    private val sockets = java.util.concurrent.ConcurrentHashMap<String, WebSocket>()
+    /** The most recently opened, which is what a bare [dropConnection] has always ended. */
     @Volatile private var socket: WebSocket? = null
     @Volatile private var groups: JsonObject = reachableTopology()
 
@@ -136,7 +143,11 @@ class FakePlayer(
                     return MockResponse().setResponseCode(400)
                 }
                 lastUpgrade = request
-                return upgrade()
+                val host = request.headers["Host"].orEmpty().substringBefore(':').lowercase()
+                // MockWebServer serves each connection on its own thread, so this delays only
+                // the handshake to this one player.
+                stalledHandshakes[host]?.let { Thread.sleep(it) }
+                return upgrade(host)
             }
         }
         server.start(InetAddress.getByName("127.0.0.1"), 0)
@@ -147,7 +158,8 @@ class FakePlayer(
      * still open, which would otherwise be reported against every test in the class.
      */
     fun shutdown() {
-        runCatching { socket?.close(1000, null) }
+        sockets.values.forEach { runCatching { it.close(1000, null) } }
+        sockets.clear()
         socket = null
         runCatching { server.shutdown() }
     }
@@ -163,9 +175,34 @@ class FakePlayer(
      * untested here.
      */
     fun dropConnection() {
-        socket?.close(1000, "player going away")
+        val ws = socket ?: return
+        ws.close(1000, "player going away")
+        sockets.values.remove(ws)
         socket = null
     }
+
+    /**
+     * End one player's connection and leave the rest, as when one speaker in a group loses
+     * power. Throws if the client never opened one to that player, so a test cannot pass by
+     * dropping nothing.
+     */
+    fun dropConnection(playerId: String) {
+        val name = PlayerNames.localHostname(playerId)!!.lowercase()
+        val ws = sockets.remove(name) ?: error("no connection open to $playerId")
+        ws.close(1000, "player going away")
+        if (socket === ws) socket = null
+    }
+
+    private val stalledHandshakes = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Make every future handshake to [playerId] take [millis], as an unreachable speaker's does. */
+    fun stallHandshakesTo(playerId: String, millis: Long) {
+        stalledHandshakes[PlayerNames.localHostname(playerId)!!.lowercase()] = millis
+    }
+
+    /** Whether the client holds a connection to [playerId] right now. */
+    fun isConnected(playerId: String): Boolean =
+        sockets.containsKey(PlayerNames.localHostname(playerId)!!.lowercase())
 
     /** Serve and announce a topology, the way a real regrouping arrives. */
     fun pushTopology(topology: JsonObject) {
@@ -206,7 +243,10 @@ class FakePlayer(
             groupId?.let { addProperty("groupId", it) }
             playerId?.let { addProperty("playerId", it) }
         }
-        val ws = socket ?: error("nothing connected to the fake player")
+        // Any live connection will do: the household routes events by their header, not by
+        // which socket carried them. The fake's own player is preferred, as the seed.
+        val ws = sockets[hostname.lowercase()] ?: socket ?: sockets.values.firstOrNull()
+            ?: error("nothing connected to the fake player")
         ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
     }
 
@@ -247,9 +287,19 @@ class FakePlayer(
     private val heldCommand = java.util.concurrent.atomic.AtomicReference<String?>(null)
     private val releaseLatch = java.util.concurrent.atomic.AtomicReference(CountDownLatch(0))
 
-    private fun upgrade() = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+    private fun upgrade(host: String) = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            sockets[host] = webSocket
             socket = webSocket
+        }
+
+        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+            sockets.remove(host, webSocket)
+            webSocket.close(1000, null)
+        }
+
+        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+            sockets.remove(host, webSocket)
         }
 
         override fun onMessage(webSocket: WebSocket, text: String) {
