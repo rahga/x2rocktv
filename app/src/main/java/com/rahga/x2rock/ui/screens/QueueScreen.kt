@@ -86,6 +86,7 @@ fun QueueScreen(
                     is QueueViewModel.UiState.Success -> QueueList(
                         entries = s.entries,
                         currentTrackName = s.currentTrackName,
+                        inUse = s.inUse,
                         onBack = onBack,
                         onPlayItem = viewModel::playItem,
                         onRemoveItem = viewModel::removeItem
@@ -115,6 +116,7 @@ fun QueueScreen(
 private fun QueueList(
     entries: List<QueueEntry>,
     currentTrackName: String?,
+    inUse: Boolean,
     onBack: () -> Unit,
     onPlayItem: (Int) -> Unit,
     onRemoveItem: (Int) -> Unit
@@ -150,6 +152,13 @@ private fun QueueList(
                 Text(
                     text = if (entries.isEmpty()) "Queue is empty" else "Queue (${entries.size})",
                     style = MaterialTheme.typography.displaySmall
+                )
+            }
+            if (!inUse && entries.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "The room is playing something else. Choose a track to go back to the queue.",
+                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
             Spacer(Modifier.height(24.dp))

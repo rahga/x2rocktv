@@ -1,5 +1,6 @@
 package com.rahga.x2rock.lan
 
+import com.rahga.x2rock.model.PlaybackStates
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CoroutineScope
@@ -287,6 +288,38 @@ class LiveHouseholdTest {
             assertEquals(target, observed[group.id]!!.volume!!.volume)
         } finally {
             runCatching { household.setGroupVolume(group.id, before) }
+        }
+    }
+
+    /**
+     * Only with `-Dx2rock.live.room=<room>`, and the room's source is put back afterwards —
+     * the URI and its metadata from `GetMediaInfo`, then play if it was playing.
+     *
+     * The case this exists for is a room on a station with tracks queued behind it, where a
+     * bare `Seek` answers 701. On a room already playing its queue it checks the other path,
+     * which must not re-set the source. Skipped on an empty queue: nothing here may assume
+     * one is populated.
+     */
+    @Test fun `a queue track plays whatever the room was playing`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        assumeTrue("$mutableRoom has nothing queued", household.queue(group.id).items.isNotEmpty())
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
+        val before = household.mediaInfo(group.id)
+        val wasPlaying = household.groupState(group.id).playbackState == PlaybackStates.PLAYING
+        try {
+            household.skipToQueueItem(group.id, 1)
+            assertTrue("the queue is not the source after playing from it", household.playingFromQueue(group.id))
+            withTimeout(15_000) {
+                household.groupStates.first { it[group.id]?.playbackState == PlaybackStates.PLAYING }
+            }
+        } finally {
+            runCatching {
+                household.restoreSource(group.id, before)
+                if (wasPlaying) household.play(group.id) else household.pause(group.id)
+            }
         }
     }
 
