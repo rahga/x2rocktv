@@ -204,6 +204,21 @@ class FakePlayer(
     fun isConnected(playerId: String): Boolean =
         sockets.containsKey(PlayerNames.localHostname(playerId)!!.lowercase())
 
+    /**
+     * Serve a topology from `getGroups` without announcing it — what a client that missed the
+     * event would find if it asked.
+     */
+    fun serveTopology(topology: JsonObject) {
+        groups = topology
+    }
+
+    private val refused = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Refuse every [command] from now on, the way a real player says no: `globalError`. */
+    fun refuse(command: String) {
+        refused += command
+    }
+
     /** Serve and announce a topology, the way a real regrouping arrives. */
     fun pushTopology(topology: JsonObject) {
         groups = topology
@@ -330,6 +345,13 @@ class FakePlayer(
         // answer rides in the header rather than the body.
         if (namespace == null) {
             respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
+            return
+        }
+        if (command != null && command in refused) {
+            respond(
+                webSocket, cmdId, namespace, "globalError", success = false,
+                body = JsonObject().apply { addProperty("errorCode", "ERROR_COMMAND_FAILED") },
+            )
             return
         }
         if (namespace == "groups:1" && command == "getGroups") {
