@@ -66,6 +66,8 @@ class HomeViewModel @Inject constructor(
         /** Track art, falling back to the container's: radio has a station logo, not a cover. */
         val artUrl: String? = null,
         val onTvInput: Boolean = false,
+        /** The group's volume is muted. A state, so the room list shows it as one. */
+        val muted: Boolean = false,
         /** e.g. "Dolby Digital Surround 5.1"; empty unless on a TV input with a signal. */
         val inputFormat: String = "",
         /** Whether this room has an HDMI input at all, from any of its speakers. */
@@ -108,6 +110,7 @@ class HomeViewModel @Inject constructor(
                             track = pushed?.track,
                             artUrl = pushed?.track?.imageUrl ?: pushed?.container?.imageUrl,
                             onTvInput = pushed?.onTvInput == true,
+                            muted = pushed?.volume?.muted == true,
                             inputFormat = pushed?.inputFormat.orEmpty(),
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,
@@ -153,6 +156,11 @@ class HomeViewModel @Inject constructor(
         combine(household.playerVolumes, _pendingPlayerVolumes) { pushed, pending ->
             pushed.mapValues { it.value.volume } + pending
         }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
+    /** Speakers whose own volume is muted, for the room panel's member rows. */
+    val mutedPlayers: StateFlow<Set<String>> = household.playerVolumes
+        .map { volumes -> volumes.filterValues { it.muted }.keys }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
     val tvPlayerId: StateFlow<String?> = roomPrefsStore.tvPlayerId

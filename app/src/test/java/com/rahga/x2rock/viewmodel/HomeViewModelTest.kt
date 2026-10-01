@@ -156,6 +156,19 @@ class HomeViewModelTest {
         assertTrue("the host should not be asked to join itself", host.coordinatorId !in added)
     }
 
+    /** Mute reaches the room list and the panel's speaker rows, both pushed. */
+    @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":true,"fixed":false}""", kitchen.id)
+        withTimeout(5_000) {
+            viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.get(kitchen.id)?.muted == true }
+        }
+        fake.push("playerVolume:1", "playerVolume", """{"volume":30,"muted":true,"fixed":false}""",
+            playerId = kitchen.coordinatorId)
+        withTimeout(5_000) { viewModel.mutedPlayers.first { kitchen.coordinatorId in it } }
+    }
+
     /** The panel stays open while grouping, so a failed join has to be said, not swallowed. */
     @Test fun `a refused join says so`() = runBlocking<Unit> {
         val state = connect()

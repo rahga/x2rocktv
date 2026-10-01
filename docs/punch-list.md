@@ -195,7 +195,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   fixed line-out reads "fixed" where its level is and loses its volume controls (x2rock
   `fixedVolume`, `memberFixedVolume`; `settings:1 volumeMode FIXED`). Capture a fixture only if
   a real one exists; otherwise a unit test on a derived `groupVolume` event.
-- [ ] **2.2 Mute, shown.** Group and member mute are commands today, but neither the row nor the
+- [x] **2.2 Mute, shown.** *Done 2026-10-01: a mute glyph on the room-list row; in the room
+  panel a muted row keeps its bar at its level, dimmed, with "muted" by the number; the pane
+  reads "30 (muted)" since 1.9.* Group and member mute are commands today, but neither the row nor the
   panel shows them. Row: a mute glyph in place of the percentage, the bar dimmed at its level.
   Panel: member rows show muted. Mute stays a group-only control outside the speaker rows.
 - [ ] **2.3 Normalize.** In RoomPanel's "Playing together", an action that sets every member to

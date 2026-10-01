@@ -84,6 +84,8 @@ fun RoomPanel(
     /** This group's speakers, id to name, coordinator first. */
     playerNames: List<Pair<String, String>>,
     playerVolumes: Map<String, Int>,
+    /** The speakers whose own volume is muted, for their rows. */
+    mutedPlayers: Set<String> = emptySet(),
     /** Each joinable group's own level, keyed by group id. */
     groupVolumes: Map<String, Int>,
     /** One group holding the whole household, which is what party mode leaves behind. */
@@ -163,6 +165,7 @@ fun RoomPanel(
                 modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
                 name = name,
                 volume = playerVolumes[playerId],
+                muted = playerId in mutedPlayers,
                 // The coordinator *is* the group; removing it would dissolve the group
                 // rather than free the room, so it has nothing to leave.
                 action = if (coordinator) null else "leave",
@@ -183,6 +186,7 @@ fun RoomPanel(
                         ?: (other.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
                     // A row here stands for a whole group, so its level is the group's.
                     volume = groupVolumes[other.id],
+                    muted = rooms[other.id]?.muted == true,
                     action = "join",
                     onActivate = { onJoin(other) },
                     onAdjust = { delta -> onAdjustGroupVolume(other.id, delta) },
@@ -257,6 +261,8 @@ private fun RoomRow(
     onActivate: () -> Unit,
     onAdjust: (Int) -> Unit,
     subtitle: String? = null,
+    /** Kept at its level and dimmed, the way the desktop widget draws a muted room. */
+    muted: Boolean = false,
 ) {
     AppButton(
         onClick = onActivate,
@@ -296,7 +302,7 @@ private fun RoomRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (subtitle == null) VolumeLevel(volume)
+                    if (subtitle == null) VolumeLevel(volume, muted)
                 }
                 if (subtitle != null) {
                     Row(
@@ -310,10 +316,10 @@ private fun RoomRow(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false),
                         )
-                        VolumeLevel(volume)
+                        VolumeLevel(volume, muted)
                     }
                 }
-                VolumeBar(volume)
+                VolumeBar(volume, muted)
             }
             if (action != null) {
                 Spacer(Modifier.width(16.dp))
@@ -325,9 +331,13 @@ private fun RoomRow(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun VolumeLevel(volume: Int?) {
+private fun VolumeLevel(volume: Int?, muted: Boolean = false) {
     Text(
-        text = volume?.toString() ?: "—",
+        text = when {
+            volume == null -> "—"
+            muted -> "$volume muted"
+            else -> volume.toString()
+        },
         style = MaterialTheme.typography.bodySmall,
     )
 }
@@ -341,8 +351,9 @@ private fun VolumeLevel(volume: Int?) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun VolumeBar(volume: Int?) {
-    val ink = LocalContentColor.current
+private fun VolumeBar(volume: Int?, muted: Boolean = false) {
+    // Muted keeps the level and dims it: the speaker remembers where it was, and so does this.
+    val ink = LocalContentColor.current.let { if (muted) it.copy(alpha = it.alpha * 0.4f) else it }
     Box(
         modifier = Modifier
             .fillMaxWidth()
