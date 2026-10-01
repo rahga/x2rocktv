@@ -68,11 +68,26 @@ class PlayerAddressBook : Dns {
  */
 object LanHttp {
 
-    /** Matches the Rust daemon's keepalive: ping every 30s, treat 90s of silence as dead. */
-    val PING_INTERVAL: Long = 30
-    val SILENCE_LIMIT_MILLIS: Long = 90_000
+    /**
+     * Matches the Rust daemon's keepalive interval, and is also the dead-socket detector.
+     *
+     * x2rock pings every 30s and treats 90s of total silence as a dead socket, with a timer of
+     * its own for the second half. Here OkHttp does both: when the next ping is due and the
+     * last one's pong has not come back, it fails the socket ("sent ping but didn't receive
+     * pong within…", OkHttp 4.12 `RealWebSocket.writePingFrame`). A peer gone silent is
+     * declared dead within two intervals, 60s — stricter than x2rock's 90 — and `onFailure`
+     * carries it to the household as a loss. Players answer pings: the 122s idle run in
+     * `docs/lan-transport.md` would otherwise have failed at 60. So there is no silence
+     * timer to write. `SonosSocketTest` holds a connection open while passing nothing, and
+     * fails if this stops being true.
+     */
+    const val PING_INTERVAL: Long = 30
 
-    fun client(addressBook: PlayerAddressBook): OkHttpClient {
+    fun client(
+        addressBook: PlayerAddressBook,
+        /** Overridden only by tests, which cannot wait two real intervals for a failure. */
+        pingIntervalSeconds: Long = PING_INTERVAL,
+    ): OkHttpClient {
         val trust = leafOnlyTrustManager()
         val ssl = SSLContext.getInstance("TLS").apply {
             init(null, arrayOf(trust), SecureRandom())
@@ -81,7 +96,7 @@ object LanHttp {
             .sslSocketFactory(ssl.socketFactory, trust)
             // No .hostnameVerifier(): see the note above.
             .dns(addressBook)
-            .pingInterval(PING_INTERVAL, TimeUnit.SECONDS)
+            .pingInterval(pingIntervalSeconds, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS)   // a subscription is meant to sit idle
             .build()
