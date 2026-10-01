@@ -1,0 +1,79 @@
+{
+  "_objectType": "zoneDefinitionsChange",
+  "zones": [
+    {
+      "_objectType": "zoneDefinition",
+      "members": [
+        {
+          "_objectType": "zoneMember",
+          "channelMap": [
+            "LF",
+            "LF"
+          ],
+          "id": "RINCON_AA00BBCCDDEE01400",
+          "settings": {
+            "_objectType": "zoneMemberSettings",
+            "gainTrimDB": 0.0
+          }
+        },
+        {
+          "_objectType": "zoneMember",
+          "channelMap": [
+            "RF",
+            "RF"
+          ],
+          "id": "RINCON_AA15BBCCDDEE01400",
+          "settings": {
+            "_objectType": "zoneMemberSettings",
+            "gainTrimDB": 0.0
+          }
+        }
+      ],
+      "name": "Dining Room",
+      "primaryId": "RINCON_AA00BBCCDDEE01400",
+      "zoneId": "00000000-0000-4000-8000-000000000003"
+    },
+    {
+      "_objectType": "zoneDefinition",
+      "members": [
+        {
+          "_objectType": "zoneMember",
+          "channelMap": [
+            "LF",
+            "RF"
+          ],
+          "id": "RINCON_AA07BBCCDDEE01400",
+          "settings": {
+            "_objectType": "zoneMemberSettings",
+            "gainTrimDB": 0.0
+          }
+        },
+        {
+          "_objectType": "zoneMember",
+          "channelMap": [
+            "LR"
+          ],
+          "id": "RINCON_AA10BBCCDDEE01400",
+          "settings": {
+            "_objectType": "zoneMemberSettings",
+            "gainTrimDB": 0.0
+          }
+        },
+        {
+          "_objectType": "zoneMember",
+          "channelMap": [
+            "RR"
+          ],
+          "id": "RINCON_AA11BBCCDDEE01400",
+          "settings": {
+            "_objectType": "zoneMemberSettings",
+            "gainTrimDB": 0.0
+          }
+        }
+      ],
+      "name": "Bedroom",
+      "primaryId": "RINCON_AA07BBCCDDEE01400",
+      "zoneId": "00000000-0000-4000-8000-000000000001"
+    }
+  ]
+}

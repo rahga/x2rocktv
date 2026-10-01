@@ -1,0 +1,129 @@
+{
+  "_objectType": "activeZonesChange",
+  "zones": [
+    {
+      "_objectType": "activeZone",
+      "members": [
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "LF",
+            "RF"
+          ],
+          "id": "RINCON_AA07BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "LR"
+          ],
+          "id": "RINCON_AA10BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": true
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "RR"
+          ],
+          "id": "RINCON_AA11BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        }
+      ],
+      "name": "Bedroom",
+      "zoneId": "00000000-0000-4000-8000-000000000001"
+    },
+    {
+      "_objectType": "activeZone",
+      "members": [
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "LF",
+            "RF"
+          ],
+          "id": "RINCON_AA03BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "SW"
+          ],
+          "id": "RINCON_AA12BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "LR"
+          ],
+          "id": "RINCON_AA13BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "RR"
+          ],
+          "id": "RINCON_AA14BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        }
+      ],
+      "name": "Living Room",
+      "zoneId": "00000000-0000-4000-8000-000000000002"
+    },
+    {
+      "_objectType": "activeZone",
+      "members": [
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "LF",
+            "LF"
+          ],
+          "id": "RINCON_AA00BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        },
+        {
+          "_objectType": "activeZoneMember",
+          "channelMap": [
+            "RF",
+            "RF"
+          ],
+          "id": "RINCON_AA15BBCCDDEE01400",
+          "state": {
+            "_objectType": "zoneMemberState",
+            "disconnected": false
+          }
+        }
+      ],
+      "name": "Dining Room",
+      "zoneId": "00000000-0000-4000-8000-000000000003"
+    }
+  ]
+}
