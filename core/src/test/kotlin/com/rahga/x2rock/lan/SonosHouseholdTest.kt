@@ -311,6 +311,27 @@ class SonosHouseholdTest {
         }
     }
 
+    /**
+     * Something else loaded answers a failure too: on the Shield, a room put back on its own
+     * queue after a dead stream, still idle, went on saying "Couldn't play this". The same
+     * source arriving again must not clear it — the failed stream's own metadata comes first.
+     */
+    @Test fun `a playback error clears when the source changes, not when it repeats`() = runBlocking<Unit> {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        fake.pushFixture("stationMetadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
+        fake.pushFixture("playbackError", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError != null } }
+
+        fake.pushFixture("stationMetadataStatus", groupId)
+        delay(300)
+        assertNotNull("the same source again is not an answer", household.groupState(groupId).lastError)
+
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError == null } }
+    }
+
     @Test fun `a playback event without playModes leaves the play mode alone`() = runBlocking {
         connected()
         val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id

@@ -1286,7 +1286,13 @@ class SonosHousehold(
                 val container = meta.container
                     ?.let { c -> c.copy(imageUrl = reachableArt(c.imageUrl, coordinator)) }
                 update(groupId) {
+                    // Something else loaded answers a failure as surely as playing does: a room
+                    // put back on its own queue after a dead stream, idle, otherwise kept saying
+                    // "Couldn't play this" over a track it could play (seen on the Shield).
+                    val sourceChanged = track?.name != it.track?.name || container?.name != it.container?.name ||
+                        track?.id != it.track?.id
                     it.copy(
+                        lastError = it.lastError.takeUnless { sourceChanged },
                         track = track,
                         container = container,
                         // Blank is absent: a station between titles sends an empty string,
