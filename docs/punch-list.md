@@ -230,7 +230,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   CurrentSleepTimerGeneration` ("no timer" is an empty element at generation 0; `00:00:00` is a
   real "expired, about to stop" state that lingers ~7s). Not pushed: read it when the pane opens
   and after setting, then count down locally. Withdrawn under `upnpOff`.
-- [ ] **3.2 Playlists.** `playlists:1 getPlaylists` / `loadPlaylist`, the same shape as
+- [x] **3.2 Playlists.** *Done 2026-10-01: a Playlists section on the Favorites screen,
+  loaded with `REPLACE`. Shape captured off the office One SL from a playlist saved for the
+  purpose; REPLACE confirmed there (17 tracks before and after, not 34), then the playlist
+  deleted and the room put back.* `playlists:1 getPlaylists` / `loadPlaylist`, the same shape as
   Favorites. Ids are bare (`"0"`), and `action` defaults to APPEND where `loadFavorite` replaces,
   so pass `REPLACE`, or offer append as "add to queue".
 - [ ] **3.3 Recently played.** `history:1 getHistory` (40 items) plus `playback:1 loadContent

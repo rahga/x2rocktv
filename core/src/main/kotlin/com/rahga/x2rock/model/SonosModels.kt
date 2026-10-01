@@ -280,6 +280,18 @@ data class Favorite(
     val description: String? = null,
     val imageUrl: String? = null
 )
+/**
+ * One Sonos playlist: a saved queue, what the Sonos app lists under its own playlists. A
+ * different thing from a favourite, in a different namespace. **The id is bare** (`"6"`),
+ * where UPnP's `SaveQueue` answers `SQ:6`; `loadPlaylist` refuses the prefixed form.
+ */
+data class Playlist(
+    val id: String,
+    val name: String,
+    val trackCount: Int? = null,
+)
+data class PlaylistsResponse(val playlists: List<Playlist> = emptyList())
+
 data class FavoritesResponse(
     val items: List<Favorite> = emptyList(),
     val totalItems: Int = 0

@@ -43,6 +43,8 @@ import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.model.Playlist
+import com.rahga.x2rock.viewmodel.playlistKey
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
@@ -79,10 +81,12 @@ fun FavoritesScreen(
                     }
                     is FavoritesViewModel.UiState.Success -> FavoritesList(
                         items = s.items,
+                        playlists = s.playlists,
                         activeId = s.activeId,
                         loadingId = loadingId,
                         onBack = onBack,
-                        onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
+                        onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) },
+                        onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -108,18 +112,19 @@ fun FavoritesScreen(
 @Composable
 private fun FavoritesList(
     items: List<Favorite>,
+    playlists: List<Playlist>,
     activeId: String?,
     loadingId: String?,
     onBack: () -> Unit,
-    onPlay: (Favorite) -> Unit
+    onPlay: (Favorite) -> Unit,
+    onPlayPlaylist: (Playlist) -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
-    LaunchedEffect(items.isNotEmpty()) {
-        if (items.isNotEmpty()) {
-            firstFocus.requestFocusSafely()
-        }
+    val anything = items.isNotEmpty() || playlists.isNotEmpty()
+    LaunchedEffect(anything) {
+        if (anything) firstFocus.requestFocusSafely()
     }
 
     Column(
@@ -130,16 +135,16 @@ private fun FavoritesList(
         Row(verticalAlignment = Alignment.CenterVertically) {
             AppButton(
                 onClick = onBack,
-                modifier = if (items.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
+                modifier = if (!anything) Modifier.focusRequester(firstFocus) else Modifier
             ) { Text("← Back") }
             Spacer(Modifier.width(24.dp))
             Text(
-                text = if (items.isEmpty()) "No favorites" else "Favorites",
+                text = if (!anything) "No favorites" else "Favorites",
                 style = MaterialTheme.typography.displaySmall
             )
         }
         Spacer(Modifier.height(24.dp))
-        if (items.isEmpty()) return@Column
+        if (!anything) return@Column
 
         LazyColumn(
             state = listState,
@@ -148,12 +153,36 @@ private fun FavoritesList(
         ) {
             itemsIndexed(items) { index, fav ->
                 FavoriteRow(
-                    favorite = fav,
+                    name = fav.name,
+                    description = fav.description,
+                    imageUrl = fav.imageUrl,
                     isActive = activeId == fav.id,
                     isLoading = loadingId == fav.id,
                     onClick = { onPlay(fav) },
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
+            }
+            // The household's saved queues. A separate namespace from favourites, and a
+            // separate list in the Sonos app, so they are a section of their own here.
+            if (playlists.isNotEmpty()) {
+                item {
+                    Text(
+                        "Playlists",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    )
+                }
+                itemsIndexed(playlists) { index, playlist ->
+                    FavoriteRow(
+                        name = playlist.name,
+                        description = playlist.trackCount?.let { if (it == 1) "1 track" else "$it tracks" },
+                        imageUrl = null,
+                        isActive = false,
+                        isLoading = loadingId == playlistKey(playlist.id),
+                        onClick = { onPlayPlaylist(playlist) },
+                        modifier = if (items.isEmpty() && index == 0) Modifier.focusRequester(firstFocus) else Modifier
+                    )
+                }
             }
         }
     }
@@ -162,7 +191,9 @@ private fun FavoritesList(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun FavoriteRow(
-    favorite: Favorite,
+    name: String,
+    description: String?,
+    imageUrl: String?,
     isActive: Boolean,
     isLoading: Boolean,
     onClick: () -> Unit,
@@ -181,7 +212,7 @@ private fun FavoriteRow(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            favorite.imageUrl?.let { url ->
+            imageUrl?.let { url ->
                 AsyncImage(
                     model = url,
                     contentDescription = null,
@@ -194,14 +225,14 @@ private fun FavoriteRow(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = favorite.name,
+                    text = name,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                favorite.description?.let { description ->
+                description?.let { line ->
                     Text(
-                        text = description,
+                        text = line,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

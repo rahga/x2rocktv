@@ -695,6 +695,27 @@ class SonosHouseholdTest {
         assertFalse(household.state.value.upnpOff)
     }
 
+    // ------------------------------------------------------------- playlists
+
+    /** The office One SL's list, one saved queue: the id is bare, and there is a track count. */
+    @Test fun `playlists are listed with their bare ids`() = runBlocking<Unit> {
+        connected()
+        val playlist = household.playlists().playlists.single()
+        assertEquals("6", playlist.id)
+        assertEquals(17, playlist.trackCount)
+    }
+
+    /** Not the default: loadPlaylist appends unless told, so REPLACE must be said. */
+    @Test fun `a playlist replaces the queue and plays`() = runBlocking<Unit> {
+        connected()
+        val group = household.state.value.groups.first().id
+        household.loadPlaylist(group, "6")
+        val body = fake.lastCommandBody("loadPlaylist")!!
+        assertEquals("REPLACE", body.get("action").asString)
+        assertEquals("6", body.get("playlistId").asString)
+        assertTrue(body.get("playOnCompletion").asBoolean)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

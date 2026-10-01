@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.model.Playlist
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +23,12 @@ class FavoritesViewModel @Inject constructor(
 
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val items: List<Favorite>, val activeId: String?) : UiState
+        data class Success(
+            val items: List<Favorite>,
+            val activeId: String?,
+            /** The household's Sonos playlists, listed after the favourites as the Sonos app does. */
+            val playlists: List<Playlist> = emptyList(),
+        ) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -58,6 +64,19 @@ class FavoritesViewModel @Inject constructor(
         }
     }
 
+    /** Play a Sonos playlist in place of the queue, the same way a favourite is played. */
+    fun loadPlaylist(playlistId: String, onDone: () -> Unit) {
+        if (loadingFavoriteId.value != null) return
+        viewModelScope.launch {
+            loadingFavoriteId.value = playlistKey(playlistId)
+            val loaded = runCatching { household.loadPlaylist(groupId, playlistId) }
+            loadingFavoriteId.value = null
+            loaded
+                .onSuccess { onDone() }
+                .onFailure { e -> failureNotice("play that playlist", e)?.let(_notice::post) }
+        }
+    }
+
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading
@@ -66,10 +85,19 @@ class FavoritesViewModel @Inject constructor(
                 // What is playing comes from the subscription, so only the list is fetched.
                 val containerName = household.groupState(groupId).container?.name
                 val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
-                UiState.Success(favs.items, activeId)
+                // Its own read, and allowed to fail on its own: no playlists must not mean no
+                // favourites.
+                val playlists = runCatching { household.playlists().playlists }.getOrDefault(emptyList())
+                UiState.Success(favs.items, activeId, playlists)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }
         }
     }
 }
+
+/**
+ * What [FavoritesViewModel.loadingFavoriteId] holds while a playlist loads. Favourite and
+ * playlist ids are separate number spaces — both can be "6" — so one is marked.
+ */
+fun playlistKey(playlistId: String) = "playlist:$playlistId"
