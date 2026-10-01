@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.media.NowPlayingPublisher
+import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.store.Preferences
@@ -28,7 +29,12 @@ class RecordingChannelSync : ChannelSync {
 /** Records what the system would have been told, and can drive the controls back. */
 class RecordingNowPlaying : NowPlayingPublisher {
     data class Metadata(val title: String?, val artist: String?, val album: String?, val duration: Long)
-    data class State(val playing: Boolean, val idle: Boolean, val positionMillis: Long)
+    data class State(
+        val playing: Boolean,
+        val idle: Boolean,
+        val positionMillis: Long,
+        val actions: PlaybackActions = PlaybackActions(),
+    )
 
     val metadata = mutableListOf<Metadata>()
     val states = mutableListOf<State>()
@@ -41,8 +47,8 @@ class RecordingNowPlaying : NowPlayingPublisher {
     override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long) {
         metadata += Metadata(title, artist, album, durationMillis)
     }
-    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long) {
-        states += State(playing, idle, positionMillis)
+    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long, actions: PlaybackActions) {
+        states += State(playing, idle, positionMillis, actions)
     }
 
     /** Whether a media session is being advertised at all; false on a soundbar's TV input. */

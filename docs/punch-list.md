@@ -142,7 +142,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   bar stays at its level, dimmed. Use `setRelativeVolume` for the buttons (a stateless control,
   per Sonos's rules), keep `setVolume` for the panel's left/right bar. Never answer a volume
   *event* with a volume *command*.
-- [ ] **1.10 The media session advertises what the source forbids.** `NowPlayingPublisher` always
+- [x] **1.10 The media session advertises what the source forbids.** *Done 2026-10-01: the
+  session's actions follow `availablePlaybackActions`, seek also needing a duration, and are
+  re-published when they change. Check at home with `dumpsys media_session` on a station:
+  no SKIP_TO_NEXT or SEEK_TO, and still `volumeType=1`.* `NowPlayingPublisher` always
   advertises skip and seek. Gate the session's actions on `availablePlaybackActions` as the pane
   does, so the launcher card and a voice "next" do not offer a skip to a live station.
 - [ ] **1.11 Network change: arrival, not loss.** `NetworkMonitor` reconnects on both

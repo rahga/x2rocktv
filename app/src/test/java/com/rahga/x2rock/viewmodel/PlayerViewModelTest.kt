@@ -256,6 +256,25 @@ class PlayerViewModelTest {
         assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
     }
 
+    // ---------------------------------------------------------------- media session actions
+
+    /**
+     * A live station refuses skip, previous and seek, and the session must not offer them:
+     * the launcher's media card and a voice "next" act on what it advertises. The captured
+     * radio status is a SomaFM stream with `canSkip`, `canSkipToPrevious` and `canSeek` false.
+     */
+    @Test fun `the media session offers only what the source permits`() = runBlocking<Unit> {
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { it.isRadio || !it.actions.canSkip } }
+        val published = withTimeout(5_000) {
+            while (publisher.states.lastOrNull()?.actions?.canSkip != false) delay(20)
+            publisher.states.last().actions
+        }
+        assertFalse("a station was offered a skip", published.canSkip)
+        assertFalse(published.canSkipToPrevious)
+        assertFalse("a station with no duration was offered a seek", published.canSeek)
+    }
+
     // ---------------------------------------------------------------- failed commands
 
     @Test fun `a refused command says so on the pane`() = runBlocking<Unit> {
