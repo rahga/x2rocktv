@@ -236,7 +236,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   deleted and the room put back.* `playlists:1 getPlaylists` / `loadPlaylist`, the same shape as
   Favorites. Ids are bare (`"0"`), and `action` defaults to APPEND where `loadFavorite` replaces,
   so pass `REPLACE`, or offer append as "add to queue".
-- [ ] **3.3 Recently played.** `history:1 getHistory` (40 items) plus `playback:1 loadContent
+- [x] **3.3 Recently played.** *Done 2026-10-01: a Recently played section on the Favorites
+  screen, replayed by pause, `loadContent`, then play pressed until the room is pushed as
+  playing (12s). History off is said. History captured and a live replay run on the office
+  One SL. Every item is offered — there is no account store here to tell a dead one — and a
+  refusal says why.* `history:1 getHistory` (40 items) plus `playback:1 loadContent
   {id, type}`. `loadContent` loads but does not start and ignores `playOnCompletion` — x2rock
   pauses, loads, then presses play until `PLAYING` (up to 12s); it is replace-only; anonymous
   services answer `ERROR_ACCOUNT_INVALID_ID`; with Personalization off, `getHistory` answers

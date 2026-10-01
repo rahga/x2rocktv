@@ -1,0 +1,196 @@
+{
+  "_objectType": "contentPagedResources",
+  "info": {
+    "_objectType": "contentPageInfo",
+    "count": 8,
+    "offset": 0,
+    "total": 8
+  },
+  "resources": [
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_20",
+        "objectId": "channel:1:3:resume",
+        "serviceId": "308"
+      },
+      "images": [],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiTWVsbG93IE1peCIsImltYWdlVXJsIjoiIiwiZXhwbGljaXQiOmZhbHNlLCJwbGF5YWJsZSI6dHJ1ZX0"
+      },
+      "name": "Mellow Mix",
+      "playable": true,
+      "type": "program"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "objectId": "6",
+        "serviceId": "65435"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "/getaa?s=1&u=x-sonos-http%3asong%253a1541508319.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19"
+        },
+        {
+          "_objectType": "image",
+          "url": "/getaa?s=1&u=x-sonos-http%3asong%253a1541508324.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19"
+        },
+        {
+          "_objectType": "image",
+          "url": "/getaa?s=1&u=x-sonos-http%3asong%253a1541508330.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19"
+        },
+        {
+          "_objectType": "image",
+          "url": "/getaa?s=1&u=x-sonosapi-hls-static%3aALkSOiEcY1e4Tthwv-3YPrP1L-kkK35pOTDGI1wFPk5TMP_R%3fsid%3d284%26flags%3d8%26sn%3d15"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoieDJyb2NrIGNhcHR1cmUiLCJpbWFnZVVybCI6IlwvZ2V0YWE_cz0xJnU9eC1zb25vcy1odHRwJTNhc29uZyUyNTNhMTU0MTUwODMxOS5tcDQlM2ZzaWQlM2QyMDQlMjZmbGFncyUzZDgyMzIlMjZzbiUzZDE5IiwiZXhwbGljaXQiOmZhbHNlLCJwbGF5YWJsZSI6dHJ1ZX0"
+      },
+      "name": "x2rock capture",
+      "playable": true,
+      "type": "playlist"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_20",
+        "objectId": "channel:0:3:resume",
+        "serviceId": "308"
+      },
+      "images": [],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiVGhlIE1haW4gTWl4IiwiaW1hZ2VVcmwiOiIiLCJleHBsaWNpdCI6ZmFsc2UsInBsYXlhYmxlIjp0cnVlfQ"
+      },
+      "name": "The Main Mix",
+      "playable": true,
+      "type": "program"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_20",
+        "objectId": "channel:5:4:resume",
+        "serviceId": "308"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://img.radioparadise.com/channels/0/5/cover_512x512/0.jpg"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiQmV5b25kLi4uIiwiaW1hZ2VVcmwiOiJodHRwczpcL1wvaW1nLnJhZGlvcGFyYWRpc2UuY29tXC9jaGFubmVsc1wvMFwvNVwvY292ZXJfNTEyeDUxMlwvMC5qcGciLCJleHBsaWNpdCI6ZmFsc2UsInBsYXlhYmxlIjp0cnVlfQ"
+      },
+      "name": "Beyond...",
+      "playable": true,
+      "type": "program"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_20",
+        "objectId": "channel:0:4:resume",
+        "serviceId": "308"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://img.radioparadise.com/channels/0/0/cover_512x512/0.jpg"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiVGhlIE1haW4gTWl4IiwiaW1hZ2VVcmwiOiJodHRwczpcL1wvaW1nLnJhZGlvcGFyYWRpc2UuY29tXC9jaGFubmVsc1wvMFwvMFwvY292ZXJfNTEyeDUxMlwvMC5qcGciLCJleHBsaWNpdCI6ZmFsc2UsInBsYXlhYmxlIjp0cnVlfQ"
+      },
+      "name": "The Main Mix",
+      "playable": true,
+      "type": "program"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_19",
+        "objectId": "album:1541508318",
+        "serviceId": "204"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://is5-ssl.mzstatic.com/image/thumb/Music124/v4/7f/cc/15/7fcc1558-3992-d3bf-da00-9ba11fe8b143/690193000323.jpg/400x400bb.jpeg"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiUGFpbnQgYnkgTnVtYmVyIiwiaW1hZ2VVcmwiOiJodHRwczpcL1wvaXM1LXNzbC5tenN0YXRpYy5jb21cL2ltYWdlXC90aHVtYlwvTXVzaWMxMjRcL3Y0XC83ZlwvY2NcLzE1XC83ZmNjMTU1OC0zOTkyLWQzYmYtZGEwMC05YmExMWZlOGIxNDNcLzY5MDE5MzAwMDMyMy5qcGdcLzQwMHg0MDBiYi5qcGVnIiwiZXhwbGljaXQiOmZhbHNlLCJwbGF5YWJsZSI6dHJ1ZX0"
+      },
+      "name": "Paint by Number",
+      "playable": true,
+      "type": "album"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_13",
+        "objectId": "CHANNEL_STATION:76<>Happy Radio<>{\"mood\"**[\"Happy\"]}<>hindi,tamil,telugu",
+        "serviceId": "164"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://static.saavncdn.com/_i/sonos/icons/StartRadio.jpg"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiSGFwcHkgUmFkaW8iLCJpbWFnZVVybCI6Imh0dHBzOlwvXC9zdGF0aWMuc2Fhdm5jZG4uY29tXC9faVwvc29ub3NcL2ljb25zXC9TdGFydFJhZGlvLmpwZyIsImV4cGxpY2l0IjpmYWxzZSwicGxheWFibGUiOnRydWV9"
+      },
+      "name": "Happy Radio",
+      "playable": true,
+      "type": "program"
+    },
+    {
+      "_objectType": "contentResource",
+      "explicit": false,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_13",
+        "objectId": "ALBUM:79488223",
+        "serviceId": "164"
+      },
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://c.saavncdn.com/919/Irumudi-Telugu-2026-20260821191100-150x150.jpg"
+        }
+      ],
+      "metadata": {
+        "_objectType": "contentMetadataBlob",
+        "metadataBlob": "eyJuYW1lIjoiSXJ1bXVkaSIsImltYWdlVXJsIjoiaHR0cHM6XC9cL2Muc2Fhdm5jZG4uY29tXC85MTlcL0lydW11ZGktVGVsdWd1LTIwMjYtMjAyNjA4MjExOTExMDAtMTUweDE1MC5qcGciLCJleHBsaWNpdCI6ZmFsc2UsInBsYXlhYmxlIjp0cnVlfQ"
+      },
+      "name": "Irumudi",
+      "playable": true,
+      "type": "album"
+    }
+  ]
+}

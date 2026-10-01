@@ -292,6 +292,23 @@ data class Playlist(
 )
 data class PlaylistsResponse(val playlists: List<Playlist> = emptyList())
 
+/**
+ * One thing the household played lately — the Sonos app's "Recently played". An album, a
+ * playlist, a station or a radio program; rarely a track. Named by the triple
+ * `playback:1 loadContent` takes back, so it can be played again knowing nothing of its
+ * service. It can name something gone: a playlist since deleted, or an account no longer held.
+ */
+data class HistoryItem(
+    val name: String,
+    /** `album`, `playlist`, `stream`, `program`, `container`, `track`. */
+    val type: String,
+    val id: MusicObjectId,
+    val images: List<SonosImage> = emptyList(),
+    /** The player's own word on whether this can be played again; every captured item said yes. */
+    val playable: Boolean = true,
+)
+data class HistoryResponse(val resources: List<HistoryItem> = emptyList())
+
 data class FavoritesResponse(
     val items: List<Favorite> = emptyList(),
     val totalItems: Int = 0

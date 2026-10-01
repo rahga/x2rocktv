@@ -15,6 +15,8 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.PlaybackError
 import com.rahga.x2rock.model.PlayerSettings
 import com.rahga.x2rock.model.PlaylistsResponse
+import com.rahga.x2rock.model.HistoryItem
+import com.rahga.x2rock.model.HistoryResponse
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.isPlaying
@@ -633,6 +635,71 @@ class SonosHousehold(
                 addProperty("action", "REPLACE")
             },
         )
+    }
+
+    /**
+     * What the household played lately, newest first, with any player-relative art made
+     * reachable. Household-scoped. With the Sonos app's Personalization off it answers
+     * `ERROR_DISALLOWED_BY_POLICY` ("History is disabled"), and nothing is recorded back.
+     */
+    suspend fun history(): List<HistoryItem> {
+        val household = _state.value.householdId ?: error("not connected")
+        val socket = sockets.values.firstOrNull() ?: error("not connected")
+        val body = socket.command(Frames.onHousehold("history:1", "getHistory", household))
+        // Its art is served by a player, by path; any coordinator will answer for it.
+        val anyCoordinator = _state.value.groups.firstOrNull()?.coordinatorId
+        return (gson.fromJson(body, HistoryResponse::class.java) ?: HistoryResponse()).resources.map { item ->
+            item.copy(images = item.images.map { it.copy(url = reachableArt(it.url, anyCoordinator)) })
+        }
+    }
+
+    /**
+     * Play [item] in [groupId] again, in place of what it is playing.
+     *
+     * `playback:1 loadContent` **loads and does not start**: `playOnCompletion` is accepted
+     * and ignored, and a `play` sent at once is refused with `ERROR_PLAYBACK_NO_CONTENT`
+     * while the load is under way, or accepted mid-load and comes to nothing (x2rock,
+     * verified 2026-09-26). So, as x2rock does: pause first, so that *playing* can only mean
+     * the new content; load; then press play until the room is pushed as playing. The
+     * pushed state is the answer — only the press repeats, and only until it lands.
+     *
+     * Fails as the player does, with its words: an anonymous service's item answers
+     * `ERROR_ACCOUNT_INVALID_ID`, and so does a deleted playlist. Or, after
+     * [LOAD_SETTLE_MILLIS], that it loaded and did not start.
+     */
+    suspend fun replay(groupId: String, item: HistoryItem) {
+        runCatching { pause(groupId) }
+        // Wait out the pause, or a room that was playing still reads as playing below.
+        withTimeoutOrNull(2_000) {
+            _groupStates.first { it[groupId]?.playbackState != PlaybackStates.PLAYING }
+        }
+        coordinator(groupId).command(
+            Frames.onGroup("playback:1", "loadContent", groupId),
+            JsonObject().apply {
+                add("id", JsonObject().apply {
+                    addProperty("_objectType", "universalMusicObjectId")
+                    item.id.serviceId?.let { addProperty("serviceId", it) }
+                    item.id.accountId?.let { addProperty("accountId", it) }
+                    addProperty("objectId", item.id.objectId)
+                })
+                addProperty("type", item.type)
+            },
+        )
+        val started = withTimeoutOrNull(minOf(settleMillis, LOAD_SETTLE_MILLIS)) {
+            while (true) {
+                try {
+                    play(groupId)
+                } catch (e: SonosCommandException) {
+                    if (!e.detail.startsWith("ERROR_PLAYBACK_NO_CONTENT")) throw e
+                }
+                val playing = withTimeoutOrNull(1_000) {
+                    _groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
+                }
+                if (playing != null) break
+            }
+            true
+        }
+        if (started == null) throw IOException("${item.name} loaded but did not start playing")
     }
 
     suspend fun favorites(): FavoritesResponse {
@@ -1290,6 +1357,9 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/** How long a loaded item is pressed to play before it is called a failure. x2rock's figure. */
+internal const val LOAD_SETTLE_MILLIS = 12_000L
 
 /** What a household with Authentication on is told, in place of the bare refusal. */
 const val AUTHENTICATION_REQUIRED =

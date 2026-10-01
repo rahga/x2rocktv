@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
+import com.rahga.x2rock.model.HistoryItem
+import com.rahga.x2rock.lan.SonosCommandException
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +30,10 @@ class FavoritesViewModel @Inject constructor(
             val activeId: String?,
             /** The household's Sonos playlists, listed after the favourites as the Sonos app does. */
             val playlists: List<Playlist> = emptyList(),
+            /** What the household played lately, newest first. */
+            val recent: List<HistoryItem> = emptyList(),
+            /** Why there is no recently played list, when the household said: history is off. */
+            val recentNote: String? = null,
         ) : UiState
         data class Error(val message: String) : UiState
     }
@@ -77,6 +83,19 @@ class FavoritesViewModel @Inject constructor(
         }
     }
 
+    /** Play something from recently played again. See `SonosHousehold.replay`. */
+    fun replay(item: HistoryItem, onDone: () -> Unit) {
+        if (loadingFavoriteId.value != null) return
+        viewModelScope.launch {
+            loadingFavoriteId.value = recentKey(item)
+            val played = runCatching { household.replay(groupId, item) }
+            loadingFavoriteId.value = null
+            played
+                .onSuccess { onDone() }
+                .onFailure { e -> failureNotice("play ${item.name}", e)?.let(_notice::post) }
+        }
+    }
+
     private fun load() {
         viewModelScope.launch {
             _uiState.value = UiState.Loading
@@ -88,7 +107,16 @@ class FavoritesViewModel @Inject constructor(
                 // Its own read, and allowed to fail on its own: no playlists must not mean no
                 // favourites.
                 val playlists = runCatching { household.playlists().playlists }.getOrDefault(emptyList())
-                UiState.Success(favs.items, activeId, playlists)
+                // Also its own read. With the Sonos app's Personalization off, the household
+                // refuses it with ERROR_DISALLOWED_BY_POLICY — said, rather than an empty list.
+                val history = runCatching { household.history() }
+                // Not de-duplicated by name: two "The Main Mix" in the office history are two
+                // different Radio Paradise streams, with different ids.
+                val recent = history.getOrDefault(emptyList()).filter { it.playable }
+                val recentNote = (history.exceptionOrNull() as? SonosCommandException)
+                    ?.takeIf { it.detail.startsWith("ERROR_DISALLOWED_BY_POLICY") }
+                    ?.let { HISTORY_OFF }
+                UiState.Success(favs.items, activeId, playlists, recent, recentNote)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }
@@ -101,3 +129,9 @@ class FavoritesViewModel @Inject constructor(
  * playlist ids are separate number spaces — both can be "6" — so one is marked.
  */
 fun playlistKey(playlistId: String) = "playlist:$playlistId"
+
+/** [FavoritesViewModel.loadingFavoriteId] while a recently played item loads. */
+fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.objectId}"
+
+internal const val HISTORY_OFF =
+    "Recently played is off: Personalization is turned off for this system in the Sonos app."

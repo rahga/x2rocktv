@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -359,7 +360,7 @@ class LiveHouseholdTest {
         } finally {
             runCatching {
                 household.restoreSource(group.id, before)
-                if (wasPlaying) household.play(group.id) else household.pause(group.id)
+                if (wasPlaying) resume(group.id) else household.pause(group.id)
             }
         }
     }
@@ -384,6 +385,26 @@ class LiveHouseholdTest {
         } finally {
             restoreVolume(group.id, before.volume)
             if (before.muted) runCatching { household.setGroupMute(group.id, true) }
+        }
+    }
+
+    /**
+     * Press play until the room is playing again. Once is not enough straight after a source
+     * is set: on the office One SL a play sent at once was lost and the room sat IDLE.
+     */
+    private suspend fun resume(groupId: String) {
+        // The source change shows as a stop first; until it does, "playing" is the item just
+        // replaced, and the loop below would see it and press nothing.
+        withTimeoutOrNull(3_000) {
+            household.groupStates.first { it[groupId]?.playbackState != PlaybackStates.PLAYING }
+        }
+        withTimeoutOrNull(15_000) {
+            while (household.groupState(groupId).playbackState != PlaybackStates.PLAYING) {
+                runCatching { household.play(groupId) }
+                withTimeoutOrNull(1_500) {
+                    household.groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
+                }
+            }
         }
     }
 
@@ -420,6 +441,32 @@ class LiveHouseholdTest {
             runCatching {
                 if (before != null) household.setSleepTimer(group.id, (before / 60_000L).toInt().coerceAtLeast(1))
                 else household.setSleepTimer(group.id, null)
+            }
+        }
+    }
+
+    /**
+     * Only with `-Dx2rock.live.room=<room>`, and the source put back afterwards. Plays the
+     * household's most recent playable item again, through the load-then-press-play that
+     * `loadContent` needs. Skipped with history empty or switched off.
+     */
+    @Test fun `the most recent item replays and plays`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val item = runCatching { household.history() }.getOrDefault(emptyList()).firstOrNull { it.playable }
+        assumeTrue("this household has no recently played item", item != null)
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
+        val before = household.mediaInfo(group.id)
+        val wasPlaying = household.groupState(group.id).playbackState == PlaybackStates.PLAYING
+        try {
+            household.replay(group.id, item!!)
+            assertEquals(PlaybackStates.PLAYING, household.groupState(group.id).playbackState)
+        } finally {
+            runCatching {
+                household.restoreSource(group.id, before)
+                if (wasPlaying) resume(group.id) else household.pause(group.id)
             }
         }
     }

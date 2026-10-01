@@ -45,6 +45,8 @@ import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
 import com.rahga.x2rock.viewmodel.playlistKey
+import com.rahga.x2rock.viewmodel.recentKey
+import com.rahga.x2rock.model.HistoryItem
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
@@ -82,11 +84,14 @@ fun FavoritesScreen(
                     is FavoritesViewModel.UiState.Success -> FavoritesList(
                         items = s.items,
                         playlists = s.playlists,
+                        recent = s.recent,
+                        recentNote = s.recentNote,
                         activeId = s.activeId,
                         loadingId = loadingId,
                         onBack = onBack,
                         onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) },
                         onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
+                        onReplay = { item -> viewModel.replay(item, onDone = onBack) },
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -113,16 +118,19 @@ fun FavoritesScreen(
 private fun FavoritesList(
     items: List<Favorite>,
     playlists: List<Playlist>,
+    recent: List<HistoryItem>,
+    recentNote: String?,
     activeId: String?,
     loadingId: String?,
     onBack: () -> Unit,
     onPlay: (Favorite) -> Unit,
     onPlayPlaylist: (Playlist) -> Unit,
+    onReplay: (HistoryItem) -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
 
-    val anything = items.isNotEmpty() || playlists.isNotEmpty()
+    val anything = items.isNotEmpty() || playlists.isNotEmpty() || recent.isNotEmpty()
     LaunchedEffect(anything) {
         if (anything) firstFocus.requestFocusSafely()
     }
@@ -183,6 +191,31 @@ private fun FavoritesList(
                         modifier = if (items.isEmpty() && index == 0) Modifier.focusRequester(firstFocus) else Modifier
                     )
                 }
+            }
+            // The Sonos app's "Recently played": named by service ids rather than favourites,
+            // so it can name something gone; a refusal says so when pressed.
+            if (recent.isNotEmpty() || recentNote != null) {
+                item {
+                    Text(
+                        "Recently played",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+                    )
+                }
+            }
+            recentNote?.let { note ->
+                item { Text(note, style = MaterialTheme.typography.bodySmall) }
+            }
+            itemsIndexed(recent) { index, entry ->
+                FavoriteRow(
+                    name = entry.name,
+                    description = kindLabel(entry.type),
+                    imageUrl = entry.images.firstOrNull()?.url,
+                    isActive = false,
+                    isLoading = loadingId == recentKey(entry),
+                    onClick = { onReplay(entry) },
+                    modifier = if (items.isEmpty() && playlists.isEmpty() && index == 0) Modifier.focusRequester(firstFocus) else Modifier
+                )
             }
         }
     }
@@ -249,4 +282,14 @@ private fun FavoriteRow(
             }
         }
     }
+}
+
+/** What a recently played item is, in the Sonos app's words. A program is a radio show. */
+private fun kindLabel(type: String): String? = when (type) {
+    "album" -> "Album"
+    "playlist" -> "Playlist"
+    "program", "stream" -> "Radio"
+    "track" -> "Track"
+    "container" -> null
+    else -> null
 }
