@@ -43,6 +43,9 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class UpnpRefusedException(message: String) : IOException(message)
 
+/** Where `ReorderTracksInQueue` inserts, to move [from] to [to]: x2rock's rule. */
+internal fun insertBefore(from: Int, to: Int): Int = if (to > from) to + 1 else to
+
 /** `HH:MM:SS` to milliseconds. */
 internal fun parseClock(clock: String): Long? {
     val parts = clock.split(':').map { it.toLongOrNull() ?: return null }
@@ -112,6 +115,42 @@ class Upnp(
             hostname, Service.AV_TRANSPORT, "RemoveTrackFromQueue",
             listOf("InstanceID" to "0", "ObjectID" to "Q:0/$trackNumber", "UpdateID" to updateId),
         )
+    }
+
+    /**
+     * Move track [from] to position [to], both 1-based. `ReorderTracksInQueue` names where to
+     * insert, which is one past [to] when moving down — the track leaves its old place first.
+     * Quotes a fresh `UpdateID`, as every edit here does, so an edit made against a queue
+     * someone else has since changed is refused (1028) rather than moving the wrong track.
+     */
+    suspend fun moveInQueue(hostname: String, from: Int, to: Int): Unit = withContext(Dispatchers.IO) {
+        val updateId = currentUpdateId(hostname)
+        soap(
+            hostname, Service.AV_TRANSPORT, "ReorderTracksInQueue",
+            listOf(
+                "InstanceID" to "0",
+                "StartingIndex" to from.toString(),
+                "NumberOfTracks" to "1",
+                "InsertBefore" to insertBefore(from, to).toString(),
+                "UpdateID" to updateId,
+            ),
+        )
+    }
+
+    /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */
+    suspend fun clearQueue(hostname: String): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.AV_TRANSPORT, "RemoveAllTracksFromQueue", listOf("InstanceID" to "0"))
+    }
+
+    /**
+     * Save the queue as a new Sonos playlist called [title], answering its UPnP id (`SQ:6`).
+     * An empty `ObjectID` is what makes it new rather than overwriting one.
+     */
+    suspend fun saveQueue(hostname: String, title: String): String = withContext(Dispatchers.IO) {
+        val envelope = parse(
+            soap(hostname, Service.AV_TRANSPORT, "SaveQueue", listOf("InstanceID" to "0", "Title" to title, "ObjectID" to ""))
+        )
+        envelope.text("AssignedObjectID").orEmpty()
     }
 
     suspend fun skipToQueueItem(hostname: String, trackNumber: Int): Unit = withContext(Dispatchers.IO) {

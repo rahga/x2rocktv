@@ -716,6 +716,15 @@ class SonosHouseholdTest {
         assertTrue(body.get("playOnCompletion").asBoolean)
     }
 
+    /** Adding to the queue is APPEND, said explicitly, and does not start the playlist. */
+    @Test fun `a playlist added to the queue appends and does not play`() = runBlocking<Unit> {
+        connected()
+        household.appendPlaylist(household.state.value.groups.first().id, "6")
+        val body = fake.lastCommandBody("loadPlaylist")!!
+        assertEquals("APPEND", body.get("action").asString)
+        assertFalse(body.get("playOnCompletion").asBoolean)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

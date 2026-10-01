@@ -523,8 +523,30 @@ class SonosHousehold(
     // The one part of the UI that is asked rather than pushed: the Control API has no
     // queue at all, so this goes over UPnP on port 1400. See [Upnp].
 
-    suspend fun queue(groupId: String): QueueResponse =
-        upnp.browseQueue(coordinatorHostname(groupId))
+    /**
+     * The whole queue, a page of [Upnp.MAX_ITEMS] at a time — a browse answers at most that
+     * many, and a long queue is not cut short at it.
+     */
+    suspend fun queue(groupId: String): QueueResponse {
+        val hostname = coordinatorHostname(groupId)
+        val first = upnp.browseQueue(hostname)
+        val items = first.items.toMutableList()
+        while (items.size < first.totalItems) {
+            val page = upnp.browseQueue(hostname, start = items.size)
+            if (page.items.isEmpty()) break
+            items += page.items
+        }
+        return QueueResponse(items = items, totalItems = first.totalItems)
+    }
+
+    suspend fun moveInQueue(groupId: String, from: Int, to: Int) =
+        upnp.moveInQueue(coordinatorHostname(groupId), from, to)
+
+    suspend fun clearQueue(groupId: String) = upnp.clearQueue(coordinatorHostname(groupId))
+
+    /** Save [groupId]'s queue as a new Sonos playlist. Answers its UPnP id. */
+    suspend fun saveQueue(groupId: String, title: String): String =
+        upnp.saveQueue(coordinatorHostname(groupId), title)
 
     suspend fun removeFromQueue(groupId: String, trackNumber: Int) =
         upnp.removeFromQueue(coordinatorHostname(groupId), trackNumber)
@@ -633,6 +655,21 @@ class SonosHousehold(
                 addProperty("playlistId", playlistId)
                 addProperty("playOnCompletion", true)
                 addProperty("action", "REPLACE")
+            },
+        )
+    }
+
+    /**
+     * Add [playlistId] to the end of [groupId]'s queue, leaving what plays alone — the
+     * default the player has for `loadPlaylist`, said explicitly, and without playing it.
+     */
+    suspend fun appendPlaylist(groupId: String, playlistId: String) {
+        coordinator(groupId).command(
+            Frames.onGroup("playlists:1", "loadPlaylist", groupId),
+            JsonObject().apply {
+                addProperty("playlistId", playlistId)
+                addProperty("playOnCompletion", false)
+                addProperty("action", "APPEND")
             },
         )
     }

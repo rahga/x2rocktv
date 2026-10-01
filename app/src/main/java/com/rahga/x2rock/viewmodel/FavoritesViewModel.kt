@@ -83,6 +83,15 @@ class FavoritesViewModel @Inject constructor(
         }
     }
 
+    /** Add a playlist to the end of the queue, leaving what plays alone. */
+    fun appendPlaylist(playlist: Playlist) {
+        viewModelScope.launch {
+            runCatching { household.appendPlaylist(groupId, playlist.id) }
+                .onSuccess { _notice.post("Added \"${playlist.name}\" to the queue") }
+                .onFailure { e -> failureNotice("add that playlist", e)?.let(_notice::post) }
+        }
+    }
+
     /** Play something from recently played again. See `SonosHousehold.replay`. */
     fun replay(item: HistoryItem, onDone: () -> Unit) {
         if (loadingFavoriteId.value != null) return

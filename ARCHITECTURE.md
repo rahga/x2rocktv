@@ -303,6 +303,7 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 |---|---|---|
 | ContentDirectory | `Browse Q:0` | reading the queue, and its `UpdateID` before an edit |
 | AVTransport | `RemoveTrackFromQueue`, `Seek TRACK_NR` | removing from and jumping in the queue |
+| AVTransport | `ReorderTracksInQueue`, `RemoveAllTracksFromQueue`, `SaveQueue` | moving a track, clearing, saving as a playlist |
 | AVTransport | `GetMediaInfo`, `SetAVTransportURI x-rincon-queue:<coordinator>#0` | whether the queue is the source, and making it so before a jump — `Seek` answers 701 otherwise |
 | AVTransport | `SetAVTransportURI x-sonos-htastream:<soundbar>:spdif` | the TV input, sent to the coordinator |
 | RenderingControl | `SetEQ NightMode`, `SetEQ DialogLevel` | the two home-theatre toggles, sent to the soundbar |

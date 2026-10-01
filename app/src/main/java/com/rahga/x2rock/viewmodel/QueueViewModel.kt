@@ -65,7 +65,7 @@ class QueueViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.skipToQueueItem(groupId, trackNumber) }
                 // Re-read on success: the queue may just have become the source again.
-                .onSuccess { load() }
+                .onSuccess { load(quiet = true) }
                 .onFailure { e -> failureNotice("play that track", e)?.let(_notice::post) }
         }
     }
@@ -77,14 +77,75 @@ class QueueViewModel @Inject constructor(
     fun removeItem(trackNumber: Int) {
         viewModelScope.launch {
             runCatching { household.removeFromQueue(groupId, trackNumber) }
-                .onSuccess { load() }
+                .onSuccess { load(quiet = true) }
                 .onFailure { e -> failureNotice("remove that track", e)?.let(_notice::post) }
         }
     }
 
-    private fun load() {
+    /** Move a track one place earlier or later. The queue is not pushed, so it is re-read. */
+    fun moveUp(trackNumber: Int) = move(trackNumber, trackNumber - 1)
+    fun moveDown(trackNumber: Int) = move(trackNumber, trackNumber + 1)
+
+    private fun move(from: Int, to: Int) {
+        val total = (uiState.value as? UiState.Success)?.entries?.size ?: return
+        if (to < 1 || to > total) return
+        edit("move that track") { household.moveInQueue(groupId, from, to) }
+    }
+
+    private val _clearArmed = MutableStateFlow(false)
+
+    /**
+     * True for a few seconds after the first press of Clear, when a second press empties the
+     * queue. Two presses rather than a dialog: one is easy to hit by accident on a remote, and
+     * a queue cannot be got back.
+     */
+    val clearArmed: StateFlow<Boolean> = _clearArmed.asStateFlow()
+    private var disarm: kotlinx.coroutines.Job? = null
+
+    fun clearQueue() {
+        if (!_clearArmed.value) {
+            _clearArmed.value = true
+            disarm?.cancel()
+            disarm = viewModelScope.launch {
+                kotlinx.coroutines.delay(CLEAR_CONFIRM_MILLIS)
+                _clearArmed.value = false
+            }
+            return
+        }
+        disarm?.cancel()
+        _clearArmed.value = false
+        edit("clear the queue") { household.clearQueue(groupId) }
+    }
+
+    /**
+     * Save the queue as a Sonos playlist, named for the room and the moment — there is no
+     * keyboard to ask with, and the Sonos app can rename it.
+     */
+    fun saveAsPlaylist() {
+        val room = household.state.value.groups.firstOrNull { it.id == groupId }?.name ?: "Queue"
+        val name = "$room, ${java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
         viewModelScope.launch {
-            _uiState.value = UiState.Loading
+            runCatching { household.saveQueue(groupId, name) }
+                .onSuccess { _notice.post("Saved as \"$name\"") }
+                .onFailure { e -> failureNotice("save the queue", e)?.let(_notice::post) }
+        }
+    }
+
+    /** An edit, then a re-read either way: on a refusal the queue may have moved under it. */
+    private fun edit(what: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            runCatching { block() }.onFailure { e -> failureNotice(what, e)?.let(_notice::post) }
+            load(quiet = true)
+        }
+    }
+
+    /**
+     * [quiet] keeps the list on screen until the new one arrives: after an edit, blanking it
+     * to "Loading" would throw the remote's place away on every move.
+     */
+    private fun load(quiet: Boolean = false) {
+        viewModelScope.launch {
+            if (!quiet || _uiState.value !is UiState.Success) _uiState.value = UiState.Loading
             runCatching {
                 // The queue is the one thing still asked for rather than pushed; what is
                 // playing is already known from the household's subscriptions.
@@ -101,5 +162,9 @@ class QueueViewModel @Inject constructor(
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
         }
+    }
+
+    private companion object {
+        const val CLEAR_CONFIRM_MILLIS = 4_000L
     }
 }

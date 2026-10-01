@@ -183,6 +183,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    the actions, and still `volumeType=1`.
 10. **1.11** On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
     must not blank.
+11. **3.4** In a room whose queue you can spare: Save as playlist (a playlist named for the
+    room and time appears), move a track up and down, then Clear twice. Long-press a playlist
+    on the Favorites screen to add it back.
 
 ---
 
@@ -245,7 +248,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   pauses, loads, then presses play until `PLAYING` (up to 12s); it is replace-only; anonymous
   services answer `ERROR_ACCOUNT_INVALID_ID`; with Personalization off, `getHistory` answers
   `ERROR_DISALLOWED_BY_POLICY` ("History is disabled") — show that, do not retry.
-- [ ] **3.4 Queue edits beyond remove.** Move (`ReorderTracksInQueue`), clear
+- [x] **3.4 Queue edits beyond remove.** *Done 2026-10-01: Move up/down in the track menu,
+  Save as playlist (named for the room and time — no keyboard) and a two-press Clear in the
+  header, a long press on a playlist to add it to the end of the queue, and the read pages
+  past 1000. Edits re-read without blanking the list. Not done: adding a **favourite** to the
+  queue, which needs `Browse FV:2` for its URI and `AddURIToQueue`; and focus does not follow
+  a moved track. Browse pages captured read-only at home; no edit has run on hardware yet.* Move (`ReorderTracksInQueue`), clear
   (`RemoveAllTracksFromQueue`, confirmed first), save (`SaveQueue`), add a favourite or playlist
   (`AddURIToQueue`, then seek to `FirstTrackNumberEnqueued`, not `NewQueueLength`). Every edit
   quotes a fresh `UpdateID`; a stale one gets 1028 and re-reads rather than retries. The

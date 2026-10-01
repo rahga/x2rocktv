@@ -63,6 +63,7 @@ fun QueueScreen(
     val state by viewModel.uiState.collectAsState()
     val playerState by playerViewModel.uiState.collectAsState()
     val notice by viewModel.notice.collectAsState()
+    val clearArmed by viewModel.clearArmed.collectAsState()
     BackHandler { onBack() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -89,7 +90,12 @@ fun QueueScreen(
                         inUse = s.inUse,
                         onBack = onBack,
                         onPlayItem = viewModel::playItem,
-                        onRemoveItem = viewModel::removeItem
+                        onRemoveItem = viewModel::removeItem,
+                        onMoveUp = viewModel::moveUp,
+                        onMoveDown = viewModel::moveDown,
+                        clearArmed = clearArmed,
+                        onClear = viewModel::clearQueue,
+                        onSave = viewModel::saveAsPlaylist,
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -119,7 +125,12 @@ private fun QueueList(
     inUse: Boolean,
     onBack: () -> Unit,
     onPlayItem: (Int) -> Unit,
-    onRemoveItem: (Int) -> Unit
+    onRemoveItem: (Int) -> Unit,
+    onMoveUp: (Int) -> Unit,
+    onMoveDown: (Int) -> Unit,
+    clearArmed: Boolean,
+    onClear: () -> Unit,
+    onSave: () -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -153,6 +164,13 @@ private fun QueueList(
                     text = if (entries.isEmpty()) "Queue is empty" else "Queue (${entries.size})",
                     style = MaterialTheme.typography.displaySmall
                 )
+                if (entries.isNotEmpty()) {
+                    Spacer(Modifier.width(24.dp))
+                    AppButton(onClick = onSave) { Text("Save as playlist") }
+                    Spacer(Modifier.width(12.dp))
+                    // Two presses: the label says what the second will do.
+                    AppButton(onClick = onClear) { Text(if (clearArmed) "Press again to clear" else "Clear") }
+                }
             }
             if (!inUse && entries.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -185,7 +203,11 @@ private fun QueueList(
         if (menuEntry != null) {
             QueueItemContextMenu(
                 item = menuEntry.item,
+                canMoveUp = menuEntry.trackNumber > 1,
+                canMoveDown = menuEntry.trackNumber < entries.size,
                 onRemove = { onRemoveItem(menuEntry.trackNumber); contextMenuEntry = null },
+                onMoveUp = { onMoveUp(menuEntry.trackNumber); contextMenuEntry = null },
+                onMoveDown = { onMoveDown(menuEntry.trackNumber); contextMenuEntry = null },
                 onDismiss = { contextMenuEntry = null }
             )
         }
@@ -255,7 +277,11 @@ private fun QueueRow(
 @Composable
 private fun QueueItemContextMenu(
     item: QueueItem,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
     onRemove: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
@@ -281,6 +307,13 @@ private fun QueueItemContextMenu(
                 modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
             ) {
                 Text("Remove from Queue")
+            }
+            // Drawn only where there is somewhere to move to, rather than disabled.
+            if (canMoveUp) {
+                AppButton(onClick = onMoveUp, modifier = Modifier.fillMaxWidth()) { Text("Move up") }
+            }
+            if (canMoveDown) {
+                AppButton(onClick = onMoveDown, modifier = Modifier.fillMaxWidth()) { Text("Move down") }
             }
             AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
                 Text("Cancel")
