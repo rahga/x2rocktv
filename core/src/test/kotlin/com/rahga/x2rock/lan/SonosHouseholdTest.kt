@@ -654,6 +654,47 @@ class SonosHouseholdTest {
         assertNull(recovered.error)
     }
 
+    // ------------------------------------------------------------- the UPnP switch
+    //
+    // Captured off the office One SL with UPnP on (getSettingsGroup and settingsChanged, both
+    // at security version 9). Off is the capture with its one attribute flipped and the
+    // version moved, which is what the switch in the Sonos app does to them.
+
+    @Test fun `a household with UPnP on reads as on`() {
+        connected()
+        runBlocking { fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "getSettingsGroup" } }
+        assertFalse(household.state.value.upnpOff)
+    }
+
+    @Test fun `the UPnP switch is followed in both directions`() = runBlocking<Unit> {
+        connected()
+        fake.setUpnpAllowed(false)
+        withTimeout(5_000) { household.state.first { it.upnpOff } }
+        fake.setUpnpAllowed(true)
+        withTimeout(5_000) { household.state.first { !it.upnpOff } }
+    }
+
+    /** Every settings group's version rides in every event; only a moved `security` is news. */
+    @Test fun `an event at the version already read asks nothing`() = runBlocking<Unit> {
+        connected()
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "getSettingsGroup" }
+        delay(200)
+        val reads = fake.commandsNamed("getSettingsGroup")
+        // From the seed, or it is ignored for the wrong reason and this could not fail.
+        fake.push("effectiveSettings:1", "settingsChanged",
+            FakePlayer.fixture("event.settingsChanged.json").toString(), groupId = null, playerId = fake.id)
+        delay(500)
+        assertEquals(reads, fake.commandsNamed("getSettingsGroup"))
+    }
+
+    @Test fun `only the seed's settings are followed`() = runBlocking<Unit> {
+        connected()
+        val other = household.state.value.players.first { it.id != fake.id }.id
+        fake.setUpnpAllowed(false, playerId = other)
+        delay(1_000)
+        assertFalse(household.state.value.upnpOff)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

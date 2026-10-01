@@ -96,6 +96,8 @@ fun RoomPanel(
     onJoin: (Group) -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
+    /** UPnP is off for the household, so the TV input cannot be switched to. */
+    upnpOff: Boolean = false,
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -198,17 +200,21 @@ fun RoomPanel(
         // the lists above. The source comes first: it is a thing to *do*, and the setting
         // below it is a thing to state once and never touch again.
         if (info.hasTvInput) {
-            PanelSection("Source")
-            AppButton(
-                onClick = onUseTvInput,
-                // Deliberately *not* disabled while it is already the source. A disabled
-                // button here still takes focus and draws no highlight, so pressing down
-                // onto it left the remote sitting on an invisible row — seen on the
-                // Streamer. Re-selecting the input it is already on is harmless anyway, and
-                // is the obvious thing to press when the TV audio has dropped out.
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
+            // Switching the input is UPnP, so with UPnP off there is no Source to offer; the
+            // setting below needs nothing from the speakers and stays.
+            if (!upnpOff) {
+                PanelSection("Source")
+                AppButton(
+                    onClick = onUseTvInput,
+                    // Deliberately *not* disabled while it is already the source. A disabled
+                    // button here still takes focus and draws no highlight, so pressing down
+                    // onto it left the remote sitting on an invisible row — seen on the
+                    // Streamer. Re-selecting the input it is already on is harmless anyway,
+                    // and is the obvious thing to press when the TV audio has dropped out.
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
+                }
             }
 
             // Detection fills this in on its own but has been seen to answer wrongly and

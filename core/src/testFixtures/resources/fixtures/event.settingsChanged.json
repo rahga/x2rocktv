@@ -1,0 +1,35 @@
+{
+  "_objectType": "settingsChanged",
+  "settingsGroupMetadata": [
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "global",
+      "timestamp": "1"
+    },
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "playback",
+      "timestamp": "1"
+    },
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "playerUI",
+      "timestamp": "1"
+    },
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "security",
+      "timestamp": "9"
+    },
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "playerBasic",
+      "timestamp": "5"
+    },
+    {
+      "_objectType": "settingsGroupMetadata",
+      "name": "positioning",
+      "timestamp": "1"
+    }
+  ]
+}

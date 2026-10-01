@@ -395,6 +395,10 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /** UPnP switched off for the household: the room panel has no TV input to offer. */
+    val upnpOff: StateFlow<Boolean> = household.state.map { it.upnpOff }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _notice = TransientNotice(viewModelScope)
 
     /**

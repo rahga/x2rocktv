@@ -1,0 +1,11 @@
+{
+  "attributes": {
+    "allowGuestAccess": true,
+    "allowInsecureUPnP": true,
+    "allowUnauthenticatedControl": true,
+    "authPin": ""
+  },
+  "eTag": "\"redacted\"",
+  "schemaVersion": 9,
+  "timestamp": "9"
+}
