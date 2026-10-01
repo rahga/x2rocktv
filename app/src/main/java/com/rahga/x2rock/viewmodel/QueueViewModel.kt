@@ -34,7 +34,16 @@ class QueueViewModel @Inject constructor(
 
     sealed interface UiState {
         data object Loading : UiState
-        data class Success(val entries: List<QueueEntry>, val currentTrackName: String?) : UiState
+        data class Success(
+            val entries: List<QueueEntry>,
+            /** Only while the queue is the source: a station's track must not light a queue row. */
+            val currentTrackName: String?,
+            /**
+             * Whether the room is playing from this queue. After a station, a stream or the TV
+             * input it is not, though the tracks are all still here; choosing one switches back.
+             */
+            val inUse: Boolean = true,
+        ) : UiState
         data class Error(val message: String) : UiState
     }
 
@@ -55,6 +64,8 @@ class QueueViewModel @Inject constructor(
     fun playItem(trackNumber: Int) {
         viewModelScope.launch {
             runCatching { household.skipToQueueItem(groupId, trackNumber) }
+                // Re-read on success: the queue may just have become the source again.
+                .onSuccess { load() }
                 .onFailure { e -> failureNotice("play that track", e)?.let(_notice::post) }
         }
     }
@@ -78,7 +89,14 @@ class QueueViewModel @Inject constructor(
                 // The queue is the one thing still asked for rather than pushed; what is
                 // playing is already known from the household's subscriptions.
                 val queue = household.queue(groupId)
-                UiState.Success(queueEntries(queue.items), household.groupState(groupId).track?.name)
+                // Unknown counts as in use: a failed read must not hide the marker it can't
+                // disprove, and the play path checks again for itself.
+                val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)
+                UiState.Success(
+                    queueEntries(queue.items),
+                    household.groupState(groupId).track?.name?.takeIf { inUse },
+                    inUse,
+                )
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }

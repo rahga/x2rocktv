@@ -89,7 +89,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   error discarded. Minimum: a transient message on the pane or panel for a refused or timed-out
   command, reusing the 4s message the ratings WIP added. `ERROR_NO_PERMISSION` and UPnP 403 get
   the wording from 1.6 and 1.7.
-- [ ] **1.5 Skip to a queue item fails with 701 after radio.** `skipToQueueItem` is `Seek
+- [x] **1.5 Skip to a queue item fails with 701 after radio.** *Done 2026-10-01: 701
+  confirmed on the office One SL on Radio Paradise; `skipToQueueItem` now makes the queue the
+  source when `GetMediaInfo` says it is not, seeks, and plays. Live test passes there and
+  restores the source. The queue screen marks the playing row only while the queue is the
+  source, and says when it is not.* `skipToQueueItem` is `Seek
   TRACK_NR` alone; when the queue is not the transport's source (after a station or TV input)
   Seek answers 701. Set `SetAVTransportURI x-rincon-queue:<coordinator>#0` first. Read
   `GetMediaInfo` for `x-rincon-queue:` to know whether the queue is in use, which is what the

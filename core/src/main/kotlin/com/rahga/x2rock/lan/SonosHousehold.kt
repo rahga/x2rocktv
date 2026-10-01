@@ -480,8 +480,32 @@ class SonosHousehold(
     suspend fun removeFromQueue(groupId: String, trackNumber: Int) =
         upnp.removeFromQueue(coordinatorHostname(groupId), trackNumber)
 
-    suspend fun skipToQueueItem(groupId: String, trackNumber: Int) =
-        upnp.skipToQueueItem(coordinatorHostname(groupId), trackNumber)
+    /**
+     * Play the queue from [trackNumber], whatever the room is playing now.
+     *
+     * The queue outlives a station, a stream or the TV input, but stops being the source,
+     * and a bare `Seek` then answers 701. So the queue is made the source first, only if it
+     * is not already — re-setting it while it plays would restart the transport for nothing —
+     * then the track is chosen and played. Played because choosing a track is the request:
+     * after a switch, or on a paused room, the transport would otherwise sit stopped on it.
+     */
+    suspend fun skipToQueueItem(groupId: String, trackNumber: Int) {
+        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        val hostname = coordinatorHostname(groupId)
+        if (!upnp.mediaInfo(hostname).playingFromQueue) upnp.useQueue(hostname, group.coordinatorId)
+        upnp.skipToQueueItem(hostname, trackNumber)
+        play(groupId)
+    }
+
+    /** Whether [groupId] is playing from its queue, rather than a station, stream or TV. */
+    suspend fun playingFromQueue(groupId: String): Boolean =
+        upnp.mediaInfo(coordinatorHostname(groupId)).playingFromQueue
+
+    /** For the live suite, which must put a room's source back as it found it. */
+    internal suspend fun mediaInfo(groupId: String): MediaInfo = upnp.mediaInfo(coordinatorHostname(groupId))
+
+    internal suspend fun restoreSource(groupId: String, info: MediaInfo) =
+        upnp.setTransportUri(coordinatorHostname(groupId), info.currentUri, info.currentUriMetaData)
 
     private fun coordinatorHostname(groupId: String): String {
         val group = _state.value.groups.firstOrNull { it.id == groupId }

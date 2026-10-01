@@ -43,6 +43,11 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class UpnpRefusedException(message: String) : IOException(message)
 
+/** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
+data class MediaInfo(val currentUri: String, val currentUriMetaData: String = "") {
+    val playingFromQueue: Boolean get() = currentUri.startsWith("x-rincon-queue:")
+}
+
 /** `ListAvailableServices`'s reply — see [Upnp.listAvailableServices]. */
 data class ServiceListAnswer(val descriptors: String)
 
@@ -119,16 +124,40 @@ class Upnp(
      * means. [SonosHousehold.useTvInput] does: it waits for the pushed `htInputFormat`
      * instead of the reply, which the sibling project could not do.
      */
-    suspend fun useTvInput(hostname: String, soundbarId: String): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "SetAVTransportURI",
-            listOf(
-                "InstanceID" to "0",
-                "CurrentURI" to tvStreamUri(soundbarId),
-                "CurrentURIMetaData" to "",
-            ),
+    suspend fun useTvInput(hostname: String, soundbarId: String) =
+        setTransportUri(hostname, tvStreamUri(soundbarId))
+
+    /**
+     * Make the coordinator's own queue the group's source again.
+     *
+     * After a station, a stream or the TV input, the queue is still there but no longer what
+     * the transport plays, and `Seek TRACK_NR` answers **701** — verified 2026-10-01 on a One SL
+     * playing Radio Paradise with seventeen tracks queued. The URI names the coordinator.
+     */
+    suspend fun useQueue(hostname: String, coordinatorId: String) =
+        setTransportUri(hostname, "x-rincon-queue:$coordinatorId#0")
+
+    /**
+     * What the transport is playing from. `CurrentURI` says which source — `x-rincon-queue:`
+     * when it is the queue, `x-sonosapi-radio:` for a service's radio, `x-sonos-htastream:`
+     * on the TV — and the metadata is what putting it back needs.
+     */
+    suspend fun mediaInfo(hostname: String): MediaInfo = withContext(Dispatchers.IO) {
+        val envelope = parse(soap(hostname, Service.AV_TRANSPORT, "GetMediaInfo", listOf("InstanceID" to "0")))
+        MediaInfo(
+            currentUri = envelope.text("CurrentURI").orEmpty(),
+            currentUriMetaData = envelope.text("CurrentURIMetaData").orEmpty(),
         )
     }
+
+    /** Set the transport's source. The coordinator is who is asked; see [useTvInput]. */
+    suspend fun setTransportUri(hostname: String, uri: String, metadata: String = ""): Unit =
+        withContext(Dispatchers.IO) {
+            soap(
+                hostname, Service.AV_TRANSPORT, "SetAVTransportURI",
+                listOf("InstanceID" to "0", "CurrentURI" to uri, "CurrentURIMetaData" to metadata),
+            )
+        }
 
     /**
      * One of the extended-EQ toggles — `NightMode` and `DialogLevel`, which the Sonos app
