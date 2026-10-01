@@ -212,11 +212,16 @@ class FakePlayer(
         groups = topology
     }
 
-    private val refused = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    private val refused = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Refuse every [command] from now on, the way a real player says no: `globalError`. */
-    fun refuse(command: String) {
-        refused += command
+    fun refuse(command: String, errorCode: String = "ERROR_COMMAND_FAILED") {
+        refused[command] = errorCode
+    }
+
+    /** Stop refusing [command]. */
+    fun allow(command: String) {
+        refused.remove(command)
     }
 
     /** Serve and announce a topology, the way a real regrouping arrives. */
@@ -347,10 +352,10 @@ class FakePlayer(
             respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
             return
         }
-        if (command != null && command in refused) {
+        refused[command ?: ""]?.let { errorCode ->
             respond(
                 webSocket, cmdId, namespace, "globalError", success = false,
-                body = JsonObject().apply { addProperty("errorCode", "ERROR_COMMAND_FAILED") },
+                body = JsonObject().apply { addProperty("errorCode", errorCode) },
             )
             return
         }

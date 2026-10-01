@@ -98,7 +98,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   Seek answers 701. Set `SetAVTransportURI x-rincon-queue:<coordinator>#0` first. Read
   `GetMediaInfo` for `x-rincon-queue:` to know whether the queue is in use, which is what the
   queue screen's now-playing marker should key on.
-- [ ] **1.6 Authentication-on households.** With the Sonos app's Connection Security →
+- [x] **1.6 Authentication-on households.** *Done 2026-10-01 against the fake: a
+  permission refusal at connect sets `authenticationRequired`, names the switch, and keeps the
+  remembered player; Retry recovers once it is off. The REST pre-check was not needed —
+  `getGroups` answers at once. Needs the switch flipped at home to confirm.* With the Sonos app's Connection Security →
   Authentication switch on, every Control API command answers `ERROR_NO_PERMISSION`, starting
   with `getGroups`; UPnP keeps answering. The app would show a generic error and retry forever.
   Detect it at `getGroups` and say so, naming the Sonos app path (Account → Privacy and
