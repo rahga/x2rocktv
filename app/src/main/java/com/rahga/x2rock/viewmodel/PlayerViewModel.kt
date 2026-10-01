@@ -143,6 +143,7 @@ class PlayerViewModel @Inject constructor(
     private var lastMetadataKey = ""
     private var lastPbStateCode = -1
     private var lastPbPositionMillis = -1L
+    private var lastPbActions: PlaybackActions? = null
 
     /**
      * Everything visible is derived from pushed state. There is no refresh: a command's
@@ -360,10 +361,13 @@ class PlayerViewModel @Inject constructor(
         // no track metadata and is still playing.
         val idle = !state.playbackState.hasLoadedContent()
         val code = if (idle) 0 else if (playing) 1 else 2
-        if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis) return
+        // Seek the way the pane offers it: only with a duration to seek within.
+        val actions = state.actions.copy(canSeek = state.actions.canSeek && state.durationMillis > 0)
+        if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis && actions == lastPbActions) return
         lastPbStateCode = code
         lastPbPositionMillis = state.positionMillis
-        nowPlaying.publishState(playing, idle, state.positionMillis)
+        lastPbActions = actions
+        nowPlaying.publishState(playing, idle, state.positionMillis, actions)
     }
 
     // ------------------------------------------------------------ transport

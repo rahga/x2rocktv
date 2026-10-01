@@ -1,5 +1,6 @@
 package com.rahga.x2rock.media
 
+import com.rahga.x2rock.model.PlaybackActions
 import android.content.Context
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -35,7 +36,17 @@ interface NowPlayingPublisher {
      *   makes the system treat the session as inactive — media keys and voice transport
      *   then have nowhere to land for exactly the room most likely to be in use.
      */
-    fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long)
+    fun publishState(
+        playing: Boolean,
+        idle: Boolean,
+        positionMillis: Long,
+        /**
+         * What the source permits, so the system offers only that: a live station refuses
+         * skip and seek, and a launcher card or a voice "next" offering them would do
+         * nothing. Seek arrives already gated on there being a duration, as the pane gates it.
+         */
+        actions: PlaybackActions = PlaybackActions(),
+    )
 
     /**
      * Whether this room is something a media session should represent at all.
@@ -120,7 +131,18 @@ class MediaSessionPublisher @Inject constructor(
         )
     }
 
-    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long) {
+    override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long, actions: PlaybackActions) {
+        // Play/pause stays whenever anything of the kind is possible: on a live stream
+        // "pause" is a stop, and the command is the same either way.
+        var advertised = 0L
+        if (actions.canPlay) advertised = advertised or PlaybackState.ACTION_PLAY
+        if (actions.canPause || actions.canStop) advertised = advertised or PlaybackState.ACTION_PAUSE
+        if (actions.canPlay || actions.canPause || actions.canStop) {
+            advertised = advertised or PlaybackState.ACTION_PLAY_PAUSE
+        }
+        if (actions.canSkip) advertised = advertised or PlaybackState.ACTION_SKIP_TO_NEXT
+        if (actions.canSkipToPrevious) advertised = advertised or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        if (actions.canSeek) advertised = advertised or PlaybackState.ACTION_SEEK_TO
         val state = when {
             idle -> PlaybackState.STATE_NONE
             playing -> PlaybackState.STATE_PLAYING
@@ -128,11 +150,7 @@ class MediaSessionPublisher @Inject constructor(
         }
         session.setPlaybackState(
             PlaybackState.Builder()
-                .setActions(
-                    PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                        PlaybackState.ACTION_PLAY_PAUSE or PlaybackState.ACTION_SKIP_TO_NEXT or
-                        PlaybackState.ACTION_SKIP_TO_PREVIOUS or PlaybackState.ACTION_SEEK_TO
-                )
+                .setActions(advertised)
                 .setState(state, positionMillis, 1.0f)
                 .build()
         )
@@ -150,7 +168,7 @@ class MediaSessionPublisher @Inject constructor(
         if (attached !== controls) return
         attached = null
         session.setCallback(null)
-        publishState(playing = false, idle = true, positionMillis = 0)
+        publishState(playing = false, idle = true, positionMillis = 0, actions = PlaybackActions())
         session.isActive = false
     }
 }
