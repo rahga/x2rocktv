@@ -94,18 +94,13 @@ class QueueViewModelTest {
 
     // ---------------------------------------------------------------- freshness
 
-    @Test fun `a queue changed elsewhere is read again on the next playback event`() = runBlocking<Unit> {
-        updateId = "59"
+    /** A playback event at the version already shown costs nothing: no browse at all. */
+    @Test fun `a playback event at the same queue version reads nothing`() = runBlocking<Unit> {
         fake.pushFixture("playbackStatus", groupId)
-        withTimeout(5_000) { while (fullReads() == 0) delay(20) }
-    }
-
-    /** A playback event costs a one-item browse, not the queue, when nothing changed. */
-    @Test fun `an unchanged queue is not read again`() = runBlocking<Unit> {
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
         fake.pushFixture("playbackStatus", groupId)
-        withTimeout(5_000) { while ("1" !in browses) delay(20) }
         delay(500)
-        assertEquals(0, fullReads())
+        assertEquals(0, browses.size)
     }
 
     @Test fun `a new queue version reads the queue again`() = runBlocking<Unit> {
