@@ -389,6 +389,11 @@ class FakePlayer(
             )
             return
         }
+        // Captured off the office One SL, eight items, one a playlist since deleted.
+        if (namespace == "history:1" && command == "getHistory") {
+            respond(webSocket, cmdId, namespace, "contentPagedResources", success = true, body = fixture("getHistory.reply.json"))
+            return
+        }
         // Captured off the office One SL, with one queue saved as a playlist for the purpose.
         if (namespace == "playlists:1" && command == "getPlaylists") {
             respond(webSocket, cmdId, namespace, "playlistsList", success = true, body = fixture("getPlaylists.reply.json"))

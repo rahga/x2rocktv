@@ -20,6 +20,7 @@ import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.net.InetAddress
@@ -62,6 +63,27 @@ class FavoritesViewModelTest {
             viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
         }
         assertEquals(listOf("x2rock capture"), state.playlists.map { it.name })
+    }
+
+    /** The office One SL's history: eight entries, two of them streams that share a name. */
+    @Test fun `recently played is listed, each stream its own row`() = runBlocking<Unit> {
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
+        }
+        assertEquals(8, state.recent.size)
+        assertEquals(2, state.recent.count { it.name == "The Main Mix" })
+        assertEquals("Mellow Mix", state.recent.first().name)
+    }
+
+    /** With Personalization off the household refuses the read, and the screen says why. */
+    @Test fun `history switched off is said, not shown as nothing`() = runBlocking<Unit> {
+        fake.refuse("getHistory", "ERROR_DISALLOWED_BY_POLICY")
+        viewModel.reload()
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { (it as? FavoritesViewModel.UiState.Success)?.recentNote != null } as FavoritesViewModel.UiState.Success
+        }
+        assertEquals(HISTORY_OFF, state.recentNote)
+        assertTrue(state.recent.isEmpty())
     }
 
     @Test fun `a playlist that fails to load stays on the list and says why`() = runBlocking<Unit> {
