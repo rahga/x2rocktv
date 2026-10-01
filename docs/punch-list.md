@@ -148,7 +148,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   no SKIP_TO_NEXT or SEEK_TO, and still `volumeType=1`.* `NowPlayingPublisher` always
   advertises skip and seek. Gate the session's actions on `availablePlaybackActions` as the pane
   does, so the launcher card and a voice "next" do not offer a skip to a live station.
-- [ ] **1.11 Network change: arrival, not loss.** `NetworkMonitor` reconnects on both
+- [x] **1.11 Network change: arrival, not loss.** *Done 2026-10-01: `onLost` no longer
+  rebuilds; a lost carrying network fails the sockets by itself and the next arrival reconnects.
+  Android framework code, so untested here: on a box with both, unplug the unused network and
+  the rooms must not blank.* `NetworkMonitor` reconnects on both
   `onAvailable` and `onLost`. x2rock: only arrival on a network is a reason to reconnect; acting
   on loss causes retry storms. Check what `onLost` does and drop the reconnect if that is it.
 
