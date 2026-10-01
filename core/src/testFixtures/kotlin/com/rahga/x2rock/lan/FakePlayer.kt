@@ -389,6 +389,11 @@ class FakePlayer(
             )
             return
         }
+        // Captured off the office One SL, with one queue saved as a playlist for the purpose.
+        if (namespace == "playlists:1" && command == "getPlaylists") {
+            respond(webSocket, cmdId, namespace, "playlistsList", success = true, body = fixture("getPlaylists.reply.json"))
+            return
+        }
         if (namespace == "groups:1" && command == "getGroups") {
             respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
             return

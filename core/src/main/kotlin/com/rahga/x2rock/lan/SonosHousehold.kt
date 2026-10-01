@@ -14,6 +14,7 @@ import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.PlaybackError
 import com.rahga.x2rock.model.PlayerSettings
+import com.rahga.x2rock.model.PlaylistsResponse
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.isPlaying
@@ -605,6 +606,33 @@ class SonosHousehold(
                 throw IOException("${group.name} did not answer, and has not switched to the TV", e)
             }
         }
+    }
+
+    /** The household's Sonos playlists — its saved queues. `playlists:1`, household-scoped. */
+    suspend fun playlists(): PlaylistsResponse {
+        val household = _state.value.householdId ?: error("not connected")
+        val socket = sockets.values.firstOrNull() ?: error("not connected")
+        val body = socket.command(Frames.onHousehold("playlists:1", "getPlaylists", household))
+        return gson.fromJson(body, PlaylistsResponse::class.java) ?: PlaylistsResponse()
+    }
+
+    /**
+     * Play [playlistId] in [groupId], in place of the queue.
+     *
+     * `REPLACE` is said out loud because it is not the default: `loadPlaylist` *appends*
+     * unless told otherwise, with playback jumping to the end, so playing one playlist twice
+     * on a four-track queue left twelve (x2rock, verified 2026-09-04). `loadFavorite` replaces
+     * without being asked; the two sibling commands do not agree.
+     */
+    suspend fun loadPlaylist(groupId: String, playlistId: String) {
+        coordinator(groupId).command(
+            Frames.onGroup("playlists:1", "loadPlaylist", groupId),
+            JsonObject().apply {
+                addProperty("playlistId", playlistId)
+                addProperty("playOnCompletion", true)
+                addProperty("action", "REPLACE")
+            },
+        )
     }
 
     suspend fun favorites(): FavoritesResponse {

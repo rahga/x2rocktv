@@ -57,6 +57,22 @@ class FavoritesViewModelTest {
         Dispatchers.resetMain()
     }
 
+    @Test fun `playlists are listed after the favourites`() = runBlocking<Unit> {
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
+        }
+        assertEquals(listOf("x2rock capture"), state.playlists.map { it.name })
+    }
+
+    @Test fun `a playlist that fails to load stays on the list and says why`() = runBlocking<Unit> {
+        fake.refuse("loadPlaylist")
+        var wentBack = false
+        viewModel.loadPlaylist("6") { wentBack = true }
+        val notice = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        assertEquals("Couldn't play that playlist: ERROR_COMMAND_FAILED", notice)
+        assertFalse(wentBack)
+    }
+
     /**
      * A favourite that would not load used to send the viewer back to the room anyway, with
      * nothing playing and no word why. Now the list stays, and says.

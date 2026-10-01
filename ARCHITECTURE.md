@@ -289,6 +289,7 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | `groupVolume:1` | group (coordinator) | group volume and mute |
 | `playerVolume:1` | **that player's own socket** | per-speaker volume and mute |
 | `favorites:1` | household / group | listing and loading favourites |
+| `playlists:1` | household / group | listing Sonos playlists, and loading one with `action: REPLACE` |
 | `settings:1` | player | `getPlayerSettings`: Night Sound and Speech Enhancement, read only |
 | `effectiveSettings:1` | player (the seed) | the UPnP switch: `getSettingsGroup {"groupName":"security"}`, followed by `settingsChanged`'s per-group timestamps |
 
