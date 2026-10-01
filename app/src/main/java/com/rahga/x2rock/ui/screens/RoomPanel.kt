@@ -84,6 +84,8 @@ fun RoomPanel(
     /** This group's speakers, id to name, coordinator first. */
     playerNames: List<Pair<String, String>>,
     playerVolumes: Map<String, Int>,
+    /** Set every member to the group's level; offered only while their levels differ. */
+    onNormalize: () -> Unit = {},
     /** The speakers whose own volume is muted, for their rows. */
     mutedPlayers: Set<String> = emptySet(),
     /** Each joinable group's own level, keyed by group id. */
@@ -172,6 +174,15 @@ fun RoomPanel(
                 onActivate = { if (!coordinator) onRemovePlayer(playerId) },
                 onAdjust = { delta -> onAdjustPlayerVolume(playerId, delta) },
             )
+        }
+
+        // Members drift apart as each is turned up on its own; one press brings them back to
+        // the group's level. Only while there is something to even out.
+        val memberLevels = playerNames.mapNotNull { (id, _) -> playerVolumes[id] }
+        if (members > 1 && memberLevels.distinct().size > 1) {
+            AppButton(onClick = onNormalize, modifier = Modifier.fillMaxWidth()) {
+                Text("Even out the levels")
+            }
         }
 
         // And the rooms that could join it.

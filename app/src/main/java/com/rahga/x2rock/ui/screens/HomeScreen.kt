@@ -261,6 +261,7 @@ fun HomeScreen(
                     playerNames = playerNames,
                     playerVolumes = volumes,
                     mutedPlayers = mutedPlayers,
+                    onNormalize = { homeViewModel.normalizeGroup(liveGroup.id) },
                     groupVolumes = groupVolumes,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
