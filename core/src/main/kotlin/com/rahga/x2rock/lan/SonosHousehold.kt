@@ -790,6 +790,20 @@ class SonosHousehold(
         )
     }
 
+    /**
+     * Move the group's level by [delta]. For buttons and keys, which say "louder" rather than
+     * a level — Sonos's own rule: `setVolume` for stateful controls like a slider,
+     * `setRelativeVolume` for stateless ones. It needs no baseline, so a press before the
+     * first snapshot moves the speaker by the step rather than to it, and it unmutes as a side
+     * effect, as both setters do. Clamping to 0..100 is the player's.
+     */
+    suspend fun adjustGroupVolume(groupId: String, delta: Int) {
+        coordinator(groupId).command(
+            Frames.onGroup("groupVolume:1", "setRelativeVolume", groupId),
+            JsonObject().apply { addProperty("volumeDelta", delta.coerceIn(-100, 100)) },
+        )
+    }
+
     suspend fun setGroupMute(groupId: String, muted: Boolean) {
         coordinator(groupId).command(
             Frames.onGroup("groupVolume:1", "setMute", groupId),
@@ -802,6 +816,14 @@ class SonosHousehold(
         socketForPlayer(playerId).command(
             Frames.onPlayer("playerVolume:1", "setVolume", playerId),
             JsonObject().apply { addProperty("volume", volume.coerceIn(0, 100)) },
+        )
+    }
+
+    /** One speaker's level by [delta], on its own socket. See [adjustGroupVolume]. */
+    suspend fun adjustPlayerVolume(playerId: String, delta: Int) {
+        socketForPlayer(playerId).command(
+            Frames.onPlayer("playerVolume:1", "setRelativeVolume", playerId),
+            JsonObject().apply { addProperty("volumeDelta", delta.coerceIn(-100, 100)) },
         )
     }
 

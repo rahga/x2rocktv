@@ -328,7 +328,7 @@ class LiveHouseholdTest {
             }
             assertEquals(target, observed[group.id]!!.volume!!.volume)
         } finally {
-            runCatching { household.setGroupVolume(group.id, before) }
+            restoreVolume(group.id, before)
         }
     }
 
@@ -361,6 +361,42 @@ class LiveHouseholdTest {
                 household.restoreSource(group.id, before)
                 if (wasPlaying) household.play(group.id) else household.pause(group.id)
             }
+        }
+    }
+
+    /**
+     * Only with `-Dx2rock.live.room=<room>`, and restored afterwards. The Vol −/+ buttons send
+     * `setRelativeVolume`, so the step is checked against what the player then reports.
+     */
+    @Test fun `a relative volume step comes back as an event`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.volume != null } }
+        val before = household.groupState(group.id).volume!!
+        val step = if (before.volume >= 50) -3 else 3
+        try {
+            household.adjustGroupVolume(group.id, step)
+            withTimeout(10_000) {
+                household.groupStates.first { it[group.id]?.volume?.volume == before.volume + step }
+            }
+        } finally {
+            restoreVolume(group.id, before.volume)
+            if (before.muted) runCatching { household.setGroupMute(group.id, true) }
+        }
+    }
+
+    /**
+     * Put a level back and wait until the player says it is back. Not just send it: a second
+     * volume command inside ~260ms is deferred and reads in that window are stale (x2rock,
+     * "Volume handling"), so the next test could read a half-restored level and "restore" to
+     * that — seen on the office One SL, which finished a run at 4 having started at 0.
+     */
+    private suspend fun restoreVolume(groupId: String, level: Int) {
+        runCatching {
+            household.setGroupVolume(groupId, level)
+            withTimeout(10_000) { household.groupStates.first { it[groupId]?.volume?.volume == level } }
         }
     }
 

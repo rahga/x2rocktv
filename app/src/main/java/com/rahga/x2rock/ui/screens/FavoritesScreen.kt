@@ -151,7 +151,6 @@ private fun FavoritesList(
                     favorite = fav,
                     isActive = activeId == fav.id,
                     isLoading = loadingId == fav.id,
-                    enabled = loadingId == null,
                     onClick = { onPlay(fav) },
                     modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
                 )
@@ -166,7 +165,6 @@ private fun FavoriteRow(
     favorite: Favorite,
     isActive: Boolean,
     isLoading: Boolean,
-    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
