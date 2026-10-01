@@ -23,8 +23,10 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Ported from x2rock's `sonos/smapi.rs`, verified there against a real household's
  * iHeartRadio account on 2026-09-12, and trimmed to what a rating button needs — no search,
  * no browse. [Auth] and [Token] carry the full shape a device-linked service needs even though
- * nothing mints a token yet; every call here is `token = null`, which is exactly what an
- * [Auth.ANONYMOUS] service (iHeartRadio, TuneIn-shaped) wants.
+ * nothing mints a token yet; every call here is `token = null`, which only an
+ * [Auth.ANONYMOUS] service accepts. **iHeartRadio is not one**: the home household lists it
+ * as `DeviceLink` (checked 2026-10-01), and x2rock rated it with a linked token. So until a
+ * device link exists here, iHeartRadio tracks show no rating buttons at all.
  */
 
 private const val NS = "http://www.sonos.com/Services/1.1"

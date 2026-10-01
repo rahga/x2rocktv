@@ -472,6 +472,69 @@ class LiveHouseholdTest {
     }
 
     /**
+     * Only with `-Dx2rock.live.room=<room>`, and everything put back: the queue is saved as a
+     * playlist first, restored from it at the end, and the playlist deleted. Checks the save's
+     * real reply (the unit test's is built), a move and its undo, and a clear. Tracks are told
+     * apart by their art URLs, which carry each track's own id — item ids are positions.
+     *
+     * One thing it cannot put back: the queue's container, which afterwards names the deleted
+     * "x2rock live test" playlist it was restored from, until the room loads something else.
+     */
+    @Test fun `the queue saves, moves, clears and is put back`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val original = household.queue(group.id).items.map { it.track?.imageUrl }
+        assumeTrue("$mutableRoom needs two queued tracks", original.size >= 2)
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
+        val source = household.mediaInfo(group.id)
+        val wasPlaying = household.groupState(group.id).playbackState == PlaybackStates.PLAYING
+
+        val saved = household.saveQueue(group.id, "x2rock live test")
+        assertTrue("SaveQueue answered no id: '$saved'", saved.startsWith("SQ:"))
+        val bareId = saved.removePrefix("SQ:")
+        try {
+            household.moveInQueue(group.id, from = 1, to = 2)
+            val moved = household.queue(group.id).items.map { it.track?.imageUrl }
+            assertEquals(listOf(original[1], original[0]) + original.drop(2), moved)
+            household.moveInQueue(group.id, from = 2, to = 1)
+            assertEquals(original, household.queue(group.id).items.map { it.track?.imageUrl })
+
+            household.clearQueue(group.id)
+            assertTrue(household.queue(group.id).items.isEmpty())
+        } finally {
+            runCatching {
+                if (household.queue(group.id).items.isEmpty()) {
+                    household.loadPlaylist(group.id, bareId)
+                    withTimeoutOrNull(10_000) {
+                        while (household.queue(group.id).items.size < original.size) kotlinx.coroutines.delay(300)
+                    }
+                }
+                household.destroyPlaylist(group.id, saved)
+                household.restoreSource(group.id, source)
+                if (wasPlaying) resume(group.id) else household.pause(group.id)
+            }
+        }
+        assertEquals("the queue was not put back", original, household.queue(group.id).items.map { it.track?.imageUrl })
+    }
+
+    /**
+     * Read-only on the household; asks the track's own service for its rating state, which is
+     * a read there too. Says what it found rather than asserting it: whether a track can be
+     * rated is the content's business, not the protocol's.
+     */
+    @Test fun `the room's track reports a rating state or none`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to name the room", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
+        val track = household.groupState(group.id).track
+        println("LIVE rating: ${track?.name} id=${track?.id} -> ${household.ratingState(group.id)}")
+    }
+
+    /**
      * Read-only, and about the protocol rather than this house: a soundbar answers
      * `settings:1 getPlayerSettings` with a `homeTheater` block. Nothing asserts which way
      * the toggles are set — a household where both happen to be off must pass too.

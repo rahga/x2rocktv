@@ -153,6 +153,11 @@ class Upnp(
         envelope.text("AssignedObjectID").orEmpty()
     }
 
+    /** Delete a saved playlist by its UPnP id (`SQ:6`). For the live suite, which tidies up after itself. */
+    internal suspend fun destroyObject(hostname: String, objectId: String): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.CONTENT_DIRECTORY, "DestroyObject", listOf("ObjectID" to objectId))
+    }
+
     suspend fun skipToQueueItem(hostname: String, trackNumber: Int): Unit = withContext(Dispatchers.IO) {
         soap(
             hostname, Service.AV_TRANSPORT, "Seek",
