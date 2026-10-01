@@ -188,7 +188,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 
 ## Tier 2 — the room list and panel: what the widget shows that we do not
 
-- [ ] **2.1 Fixed volume.** `GroupVolume.fixed` is parsed and never read. A Port or Amp with a
+- [x] **2.1 Fixed volume.** *Done 2026-10-01: the pane and its speaker rows read "fixed"
+  with no −/+ (Mute takes the left exit), and a step on a fixed group or speaker, from the pane
+  or the room panel, sends nothing and says to use the amplifier. Left: the panel's level bar
+  still draws a fixed speaker's level. No real fixed capture exists; the test flips the flag.* `GroupVolume.fixed` is parsed and never read. A Port or Amp with a
   fixed line-out reads "fixed" where its level is and loses its volume controls (x2rock
   `fixedVolume`, `memberFixedVolume`; `settings:1 volumeMode FIXED`). Capture a fixture only if
   a real one exists; otherwise a unit test on a derived `groupVolume` event.

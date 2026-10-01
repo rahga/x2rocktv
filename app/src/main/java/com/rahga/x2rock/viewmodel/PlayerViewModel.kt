@@ -31,7 +31,9 @@ data class PlayerVolumeEntry(
     val playerId: String,
     val playerName: String,
     val volume: Int,
-    val muted: Boolean
+    val muted: Boolean,
+    /** A fixed line-out, as on a Port or an Amp set that way: its level is the amplifier's. */
+    val fixed: Boolean = false,
 )
 
 data class PlayerUiState(
@@ -80,6 +82,11 @@ data class PlayerUiState(
     val playbackError: String? = null,
     /** UPnP is switched off for the household: see `HouseholdState.upnpOff`. */
     val upnpOff: Boolean = false,
+    /**
+     * The group's volume is fixed — a Port or an Amp with a fixed line-out — so it is set on
+     * the amplifier it feeds, not here. `groupVolume:1`'s `fixed`; x2rock shows "fixed".
+     */
+    val volumeFixed: Boolean = false,
     val sleepTimerRemainingMillis: Long? = null,
     /**
      * The soundbar in this room, when it has one. Kept because the home-theatre writes are
@@ -189,6 +196,7 @@ class PlayerViewModel @Inject constructor(
                     positionUpdatedAt = state.positionUpdatedAt,
                     volume = state.volume?.volume,
                     isMuted = state.volume?.muted ?: false,
+                    volumeFixed = state.volume?.fixed ?: false,
                     shuffle = state.playMode.shuffle,
                     repeat = state.playMode.repeat,
                     crossfade = state.playMode.crossfade,
@@ -201,7 +209,7 @@ class PlayerViewModel @Inject constructor(
                         ?.takeIf { it.size > 1 }
                         ?.mapNotNull { id ->
                             playerVolumes[id]?.let {
-                                PlayerVolumeEntry(id, household.playerName(id), it.volume, it.muted)
+                                PlayerVolumeEntry(id, household.playerName(id), it.volume, it.muted, it.fixed)
                             }
                         }
                         .orEmpty(),
@@ -451,6 +459,8 @@ class PlayerViewModel @Inject constructor(
      */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
+        // The player refuses a level it does not control; say so instead of asking it.
+        if (uiState.value.volumeFixed) return notice.post(FIXED_VOLUME)
         pendingVolumeDelta += delta
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
@@ -491,6 +501,7 @@ class PlayerViewModel @Inject constructor(
 
     /** One speaker's step, the same way as [adjustVolume]. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
+        if (uiState.value.playerVolumes.any { it.playerId == playerId && it.fixed }) return notice.post(FIXED_VOLUME)
         pendingPlayerDeltas[playerId] = (pendingPlayerDeltas[playerId] ?: 0) + delta
         playerVolumeDebounceJobs[playerId]?.cancel()
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {

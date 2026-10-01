@@ -364,6 +364,7 @@ class HomeViewModel @Inject constructor(
 
     /** A whole group's level, from a row that offers to join it. */
     fun adjustGroupVolume(groupId: String, delta: Int) {
+        if (household.groupState(groupId).volume?.fixed == true) return _notice.post(FIXED_VOLUME)
         val current = groupVolumes.value[groupId] ?: return
         val target = (current + delta).coerceIn(0, 100)
         _pendingGroupVolumes.update { it + (groupId to target) }
@@ -378,6 +379,7 @@ class HomeViewModel @Inject constructor(
 
     /** One speaker's own level, accumulating presses the way the group volume does. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
+        if (household.playerVolumes.value[playerId]?.fixed == true) return _notice.post(FIXED_VOLUME)
         val current = playerVolumes.value[playerId] ?: return
         val target = (current + delta).coerceIn(0, 100)
         _pendingPlayerVolumes.update { it + (playerId to target) }

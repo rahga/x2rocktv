@@ -551,27 +551,37 @@ private fun VolumeRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.focusGroup()
     ) {
-        // Never disabled. A disabled tv-material3 button still takes focus and draws no
-        // highlight, and these once were, until a level was known and while muted. A step is
-        // relative, so it needs no level, and on a muted room it unmutes as the player does.
-        AppButton(
-            onClick = { viewModel.adjustVolume(-5) },
-            modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-        ) { Text("Vol \u2212") }
-        // A muted room keeps its level — the Control API reports it through mute — so it is
-        // shown, and said to be muted, rather than replaced by the word.
-        Text(
-            text = when {
-                state.volume == null -> "Volume: \u2014"
-                state.isMuted -> "Volume: ${state.volume} (muted)"
-                else -> "Volume: ${state.volume}"
-            },
-            style = MaterialTheme.typography.bodyLarge
-        )
-        AppButton(onClick = { viewModel.adjustVolume(+5) }) { Text("Vol +") }
+        // A fixed line-out has no level to step, so −/+ are not drawn — hidden rather than
+        // disabled, for the reason below — and Mute takes over as the row's left exit.
+        if (state.volumeFixed) {
+            Text("Volume: fixed", style = MaterialTheme.typography.bodyLarge)
+        } else {
+            // Never disabled. A disabled tv-material3 button still takes focus and draws no
+            // highlight, and these once were, until a level was known and while muted. A step
+            // is relative, so it needs no level, and on a muted room it unmutes as the player
+            // does.
+            AppButton(
+                onClick = { viewModel.adjustVolume(-5) },
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) { Text("Vol \u2212") }
+            // A muted room keeps its level — the Control API reports it through mute — so it
+            // is shown, and said to be muted, rather than replaced by the word.
+            Text(
+                text = when {
+                    state.volume == null -> "Volume: \u2014"
+                    state.isMuted -> "Volume: ${state.volume} (muted)"
+                    else -> "Volume: ${state.volume}"
+                },
+                style = MaterialTheme.typography.bodyLarge
+            )
+            AppButton(onClick = { viewModel.adjustVolume(+5) }) { Text("Vol +") }
+        }
         // Needs the current state to toggle, so a press in the moment before the first
         // snapshot does nothing — the view model says why in its own comment.
-        AppButton(onClick = { viewModel.toggleMute() }) {
+        AppButton(
+            onClick = { viewModel.toggleMute() },
+            modifier = if (state.volumeFixed) Modifier.exitLeftTo(exitLeftFocusRequester) else Modifier,
+        ) {
             Text(if (state.isMuted) "Unmute" else "Mute")
         }
     }
@@ -757,24 +767,38 @@ private fun PlayerVolumeRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        AppButton(
-            onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
-            // Not disabled while muted: a step unmutes, and a disabled button here would be
-            // this row's left exit with no highlight to show the remote was on it.
-            // The leftmost control of this row, and these rows appear whenever the room is
-            // grouped. Without it a left press falls through to the pane's `focusProperties`,
-            // which does not govern the search — so focus left the pane and was lost.
-            modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-        ) { Text("−") }
+        // A fixed line-out has no level to step: −/+ are not drawn, and Mute is the left exit.
+        if (!entry.fixed) {
+            AppButton(
+                onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
+                // Not disabled while muted: a step unmutes, and a disabled button here would
+                // be this row's left exit with no highlight to show the remote was on it.
+                // The leftmost control of this row, and these rows appear whenever the room
+                // is grouped. Without it a left press falls through to the pane's
+                // `focusProperties`, which does not govern the search — so focus left the
+                // pane and was lost.
+                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+            ) { Text("−") }
+        }
         Text(
-            text = if (entry.muted) "${entry.volume} (muted)" else "${entry.volume}",
+            text = when {
+                entry.fixed -> "fixed"
+                entry.muted -> "${entry.volume} (muted)"
+                else -> "${entry.volume}"
+            },
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(52.dp)
+            // Wide enough for "100 (muted)" on one line.
+            modifier = Modifier.width(104.dp)
         )
+        if (!entry.fixed) {
+            AppButton(
+                onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
+            ) { Text("+") }
+        }
         AppButton(
-            onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
-        ) { Text("+") }
-        AppButton(onClick = { viewModel.togglePlayerMute(entry.playerId) }) {
+            onClick = { viewModel.togglePlayerMute(entry.playerId) },
+            modifier = if (entry.fixed) Modifier.exitLeftTo(exitLeftFocusRequester) else Modifier,
+        ) {
             Text(if (entry.muted) "Unmute" else "Mute")
         }
     }
