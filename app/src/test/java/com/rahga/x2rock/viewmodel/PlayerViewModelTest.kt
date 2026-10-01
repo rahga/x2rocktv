@@ -143,6 +143,22 @@ class PlayerViewModelTest {
         assertEquals(1, fake.commandsNamed("setRelativeVolume"))
     }
 
+    /**
+     * A fixed line-out's level belongs to the amplifier it feeds, so a step is not sent and
+     * the reason is said. No capture of one exists here — this household has no Port or Amp
+     * set that way — so the event is the captured groupVolume shape with `fixed` true.
+     */
+    @Test fun `a step on a fixed volume sends nothing and says why`() = runBlocking<Unit> {
+        fake.push("groupVolume:1", "groupVolume", """{"volume":100,"muted":false,"fixed":true}""", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { it.volumeFixed } }
+        fake.clearHistory()
+        viewModel.adjustVolume(+5)
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.notice != null } }
+        assertEquals(FIXED_VOLUME, state.notice)
+        delay(600)
+        assertEquals(0, fake.commandsNamed("setRelativeVolume"))
+    }
+
     /** Muted is not a reason to refuse a step: the player unmutes on either setter. */
     @Test fun `a step on a muted room is sent`() = runBlocking<Unit> {
         fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":true,"fixed":false}""", groupId)

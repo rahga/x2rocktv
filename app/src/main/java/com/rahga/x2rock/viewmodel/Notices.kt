@@ -59,6 +59,9 @@ internal fun failureNotice(what: String, e: Throwable): String? {
     return "Couldn't $what: $why"
 }
 
+/** A level the speaker does not control: a Port or an Amp with a fixed line-out. */
+internal const val FIXED_VOLUME = "This speaker's volume is fixed. Change it on the amplifier it feeds."
+
 internal const val AUTHENTICATION_ON =
     "this system requires authentication. Turn it off in the Sonos app: " +
         "Account > Privacy and Security > Connection Security"
