@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -249,6 +250,7 @@ fun HomeScreen(
             val volumes by homeViewModel.playerVolumes.collectAsState()
             val groupVolumes by homeViewModel.groupVolumes.collectAsState()
             val upnpOff by homeViewModel.upnpOff.collectAsState()
+            val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
             Overlay {
                 RoomPanel(
                     group = liveGroup,
@@ -258,6 +260,7 @@ fun HomeScreen(
                     rooms = rooms,
                     playerNames = playerNames,
                     playerVolumes = volumes,
+                    mutedPlayers = mutedPlayers,
                     groupVolumes = groupVolumes,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
@@ -533,6 +536,14 @@ private fun RoomListItem(
                         contentDescription = "Has a TV input",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    )
+                }
+                // Muted is a state, not a capability, so it is not dimmed like the TV badge.
+                if (info.muted) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                        contentDescription = "Muted",
+                        modifier = Modifier.size(16.dp),
                     )
                 }
                 if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
