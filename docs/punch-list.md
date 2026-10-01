@@ -124,7 +124,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   Control API fallback for TV input: `homeTheater:1 loadHomeTheaterPlayback` (player-scoped, no
   params) does not preserve the group, so offer it only for a soundbar that is alone. Capture
   `getSettingsGroup` and `settingsChanged` fixtures.
-- [ ] **1.8 Household id fallback.** `SonosSocket.householdId()` (a malformed frame) is still the
+- [x] **1.8 Household id fallback.** *Done 2026-10-01: `/status/zp`'s `HouseholdControlID`
+  replaces the malformed-frame probe, which is removed; a live test connects a household-less
+  seed on the office One SL. The second half needed nothing: a seed is reached by its `.local`
+  name, so an address now held by another household's player fails hostname verification,
+  and a failed remembered seed is already cleared.* `SonosSocket.householdId()` (a malformed frame) is still the
   fallback and a One SL ignored it. Replace with the long id from `http://<ip>:1400/status/zp`,
   which the live suite's named-address form already reads. A remembered seed whose household
   differs from what the player now reports is rejected, not used.
