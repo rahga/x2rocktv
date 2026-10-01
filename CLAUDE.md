@@ -42,7 +42,7 @@ claim in it was run against real hardware.
 
   When the soundbar is a member, taking the TV hands coordination to it, so the player we
   asked stops coordinating before it answers and the reply is simply lost. That is normal,
-  not a failure, and only the coordinator's own answer is treated as real. **Nothing polls
+  not a failure: silence is never treated as an answer, from either player. **Nothing polls
   to find out** — unlike the sibling project, which had to: the switch arrives as a
   `playbackMetadata:1` event carrying `htInputFormat`, the same thing that lights the row.
   Measured on hardware: TV audio at ~4-5s, the format settled by ~9s. With no reply,
