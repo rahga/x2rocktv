@@ -380,6 +380,7 @@ class SonosHousehold(
             // until Sonos dropped it. A group left unsubscribed here is caught up by the next
             // groups:1 event, which is how groups formed later are subscribed anyway.
             groups.groups.forEach { group -> runCatching { subscribeGroup(group) } }
+            if (unsubscribedGroupsRemain()) catchUpLater()
 
             // The UPnP switch: read once, then followed. A `settingsChanged` event names the
             // version each settings group is at, so a flip in the Sonos app is heard without
@@ -485,6 +486,7 @@ class SonosHousehold(
 
     private suspend fun teardown() = lock.withLock {
         generation++
+        catchUpJob?.cancel()
         takeJobs().forEach { it.cancel() }
         // Out of the pool before they are cancelled, so the failures cancelling raises are
         // recognised as a previous session's and ignored. cancel(), not close(): this runs on
@@ -508,6 +510,7 @@ class SonosHousehold(
         reconnectJob?.cancel()
         reconnectJob = null
         generation++
+        catchUpJob?.cancel()
         takeJobs().forEach { it.cancel() }
         val closing = sockets.values.toList()
         sockets.clear()
@@ -1183,6 +1186,36 @@ class SonosHousehold(
             runCatching {
                 socketForPlayer(player.id)
                     .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
+            }
+        }
+        if (unsubscribedGroupsRemain()) catchUpLater()
+    }
+
+    @Volatile private var catchUpJob: Job? = null
+
+    private fun unsubscribedGroupsRemain(): Boolean =
+        _state.value.groups.any { subscribedGroups[it.id] != it.coordinatorId }
+
+    /**
+     * Keep trying the groups that could not be subscribed, with the reconnect's backoff.
+     *
+     * Needed because a topology event is not guaranteed. Kitchen, unplugged and plugged back
+     * in on the Shield, was listed as its own group the whole time, so its return changed no
+     * topology, no groups:1 event came, and it sat in the room list frozen — the very failure
+     * the catch-up exists to prevent, reached a way it did not cover. This is reconnecting to
+     * a speaker, not asking for state: it stops the moment every listed group is subscribed,
+     * or the session it belongs to is torn down.
+     */
+    private fun catchUpLater() {
+        if (catchUpJob?.isActive == true) return
+        val session = generation
+        catchUpJob = scope.launch {
+            var wait = MIN_BACKOFF_MILLIS
+            while (isActive && session == generation && unsubscribedGroupsRemain()) {
+                delay(wait)
+                if (session != generation) return@launch
+                runCatching { resubscribe() }
+                wait = nextBackoff(wait)
             }
         }
     }
