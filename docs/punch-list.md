@@ -337,6 +337,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   focus was restored on resume before the new selection had recomposed, onto the old row,
   and selection-follows-focus put it back. Fixed by waiting two frames; verified on the Shield.
   This was also why a channel tile could not switch rooms with the app open (4.5).
+- [x] **One unreachable coordinator sank the whole session.** Sonos lists an unplugged speaker
+  for minutes, and setup subscribed every listed group in turn, so one coordinator that could
+  not be reached threw out of it: on the Shield, Kitchen pulled after the party broke up left
+  every room behind "websocket to … failed", each retry failing the same way. Groups are now
+  subscribed one by one at setup, a failure left for the next groups:1 event; verified on the
+  Shield with Kitchen still listed and still down.
 - [x] **A grouped room's speaker rows were out of reach.** Neither pane scrolled, so with a
   five-room party on the TV input the Speakers rows were drawn below the screen and focus
   stopped at Favorites. The pane now scrolls, and focus brings each row into view; verified on

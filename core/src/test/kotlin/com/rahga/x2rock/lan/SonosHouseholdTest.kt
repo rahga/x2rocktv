@@ -755,6 +755,24 @@ class SonosHouseholdTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
     }
 
+    /**
+     * Sonos lists an unplugged speaker for minutes. One group whose coordinator cannot be
+     * reached must cost that group, not the session: on the Shield it cost every room.
+     */
+    @Test fun `a listed coordinator that cannot be reached does not sink the session`() = runBlocking<Unit> {
+        val groups = FakePlayer.reachableTopology().getAsJsonArray("groups").map { it.asJsonObject }
+        val kitchen = groups.first { it.get("name").asString == "Kitchen" }
+        fake.makeUnreachable(kitchen.get("coordinatorId").asString)
+
+        connected()
+        val state = household.state.value
+        assertTrue(state.connected)
+        assertNull(state.error)
+        val dining = state.groups.first { it.name == "Dining Room" }.id
+        fake.push("groupVolume:1", "groupVolume", VOLUME_42, dining)
+        withTimeout(5_000) { household.groupStates.first { it[dining]?.volume?.volume == 42 } }
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()
