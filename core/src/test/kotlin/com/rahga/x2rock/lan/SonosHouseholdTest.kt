@@ -272,6 +272,43 @@ class SonosHouseholdTest {
     }
 
     /** Regression: absent playModes used to reset shuffle and repeat to off. */
+    /**
+     * The captured error, between two captured statuses. It must change nothing a status
+     * would — x2rock's version reset every capability to false on each failed stream — and
+     * it must outlast the IDLE statuses a failed stream sends, or it is gone before anyone
+     * reads it. Only playing again clears it.
+     */
+    @Test fun `a playback error is kept as an error, not read as a status`() = runBlocking<Unit> {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        val playing = withTimeout(5_000) {
+            household.groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
+        }.getValue(groupId)
+
+        fake.pushFixture("playbackError", groupId)
+        val failed = withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError != null } }
+            .getValue(groupId)
+        assertEquals("ERROR_NO_PLAYABLE_CONTENT", failed.lastError?.reason)
+        assertEquals("Couldn't play this: found nothing it could play", failed.lastError?.describe())
+        assertEquals("the error must not touch what the source permits", playing.actions, failed.actions)
+        assertEquals(playing.playMode, failed.playMode)
+        assertEquals(playing.playbackState, failed.playbackState)
+
+        fake.pushFixture("playbackStatus", groupId)
+        val idle = withTimeout(5_000) {
+            household.groupStates.first { it[groupId]?.playbackState == PlaybackStates.IDLE }
+        }.getValue(groupId)
+        assertNotNull("an idle status after a failure does not answer it", idle.lastError)
+
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) {
+            household.groupStates.first {
+                it[groupId]?.playbackState == PlaybackStates.PLAYING && it[groupId]?.lastError == null
+            }
+        }
+    }
+
     @Test fun `a playback event without playModes leaves the play mode alone`() = runBlocking {
         connected()
         val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id

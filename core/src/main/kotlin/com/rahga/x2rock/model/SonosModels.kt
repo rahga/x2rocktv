@@ -183,6 +183,34 @@ data class ContainerMetadata(
     val htInputFormat: HomeTheaterFormat? = null,
 )
 /**
+ * A `playback:1` event saying the room could not play something, rather than what state it is
+ * in. Same namespace as a status, told apart only by its type: read as a status, every field
+ * is absent and it vanishes as "nothing changed" — x2rock lost them exactly that way.
+ *
+ * Every field is optional because the player treats them so. Captured off a One SL playing a
+ * URL that does not resolve: `errorCode` and `reason`, `serviceId: -1`, and no track at all.
+ * x2rock's capture of an expired stream carried `trackName` and `itemId`, and a second error
+ * three seconds later carried no `itemId`.
+ */
+data class PlaybackError(
+    val errorCode: String? = null,
+    val reason: String? = null,
+    val trackName: String? = null,
+) {
+    /** What to tell someone holding a remote: the reason in words, and the track if named. */
+    fun describe(): String {
+        val code = reason ?: errorCode
+        val why = when (code) {
+            "ERROR_CANT_REACH_SERVER" -> "couldn't reach its server"
+            "ERROR_NO_PLAYABLE_CONTENT", "ERROR_PLAYBACK_NO_PLAYABLE_CONTENT" -> "found nothing it could play"
+            null -> "failed"
+            else -> code.removePrefix("ERROR_").lowercase().replace('_', ' ')
+        }
+        return if (trackName.isNullOrBlank()) "Couldn't play this: $why" else "Couldn't play $trackName: $why"
+    }
+}
+
+/**
  * What the *source* permits, which is not a property of the speaker: a queue of tracks allows
  * skip, seek and shuffle, while a live stream refuses all three — and refuses pause too,
  * offering only stop. Verified on hardware: pausing an internet radio stream leaves the room

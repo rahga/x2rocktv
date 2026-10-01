@@ -12,9 +12,11 @@ import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.PlaybackMetadata
 import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.model.PlaybackError
 import com.rahga.x2rock.model.PlayerSettings
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
+import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.smapi.Auth
 import com.rahga.x2rock.smapi.RatingsCatalogue
@@ -68,6 +70,12 @@ data class GroupState(
      * that has merely not answered yet.
      */
     val metadataSeen: Boolean = false,
+    /**
+     * The last thing this room failed to play, until it plays again. A failed stream drops
+     * the room to IDLE and says why only in a `playbackError`, so without this the pane
+     * shows an idle room and nothing about the music having stopped.
+     */
+    val lastError: PlaybackError? = null,
 ) {
     /**
      * Whether this group is on a soundbar's TV input right now.
@@ -847,6 +855,15 @@ class SonosHousehold(
             "playback:1" -> {
                 if (groupId == null) return
                 val body = event.body.asJsonObject
+                // The same namespace sends two shapes. An error has none of a status's fields,
+                // so reading it as one would apply nothing and drop the only notice that the
+                // music stopped. The body's `_objectType` says which, as it does in every capture
+                // (the header's type agrees), and it is what x2rock reads too.
+                if (body.string("_objectType") == "playbackError") {
+                    val error = gson.fromJson(body, PlaybackError::class.java) ?: return
+                    update(groupId) { it.copy(lastError = error) }
+                    return
+                }
                 // Keep the groups list in step. It carries its own playbackState, which only
                 // a groups:1 event would otherwise refresh — leaving a room list showing
                 // "Playing" for something that stopped seconds ago.
@@ -861,8 +878,12 @@ class SonosHousehold(
                 }
                 val position = body.long("positionMillis")
                 update(groupId) {
+                    val playbackState = body.string("playbackState") ?: it.playbackState
                     it.copy(
-                        playbackState = body.string("playbackState") ?: it.playbackState,
+                        playbackState = playbackState,
+                        // Playing again answers the error; anything short of that leaves it
+                        // standing, because a failed stream is followed by IDLE statuses.
+                        lastError = it.lastError.takeUnless { playbackState.isPlaying() },
                         positionMillis = position ?: it.positionMillis,
                         // Only move the clock when a position actually arrived. The UI keys
                         // its extrapolation off this, so refreshing it regardless makes the

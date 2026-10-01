@@ -73,6 +73,11 @@ data class PlayerUiState(
     val playerVolumes: List<PlayerVolumeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
+    /**
+     * Why the room stopped, when it failed to play something — "Couldn't play this: found
+     * nothing it could play". Stands until the room plays again. See `GroupState.lastError`.
+     */
+    val playbackError: String? = null,
     val sleepTimerRemainingMillis: Long? = null,
     /**
      * The soundbar in this room, when it has one. Kept because the home-theatre writes are
@@ -185,6 +190,7 @@ class PlayerViewModel @Inject constructor(
                     crossfade = state.playMode.crossfade,
                     actions = state.actions,
                     isRadio = state.isRadio,
+                    playbackError = state.lastError?.describe(),
                     // Per-speaker rows only mean anything once a group has more than one.
                     playerVolumes = group?.playerIds
                         ?.takeIf { it.size > 1 }

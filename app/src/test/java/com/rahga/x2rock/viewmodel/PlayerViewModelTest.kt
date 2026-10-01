@@ -253,6 +253,14 @@ class PlayerViewModelTest {
         assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
     }
 
+    // ---------------------------------------------------------------- playback errors
+
+    @Test fun `a room that failed to play says why on the pane`() = runBlocking<Unit> {
+        fake.pushFixture("playbackError", groupId)
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.playbackError != null } }
+        assertEquals("Couldn't play this: found nothing it could play", state.playbackError)
+    }
+
     // ---------------------------------------------------------------- ratings
 
     /**

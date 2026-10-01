@@ -270,6 +270,12 @@ private fun TrackInfo(state: PlayerUiState) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodySmall)
                 }
+                // Without this a failed stream is just an idle room: the player says why in
+                // an event of its own, and only once.
+                state.playbackError?.let {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                }
             }
         }
     }
