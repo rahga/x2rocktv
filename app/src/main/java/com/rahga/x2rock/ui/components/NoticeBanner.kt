@@ -12,7 +12,8 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 
 /**
- * A command that did not work, for a few seconds — see `TransientNotice`. Never focusable:
+ * One line for a few seconds — a command that did not work, or one that did and has
+ * nothing else to show it, like a save. See `TransientNotice`. Never focusable:
  * a message must not move the remote's place, and there is nothing on it to press.
  */
 @Composable
@@ -21,9 +22,11 @@ fun NoticeBanner(text: String, modifier: Modifier = Modifier) {
         modifier = modifier
             .padding(bottom = 32.dp)
             .widthIn(max = 720.dp)
-            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+            // Inverse rather than the error colours: it carries "Saved as …" as well as
+            // "Couldn't …", and either has to stand out from whatever is behind it.
+            .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(12.dp))
             .padding(horizontal = 24.dp, vertical = 14.dp),
     ) {
-        Text(text, color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyLarge)
+        Text(text, color = MaterialTheme.colorScheme.inverseOnSurface, style = MaterialTheme.typography.bodyLarge)
     }
 }

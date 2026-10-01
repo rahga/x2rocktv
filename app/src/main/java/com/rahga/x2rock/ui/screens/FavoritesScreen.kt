@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.ui.components.NoticeBanner
+import com.rahga.x2rock.ui.components.dpadLongPress
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -92,6 +93,7 @@ fun FavoritesScreen(
                         onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) },
                         onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
                         onReplay = { item -> viewModel.replay(item, onDone = onBack) },
+                        onAppendPlaylist = viewModel::appendPlaylist,
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -126,6 +128,7 @@ private fun FavoritesList(
     onPlay: (Favorite) -> Unit,
     onPlayPlaylist: (Playlist) -> Unit,
     onReplay: (HistoryItem) -> Unit,
+    onAppendPlaylist: (Playlist) -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -188,6 +191,9 @@ private fun FavoritesList(
                         isActive = false,
                         isLoading = loadingId == playlistKey(playlist.id),
                         onClick = { onPlayPlaylist(playlist) },
+                        // Hold, or the Menu key: add to the end of the queue instead of
+                        // replacing it.
+                        onLongPress = { onAppendPlaylist(playlist) },
                         modifier = if (items.isEmpty() && index == 0) Modifier.focusRequester(firstFocus) else Modifier
                     )
                 }
@@ -230,12 +236,14 @@ private fun FavoriteRow(
     isActive: Boolean,
     isLoading: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onLongPress: (() -> Unit)? = null,
 ) {
     Card(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
+            .then(if (onLongPress != null) Modifier.dpadLongPress(onLongPress) else Modifier)
             .then(
                 if (isActive) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier
