@@ -421,6 +421,25 @@ class HomeViewModel @Inject constructor(
         failureNotice(what, e)?.let(_notice::post)
     }
 
+    /**
+     * Every speaker in [groupId] set to the group's own level — the desktop widget's
+     * *Normalize*, and x2rock's `vol normalize`. `playerVolume:1 setVolume` per member: Sonos
+     * then moves the group's level to their average, which is already the level each was set
+     * to, so the group stays where it was. Fixed line-outs are left alone.
+     */
+    fun normalizeGroup(groupId: String) {
+        val group = findGroup(groupId) ?: return
+        val level = household.groupState(groupId).volume?.volume ?: return
+        val pushed = household.playerVolumes.value
+        val members = group.playerIds.filter { pushed[it]?.fixed != true }
+        viewModelScope.launch {
+            members.forEach { playerId ->
+                runCatching { household.setPlayerVolume(playerId, level) }
+                    .onFailure { report("even out ${household.playerName(playerId)}", it) }
+            }
+        }
+    }
+
     /** What the app would choose with nothing else to go on. */
     private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups).firstOrNull()
 

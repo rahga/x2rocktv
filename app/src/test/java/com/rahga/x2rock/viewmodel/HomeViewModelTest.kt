@@ -156,6 +156,31 @@ class HomeViewModelTest {
         assertTrue("the host should not be asked to join itself", host.coordinatorId !in added)
     }
 
+    /** Each member to the group's level, on its own socket; a fixed line-out left alone. */
+    @Test fun `evening out sets every member to the group's level`() = runBlocking<Unit> {
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val group = withTimeout(10_000) {
+            viewModel.uiState.first { s ->
+                (s as? HomeViewModel.UiState.Success)?.groups?.any { it.playerIds.size > 1 } == true
+            } as HomeViewModel.UiState.Success
+        }.groups.first { it.playerIds.size > 1 }
+        val (first, second) = group.playerIds
+        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":false,"fixed":false}""", group.id)
+        withTimeout(5_000) { household.groupStates.first { it[group.id]?.volume?.volume == 30 } }
+        fake.push("playerVolume:1", "playerVolume", """{"volume":20,"muted":false,"fixed":false}""", playerId = first)
+        fake.push("playerVolume:1", "playerVolume", """{"volume":40,"muted":false,"fixed":true}""", playerId = second)
+        withTimeout(5_000) { household.playerVolumes.first { it[first] != null && it[second] != null } }
+        fake.clearHistory()
+
+        viewModel.normalizeGroup(group.id)
+
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" && it.get("playerId")?.asString == first }
+        assertEquals(30, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+        delay(500)
+        assertEquals("a fixed line-out was set", 1, fake.commandsNamed("setVolume"))
+    }
+
     /** Mute reaches the room list and the panel's speaker rows, both pushed. */
     @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
         val state = connect()

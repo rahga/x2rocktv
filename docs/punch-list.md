@@ -200,7 +200,8 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   reads "30 (muted)" since 1.9.* Group and member mute are commands today, but neither the row nor the
   panel shows them. Row: a mute glyph in place of the percentage, the bar dimmed at its level.
   Panel: member rows show muted. Mute stays a group-only control outside the speaker rows.
-- [ ] **2.3 Normalize.** In RoomPanel's "Playing together", an action that sets every member to
+- [x] **2.3 Normalize.** *Done 2026-10-01: "Even out the levels" in the room panel's
+  Playing together, shown while member levels differ; fixed line-outs are skipped.* In RoomPanel's "Playing together", an action that sets every member to
   the group's level (`playerVolume:1 setVolume` per member), shown only while levels differ.
 - [ ] **2.4 Bonded speakers that have dropped off.** `zones:1 subscribe` (there is no `get`)
   answers two events, per-member `state.disconnected` and `settings.gainTrimDB`; x2rock merges
