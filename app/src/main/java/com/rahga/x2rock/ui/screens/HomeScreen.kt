@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import com.rahga.x2rock.ui.components.NoticeBanner
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -280,6 +281,11 @@ fun HomeScreen(
                 )
             }
         }
+
+        // Last, so it draws over the room panel: grouping keeps the panel open, and a failed
+        // join must be said where the viewer is looking.
+        val notice by homeViewModel.notice.collectAsState()
+        notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
     }
 }
 

@@ -216,8 +216,8 @@ class Upnp(
             if (response.isSuccessful) return body
             if (response.code == 403) {
                 throw UpnpRefusedException(
-                    "$hostname refused UPnP (403). Enable it in the Sonos app: " +
-                        "Settings > Privacy & Security > UPnP"
+                    "$hostname refused UPnP (403). Turn UPnP on in the Sonos app: " +
+                        "Account > Privacy and Security > Connection Security"
                 )
             }
             throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}")

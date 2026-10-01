@@ -81,7 +81,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   find the group *by coordinator*; if every added player is in and every removed one is out,
   it is done. Likewise `useTvInput` on a member soundbar, whose reply is lost by design: the
   `htInputFormat` event confirms it, but report a failure if nothing arrives within ~20s.
-- [ ] **1.4 Commands fail silently.** Every view-model command is `runCatching { }` with the
+- [x] **1.4 Commands fail silently.** *Done 2026-10-01: every view-model command reports
+  through `TransientNotice` — the pane, a banner over the room panel, and the queue and
+  favourites screens; a failed favourite no longer navigates back. `ERROR_NO_PERMISSION`
+  names Connection Security; the UPnP 403 text now gives the path x2rock confirmed. Not yet
+  seen on a television.* Every view-model command is `runCatching { }` with the
   error discarded. Minimum: a transient message on the pane or panel for a refused or timed-out
   command, reusing the 4s message the ratings WIP added. `ERROR_NO_PERMISSION` and UPnP 403 get
   the wording from 1.6 and 1.7.

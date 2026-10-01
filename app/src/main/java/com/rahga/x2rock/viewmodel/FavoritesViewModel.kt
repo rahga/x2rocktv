@@ -31,6 +31,11 @@ class FavoritesViewModel @Inject constructor(
 
     val loadingFavoriteId = MutableStateFlow<String?>(null)
 
+    private val _notice = TransientNotice(viewModelScope)
+
+    /** Why the last favourite did not load, for a few seconds. */
+    val notice: StateFlow<String?> = _notice.text
+
     init {
         load()
     }
@@ -40,9 +45,13 @@ class FavoritesViewModel @Inject constructor(
     fun loadFavorite(favoriteId: String, onDone: () -> Unit) {
         viewModelScope.launch {
             loadingFavoriteId.value = favoriteId
-            runCatching { household.loadFavorite(groupId, favoriteId) }
+            val loaded = runCatching { household.loadFavorite(groupId, favoriteId) }
             loadingFavoriteId.value = null
-            onDone()
+            // Back to the room only once it worked. On failure the list stays, so the reason
+            // is said where the viewer is and another favourite is one press away.
+            loaded
+                .onSuccess { onDone() }
+                .onFailure { e -> failureNotice("play that favourite", e)?.let(_notice::post) }
         }
     }
 

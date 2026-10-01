@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import com.rahga.x2rock.ui.components.NoticeBanner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ fun FavoritesScreen(
     val state by viewModel.uiState.collectAsState()
     val loadingId by viewModel.loadingFavoriteId.collectAsState()
     val playerState by playerViewModel.uiState.collectAsState()
+    val notice by viewModel.notice.collectAsState()
     BackHandler { onBack() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -82,6 +84,11 @@ fun FavoritesScreen(
                         onBack = onBack,
                         onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) }
                     )
+                }
+                // This screen's own failures, or the now-playing bar's, which go through the
+                // player — either would otherwise be said only on a pane this screen covers.
+                (notice ?: playerState.notice)?.let {
+                    NoticeBanner(it, Modifier.align(Alignment.BottomCenter))
                 }
             }
             val nowPlayingTrack = playerState.trackName

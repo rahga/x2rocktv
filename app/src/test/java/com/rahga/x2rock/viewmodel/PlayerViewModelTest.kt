@@ -253,6 +253,34 @@ class PlayerViewModelTest {
         assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
     }
 
+    // ---------------------------------------------------------------- failed commands
+
+    @Test fun `a refused command says so on the pane`() = runBlocking<Unit> {
+        fake.refuse("togglePlayPause")
+        viewModel.togglePlayPause()
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.notice != null } }
+        assertEquals("Couldn't play or pause: ERROR_COMMAND_FAILED", state.notice)
+    }
+
+    /**
+     * A newer press cancels the volume send still in flight, and `runCatching` catches that
+     * cancellation too. It is not a failure; reported, a held key would flash an error on
+     * every repeat. The reply is held so the cancellation lands mid-command, the one place
+     * `runCatching` sees it.
+     */
+    @Test fun `a volume send cancelled by a newer press says nothing`() = runBlocking<Unit> {
+        pushVolume(20)
+        awaitVolume(20)
+        fake.holdRepliesTo("setVolume")
+        viewModel.adjustVolume(+5)
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        viewModel.adjustVolume(+5)
+        fake.releaseReplies()
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        delay(500)
+        assertNull("a cancelled send was reported as a failure", viewModel.uiState.value.notice)
+    }
+
     // ---------------------------------------------------------------- playback errors
 
     @Test fun `a room that failed to play says why on the pane`() = runBlocking<Unit> {
@@ -272,8 +300,8 @@ class PlayerViewModelTest {
      */
     @Test fun `a failed rating attempt surfaces a message rather than nothing`() = runBlocking<Unit> {
         viewModel.rateUp()
-        val state = withTimeout(5_000) { viewModel.uiState.first { it.ratingResult != null } }
-        assertEquals("nothing rateable is playing in this room", state.ratingResult)
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.notice != null } }
+        assertEquals("nothing rateable is playing in this room", state.notice)
     }
 
     // ---------------------------------------------------------------- failure

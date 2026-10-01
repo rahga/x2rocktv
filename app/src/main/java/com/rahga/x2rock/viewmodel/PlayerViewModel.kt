@@ -96,11 +96,10 @@ data class PlayerUiState(
      */
     val rating: SonosHousehold.RatingState? = null,
     /**
-     * A transient result from the last [PlayerViewModel.rateUp]/[PlayerViewModel.rateDown] —
-     * "Rated up on iHeartRadio", or why it failed. Cleared a few seconds after it lands; not
-     * meant to be read back once the moment has passed.
+     * One transient line: a rating's result ("Rated up on iHeartRadio"), or why a command
+     * did not work. Cleared a few seconds after it lands. See [TransientNotice].
      */
-    val ratingResult: String? = null,
+    val notice: String? = null,
 )
 
 /** What one read of `settings:1` yielded, with the speaker it came from. */
@@ -120,7 +119,7 @@ class PlayerViewModel @Inject constructor(
     private val _groupName = MutableStateFlow("")
     private val _sleepRemaining = MutableStateFlow<Long?>(null)
     private val _homeTheater = MutableStateFlow<HomeTheaterUi?>(null)
-    private val _ratingResult = MutableStateFlow<String?>(null)
+    private val notice = TransientNotice(viewModelScope)
     /** The last [SonosHousehold.ratingState] answer, with the room it answered for. */
     private val _rating = MutableStateFlow<Pair<String, SonosHousehold.RatingState>?>(null)
 
@@ -217,8 +216,8 @@ class PlayerViewModel @Inject constructor(
         }.combine(_rating) { state, rating ->
             // Keyed to the room it was read for, so a switch never shows the last room's.
             state.copy(rating = rating?.takeIf { it.first == _groupId.value }?.second)
-        }.combine(_ratingResult) { state, result ->
-            state.copy(ratingResult = result)
+        }.combine(notice.text) { state, text ->
+            state.copy(notice = text)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
     private val controls = object : NowPlayingPublisher.Controls {
@@ -309,6 +308,7 @@ class PlayerViewModel @Inject constructor(
         _homeTheater.value = ht.copy(nightMode = wanted)
         viewModelScope.launch {
             runCatching { household.setNightMode(ht.soundbarId, wanted) }
+                .onFailure { report("change Night Sound", it) }
             loadHomeTheater()
         }
     }
@@ -320,6 +320,7 @@ class PlayerViewModel @Inject constructor(
         _homeTheater.value = ht.copy(speechEnhancement = wanted)
         viewModelScope.launch {
             runCatching { household.setSpeechEnhancement(ht.soundbarId, wanted) }
+                .onFailure { report("change Speech Enhancement", it) }
             loadHomeTheater()
         }
     }
@@ -364,9 +365,9 @@ class PlayerViewModel @Inject constructor(
     //
     // Fire and forget. The player answers with an event, and the flows above pick it up.
 
-    fun togglePlayPause() = command { household.togglePlayPause(it) }
-    fun skipToNextTrack() = command { household.skipToNextTrack(it) }
-    fun skipToPreviousTrack() = command { household.skipToPreviousTrack(it) }
+    fun togglePlayPause() = command("play or pause") { household.togglePlayPause(it) }
+    fun skipToNextTrack() = command("skip") { household.skipToNextTrack(it) }
+    fun skipToPreviousTrack() = command("go back") { household.skipToPreviousTrack(it) }
 
     // ------------------------------------------------------------ ratings
     //
@@ -391,11 +392,7 @@ class PlayerViewModel @Inject constructor(
                 },
                 onFailure = { it.message ?: "Could not rate this track" },
             )
-            _ratingResult.value = message
-            delay(RATING_MESSAGE_MILLIS)
-            // Only clear it if it's still the message this call posted — a second press
-            // inside the window must not have its own result erased by the first one's timer.
-            if (_ratingResult.value == message) _ratingResult.value = null
+            notice.post(message)
         }
     }
 
@@ -414,7 +411,7 @@ class PlayerViewModel @Inject constructor(
         seekDebounceJob?.cancel()
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.seek(groupId, target) }
+            runCatching { household.seek(groupId, target) }.onFailure { report("seek", it) }
             // Only if it is still ours — see `pendingVolume` below.
             if (pendingSeekMillis == target) pendingSeekMillis = null
         }
@@ -423,7 +420,7 @@ class PlayerViewModel @Inject constructor(
     fun toggleMute() {
         if (uiState.value.volume == null) return
         val muted = !uiState.value.isMuted
-        command { household.setGroupMute(it, muted) }
+        command(if (muted) "mute" else "unmute") { household.setGroupMute(it, muted) }
     }
 
     /** Debounced: a held D-pad key would otherwise send one command per repeat. */
@@ -436,7 +433,7 @@ class PlayerViewModel @Inject constructor(
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setGroupVolume(groupId, target) }
+            runCatching { household.setGroupVolume(groupId, target) }.onFailure { report("change the volume", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a
             // newer press throws in here, and this is not a suspension point, so clearing
             // unconditionally would delete the target that press just wrote — and the press
@@ -466,7 +463,10 @@ class PlayerViewModel @Inject constructor(
             shuffle = uiState.value.shuffle,
             crossfade = uiState.value.crossfade,
         )
-        viewModelScope.launch { runCatching { household.setPlayMode(groupId, transform(current)) } }
+        viewModelScope.launch {
+            runCatching { household.setPlayMode(groupId, transform(current)) }
+                .onFailure { report("change the play mode", it) }
+        }
     }
 
     fun adjustPlayerVolume(playerId: String, delta: Int) {
@@ -477,6 +477,7 @@ class PlayerViewModel @Inject constructor(
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
+                .onFailure { report("change that speaker's volume", it) }
             // Only if it is still ours — see `pendingVolume` above.
             if (pendingPlayerVolumes[playerId] == target) pendingPlayerVolumes.remove(playerId)
         }
@@ -484,7 +485,10 @@ class PlayerViewModel @Inject constructor(
 
     fun togglePlayerMute(playerId: String) {
         val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
-        viewModelScope.launch { runCatching { household.setPlayerMute(playerId, !current.muted) } }
+        viewModelScope.launch {
+            runCatching { household.setPlayerMute(playerId, !current.muted) }
+                .onFailure { report(if (current.muted) "unmute that speaker" else "mute that speaker", it) }
+        }
     }
 
     // ------------------------------------------------------------ sleep timer
@@ -502,6 +506,7 @@ class PlayerViewModel @Inject constructor(
                     sleepTimerJob = null
                     if (uiState.value.playbackState.isPlaying()) {
                         runCatching { household.pause(groupId) }
+                            .onFailure { report("pause for the sleep timer", it) }
                     }
                     break
                 }
@@ -523,13 +528,17 @@ class PlayerViewModel @Inject constructor(
         super.onCleared()
     }
 
-    private fun command(block: suspend (String) -> Unit) {
+    private fun command(what: String, block: suspend (String) -> Unit) {
         val groupId = _groupId.value ?: return
-        viewModelScope.launch { runCatching { block(groupId) } }
+        viewModelScope.launch { runCatching { block(groupId) }.onFailure { report(what, it) } }
+    }
+
+    /** Says why [what] failed, unless it was only cancelled by a newer press. */
+    private fun report(what: String, e: Throwable) {
+        failureNotice(what, e)?.let(notice::post)
     }
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
-        const val RATING_MESSAGE_MILLIS = 4_000L
     }
 }
