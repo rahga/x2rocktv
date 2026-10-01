@@ -123,7 +123,7 @@ SL on a desk as much as for five rooms with a soundbar, so nothing asserts a roo
 group count, or a populated queue.
 
 **The discipline that makes the fake trustworthy: capture fixtures, never invent them.**
-Everything in `core/src/test/resources/fixtures/` was recorded verbatim off a real household
+Everything in `core/src/testFixtures/resources/fixtures/` was recorded verbatim off a real household
 and redacted for identifiers only. The invented payloads these replaced had no `_objectType`
 anywhere, no `queueVersion`, no `availablePlaybackActions`, and no stereo pair — a fake
 built from what one *assumes* the protocol looks like tests those assumptions against

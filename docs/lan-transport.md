@@ -4,30 +4,29 @@
 NVIDIA Shield (Android 11 / API 30, Ethernet) and a real Sonos household. Nothing here is
 inferred from documentation.
 
-This document exists because `:core` is built on the wrong transport. It records what the
-replacement is and what it costs on this platform, so the rewrite does not have to
-rediscover any of it.
+This document was written when `:core` was built on the wrong transport, to record what
+the replacement was and what it costs on this platform. The rewrite it was for landed in
+2026-09; what it records is still how `:core` works.
 
 ---
 
-## Why the cloud API has to go
+## Why the cloud API went
 
 Two independent reasons, either sufficient on its own.
 
 **1. It cannot ship on a television.** Sonos's OAuth consent page cannot be completed with
 a remote — reaching and activating its Sign In control wants a pointer — and Sonos offers
-no device-code or second-screen grant. `LoginScreen` → `SonosAuthWebViewScreen` is a dead
-end on the target device, whatever else is right about it. The account path is not
+no device-code or second-screen grant. The app's old `LoginScreen` → `SonosAuthWebViewScreen`
+was a dead end on the target device, whatever else was right about it. The account path is not
 undesirable here; it is closed.
 
 **2. It buys nothing.** The Control API is the *same API* over the LAN, unauthenticated.
 The only cloud-exclusive capability is control from outside the house. YouTube Music search
-is closed on both transports — the `apiKey` is sealed in an RSA/AES envelope opened only by
-the controller app and player firmware — while SMAPI search works over the LAN with no
-account at all.
+is closed on both transports — by a Google project gate on its partner API, x2rock found on
+2026-09-23 — while SMAPI search works over the LAN with no account at all.
 
-Sibling research: `../x2rock/docs/architecture.md`, especially "Integration path" and
-"Porting to Android TV (Kotlin), with no Sonos account".
+Sibling research: `../x2rock/docs/architecture.md`, especially "Integration path". Its
+porting guidance for this app now lives here, in `docs/porting-from-x2rock.md`.
 
 ---
 
@@ -258,27 +257,13 @@ The probe used is a throwaway standalone project, not part of this repo.
 
 ---
 
-## What this means for `:core`
+## What this meant for `:core`
 
-Smaller than it looks. `SonosModels.kt` holds the Control API's own shapes — `groups`,
-`playbackState`, `positionMillis`, `groupVolume` — and the LAN events carry exactly those
-fields, because it is the same API. The model layer should survive largely intact.
-
-Replace: `SonosApiService.kt` (Retrofit REST → WebSocket), `AuthInterceptor.kt`.
-
-Delete outright: `SonosAuthRepository.kt`, `TokenStore` / `EncryptedTokenStore`,
-`SonosClientConfig`, `LoginScreen`, `SonosAuthWebViewScreen`, and `viewmodel/Polling.kt`
-with its backoff curve and `RateLimitedException` — all of it exists only to make polling a
-rate-limited cloud API survivable.
-
-The ViewModels and Compose screens are transport-agnostic: they consume a `StateFlow` and do
-not care what fills it. `PlayerViewModel` already publishes to a `MediaSession`, which is the
-Android analogue of the daemon's MPRIS layer — it just needs feeding from an event stream
-instead of a 5-second timer. Three of the four links in the chain are already reactive.
-
-Also removable once the transport lands: the six `delay(300L)`-then-refetch call sites in
-`PlayerViewModel`, and the 1-second fake progress ticker in `PlayerScreen.kt` — both are
-workarounds for having no event stream.
+Done in 2026-09. The model layer survived intact, as predicted: the LAN events carry exactly
+the Control API's own shapes. The Retrofit REST client, the OAuth flow and its token store,
+the login screens and the polling machinery with its backoff curve were all removed, along
+with the `delay(300L)`-then-refetch workarounds that existed only for want of an event
+stream. `ARCHITECTURE.md` describes what replaced them.
 
 ---
 
@@ -286,15 +271,18 @@ workarounds for having no event stream.
 
 - **The Sonos root CA.** Sourcing it out of band would remove the last trust relaxation and
   let the chain validate normally. Not chased.
-- **Long-lived socket hosting.** No `Service` exists in `:app` today; `ChannelSyncReceiver`
-  is a short-lived broadcast handler and the `MediaSession` is ViewModel-scoped. A persistent
-  WebSocket needs a lifecycle-appropriate home. **Not `mediaPlayback`**, though: this app
-  plays nothing, the speakers do, and that foreground-service type is for apps that are
-  themselves playing. `connectedDevice` is the honest description of talking to speakers on
-  the network. Untested, and quite possibly unnecessary — see CLAUDE.md.
-- **Network-change handling.** The sibling project treats suspend/resume and network changes
-  as "assume dead, reconnect from scratch" because a resumed TCP session can be a zombie that
-  accepts writes and never surfaces failure. `ConnectivityManager.NetworkCallback` is the
-  Android signal. Untested.
-- **The Google TV Streamer** (Android 14) is the stricter target and has not been tested;
-  newer releases have been tightening local-network access, which would surface there first.
+- **Long-lived socket hosting.** No `Service` exists in `:app`. The sockets live in an
+  application-scoped `CoroutineScope` and the `MediaSession` in a singleton behind
+  `NowPlayingPublisher`, so both survive Activity changes but not the process being
+  reclaimed, which costs a reconnect on the next launch. If a service is ever added, it is
+  **not `mediaPlayback`**: this app plays nothing, the speakers do, and that type is for apps
+  that are themselves playing. `connectedDevice` is the honest description of talking to
+  speakers on the network. Untested, and quite possibly unnecessary — see CLAUDE.md.
+
+Answered since this was written:
+
+- **Network-change handling** — `NetworkMonitor` feeds `ConnectivityManager.NetworkCallback`
+  into `SonosHousehold.onNetworkChanged()`, which rebuilds at once rather than waiting out a
+  backoff.
+- **The Google TV Streamer** (Android 14, Wi-Fi) raised nothing: the WebSocket, SSDP over Wi-Fi
+  and cleartext UPnP to `.local` all worked unchanged. See `CLAUDE.md`, "Tested on two devices".
