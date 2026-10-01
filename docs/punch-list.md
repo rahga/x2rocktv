@@ -132,7 +132,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   fallback and a One SL ignored it. Replace with the long id from `http://<ip>:1400/status/zp`,
   which the live suite's named-address form already reads. A remembered seed whose household
   differs from what the player now reports is rejected, not used.
-- [ ] **1.9 Volume buttons disabled while muted.** CLAUDE.md's own rule: a disabled tv-material3
+- [x] **1.9 Volume buttons disabled while muted.** *Done 2026-10-01: Vol −/+ and the
+  per-speaker steps are never disabled and send `setRelativeVolume`, so they need no known
+  level and unmute a muted room; a muted level is shown as "30 (muted)". The panel's bar keeps
+  `setVolume`. Live test on the office One SL; its volume restores now wait for the player's
+  own event, after one run left the room at 4.* CLAUDE.md's own rule: a disabled tv-material3
   button takes focus and draws no highlight, yet Vol −/+ are disabled while muted and until the
   volume is known. x2rock: a step on a muted room unmutes it (both setters unmute anyway) and the
   bar stays at its level, dimmed. Use `setRelativeVolume` for the buttons (a stateless control,

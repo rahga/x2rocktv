@@ -43,6 +43,9 @@ class FavoritesViewModel @Inject constructor(
     fun reload() = load()
 
     fun loadFavorite(favoriteId: String, onDone: () -> Unit) {
+        // One at a time: the rows are never disabled — a disabled tv-material3 row keeps focus
+        // and loses its highlight — so this is where a second press is turned away.
+        if (loadingFavoriteId.value != null) return
         viewModelScope.launch {
             loadingFavoriteId.value = favoriteId
             val loaded = runCatching { household.loadFavorite(groupId, favoriteId) }

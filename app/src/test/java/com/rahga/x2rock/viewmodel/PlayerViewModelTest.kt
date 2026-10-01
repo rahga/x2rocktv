@@ -101,14 +101,15 @@ class PlayerViewModelTest {
     }
 
     /**
-     * Worse than the wrong label: `adjustVolume` derived its target from that 0, so a
-     * Vol+ press in that window aimed at 0 + delta and turned the speaker *down*.
+     * The old regression was a Vol+ press in this window aiming at 0 + delta and turning the
+     * speaker *down*, because the target was computed from a level that had not arrived. A
+     * relative step has no baseline to get wrong: it moves the speaker by the step.
      */
-    @Test fun `adjusting before a volume is known sends nothing`() = runBlocking<Unit> {
+    @Test fun `a step before a volume is known moves it by the step`() = runBlocking<Unit> {
         viewModel.adjustVolume(+5)
-        delay(600)
-        val sent = fake.received.any { it.get("command")?.asString == "setVolume" }
-        assertFalse("a volume was set with no baseline to set it from", sent)
+        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setRelativeVolume" }
+        assertEquals(5, sentDelta())
+        assertEquals("no absolute level may be sent from a guess", 0, fake.commandsNamed("setVolume"))
     }
 
     @Test fun `muting before a volume is known sends nothing`() = runBlocking<Unit> {
@@ -131,26 +132,28 @@ class PlayerViewModelTest {
         repeat(4) { viewModel.adjustVolume(+5) }
 
         val command = fake.awaitCommand(timeoutMillis = 3_000) {
-            it.get("command")?.asString == "setVolume"
+            it.get("command")?.asString == "setRelativeVolume"
         }
         assertEquals(groupId, command.get("groupId").asString)
-        // 30 + 5 + 5 + 5 + 5, not 30 + 5.
-        assertEquals(50, sentVolume())
+        // Four steps, not one.
+        assertEquals(20, sentDelta())
         // And one command, not four: the debounce still collapses them. Counted from the
         // fake's own log, because awaitCommand above consumed the queue entry.
         delay(600)
-        assertEquals(1, fake.commandsNamed("setVolume"))
+        assertEquals(1, fake.commandsNamed("setRelativeVolume"))
     }
 
-    @Test fun `presses are clamped to the usable range`() = runBlocking<Unit> {
-        pushVolume(98)
-        awaitVolume(98)
-        repeat(3) { viewModel.adjustVolume(+5) }
-        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setVolume" }
-        assertEquals(100, sentVolume())
+    /** Muted is not a reason to refuse a step: the player unmutes on either setter. */
+    @Test fun `a step on a muted room is sent`() = runBlocking<Unit> {
+        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":true,"fixed":false}""", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { it.isMuted } }
+        viewModel.adjustVolume(-5)
+        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setRelativeVolume" }
+        assertEquals(-5, sentDelta())
     }
 
-    private fun sentVolume(): Int? = fake.lastCommandBody("setVolume")?.get("volume")?.asInt
+    private fun sentDelta(): Int? = fake.lastCommandBody("setRelativeVolume")?.get("volumeDelta")?.asInt
+
 
     // ---------------------------------------------------------------- play modes
 
@@ -271,14 +274,16 @@ class PlayerViewModelTest {
     @Test fun `a volume send cancelled by a newer press says nothing`() = runBlocking<Unit> {
         pushVolume(20)
         awaitVolume(20)
-        fake.holdRepliesTo("setVolume")
+        fake.holdRepliesTo("setRelativeVolume")
         viewModel.adjustVolume(+5)
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setRelativeVolume" }
         viewModel.adjustVolume(+5)
         fake.releaseReplies()
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setRelativeVolume" }
         delay(500)
         assertNull("a cancelled send was reported as a failure", viewModel.uiState.value.notice)
+        // The first step had already gone when it was cancelled, so the second sends its own.
+        assertEquals("a step was sent twice", 5, sentDelta())
     }
 
     /** UPnP off takes the queue away and puts the reason on the pane; on again restores it. */

@@ -198,7 +198,8 @@ Derives everything visible for the selected group from pushed state, and feeds
 `NowPlayingPublisher` so media keys and the TV's transport controls work. It never takes the
 volume keys. Manages:
 - Volume and seek debouncing: 300ms, accumulating, so a held key sends one command by the
-  total rather than one per repeat
+  total rather than one per repeat. Volume buttons send `setRelativeVolume` (Sonos's rule for
+  stateless controls); the room panel's level bar sends `setVolume`
 - The home-theatre reading and its optimistic toggles
 - The rating state
 - A notice line: a rating's result, or why a command failed

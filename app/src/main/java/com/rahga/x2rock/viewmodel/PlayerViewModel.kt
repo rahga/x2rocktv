@@ -136,9 +136,9 @@ class PlayerViewModel @Inject constructor(
     // Necessary because uiState is now purely pushed: without it, five volume presses
     // inside the debounce window all read the same unchanged pushed value and the speaker
     // moves one step instead of five. Cleared once the command has gone.
-    private var pendingVolume: Int? = null
+    private var pendingVolumeDelta = 0
     private var pendingSeekMillis: Long? = null
-    private val pendingPlayerVolumes = mutableMapOf<String, Int>()
+    private val pendingPlayerDeltas = mutableMapOf<String, Int>()
 
     private var lastMetadataKey = ""
     private var lastPbStateCode = -1
@@ -302,7 +302,7 @@ class PlayerViewModel @Inject constructor(
     /**
      * Applied locally before it is sent, then reconciled by the re-read.
      *
-     * Necessary for the same reason as [pendingVolume]: nothing pushes these, so a second
+     * Necessary for the same reason the volume steps accumulate: nothing pushes these, so a second
      * press inside the write-and-re-read window would otherwise read the same stale value and
      * send the same command again — two presses landing on *on* rather than back where they
      * started.
@@ -417,7 +417,10 @@ class PlayerViewModel @Inject constructor(
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.seek(groupId, target) }.onFailure { report("seek", it) }
-            // Only if it is still ours — see `pendingVolume` below.
+            // Only if it is still ours. `runCatching` catches the CancellationException a newer
+            // press throws in here, and this is not a suspension point, so clearing
+            // unconditionally would delete the target that press just wrote — and the press
+            // after it would aim from the stale pushed position, losing a step.
             if (pendingSeekMillis == target) pendingSeekMillis = null
         }
     }
@@ -429,21 +432,29 @@ class PlayerViewModel @Inject constructor(
     }
 
     /** Debounced: a held D-pad key would otherwise send one command per repeat. */
+    /**
+     * A step, accumulated across presses and sent as one relative change after the debounce.
+     *
+     * Relative because a button says "louder", not a level (Sonos's rule for stateless
+     * controls), and because it needs no baseline: the old absolute target was computed from
+     * the last pushed level, so the buttons had to be disabled until one arrived and while
+     * muted — and a disabled tv-material3 button still takes focus and draws nothing. A step
+     * on a muted room unmutes it, as the player does for either setter.
+     *
+     * The total is taken and zeroed just before it is sent, so a newer press — which cancels
+     * this job, possibly with the command already in flight — starts a new total rather than
+     * resending this one or losing its own.
+     */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
-        // Nothing to adjust relative to until the speaker has told us where it is.
-        val current = pendingVolume ?: uiState.value.volume ?: return
-        val target = (current + delta).coerceIn(0, 100)
-        pendingVolume = target
+        pendingVolumeDelta += delta
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setGroupVolume(groupId, target) }.onFailure { report("change the volume", it) }
-            // Only if it is still ours. `runCatching` catches the CancellationException a
-            // newer press throws in here, and this is not a suspension point, so clearing
-            // unconditionally would delete the target that press just wrote — and the press
-            // after it would aim from the stale pushed level, losing a step.
-            if (pendingVolume == target) pendingVolume = null
+            val step = pendingVolumeDelta
+            pendingVolumeDelta = 0
+            if (step == 0) return@launch
+            runCatching { household.adjustGroupVolume(groupId, step) }.onFailure { report("change the volume", it) }
         }
     }
 
@@ -474,17 +485,16 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /** One speaker's step, the same way as [adjustVolume]. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
-        val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
-        val target = ((pendingPlayerVolumes[playerId] ?: current.volume) + delta).coerceIn(0, 100)
-        pendingPlayerVolumes[playerId] = target
+        pendingPlayerDeltas[playerId] = (pendingPlayerDeltas[playerId] ?: 0) + delta
         playerVolumeDebounceJobs[playerId]?.cancel()
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setPlayerVolume(playerId, target) }
+            val step = pendingPlayerDeltas.remove(playerId) ?: return@launch
+            if (step == 0) return@launch
+            runCatching { household.adjustPlayerVolume(playerId, step) }
                 .onFailure { report("change that speaker's volume", it) }
-            // Only if it is still ours — see `pendingVolume` above.
-            if (pendingPlayerVolumes[playerId] == target) pendingPlayerVolumes.remove(playerId)
         }
     }
 
