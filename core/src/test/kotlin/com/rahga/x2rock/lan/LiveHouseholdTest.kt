@@ -401,6 +401,30 @@ class LiveHouseholdTest {
     }
 
     /**
+     * Only with `-Dx2rock.live.room=<room>`. Arms the room's own sleep timer, reads it back
+     * and cancels it; a timer already running is put back with what it had left.
+     */
+    @Test fun `the room's sleep timer arms, reads back and cancels`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val before = household.sleepTimer(group.id)
+        try {
+            household.setSleepTimer(group.id, 60)
+            val armed = household.sleepTimer(group.id)
+            assertTrue("armed for an hour, read back $armed", armed != null && armed in 59 * 60_000L..60 * 60_000L)
+            household.setSleepTimer(group.id, null)
+            assertEquals(null, household.sleepTimer(group.id))
+        } finally {
+            runCatching {
+                if (before != null) household.setSleepTimer(group.id, (before / 60_000L).toInt().coerceAtLeast(1))
+                else household.setSleepTimer(group.id, null)
+            }
+        }
+    }
+
+    /**
      * Read-only, and about the protocol rather than this house: a soundbar answers
      * `settings:1 getPlayerSettings` with a `homeTheater` block. Nothing asserts which way
      * the toggles are set — a household where both happen to be off must pass too.

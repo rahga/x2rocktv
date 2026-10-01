@@ -286,6 +286,8 @@ class PlayerViewModel @Inject constructor(
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
         loadHomeTheater()
+        _sleepRemaining.value = null
+        loadSleepTimer()
     }
 
     /**
@@ -522,34 +524,47 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ------------------------------------------------------------ sleep timer
+    //
+    // Sonos's own timer, so the Sonos app and every other controller see it, and it outlives
+    // this one: the room pauses itself when it fires. It is not pushed, so it is read when a
+    // room is selected and after each change, and counted down here between reads for the
+    // display alone — nothing is asked of the speaker on a timer.
 
-    fun setSleepTimer(minutes: Int) {
+    fun setSleepTimer(minutes: Int) = changeSleepTimer(minutes, "set the sleep timer")
+
+    fun cancelSleepTimer() = changeSleepTimer(null, "cancel the sleep timer")
+
+    private fun changeSleepTimer(minutes: Int?, what: String) {
         val groupId = _groupId.value ?: return
-        sleepTimerJob?.cancel()
-        val endMs = System.currentTimeMillis() + minutes * 60_000L
-        _sleepRemaining.value = minutes * 60_000L
-        sleepTimerJob = viewModelScope.launch {
-            while (isActive) {
-                val remaining = endMs - System.currentTimeMillis()
-                if (remaining <= 0) {
-                    _sleepRemaining.value = null
-                    sleepTimerJob = null
-                    if (uiState.value.playbackState.isPlaying()) {
-                        runCatching { household.pause(groupId) }
-                            .onFailure { report("pause for the sleep timer", it) }
-                    }
-                    break
-                }
-                _sleepRemaining.value = remaining
-                delay(1_000L)
-            }
+        viewModelScope.launch {
+            runCatching { household.setSleepTimer(groupId, minutes) }.onFailure { report(what, it) }
+            loadSleepTimer()
         }
     }
 
-    fun cancelSleepTimer() {
+    private fun loadSleepTimer() {
+        val groupId = _groupId.value ?: return
         sleepTimerJob?.cancel()
-        sleepTimerJob = null
-        _sleepRemaining.value = null
+        sleepTimerJob = viewModelScope.launch {
+            // A failed read says nothing, rather than a timer that may not exist.
+            val remaining = runCatching { household.sleepTimer(groupId) }.getOrNull()
+            if (_groupId.value != groupId) return@launch
+            if (remaining == null) {
+                _sleepRemaining.value = null
+                return@launch
+            }
+            val endsAt = System.currentTimeMillis() + remaining
+            while (isActive) {
+                val left = endsAt - System.currentTimeMillis()
+                _sleepRemaining.value = left.coerceAtLeast(0)
+                if (left <= 0) break
+                delay(1_000L)
+            }
+            // The speaker stopped the room itself. Ask once more, so a timer someone re-armed
+            // meanwhile is shown, and an expired one clears.
+            delay(SLEEP_SETTLE_MILLIS)
+            if (isActive && _groupId.value == groupId) loadSleepTimer()
+        }
     }
 
     override fun onCleared() {
@@ -570,5 +585,7 @@ class PlayerViewModel @Inject constructor(
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
+        /** `00:00:00` lingers about seven seconds while the room stops; read after it. */
+        const val SLEEP_SETTLE_MILLIS = 8_000L
     }
 }

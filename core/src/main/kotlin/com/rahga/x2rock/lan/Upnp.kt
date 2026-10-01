@@ -43,6 +43,19 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 class UpnpRefusedException(message: String) : IOException(message)
 
+/** `HH:MM:SS` to milliseconds. */
+internal fun parseClock(clock: String): Long? {
+    val parts = clock.split(':').map { it.toLongOrNull() ?: return null }
+    if (parts.size != 3) return null
+    return ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * 1_000
+}
+
+/** Milliseconds to `HH:MM:SS`, rounded down to the second. */
+internal fun formatClock(millis: Long): String {
+    val total = (millis / 1_000).coerceAtLeast(0)
+    return "%02d:%02d:%02d".format(total / 3_600, total / 60 % 60, total % 60)
+}
+
 /** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
 data class MediaInfo(val currentUri: String, val currentUriMetaData: String = "") {
     val playingFromQueue: Boolean get() = currentUri.startsWith("x-rincon-queue:")
@@ -165,6 +178,32 @@ class Upnp(
             Regex("<HouseholdControlID>(Sonos_[^<.]+\\.[^<]+)</HouseholdControlID>")
                 .find(response.body?.string().orEmpty())?.groupValues?.get(1)
         }
+    }
+
+    /**
+     * The group's own sleep timer: how long until it stops, or `null` with none set.
+     *
+     * Sonos's timer, not this app's, so every controller sees it and it outlives the app. It
+     * lives on AVTransport, sent to the coordinator, and is not pushed. Captured on the office
+     * One SL, 2026-10-01: none set is an *empty* `RemainingSleepTimerDuration` at generation 0;
+     * armed, it reads `HH:MM:SS` and the generation counts every arming. `00:00:00` is a real
+     * state — expired and about to stop, for some seconds — so it reads as zero, not as none.
+     */
+    suspend fun sleepTimer(hostname: String): Long? = withContext(Dispatchers.IO) {
+        val envelope = parse(soap(hostname, Service.AV_TRANSPORT, "GetRemainingSleepTimerDuration", listOf("InstanceID" to "0")))
+        envelope.text("RemainingSleepTimerDuration")?.takeIf { it.isNotBlank() }?.let(::parseClock)
+    }
+
+    /**
+     * Arm the group's sleep timer for [millis], or cancel it with `null`. `HH:MM:SS` only —
+     * bare seconds answer 402 — and an empty duration cancels. It counts from acceptance; when
+     * it fires the room pauses and keeps its place.
+     */
+    suspend fun setSleepTimer(hostname: String, millis: Long?): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.AV_TRANSPORT, "ConfigureSleepTimer",
+            listOf("InstanceID" to "0", "NewSleepTimerDuration" to (millis?.let(::formatClock) ?: "")),
+        )
     }
 
     /** Set the transport's source. The coordinator is who is asked; see [useTvInput]. */

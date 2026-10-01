@@ -220,7 +220,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 
 ## Tier 3 — features x2rock has that fit a remote
 
-- [ ] **3.1 Native sleep timer.** The current timer is a view-model coroutine: invisible to every
+- [x] **3.1 Native sleep timer.** *Done 2026-10-01: Sonos's own timer over AVTransport,
+  read on selecting a room and after each change, counted down locally between reads, re-read
+  once it ends; withdrawn with UPnP off. Replies captured and a live test run on the office
+  One SL.* The current timer is a view-model coroutine: invisible to every
   other controller, lost with the process. Sonos's lives on UPnP `AVTransport:1`, group-scoped:
   `ConfigureSleepTimer(InstanceID, NewSleepTimerDuration)` in `HH:MM:SS` (bare seconds → 402, an
   empty string cancels) and `GetRemainingSleepTimerDuration → RemainingSleepTimerDuration,
