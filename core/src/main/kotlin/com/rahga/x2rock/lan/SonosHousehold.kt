@@ -590,6 +590,9 @@ class SonosHousehold(
     /** For the live suite, which must put a room's source back as it found it. */
     internal suspend fun mediaInfo(groupId: String): MediaInfo = upnp.mediaInfo(coordinatorHostname(groupId))
 
+    internal suspend fun destroyPlaylist(groupId: String, upnpId: String) =
+        upnp.destroyObject(coordinatorHostname(groupId), upnpId)
+
     internal suspend fun restoreSource(groupId: String, info: MediaInfo) =
         upnp.setTransportUri(coordinatorHostname(groupId), info.currentUri, info.currentUriMetaData)
 

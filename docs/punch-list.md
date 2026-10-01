@@ -323,6 +323,16 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 
 ---
 
+## Found at home, 2026-10-01
+
+- [ ] **0.1a Ratings cannot reach iHeartRadio.** The home household lists iHeartRadio
+  (service 6) as `DeviceLink`, not anonymous, and 0.1 rates anonymous services only — so the
+  buttons never appear for the service they were built for. Checked on Kitchen's iHeart
+  podcast track: `ratingState` stops at "needs an account linked". A device link is the
+  one sign-in that suits a remote: SMAPI `getDeviceLinkCode` shows a short code on the TV, the
+  viewer enters it on a phone, and `getDeviceAuthToken` is polled for the token. That reopens
+  Tier 5's "no linking" decision for this one flow — the owner's call.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [-] **Music-service search, browse, linking, `match`, household-token import.** Out
