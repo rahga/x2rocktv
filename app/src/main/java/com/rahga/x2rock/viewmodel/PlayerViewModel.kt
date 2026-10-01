@@ -18,7 +18,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -82,6 +84,18 @@ data class PlayerUiState(
     val nightMode: Boolean = false,
     /** Speech Enhancement. The player carries a level too; the Sonos app shows on/off. */
     val speechEnhancement: Boolean = false,
+    /**
+     * Where the current track stands with its service, or `null` when it cannot be rated
+     * from here — no track id, a service needing an account, or one publishing no ratings.
+     * Its presence is what draws the rating buttons.
+     */
+    val rating: SonosHousehold.RatingState? = null,
+    /**
+     * A transient result from the last [PlayerViewModel.rateUp]/[PlayerViewModel.rateDown] —
+     * "Rated up on iHeartRadio", or why it failed. Cleared a few seconds after it lands; not
+     * meant to be read back once the moment has passed.
+     */
+    val ratingResult: String? = null,
 )
 
 /** What one read of `settings:1` yielded, with the speaker it came from. */
@@ -101,6 +115,9 @@ class PlayerViewModel @Inject constructor(
     private val _groupName = MutableStateFlow("")
     private val _sleepRemaining = MutableStateFlow<Long?>(null)
     private val _homeTheater = MutableStateFlow<HomeTheaterUi?>(null)
+    private val _ratingResult = MutableStateFlow<String?>(null)
+    /** The last [SonosHousehold.ratingState] answer, with the room it answered for. */
+    private val _rating = MutableStateFlow<Pair<String, SonosHousehold.RatingState>?>(null)
 
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
@@ -191,6 +208,11 @@ class PlayerViewModel @Inject constructor(
                 nightMode = ht?.nightMode ?: false,
                 speechEnhancement = ht?.speechEnhancement ?: false,
             )
+        }.combine(_rating) { state, rating ->
+            // Keyed to the room it was read for, so a switch never shows the last room's.
+            state.copy(rating = rating?.takeIf { it.first == _groupId.value }?.second)
+        }.combine(_ratingResult) { state, result ->
+            state.copy(ratingResult = result)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
 
     private val controls = object : NowPlayingPublisher.Controls {
@@ -211,6 +233,26 @@ class PlayerViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { uiState.collect { publish(it) } }
+    }
+
+    /**
+     * A rating is not pushed, so it is asked for once per room and track — `collectLatest`
+     * drops a read still in flight when either moves on. Only a track with an id gets as far
+     * as the network; everything else answers `null` without leaving the LAN.
+     */
+    init {
+        viewModelScope.launch {
+            combine(_groupId, household.groupStates) { id, states ->
+                id to states[id]?.track?.id?.takeIf { it.isReal }
+            }.distinctUntilChanged().collectLatest { (id, trackId) ->
+                _rating.value = null
+                if (id != null && trackId != null) loadRating(id)
+            }
+        }
+    }
+
+    private suspend fun loadRating(groupId: String) {
+        _rating.value = household.ratingState(groupId)?.let { groupId to it }
     }
 
     fun selectGroup(id: String, name: String) {
@@ -319,6 +361,37 @@ class PlayerViewModel @Inject constructor(
     fun togglePlayPause() = command { household.togglePlayPause(it) }
     fun skipToNextTrack() = command { household.skipToNextTrack(it) }
     fun skipToPreviousTrack() = command { household.skipToPreviousTrack(it) }
+
+    // ------------------------------------------------------------ ratings
+    //
+    // Unlike the transport commands above, this isn't fire-and-forget: there's no pushed
+    // event for a rating, and a failure here (an unsupported service, a Live broadcast with
+    // nothing to rate) is worth saying rather than swallowing.
+
+    fun rateUp() = rate(up = true)
+    fun rateDown() = rate(up = false)
+
+    private fun rate(up: Boolean) {
+        val groupId = _groupId.value ?: return
+        viewModelScope.launch {
+            val outcome = runCatching { household.rate(groupId, up) }
+            // Re-read rather than assumed: whether a second "up" clears the first is the
+            // service's rule, and only its answer says which state the track is now in.
+            if (outcome.isSuccess) loadRating(groupId)
+            val message = outcome.fold(
+                onSuccess = { outcome ->
+                    val verb = if (outcome.up) "up" else "down"
+                    "Rated $verb on ${outcome.serviceName}" + if (outcome.skipped) " — skipping" else ""
+                },
+                onFailure = { it.message ?: "Could not rate this track" },
+            )
+            _ratingResult.value = message
+            delay(RATING_MESSAGE_MILLIS)
+            // Only clear it if it's still the message this call posted — a second press
+            // inside the window must not have its own result erased by the first one's timer.
+            if (_ratingResult.value == message) _ratingResult.value = null
+        }
+    }
 
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
@@ -451,5 +524,6 @@ class PlayerViewModel @Inject constructor(
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
+        const val RATING_MESSAGE_MILLIS = 4_000L
     }
 }

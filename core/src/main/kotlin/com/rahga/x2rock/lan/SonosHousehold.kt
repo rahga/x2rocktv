@@ -16,6 +16,14 @@ import com.rahga.x2rock.model.PlayerSettings
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.smapi.Auth
+import com.rahga.x2rock.smapi.RatingsCatalogue
+import com.rahga.x2rock.smapi.RatingsMatch
+import com.rahga.x2rock.smapi.RatingsStore
+import com.rahga.x2rock.smapi.Service
+import com.rahga.x2rock.smapi.SmapiClient
+import com.rahga.x2rock.smapi.Thumb
+import com.rahga.x2rock.smapi.parseServices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -78,6 +86,16 @@ data class GroupState(
 
     /** e.g. "Silence 2.0", "Dolby Digital 5.1", or "No Signal" with the television off. */
     val inputFormat: String get() = container?.htInputFormat?.summary().orEmpty()
+
+    /**
+     * Whether the current track carries an id a service could rate — the half of "can this
+     * be rated" knowable from metadata alone, and the check [SonosHousehold.ratingState] makes
+     * before it leaves the LAN. A Live broadcast's track has none (only its station container
+     * does, and stations are not offered for rating — verified against a real household,
+     * 2026-09-12). It is not the answer by itself: Plex tracks carry real ids and publish no
+     * ratings. Draw buttons from [SonosHousehold.ratingState], never from this.
+     */
+    val hasTrackId: Boolean get() = track?.id?.isReal == true
 }
 
 /** The household as a whole. */
@@ -140,12 +158,24 @@ class SonosHousehold(
     private val client: OkHttpClient = LanHttp.client(addressBook),
     /** Where the last reachable player is remembered, to skip discovery on a warm start. */
     private val seeds: SeedStore = SeedStore.None,
+    /**
+     * A plain, internet-facing client for [rate] — never [client]. That one trusts a
+     * leaf-only certificate chain built for the players' own LAN handshake, which has no
+     * business being extended to Sonos's CDN or a music service's own endpoint.
+     */
+    internetClient: OkHttpClient = OkHttpClient(),
+    /** Where a service's rating rules are remembered between presses. */
+    ratingsStore: RatingsStore = RatingsStore.None,
     /** Overridden only by tests, which reach a fake player on an ephemeral port. */
     private val port: Int = SonosSocket.PORT,
+    /** Likewise for cleartext UPnP, which a test answers from a separate fake. */
+    upnpPort: Int = Upnp.PORT,
 ) {
 
     private val gson = Gson()
-    private val upnp = Upnp(client)
+    private val upnp = Upnp(client, upnpPort)
+    private val smapi = SmapiClient(internetClient)
+    private val ratingsCatalogue = RatingsCatalogue(smapi, ratingsStore)
 
     private val sockets = java.util.concurrent.ConcurrentHashMap<String, SonosSocket>()
     private val socketJobs = java.util.Collections.synchronizedList(mutableListOf<Job>())
@@ -439,6 +469,101 @@ class SonosHousehold(
         val socket = sockets.values.firstOrNull() ?: error("not connected")
         val body = socket.command(Frames.onHousehold("favorites:1", "getFavorites", household))
         return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
+    }
+
+    // ---------------------------------------------------------------- ratings
+    //
+    // A genuinely different code path from everything else here: it starts from the group's
+    // current track id and coordinator, then leaves the LAN — and Sonos — entirely, for the
+    // service's presentation map on Sonos's CDN and `getExtendedMetadata`/`rateItem` on the
+    // service's own endpoint. Kept out of the socket machinery so a slow internet call can
+    // never block, or be mistaken for, the household. The mechanism is x2rock's `rate`; its
+    // `docs/openphonos-ratings-findings.md` holds the research it was built from.
+
+    /** What a [rate] call did. */
+    data class RateOutcome(
+        val up: Boolean,
+        val serviceName: String,
+        val shouldSkip: Boolean,
+        /** Whether [shouldSkip] was actually acted on — a failed skip must not read as the
+         * rating itself having failed, since it already landed. */
+        val skipped: Boolean,
+        val message: String?,
+    )
+
+    /** Where the current track stands with its service, when it can be rated at all. */
+    data class RatingState(val serviceName: String, val current: Thumb)
+
+    /** Everything a rate press needs, resolved: who to ask, what to name, which ids it offers. */
+    private class Rateable(val service: Service, val objectId: String, val matches: List<RatingsMatch>, val current: RatingsMatch)
+
+    /**
+     * Throws with a message meant to be shown as-is — "nothing rateable is playing", "Plex
+     * needs an account linked" — because each is a fact about the content or the service,
+     * not a bug. [ratingState] and [rate] share it, so a button is drawn exactly when a press
+     * would get as far as `rateItem`.
+     */
+    private suspend fun rateable(groupId: String): Rateable {
+        val trackId = groupState(groupId).track?.id?.takeIf { it.isReal }
+            ?: error("nothing rateable is playing in this room")
+        val serviceId = trackId.serviceId ?: error("the current track names no service")
+        val hostname = coordinatorHostname(groupId)
+
+        val service = parseServices(upnp.listAvailableServices(hostname).descriptors)
+            .firstOrNull { it.id == serviceId }
+            ?: error("service $serviceId is not in this player's service list")
+        // Before anything leaves the LAN: there is no account linking on a TV, so a service
+        // that needs one cannot be rated from here whatever its presentation map says.
+        if (service.auth != Auth.ANONYMOUS) error("${service.name} needs an account linked, which this app does not do")
+
+        val matches = ratingsCatalogue.ratingsFor(service)
+        if (matches.isEmpty()) error("${service.name} publishes no ratings, so nothing here can be rated")
+
+        val properties = smapi.extendedMetadata(service, token = null, id = trackId.objectId)
+        val current = RatingsMatch.current(matches, properties)
+            ?: error("${service.name} did not report a rating state for the current track")
+        return Rateable(service, trackId.objectId, matches, current)
+    }
+
+    /**
+     * Whether, and how, the track playing in [groupId] is rated — `null` whenever [rate]
+     * would refuse. Not pushed: nothing tells a controller that a rating changed, so this is
+     * asked once per track and again after a press, never on a timer.
+     *
+     * Costs a LAN call, and for a track with an id on an anonymous service that publishes
+     * ratings, one call to that service. Everything else stops before the internet.
+     */
+    suspend fun ratingState(groupId: String): RatingState? {
+        if (!groupState(groupId).hasTrackId) return null
+        val rateable = try {
+            rateable(groupId)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        return RatingState(rateable.service.name, rateable.current.selected)
+    }
+
+    /** Rate the track currently playing in [groupId]. Fails as [rateable] does. */
+    suspend fun rate(groupId: String, up: Boolean): RateOutcome {
+        val rateable = rateable(groupId)
+        val chosen = RatingsMatch.find(rateable.matches, rateable.current.propname, rateable.current.value, up)
+            ?: error("${rateable.service.name} offers no ${if (up) "up" else "down"} rating here")
+
+        val result = smapi.rateItem(rateable.service, token = null, id = rateable.objectId, rating = chosen.id)
+        // The rating already landed; a skip failure here is a separate fact, so it is caught
+        // rather than allowed to read as the rating itself having failed.
+        val skipped = result.shouldSkip == true &&
+            runCatching { skipToNextTrack(groupId) }.isSuccess
+
+        return RateOutcome(
+            up = up,
+            serviceName = rateable.service.name,
+            shouldSkip = result.shouldSkip == true,
+            skipped = skipped,
+            message = result.messageStringId,
+        )
     }
 
     /** Companion to [metadataStatusBody], for capturing what a source says it permits. */

@@ -89,6 +89,9 @@ dependencies {
 
     // Hilt
     implementation(libs.hilt.android)
+    // For the ratings cache (com.rahga.x2rock.smapi.PrefsRatingsStore) — `:core` keeps this
+    // as `implementation`, so it isn't on `:app`'s classpath by default.
+    implementation(libs.gson)
     ksp(libs.hilt.compiler)
 
     // Test
