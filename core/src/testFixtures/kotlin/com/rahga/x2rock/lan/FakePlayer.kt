@@ -212,6 +212,9 @@ class FakePlayer(
         groups = topology
     }
 
+    /** Answer nothing to the malformed "what household am I?" frame, as a real One SL did. */
+    @Volatile var ignoreHouseholdProbe = false
+
     @Volatile private var upnpAllowed = true
     @Volatile private var securityVersion = 9
 
@@ -374,6 +377,8 @@ class FakePlayer(
         // No namespace is the "what household am I?" probe: it fails by design, and the
         // answer rides in the header rather than the body.
         if (namespace == null) {
+            // A One SL on p20.96.1 sent nothing back at all; [ignoreHouseholdProbe] does the same.
+            if (ignoreHouseholdProbe) return
             respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
             return
         }

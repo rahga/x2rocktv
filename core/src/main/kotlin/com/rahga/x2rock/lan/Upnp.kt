@@ -150,6 +150,23 @@ class Upnp(
         )
     }
 
+    /**
+     * The household this player belongs to, in the **long** form the Control API accepts
+     * (`Sonos_xxx.yyy`), from `/status/zp`'s `HouseholdControlID`. Cleartext on 1400 and
+     * answered by any player, so a player found by any means can be connected to — and it
+     * works where the old way did not: asking over the socket with a deliberately malformed
+     * frame, which a One SL on p20.96.1 simply ignored. Not SOAP, so UPnP being off does not
+     * stop it.
+     */
+    suspend fun householdId(hostname: String): String? = withContext(Dispatchers.IO) {
+        require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
+        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).execute().use { response ->
+            if (!response.isSuccessful) return@withContext null
+            Regex("<HouseholdControlID>(Sonos_[^<.]+\\.[^<]+)</HouseholdControlID>")
+                .find(response.body?.string().orEmpty())?.groupValues?.get(1)
+        }
+    }
+
     /** Set the transport's source. The coordinator is who is asked; see [useTvInput]. */
     suspend fun setTransportUri(hostname: String, uri: String, metadata: String = ""): Unit =
         withContext(Dispatchers.IO) {

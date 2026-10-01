@@ -336,8 +336,11 @@ class SonosHousehold(
             val seedSocket = socketForHostname(hostname)
             seedHostname = hostname
 
-            // SSDP already answered this; only ask a player if it somehow did not.
-            val householdId = entry.householdId ?: seedSocket.householdId()
+            // SSDP already answered this. A seed found any other way asks the player's
+            // /status/zp — the socket's own way of asking was ignored by a One SL.
+            val householdId = entry.householdId
+                ?: upnp.householdId(hostname)
+                ?: error("$hostname did not say which household it belongs to")
 
             val groups = gson.fromJson(
                 seedSocket.command(Frames.onHousehold("groups:1", "getGroups", householdId)),
@@ -883,12 +886,6 @@ class SonosHousehold(
     }
 
     // ---------------------------------------------------------------- sockets
-
-    private suspend fun SonosSocket.householdId(): String =
-        // No command asks this, but every reply header answers it, so the cheapest question
-        // is a deliberately invalid one. It fails by design.
-        send(JsonObject()).header.householdId
-            ?: error("player did not report a householdId")
 
     /** The coordinator's socket, opened on first use and reused after. */
     private suspend fun coordinator(groupId: String): SonosSocket {

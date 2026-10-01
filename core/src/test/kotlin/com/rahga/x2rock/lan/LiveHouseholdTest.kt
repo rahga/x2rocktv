@@ -141,6 +141,17 @@ class LiveHouseholdTest {
      * hostname verifier, so it passing means the certificate really does carry that name —
      * the assumption the whole trust design rests on, checked against a real speaker.
      */
+    /**
+     * Read-only. A seed with no household — what any non-SSDP way of finding a player gives —
+     * must still connect: the household reads `/status/zp` for the long id. The old way, a
+     * malformed frame, got no answer at all from a One SL on p20.96.1.
+     */
+    @Test fun `a seed with no household still connects`() = runBlocking<Unit> {
+        household.connect(seed!!.copy(householdId = null))
+        val state = withTimeout(10_000) { household.state.first { it.connected } }
+        assertTrue("not the long form: ${state.householdId}", state.householdId!!.matches(Regex("Sonos_[^.]+\\..+")))
+    }
+
     @Test fun `a real player answers on its certificate hostname`() {
         val state = connected()
         assertNotNull(state.householdId)

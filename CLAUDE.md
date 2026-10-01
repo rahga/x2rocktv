@@ -173,11 +173,12 @@ later in the same session.
 That last row matters: the long id is available over cleartext 1400 from a bare address, so
 a player found by any means at all can be connected to without SSDP.
 
-**`SonosSocket.householdId()` is not a reliable fallback.** It sends a deliberately
-malformed frame and reads the household out of the error reply, and a One SL on p20.96.1
-simply ignored it — no reply at all, so a connect that depended on it hung its timeout and
-failed. It is only reached when a seed carries no household, which never happens via SSDP,
-which is why this went unnoticed for so long. Prefer a real source from the table above.
+**A seed with no household reads it from `/status/zp`** (`Upnp.householdId`, the
+`HouseholdControlID` element). It used to send a deliberately malformed frame and read the
+household out of the error reply, and a One SL on p20.96.1 simply ignored that — no reply at
+all, so a connect that depended on it hung its timeout and failed. It went unnoticed because
+SSDP always supplies the household. The probe is gone; do not bring it back as a fallback.
+`FakePlayer.ignoreHouseholdProbe` reproduces that One SL.
 
 ## Anything on the network can change this household
 
