@@ -49,7 +49,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
 
 ## Tier 1 — robustness: protocol facts the app gets wrong or ignores
 
-- [ ] **1.1 `playback:1` carries errors, and the app reads them as statuses.** `apply()` switches
+- [x] **1.1 `playback:1` carries errors, and the app reads them as statuses.** *Done
+  2026-10-01: dispatched on `_objectType`; kept as `GroupState.lastError` until the room plays
+  again, shown on the pane. Fixture captured off the office One SL. `globalError` was never
+  seen in either capture, so it is not handled: add it when one is captured.* `apply()` switches
   on namespace only; `Frame.type` exists and is never consulted. A `playbackError`
   (`{errorCode: ERROR_PLAYBACK_FAILED, reason: ERROR_CANT_REACH_SERVER, trackName, itemId}`)
   deserialises into an all-null status and vanishes — benign today only because every field is
@@ -167,10 +170,16 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   quotes a fresh `UpdateID`; a stale one gets 1028 and re-reads rather than retries. The
   1000-item cap needs paging (`StartingIndex`).
 - [ ] **3.5 Queue freshness.** The `UpdateID` of a `Q:0` browse with count 1 is the change signal
-  (`queueVersion` does not exist in this firmware). While the queue screen is open, re-browse on
+  (x2rock found no `queueVersion`; see the correction below). While the queue screen is open, re-browse on
   each `playback:1` event whose `UpdateID` moved, off the event path with its own timeout
   (x2rock: one wedged coordinator stalled every room). Request/response, bounded to the open
   screen — the one documented exception to "nothing polls".
+  **Correction, 2026-10-01:** `queueVersion` *is* sent. The office One SL (build 97180312)
+  sends `"queueVersion": "QV:00019"` in `playbackStatus`, and this repo's own captured
+  `event.playbackStatus.json` carries `"queueVersion": "8"`. x2rock's "does not exist" holds
+  for the firmware it was measured on and not beyond. Check whether it moves on a queue edit
+  before choosing it or `UpdateID` as the signal.
+
 - [ ] **3.6 Room settings: tone.** Bass and treble (`RenderingControl Get/SetBass|Treble`,
   −10..10), loudness (`Get/SetLoudness` needs `Channel=Master`, wire `1`/`0`), TruePlay on/off
   (`Get/SetRoomCalibrationStatus`). Read via `settings:1 getPlayerSettings` `eq{bass, treble,
@@ -239,9 +248,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
 
 Recorded by x2rock since 2026-09-04 and relevant here:
 
-- `playback:1` sends `playbackStatus` and `playbackError`, told apart by `_objectType`. An event
+- ~~`playback:1` sends `playbackStatus` and `playbackError`~~ — copied in with 1.1. An event
   that omits a field is not setting it false.
-- `queueVersion` is not sent by this firmware; the queue-change signal is UPnP `UpdateID`.
+- `queueVersion` was not sent by the firmware x2rock measured, but is sent by the office One SL
+  and appears in this repo's captures (see 3.5); UPnP `UpdateID` is the signal known to work.
   `itemId` is the 1-based queue position while the queue drives and an opaque hash otherwise, and
   it renumbers on every edit.
 - Namespaces resolve by prefix (`home:1` → `homeTheater:1`); read the echoed header. 41

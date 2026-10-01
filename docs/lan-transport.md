@@ -168,6 +168,23 @@ x2rock's 90s-of-silence timer has no counterpart here because it needs none. Sub
 do **not** survive a reconnect and there is no replay buffer: re-subscribe and take the fresh
 snapshot as truth rather than merging with pre-disconnect state.
 
+**`playback:1` sends two shapes**, told apart by the body's `_objectType`: `playbackStatus`,
+and `playbackError` when the room could not play something. An error carries none of a
+status's fields, so a parser that treats every field as optional reads it as "nothing
+changed" and the only notice that the music stopped is lost. Captured 2026-10-01 off a One SL
+(display version 18.8, build 97180312), playing a URL that does not resolve and then one that
+refuses the connection — the same body both times, `core/src/testFixtures/resources/fixtures/
+event.playbackError.json`:
+
+```json
+{"_objectType":"playbackError","errorCode":"ERROR_PLAYBACK_NO_PLAYABLE_CONTENT",
+ "reason":"ERROR_NO_PLAYABLE_CONTENT","serviceId":-1}
+```
+
+It arrived after three IDLE statuses, not before them. x2rock's capture of an expired stream
+was `ERROR_PLAYBACK_FAILED` / `ERROR_CANT_REACH_SERVER` with a `trackName` and an `itemId`,
+and a second error three seconds later had no `itemId`; no field can be relied on.
+
 ---
 
 ## Discovery: SSDP works here

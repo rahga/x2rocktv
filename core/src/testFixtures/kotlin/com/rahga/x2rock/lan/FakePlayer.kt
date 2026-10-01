@@ -413,7 +413,9 @@ class FakePlayer(
         }
 
         private fun namespaceFor(type: String) = when (type) {
-            "playbackStatus", "radioPlaybackStatus" -> "playback:1"
+            // playbackError shares the namespace and differs only in its type: captured off
+            // a One SL playing a URL that does not resolve.
+            "playbackStatus", "radioPlaybackStatus", "playbackError" -> "playback:1"
             // The two TV captures are metadata too; they differ only in what they carry —
             // one a stereo input, one Dolby 5.1 — and both arrive on this namespace.
             // radioMetadataStatus is a stream loaded by URL: no currentItem and no track
