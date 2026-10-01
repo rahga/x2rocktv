@@ -45,7 +45,15 @@ claim in it was run against real hardware.
   not a failure, and only the coordinator's own answer is treated as real. **Nothing polls
   to find out** — unlike the sibling project, which had to: the switch arrives as a
   `playbackMetadata:1` event carrying `htInputFormat`, the same thing that lights the row.
-  Measured on hardware: TV audio at ~4-5s, the format settled by ~9s.
+  Measured on hardware: TV audio at ~4-5s, the format settled by ~9s. With no reply,
+  `useTvInput` waits up to 20s for that event and fails if it never comes; an error the
+  player actually answered with (`UpnpRefusedException`) fails at once.
+- **No reply is not "no".** A player can stall past the 5s reply timeout and then do what it
+  was asked — a Beam on its TV input took 14-20s to apply a regroup. A timeout is its own
+  type, `ReplyTimeoutException`, and `modifyGroupMembers` answers one by waiting for the
+  topology to show the change, finding the group **by coordinator** because the id moves,
+  then asking once more. A `SonosCommandException` is the player's refusal: final, never
+  re-checked.
 - The **queue is not in the Control API at all** (`ERROR_UNSUPPORTED_NAMESPACE`). It lives
   behind UPnP on cleartext port 1400 — see `Upnp` — and is the one thing still asked for
   rather than pushed.

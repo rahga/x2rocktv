@@ -41,6 +41,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.IOException
 import java.net.InetAddress
@@ -178,6 +181,12 @@ class SonosHousehold(
     private val port: Int = SonosSocket.PORT,
     /** Likewise for cleartext UPnP, which a test answers from a separate fake. */
     upnpPort: Int = Upnp.PORT,
+    /**
+     * How long an unanswered change is given to show up anyway. A Beam stalled for 14–20s
+     * and then applied a regroup; TV audio arrives in 4–5s and its format by ~9s.
+     * Overridden only by tests, which cannot wait that long for a failure.
+     */
+    private val settleMillis: Long = UNANSWERED_SETTLE_MILLIS,
 ) {
 
     private val gson = Gson()
@@ -484,14 +493,14 @@ class SonosHousehold(
     /**
      * Put this room on its soundbar's HDMI input, overriding whatever music it is playing.
      *
-     * Fails only if the room has no soundbar in it. Everything else is deliberately not
-     * awaited: when the soundbar is a *member* rather than the coordinator, taking the TV
-     * hands coordination over, and the player we asked stops coordinating before it can
-     * answer — so a lost reply there is the normal case, not a failure.
+     * When the soundbar is a *member* rather than the coordinator, taking the TV hands
+     * coordination over, and the player we asked stops coordinating before it can answer —
+     * so a lost reply there is the normal case, not a failure. An error the player actually
+     * answered with is real, from either; only silence is not.
      *
-     * Nothing needs to be polled to find out. The switch arrives as a `playbackMetadata:1`
-     * event carrying `htInputFormat`, which is what [GroupState.onTvInput] already reads,
-     * so the UI learns it the same way it learns everything else.
+     * Nothing polls to find out. The switch arrives as a `playbackMetadata:1` event
+     * carrying `htInputFormat`, which is what [GroupState.onTvInput] reads. With no reply,
+     * this waits for that event, and fails if it never comes, rather than say nothing.
      */
     suspend fun useTvInput(groupId: String, preferSoundbar: String? = null) {
         val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
@@ -506,10 +515,18 @@ class SonosHousehold(
         try {
             upnp.useTvInput(coordinatorHostname(groupId), soundbar)
         } catch (e: IOException) {
-            // A soundbar that already coordinates hands nothing over, so its answer is the
-            // answer and an error from it is a real one. Caught narrowly: cancellation must
-            // still propagate, and a room with no soundbar is a caller's mistake either way.
-            if (soundbar == group.coordinatorId) throw e
+            // An answer that is an error is final, from whichever player gave it. What is left
+            // is silence: a reply lost in the handoff, or a soundbar too busy to answer.
+            // Caught narrowly: cancellation must still propagate.
+            if (e is UpnpRefusedException) throw e
+            val switched = withTimeoutOrNull(settleMillis) {
+                combine(_state, _groupStates) { state, groups ->
+                    state.groups.any { soundbar in it.playerIds && groups[it.id]?.onTvInput == true }
+                }.first { it }
+            }
+            if (switched == null) {
+                throw IOException("${group.name} did not answer, and has not switched to the TV", e)
+            }
         }
     }
 
@@ -735,14 +752,46 @@ class SonosHousehold(
         )
     }
 
+    /**
+     * Move players into or out of [groupId]'s group.
+     *
+     * A refusal is final. **No answer is not**: grouping onto a soundbar on its TV input
+     * stalled it past the reply timeout, and the change landed 14–20s later (x2rock, "The
+     * Beam stall"). So on a timeout this waits for the topology to show the change — it
+     * arrives by push like any regroup — and failing that asks once more, from the seed.
+     * Only if neither shows it does the call fail.
+     *
+     * The group is found **by coordinator**, not by id: a regroup mints a new group id, so
+     * the id this was called with names nothing once the change has happened.
+     */
     suspend fun modifyGroupMembers(groupId: String, add: List<String>, remove: List<String>) {
-        coordinator(groupId).command(
-            Frames.onGroup("groups:1", "modifyGroupMembers", groupId),
-            JsonObject().apply {
-                add("playerIdsToAdd", gson.toJsonTree(add))
-                add("playerIdsToRemove", gson.toJsonTree(remove))
-            },
-        )
+        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        try {
+            coordinator(groupId).command(
+                Frames.onGroup("groups:1", "modifyGroupMembers", groupId),
+                JsonObject().apply {
+                    add("playerIdsToAdd", gson.toJsonTree(add))
+                    add("playerIdsToRemove", gson.toJsonTree(remove))
+                },
+            )
+        } catch (e: ReplyTimeoutException) {
+            fun landed(groups: List<Group>): Boolean {
+                val now = groups.firstOrNull { it.coordinatorId == group.coordinatorId } ?: return false
+                return add.all { it in now.playerIds } && remove.none { it in now.playerIds }
+            }
+            if (withTimeoutOrNull(settleMillis) { _state.first { landed(it.groups) } } != null) return
+            val fresh = runCatching { freshGroups() }.getOrNull()
+            if (fresh != null && landed(fresh)) return
+            throw IOException("${group.name} did not answer, and the change has not appeared", e)
+        }
+    }
+
+    /** The topology as the seed reports it now, for a check the pushed copy could not settle. */
+    private suspend fun freshGroups(): List<Group> {
+        val household = _state.value.householdId ?: error("not connected")
+        val seed = seedHostname ?: error("not connected")
+        val body = socketForHostname(seed).command(Frames.onHousehold("groups:1", "getGroups", household))
+        return gson.fromJson(body, GroupsResponse::class.java)?.groups.orEmpty()
     }
 
     private suspend fun onGroup(groupId: String, command: String) {
@@ -1091,6 +1140,9 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/** See [SonosHousehold]'s `settleMillis`: the Beam stall's 14–20s, with the top of it. */
+internal const val UNANSWERED_SETTLE_MILLIS = 20_000L
 
 /** A remembered address gets this long to prove itself before discovery takes over. */
 internal const val PROBE_TIMEOUT_MILLIS = 3_000L

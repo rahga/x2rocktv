@@ -36,6 +36,13 @@ import javax.xml.parsers.DocumentBuilderFactory
  * the UI that still has to be asked rather than pushed.
  */
 
+/**
+ * The player answered, and the answer was an error — a fault, or 403 with UPnP switched off.
+ * Distinct from a transport failure, where nothing came back and the request may yet have
+ * been carried out.
+ */
+class UpnpRefusedException(message: String) : IOException(message)
+
 /** `ListAvailableServices`'s reply — see [Upnp.listAvailableServices]. */
 data class ServiceListAnswer(val descriptors: String)
 
@@ -208,12 +215,12 @@ class Upnp(
             val body = response.body?.string().orEmpty()
             if (response.isSuccessful) return body
             if (response.code == 403) {
-                throw IOException(
+                throw UpnpRefusedException(
                     "$hostname refused UPnP (403). Enable it in the Sonos app: " +
                         "Settings > Privacy & Security > UPnP"
                 )
             }
-            throw IOException("$action failed: HTTP ${response.code} ${describe(body)}")
+            throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}")
         }
     }
 

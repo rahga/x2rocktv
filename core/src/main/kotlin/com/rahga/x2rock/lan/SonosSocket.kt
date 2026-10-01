@@ -95,7 +95,7 @@ class SonosSocket private constructor(
             return try {
                 withTimeout(REPLY_TIMEOUT_MILLIS) { waiter.await() }
             } catch (e: TimeoutCancellationException) {
-                throw IOException("no reply from $hostname within ${REPLY_TIMEOUT_MILLIS}ms", e)
+                throw ReplyTimeoutException(hostname, REPLY_TIMEOUT_MILLIS, e)
             }
         } finally {
             pending.remove(id)
@@ -223,6 +223,16 @@ class SonosSocket private constructor(
         }
     }
 }
+
+/**
+ * No answer in time — which is not "no". A player can stall past the timeout and then do what
+ * it was asked: a Beam on its TV input did, for 14–20s, when a party was grouped onto it
+ * (x2rock, "The Beam stall"). A caller whose command has an observable effect should look for
+ * the effect before reporting failure; a [SonosCommandException] is the player's actual
+ * refusal and needs no such check.
+ */
+class ReplyTimeoutException(hostname: String, millis: Long, cause: Throwable) :
+    IOException("no reply from $hostname within ${millis}ms", cause)
 
 /** The player understood the command and said no. Distinct from a transport failure. */
 class SonosCommandException(
