@@ -157,6 +157,35 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
 
 ---
 
+## Hardware checks waiting on the home household (written 2026-10-01)
+
+Tier 0 and Tier 1 were built against the fake and, where it could be done read-only or on one
+speaker, the office One SL. These need the five rooms, a Beam, or a switch flipped:
+
+1. **The live suite, named room.** `./gradlew :core:test -Dx2rock.live=discover
+   -Dx2rock.live.room=Kitchen` — the fixture-drift checks against a five-room household, the
+   queue test from a station, the relative volume step. Put Kitchen on a radio station with
+   tracks queued first so the queue test takes the 701 path.
+2. **1.1** Play a dead stream URL in a room (`x2rock play-url https://x2rock-dead.invalid/a.mp3`):
+   the pane says "Couldn't play this: found nothing it could play".
+3. **0.1** On an iHeartRadio Custom or Artist Radio track, the thumbs appear and a press fills
+   one; on a Live station they do not appear at all.
+4. **1.2** Group two rooms, then pull the member's power: the other rooms stay as they are and
+   only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
+5. **1.3** Put a Beam on its TV input, then group another room onto it from the room panel:
+   it either lands or a banner says it did not, within about 25s.
+6. **1.6** Sonos app → Account → Privacy and Security → Connection Security → Authentication
+   on, relaunch: the room list names the switch. Off again, Retry: rooms come back.
+7. **1.7** Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
+   without a relaunch. On again: they return.
+8. **1.9** Mute a room, press Vol +: it unmutes and steps.
+9. **1.10** On a station, `adb shell dumpsys media_session`: no SKIP_TO_NEXT or SEEK_TO in
+   the actions, and still `volumeType=1`.
+10. **1.11** On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
+    must not blank.
+
+---
+
 ## Tier 2 — the room list and panel: what the widget shows that we do not
 
 - [ ] **2.1 Fixed volume.** `GroupVolume.fixed` is parsed and never read. A Port or Amp with a
