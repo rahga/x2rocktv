@@ -250,7 +250,8 @@ envelope are in `../x2rock/src/sonos/upnp.rs`. Note two things when porting: **d
 than a request when you need one.
 
 A player answering **HTTP 403** on 1400 has UPnP disabled in the Sonos app under
-Settings → Privacy & Security → UPnP.
+Account → Privacy and Security → Connection Security → UPnP (the path x2rock confirmed on
+iPhone and Android, 2026-09-28; an older one was given here).
 
 ---
 

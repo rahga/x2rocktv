@@ -156,6 +156,17 @@ class HomeViewModelTest {
         assertTrue("the host should not be asked to join itself", host.coordinatorId !in added)
     }
 
+    /** The panel stays open while grouping, so a failed join has to be said, not swallowed. */
+    @Test fun `a refused join says so`() = runBlocking<Unit> {
+        val state = connect()
+        fake.refuse("modifyGroupMembers")
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        val guest = state.groups.first { it.name == "Guest TV" }
+        viewModel.joinGroup(guest.id, kitchen.id)
+        val notice = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        assertEquals("Couldn't add Guest TV: ERROR_COMMAND_FAILED", notice)
+    }
+
     /**
      * Solo removes the members and never the coordinator — that would dissolve the group.
      *

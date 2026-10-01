@@ -41,6 +41,11 @@ class QueueViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
+    private val _notice = TransientNotice(viewModelScope)
+
+    /** Why the last play or remove did not work, for a few seconds. */
+    val notice: StateFlow<String?> = _notice.text
+
     init {
         load()
     }
@@ -50,6 +55,7 @@ class QueueViewModel @Inject constructor(
     fun playItem(trackNumber: Int) {
         viewModelScope.launch {
             runCatching { household.skipToQueueItem(groupId, trackNumber) }
+                .onFailure { e -> failureNotice("play that track", e)?.let(_notice::post) }
         }
     }
 
@@ -59,7 +65,9 @@ class QueueViewModel @Inject constructor(
      */
     fun removeItem(trackNumber: Int) {
         viewModelScope.launch {
-            runCatching { household.removeFromQueue(groupId, trackNumber) }.onSuccess { load() }
+            runCatching { household.removeFromQueue(groupId, trackNumber) }
+                .onSuccess { load() }
+                .onFailure { e -> failureNotice("remove that track", e)?.let(_notice::post) }
         }
     }
 

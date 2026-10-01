@@ -200,7 +200,8 @@ volume keys. Manages:
 - Volume and seek debouncing: 300ms, accumulating, so a held key sends one command by the
   total rather than one per repeat
 - The home-theatre reading and its optimistic toggles
-- The rating state, and a transient result line after a press
+- The rating state
+- A notice line: a rating's result, or why a command failed
 - A sleep timer, as a local countdown that pauses the group when it expires
 
 The selected room reaches it from `HomeScreen`, which calls `selectGroup` as focus moves.
@@ -320,6 +321,12 @@ Dagger Hilt in `:app` only. `AppModule` provides:
 name nor permission to fetch it.
 
 All ViewModels are `@HiltViewModel` and injected automatically.
+
+**Commands fail out loud.** They are fire-and-forget, because their effect returns as an event,
+but a failure is reported through `TransientNotice`: one line for a few seconds, worded by
+`failureNotice`. The home screen draws its line above the room panel, which stays open while
+grouping. A cancellation is never reported: a newer press cancels a debounced volume send,
+and `runCatching` catches that too.
 
 ---
 

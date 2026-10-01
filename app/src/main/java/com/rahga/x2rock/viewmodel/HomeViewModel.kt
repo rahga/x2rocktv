@@ -279,6 +279,7 @@ class HomeViewModel @Inject constructor(
         val source = findGroup(sourceGroupId) ?: return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(targetGroupId, add = source.playerIds, remove = emptyList()) }
+                .onFailure { report("add ${source.name}", it) }
         }
     }
 
@@ -289,12 +290,14 @@ class HomeViewModel @Inject constructor(
         if (others.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = others) }
+                .onFailure { report("separate ${group.name}", it) }
         }
     }
 
     fun removePlayerFromGroup(groupId: String, playerId: String) {
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = listOf(playerId)) }
+                .onFailure { report("remove ${household.playerName(playerId)}", it) }
         }
     }
 
@@ -319,6 +322,7 @@ class HomeViewModel @Inject constructor(
         if (joiners.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
+                .onFailure { report("start the party", it) }
         }
     }
 
@@ -330,7 +334,10 @@ class HomeViewModel @Inject constructor(
      */
     fun useTvInput(groupId: String) {
         val named = roomPrefsStore.tvPlayerId.value
-        viewModelScope.launch { runCatching { household.useTvInput(groupId, preferSoundbar = named) } }
+        viewModelScope.launch {
+            runCatching { household.useTvInput(groupId, preferSoundbar = named) }
+                .onFailure { report("switch to the TV", it) }
+        }
     }
 
     /**
@@ -363,7 +370,7 @@ class HomeViewModel @Inject constructor(
         groupVolumeJobs[groupId]?.cancel()
         groupVolumeJobs[groupId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setGroupVolume(groupId, target) }
+            runCatching { household.setGroupVolume(groupId, target) }.onFailure { report("change the volume", it) }
             // Only if it is still ours — see [adjustPlayerVolume].
             _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
         }
@@ -378,6 +385,7 @@ class HomeViewModel @Inject constructor(
         playerVolumeJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
+                .onFailure { report("change that speaker's volume", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a
             // newer press throws in here, and this line is not a suspension point, so
             // clearing unconditionally would delete the target that press just wrote —
@@ -385,6 +393,18 @@ class HomeViewModel @Inject constructor(
             // there, which is the very accumulation this exists to prevent.
             _pendingPlayerVolumes.update { if (it[playerId] == target) it - playerId else it }
         }
+    }
+
+    private val _notice = TransientNotice(viewModelScope)
+
+    /**
+     * Why the last grouping, party, TV or level change did not work, for a few seconds. Drawn
+     * above the room panel, because the panel stays open while a group is built.
+     */
+    val notice: StateFlow<String?> = _notice.text
+
+    private fun report(what: String, e: Throwable) {
+        failureNotice(what, e)?.let(_notice::post)
     }
 
     /** What the app would choose with nothing else to go on. */

@@ -444,9 +444,9 @@ private fun PlaybackControls(
             }
         }
 
-        if (state.ratingResult != null) {
+        if (state.notice != null) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(state.ratingResult, style = MaterialTheme.typography.bodySmall)
+            Text(state.notice, style = MaterialTheme.typography.bodySmall)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
