@@ -726,14 +726,11 @@ class SonosHouseholdTest {
         assertFalse(body.get("playOnCompletion").asBoolean)
     }
 
-    /** The captured status carries a queueVersion, and every playback event is signalled. */
-    @Test fun `a playback event is signalled, with the queue version it carries`() = runBlocking<Unit> {
+    /** The captured status carries a queueVersion. */
+    @Test fun `a playback status carries the queue version`() = runBlocking<Unit> {
         connected()
         val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
-        val signalled = async { withTimeout(5_000) { household.playbackEvents.first { it == groupId } } }
-        delay(100)
         fake.pushFixture("playbackStatus", groupId)
-        assertEquals(groupId, signalled.await())
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
     }
 

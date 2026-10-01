@@ -9,8 +9,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -61,16 +59,12 @@ class QueueViewModel @Inject constructor(
     /** Why the last play or remove did not work, for a few seconds. */
     val notice: StateFlow<String?> = _notice.text
 
-    /** The `UpdateID` the list on screen was read at. */
-    @Volatile private var loadedUpdateId: String? = null
-
     init {
         load()
-        // Kept current while this screen is open, which is this view model's whole life.
-        // Two signals, because which one moves on an edit is not yet verified on hardware:
-        // a new `queueVersion` on the room re-reads at once; any playback event asks the
-        // browse's `UpdateID`, and re-reads only if that moved (x2rock's way). `collectLatest`
-        // keeps one check in flight, and it runs here, never on the household's event path.
+        // Kept current while this screen is open, which is this view model's whole life, by the
+        // room's `queueVersion`. Verified at home on 2026-10-01: each edit moved it (26, 27, 28
+        // for a move and its undo) and each arrived as a playback event, on an idle room too.
+        // So nothing is browsed on a timer or per event; the version moving is the signal.
         viewModelScope.launch {
             // The first version seen is the one the list was read at, not a change.
             household.groupStates.map { it[groupId]?.queueVersion }
@@ -78,12 +72,6 @@ class QueueViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .drop(1)
                 .collect { load(quiet = true) }
-        }
-        viewModelScope.launch {
-            household.playbackEvents.filter { it == groupId }.collectLatest {
-                val now = runCatching { household.queueUpdateId(groupId) }.getOrNull() ?: return@collectLatest
-                if (now != loadedUpdateId) load(quiet = true)
-            }
         }
     }
 
@@ -178,7 +166,6 @@ class QueueViewModel @Inject constructor(
                 // The queue is the one thing still asked for rather than pushed; what is
                 // playing is already known from the household's subscriptions.
                 val queue = household.queue(groupId)
-                loadedUpdateId = queue.updateId
                 // Unknown counts as in use: a failed read must not hide the marker it can't
                 // disprove, and the play path checks again for itself.
                 val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)
