@@ -60,7 +60,10 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   `globalError` events) and surface the error on `GroupState` so the pane can say what failed.
   Capture a real `playbackError` fixture by playing a dead stream URL; do not invent it. x2rock:
   "`playback:1` carries errors too, and they parsed as statuses".
-- [ ] **1.2 One lost socket tears down the household.** `handleLoss` rebuilds everything on any
+- [x] **1.2 One lost socket tears down the household.** *Done 2026-10-01: only the seed's or a
+  coordinator's loss rebuilds; a member's is evicted and its level withdrawn; sockets open
+  outside the lock. Not exercised on hardware — the office household has no group members.
+  Re-reading state after a failed write is left to 1.4, where command failures are surfaced.* `handleLoss` rebuilds everything on any
   socket failure, members included. x2rock's rule: only an *unreachable* coordinator (or the
   seed) drops the session; a member socket is best-effort and its loss is swallowed; a player's
   *refusal* never drops anything. From its `session::Pool`: never hold the lock across an open,
