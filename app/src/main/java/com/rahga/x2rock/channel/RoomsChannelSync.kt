@@ -40,6 +40,11 @@ class RoomsChannelSync @Inject constructor(
         }
     }
 
+    // RestrictedApi here is a known AGP lint false positive on tv-provider's self-bounded
+    // generic builders (Builder<T extends Builder<T>>): lint resolves setType/setTitle/etc.
+    // to the base class's library scope even though none of them carry @RestrictTo — verified
+    // by decompiling tvprovider-1.0.0. This is exactly the public Preview Channels API.
+    @Suppress("RestrictedApi")
     private fun ensureChannel(): Long? {
         if (channelId != NO_ID) return channelId
 
@@ -69,6 +74,7 @@ class RoomsChannelSync @Inject constructor(
         return channelId
     }
 
+    @Suppress("RestrictedApi")
     private fun updatePrograms(channelId: Long, groups: List<Group>, nowPlaying: Map<String, Track?>) {
         val existing = mutableMapOf<String, Long>()
         context.contentResolver.query(
