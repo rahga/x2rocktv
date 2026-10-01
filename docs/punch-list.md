@@ -32,7 +32,9 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   SMAPI endpoint — mutation-check each. No live test: this household's iHeart listening is Live
   stations, which have no track id to rate. Icons instead of emoji labels. Commit
   `docs/porting-from-x2rock.md` (untracked since 2026-09-23) in the same go.
-- [ ] **0.2 Stale docs.** `README.md` still describes the cloud API and `SONOS_CLIENT_ID`/`SECRET`.
+- [x] **0.2 Stale docs.** *Done 2026-10-01: README rewritten for the LAN app;
+  ARCHITECTURE.md rebuilt from the code; fixture path fixed; the transport doc's migration
+  section and answered questions marked as such.* `README.md` still describes the cloud API and `SONOS_CLIENT_ID`/`SECRET`.
   `CLAUDE.md` puts fixtures in `core/src/test/resources/fixtures/`; they are in
   `core/src/testFixtures/resources/fixtures/`. `ARCHITECTURE.md` predates RoomPanel, TvSoundbar,
   NowPlayingPublisher, ChannelSync, MulticastGate, SeedStore, the smapi package and `settings:1`,

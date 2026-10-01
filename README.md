@@ -3,25 +3,37 @@
 A Sonos controller for Google TV / Android TV. The Sonos layer is a plain Kotlin/JVM
 library (`:core`) with no Android dependency; `:app` is the TV frontend.
 
+It talks to the speakers directly over the local network, the same Control API the Sonos
+apps use, with **no Sonos account, no sign-in and no polling**: subscribe, and the speakers
+push every change. See [`docs/lan-transport.md`](docs/lan-transport.md) for the protocol and
+the evidence behind it.
+
 ## Status
 
-Not stable at present, primarily due to GUI bugs.
+In use on an NVIDIA Shield (Android 11, Ethernet) and a Google TV Streamer (Android 14,
+Wi-Fi). Rooms, transport, volume, grouping and party mode, the queue, favourites, a
+soundbar's TV input with Night Sound and Speech Enhancement, and track ratings all work.
+What is still to do is in [`docs/punch-list.md`](docs/punch-list.md).
 
-There is also a larger problem than the GUI: the app talks to Sonos over the **cloud** API,
-and Sonos's OAuth consent page cannot be completed with a TV remote — so the sign-in flow
-cannot ship on the device this is for. The same Control API turns out to be served by the
-speakers themselves over the LAN, with no account and no polling; that has been verified
-end to end on an NVIDIA Shield. See [`docs/lan-transport.md`](docs/lan-transport.md).
-Replacing the transport is the next significant piece of work.
+Discovery is SSDP only, so a network that blocks multicast will find no speakers yet.
 
-## Android TV
+## Building
 
-Open in Android Studio, put `SONOS_CLIENT_ID` / `SONOS_CLIENT_SECRET` in `local.properties`, run `:app`.
+You need a JDK (17+; 21 is what has been tested) and an Android SDK, named by `sdk.dir` in
+`local.properties` or by `ANDROID_HOME`. There are no credentials to supply. Gradle is fetched
+by the wrapper.
+
+Open in Android Studio and run `:app`, or:
+
+```sh
+./gradlew :app:installDebug
+```
 
 ## Tests
 
 ```sh
-./gradlew :core:test :app:testDebugUnitTest
+./gradlew :core:test :app:testDebugUnitTest            # against a fake player; what CI runs
+./gradlew :core:test -Dx2rock.live=discover            # also against real speakers, read-only
 ```
 
-See `ARCHITECTURE.md` for the layout.
+See `ARCHITECTURE.md` for the layout and `CLAUDE.md` for the conventions.
