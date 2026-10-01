@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -123,6 +124,13 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            // Wait for the frames that apply a selection made just before resuming. A deep link
+            // to the running app sets it in onNewIntent, and the sidebar's requester sits on
+            // whichever row is selected — asked at once, it was still on the *old* row, focus
+            // landed there, and selection-follows-focus put the old room back. Seen on the
+            // Shield: a link to Bedroom left Kitchen selected.
+            withFrameNanos { }
+            withFrameNanos { }
             if (homeViewModel.sidebarVisible.value) sidebarFocusRequester.requestFocusSafely()
             else detailFocusRequester.requestFocusSafely()
         }

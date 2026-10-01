@@ -162,13 +162,14 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
 Tier 0 and Tier 1 were built against the fake and, where it could be done read-only or on one
 speaker, the office One SL. These need the five rooms, a Beam, or a switch flipped:
 
-1. **The live suite, named room.** `./gradlew :core:test -Dx2rock.live=discover
+1. ~~**The live suite, named room.**~~ *Done 2026-10-01: passed with Kitchen (on a station, so
+   the 701 path) and with Bedroom's Beam; drift checks clean against five rooms.* `./gradlew :core:test -Dx2rock.live=discover
    -Dx2rock.live.room=Kitchen` — the fixture-drift checks against a five-room household, the
    queue test from a station, the relative volume step. Put Kitchen on a radio station with
    tracks queued first so the queue test takes the 701 path.
-2. **1.1** Play a dead stream URL in a room (`x2rock play-url https://x2rock-dead.invalid/a.mp3`):
+2. ~~**1.1**~~ *Done: same error body on home firmware, and the Shield's pane said it.* Play a dead stream URL in a room (`x2rock play-url https://x2rock-dead.invalid/a.mp3`):
    the pane says "Couldn't play this: found nothing it could play".
-3. **0.1** On an iHeartRadio Custom or Artist Radio track, the thumbs appear and a press fills
+3. **0.1** *Blocked — see 0.1a: iHeartRadio is DeviceLink here.* On an iHeartRadio Custom or Artist Radio track, the thumbs appear and a press fills
    one; on a Live station they do not appear at all.
 4. **1.2** Group two rooms, then pull the member's power: the other rooms stay as they are and
    only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
@@ -178,12 +179,14 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    on, relaunch: the room list names the switch. Off again, Retry: rooms come back.
 7. **1.7** Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
    without a relaunch. On again: they return.
-8. **1.9** Mute a room, press Vol +: it unmutes and steps.
-9. **1.10** On a station, `adb shell dumpsys media_session`: no SKIP_TO_NEXT or SEEK_TO in
+8. ~~**1.9**~~ *Done on the Shield: muted Kitchen, Vol + from the remote, unmuted at 24.* Mute a room, press Vol +: it unmutes and steps.
+9. ~~**1.10**~~ *Done: Bedroom's live station advertised 518 (play, pause, play/pause);
+   Kitchen's queue 806, with no previous; `volumeType=1` throughout.* On a station, `adb shell dumpsys media_session`: no SKIP_TO_NEXT or SEEK_TO in
    the actions, and still `volumeType=1`.
-10. **1.11** On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
+10. **1.11** *Owner to do: the Shield is Ethernet-only at present.* On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
     must not blank.
-11. **3.4** In a room whose queue you can spare: Save as playlist (a playlist named for the
+11. ~~**3.4**~~ *Done in core by a live test on Kitchen — save, move and undo, clear, put back;
+    the UI path not yet pressed through.* In a room whose queue you can spare: Save as playlist (a playlist named for the
     room and time appears), move a track up and down, then Clear twice. Long-press a playlist
     on the Favorites screen to add it back.
 12. ~~**3.5**~~ *Done 2026-10-01: `queueVersion` moves on each edit.* Open a room's queue in the app, then add a track to it from the Sonos app: the list
@@ -324,6 +327,14 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 ---
 
 ## Found at home, 2026-10-01
+
+- [x] **Deep links to the running app did nothing.** A link to Bedroom left Kitchen selected:
+  focus was restored on resume before the new selection had recomposed, onto the old row,
+  and selection-follows-focus put it back. Fixed by waiting two frames; verified on the Shield.
+  This was also why a channel tile could not switch rooms with the app open (4.5).
+- [x] **A playback error outlived a change of source.** Kitchen, put back on its queue after a
+  dead stream, still said "Couldn't play this". It now clears when the track or source
+  changes, as well as on playing.
 
 - [ ] **0.1a Ratings cannot reach iHeartRadio.** The home household lists iHeartRadio
   (service 6) as `DeviceLink`, not anonymous, and 0.1 rates anonymous services only — so the
