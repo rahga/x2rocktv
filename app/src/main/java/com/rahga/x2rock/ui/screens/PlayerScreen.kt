@@ -2,6 +2,8 @@ package com.rahga.x2rock.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
@@ -137,11 +139,16 @@ fun PlayerPane(
                     }
                 }
         ) {
+            // Scrolls, because a grouped room's speaker rows run off the bottom: with a five-room
+            // party on the Shield they were drawn below the screen and focus could not reach
+            // them. A focused control in a scrolling column is brought into view as the remote
+            // moves, so nothing else is needed for D-pad.
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 64.dp, vertical = 48.dp),
-                verticalArrangement = Arrangement.SpaceBetween
+                verticalArrangement = Arrangement.spacedBy(32.dp)
             ) {
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
