@@ -337,6 +337,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   focus was restored on resume before the new selection had recomposed, onto the old row,
   and selection-follows-focus put it back. Fixed by waiting two frames; verified on the Shield.
   This was also why a channel tile could not switch rooms with the app open (4.5).
+- [x] **A grouped room's speaker rows were out of reach.** Neither pane scrolled, so with a
+  five-room party on the TV input the Speakers rows were drawn below the screen and focus
+  stopped at Favorites. The pane now scrolls, and focus brings each row into view; verified on
+  the Shield.
 - [x] **A playback error outlived a change of source.** Kitchen, put back on its queue after a
   dead stream, still said "Couldn't play this". It now clears when the track or source
   changes, as well as on playing.
