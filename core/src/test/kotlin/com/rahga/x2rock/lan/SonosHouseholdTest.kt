@@ -4,6 +4,7 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -723,6 +724,17 @@ class SonosHouseholdTest {
         val body = fake.lastCommandBody("loadPlaylist")!!
         assertEquals("APPEND", body.get("action").asString)
         assertFalse(body.get("playOnCompletion").asBoolean)
+    }
+
+    /** The captured status carries a queueVersion, and every playback event is signalled. */
+    @Test fun `a playback event is signalled, with the queue version it carries`() = runBlocking<Unit> {
+        connected()
+        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val signalled = async { withTimeout(5_000) { household.playbackEvents.first { it == groupId } } }
+        delay(100)
+        fake.pushFixture("playbackStatus", groupId)
+        assertEquals(groupId, signalled.await())
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
     }
 
     /** The whole point of the seed store: a warm start skips discovery. */

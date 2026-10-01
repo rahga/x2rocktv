@@ -82,6 +82,12 @@ data class GroupState(
      * shows an idle room and nothing about the music having stopped.
      */
     val lastError: PlaybackError? = null,
+    /**
+     * `playbackStatus`'s `queueVersion` — sent by this firmware ("8" at home, "QV:00019" on
+     * the office One SL), though x2rock found none on its own. Whether it moves on a queue
+     * edit is not yet verified, so the queue screen watches it *and* the browse's `UpdateID`.
+     */
+    val queueVersion: String? = null,
 ) {
     /**
      * Whether this group is on a soundbar's TV input right now.
@@ -536,8 +542,22 @@ class SonosHousehold(
             if (page.items.isEmpty()) break
             items += page.items
         }
-        return QueueResponse(items = items, totalItems = first.totalItems)
+        return QueueResponse(items = items, totalItems = first.totalItems, updateId = first.updateId)
     }
+
+    /** [groupId]'s queue version, by a one-item browse. See [playbackEvents]. */
+    suspend fun queueUpdateId(groupId: String): String = upnp.queueUpdateId(coordinatorHostname(groupId))
+
+    private val _playbackEvents = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 16)
+
+    /**
+     * The group id of every `playback:1` event, as it arrives — the moment worth asking
+     * whether a queue changed. The queue is not pushed (no GENA here), and x2rock's answer is
+     * the one followed: re-read the browse's `UpdateID` on each playback event. A silent append
+     * to a room that keeps playing sends no event, so it is missed until the next one.
+     * Dropped rather than waited for when nobody is listening.
+     */
+    val playbackEvents: kotlinx.coroutines.flow.SharedFlow<String> = _playbackEvents
 
     suspend fun moveInQueue(groupId: String, from: Int, to: Int) =
         upnp.moveInQueue(coordinatorHostname(groupId), from, to)
@@ -1205,6 +1225,7 @@ class SonosHousehold(
             "playback:1" -> {
                 if (groupId == null) return
                 val body = event.body.asJsonObject
+                _playbackEvents.tryEmit(groupId)
                 // The same namespace sends two shapes. An error has none of a status's fields,
                 // so reading it as one would apply nothing and drop the only notice that the
                 // music stopped. The body's `_objectType` says which, as it does in every capture
@@ -1231,6 +1252,7 @@ class SonosHousehold(
                     val playbackState = body.string("playbackState") ?: it.playbackState
                     it.copy(
                         playbackState = playbackState,
+                        queueVersion = body.string("queueVersion") ?: it.queueVersion,
                         // Playing again answers the error; anything short of that leaves it
                         // standing, because a failed stream is followed by IDLE statuses.
                         lastError = it.lastError.takeUnless { playbackState.isPlaying() },

@@ -271,7 +271,9 @@ data class QueueItem(
 )
 data class QueueResponse(
     val items: List<QueueItem> = emptyList(),
-    val totalItems: Int = 0
+    val totalItems: Int = 0,
+    /** The browse's `UpdateID`: the queue's version as UPnP counts it, moving on every edit. */
+    val updateId: String? = null,
 )
 
 data class Favorite(

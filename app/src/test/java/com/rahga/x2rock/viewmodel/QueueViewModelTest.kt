@@ -39,6 +39,10 @@ class QueueViewModelTest {
     private lateinit var household: SonosHousehold
     private lateinit var viewModel: QueueViewModel
     private val actions = CopyOnWriteArrayList<String>()
+    /** Every Browse's RequestedCount: "1" is the version check, anything else a full read. */
+    private val browses = CopyOnWriteArrayList<String>()
+    /** What the fake reports as the queue's UpdateID; the capture says 58. */
+    @Volatile private var updateId = "58"
 
     private fun capture(name: String) =
         FakePlayer::class.java.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
@@ -53,9 +57,13 @@ class QueueViewModelTest {
                     val body = request.body.readUtf8()
                     actions += action
                     return when (action) {
-                        "Browse" -> MockResponse().setBody(
-                            capture(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
-                        )
+                        "Browse" -> {
+                            browses += Regex("<RequestedCount>(\\d+)<").find(body)!!.groupValues[1]
+                            MockResponse().setBody(
+                                capture(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
+                                    .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
+                            )
+                        }
                         "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
                         "SaveQueue" -> MockResponse().setBody("<s:Envelope><s:Body><u:SaveQueueResponse><AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>")
                         else -> MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
@@ -78,6 +86,36 @@ class QueueViewModelTest {
         viewModel = QueueViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)))
         runBlocking { withTimeout(5_000) { viewModel.uiState.first { it is QueueViewModel.UiState.Success } } }
         actions.clear()
+        browses.clear()
+    }
+
+    private val groupId get() = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+    private fun fullReads() = browses.count { it != "1" }
+
+    // ---------------------------------------------------------------- freshness
+
+    @Test fun `a queue changed elsewhere is read again on the next playback event`() = runBlocking<Unit> {
+        updateId = "59"
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { while (fullReads() == 0) delay(20) }
+    }
+
+    /** A playback event costs a one-item browse, not the queue, when nothing changed. */
+    @Test fun `an unchanged queue is not read again`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { while ("1" !in browses) delay(20) }
+        delay(500)
+        assertEquals(0, fullReads())
+    }
+
+    @Test fun `a new queue version reads the queue again`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+        val before = fullReads()
+        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("queueVersion", "9") }
+        fake.push("playback:1", "playbackStatus", body.toString(), groupId)
+        withTimeout(5_000) { while (fullReads() == before) delay(20) }
     }
 
     @After fun tearDown() {

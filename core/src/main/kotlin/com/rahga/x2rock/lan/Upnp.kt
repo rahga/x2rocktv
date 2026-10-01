@@ -105,7 +105,7 @@ class Upnp(
             // The DIDL document arrives as escaped text inside <Result>, so one layer of
             // unescaping has already happened and what is left is XML to parse again.
             val didl = envelope.text("Result").orEmpty()
-            QueueResponse(items = parseDidl(didl, hostname, start), totalItems = total)
+            QueueResponse(items = parseDidl(didl, hostname, start), totalItems = total, updateId = envelope.text("UpdateID"))
         }
 
     /** `Q:0/<n>` is one-based, matching the track numbers the UI shows. */
@@ -298,6 +298,9 @@ class Upnp(
      * which is exactly what should happen when someone else is editing it — so the id is
      * read immediately before use rather than cached.
      */
+    /** The queue's `UpdateID` alone, from a one-item browse: the cheap way to ask "has it changed?". */
+    suspend fun queueUpdateId(hostname: String): String = withContext(Dispatchers.IO) { currentUpdateId(hostname) }
+
     private suspend fun currentUpdateId(hostname: String): String {
         val response = soap(
             hostname, Service.CONTENT_DIRECTORY, "Browse",
