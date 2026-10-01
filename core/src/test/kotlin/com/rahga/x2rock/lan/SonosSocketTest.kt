@@ -84,3 +84,68 @@ class SonosSocketTest {
         assertTrue("a close we asked for was reported as a failure", !sawFailure)
     }
 }
+
+/**
+ * A socket that stays open and carries nothing, which is what a player that lost power, or a
+ * TV box that slept, leaves behind: no FIN, no RST, writes that succeed into a buffer. Nothing
+ * ever closes it, so only the keepalive can notice.
+ *
+ * A TCP relay between the client and [FakePlayer], so the TLS and the WebSocket run end to
+ * end until [freeze] stops it passing bytes either way, while both connections stay open.
+ */
+class SilentPeerTest {
+
+    private lateinit var fake: FakePlayer
+    private lateinit var relay: java.net.ServerSocket
+    private val frozen = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val sockets = java.util.concurrent.CopyOnWriteArrayList<java.net.Socket>()
+
+    @Before fun setUp() {
+        fake = FakePlayer().also { it.start() }
+        relay = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        Thread {
+            while (!relay.isClosed) {
+                val client = runCatching { relay.accept() }.getOrNull() ?: break
+                val upstream = java.net.Socket("127.0.0.1", fake.port)
+                sockets += client; sockets += upstream
+                pump(client, upstream); pump(upstream, client)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    /** Copies one direction, and once frozen reads on but forwards nothing. */
+    private fun pump(from: java.net.Socket, to: java.net.Socket) = Thread {
+        val buffer = ByteArray(8192)
+        runCatching {
+            while (true) {
+                val n = from.getInputStream().read(buffer)
+                if (n < 0) break
+                if (!frozen.get()) to.getOutputStream().apply { write(buffer, 0, n); flush() }
+            }
+        }
+    }.apply { isDaemon = true }.start()
+
+    private fun freeze() = frozen.set(true)
+
+    @After fun tearDown() {
+        relay.close()
+        sockets.forEach { runCatching { it.close() } }
+        fake.shutdown()
+    }
+
+    @Test fun `a peer that goes silent without closing is reported as a failure`() = runBlocking<Unit> {
+        val book = PlayerAddressBook().apply { register(fake.hostname, "127.0.0.1") }
+        val socket = withTimeout(5_000) {
+            SonosSocket.open(LanHttp.client(book, pingIntervalSeconds = 1), fake.hostname, relay.localPort)
+        }
+        // Alive through the relay first, so a failure below is the silence and not the setup.
+        socket.command(Frames.onHousehold("groups:1", "getGroups", fake.householdId))
+
+        freeze()
+        val failure = withTimeout(5_000) { socket.failures.first() }
+        assertTrue(
+            "expected the keepalive to name the missing pong: ${failure.cause}",
+            failure.cause?.message.orEmpty().contains("pong"),
+        )
+    }
+}

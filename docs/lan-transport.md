@@ -162,7 +162,9 @@ Scoping rules, which are not optional:
 Anything else fails `ERROR_INVALID_OBJECT_ID`.
 
 Keepalive is `pingInterval(30, SECONDS)` on the OkHttp client — one builder call reproduces
-the Rust daemon's ping behaviour. Treat 90s of total silence as a dead socket. Subscriptions
+the Rust daemon's ping behaviour, and its dead-socket rule too: OkHttp fails a socket whose
+last pong has not arrived when the next ping is due, so a silent peer is dead within 60s.
+x2rock's 90s-of-silence timer has no counterpart here because it needs none. Subscriptions
 do **not** survive a reconnect and there is no replay buffer: re-subscribe and take the fresh
 snapshot as truth rather than merging with pre-disconnect state.
 

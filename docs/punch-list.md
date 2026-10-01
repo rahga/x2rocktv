@@ -40,7 +40,9 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
   NowPlayingPublisher, ChannelSync, MulticastGate, SeedStore, the smapi package and `settings:1`,
   and still lists five routes and a favourites/primary-room store. `docs/lan-transport.md`'s open
   questions still list network-change handling and Streamer testing, both done.
-- [ ] **0.3 Dead declaration.** `LanHttp.SILENCE_LIMIT_MILLIS = 90_000` is never read. Implement
+- [x] **0.3 Dead declaration.** *Done 2026-10-01: deleted, not implemented. OkHttp's
+  ping already fails a socket whose pong is overdue, so a silent peer is dead within 60s;
+  `SilentPeerTest` freezes a live connection and fails without the ping.* `LanHttp.SILENCE_LIMIT_MILLIS = 90_000` is never read. Implement
   it with 1.2 (x2rock: ping every 30s, 90s of total silence is a dead socket) or delete it.
 
 ---
