@@ -89,6 +89,7 @@ class QueueEditTest {
     @Test fun `a queue longer than one answer is read to the end`() = runBlocking<Unit> {
         val queue = household.queue(group())
         assertEquals(10, queue.items.size)
+        assertEquals("58", queue.updateId)
         assertEquals(listOf("0", "6"), requests.filter { it.first == "Browse" }.map { it.second["StartingIndex"] })
     }
 

@@ -186,6 +186,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 11. **3.4** In a room whose queue you can spare: Save as playlist (a playlist named for the
     room and time appears), move a track up and down, then Clear twice. Long-press a playlist
     on the Favorites screen to add it back.
+12. **3.5** Open a room's queue in the app, then add a track to it from the Sonos app: the list
+    updates on the next playback event. Meanwhile `x2rock -r <room> raw api playback:1
+    subscribe --scope group --watch 60` shows whether `queueVersion` moved with the edit —
+    the one thing that says whether `UpdateID` is still needed.
 
 ---
 
@@ -258,7 +262,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   (`AddURIToQueue`, then seek to `FirstTrackNumberEnqueued`, not `NewQueueLength`). Every edit
   quotes a fresh `UpdateID`; a stale one gets 1028 and re-reads rather than retries. The
   1000-item cap needs paging (`StartingIndex`).
-- [ ] **3.5 Queue freshness.** The `UpdateID` of a `Q:0` browse with count 1 is the change signal
+- [x] **3.5 Queue freshness.** *Done 2026-10-01: while the queue screen is open, a moved
+  `queueVersion` re-reads, and each playback event asks the one-item browse's `UpdateID` and
+  re-reads only if it moved; one check in flight, off the event path. Whether `queueVersion`
+  itself moves on an edit is still unverified (home checklist 12).* The `UpdateID` of a `Q:0` browse with count 1 is the change signal
   (x2rock found no `queueVersion`; see the correction below). While the queue screen is open, re-browse on
   each `playback:1` event whose `UpdateID` moved, off the event path with its own timeout
   (x2rock: one wedged coordinator stalled every room). Request/response, bounded to the open

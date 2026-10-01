@@ -55,8 +55,8 @@ claim in it was run against real hardware.
   then asking once more. A `SonosCommandException` is the player's refusal: final, never
   re-checked.
 - The **queue is not in the Control API at all** (`ERROR_UNSUPPORTED_NAMESPACE`). It lives
-  behind UPnP on cleartext port 1400 — see `Upnp` — and is the one thing still asked for
-  rather than pushed.
+  behind UPnP on cleartext port 1400 — see `Upnp` — and is asked for rather than pushed,
+  re-read on a playback event that shows it changed.
 - Docs in `/docs/` mirror Sonos's own reference for the namespaces and body shapes, which
   are the same over either transport. `docs/sonos-auth.md` describes the account flow this
   project no longer uses; it is kept for reference only.
@@ -261,8 +261,10 @@ Start there before picking up new work; the items below are the standing notes i
 - **A custom `X509TrustManager` is still required**, because players present a leaf-only
   chain whose root is not in any store. Hostname verification is *not* relaxed — see
   `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
-- The queue does not update by itself: UPnP eventing needs the player to connect back to us,
-  which is deliberately not used, so the queue screen re-reads instead.
+- The queue is not pushed: UPnP eventing needs the player to connect back to us, which is
+  deliberately not used. While the queue screen is open it re-reads when the room's
+  `queueVersion` moves, or when a playback event finds the browse's `UpdateID` has. An edit
+  made elsewhere to a room that keeps playing sends no event, so it waits for the next one.
 - **`Upnp` keeps its own read timeout, and must.** It is handed the WebSocket's client,
   where `readTimeout(0)` is right because a subscription is meant to sit idle — and fatal
   for request/response, where a player that goes quiet mid-answer would hang the caller
