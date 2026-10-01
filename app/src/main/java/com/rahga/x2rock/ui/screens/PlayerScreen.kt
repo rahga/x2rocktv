@@ -505,15 +505,18 @@ private fun PlaybackControls(
                 modifier = if (hasContent) Modifier
                     else Modifier.focusRequester(playPauseFocusRequester),
             ) { Text("Favorites") }
-            AppButton(onClick = {
-                if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
-                else onOpenSleepTimer()
-            }) {
-                Text(
-                    if (state.sleepTimerRemainingMillis != null)
-                        "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
-                    else "Sleep Timer"
-                )
+            // Sonos's own timer, on AVTransport: with UPnP off there is none to set.
+            if (!state.upnpOff) {
+                AppButton(onClick = {
+                    if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                    else onOpenSleepTimer()
+                }) {
+                    Text(
+                        if (state.sleepTimerRemainingMillis != null)
+                            "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                        else "Sleep Timer"
+                    )
+                }
             }
         }
 
@@ -706,17 +709,19 @@ private fun TvControls(
                 onClick = onOpenFavorites,
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Favorites") }
-            AppButton(
-                onClick = {
-                    if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
-                    else onOpenSleepTimer()
-                },
-            ) {
-                Text(
-                    if (state.sleepTimerRemainingMillis != null)
-                        "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
-                    else "Sleep Timer"
-                )
+            if (!state.upnpOff) {
+                AppButton(
+                    onClick = {
+                        if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                        else onOpenSleepTimer()
+                    },
+                ) {
+                    Text(
+                        if (state.sleepTimerRemainingMillis != null)
+                            "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                        else "Sleep Timer"
+                    )
+                }
             }
         }
 
@@ -880,8 +885,8 @@ private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
 @Composable
 private fun UpnpOffNote() {
     Text(
-        "UPnP is off for this system, so the queue, the TV input and Night Sound and Speech " +
-            "Enhancement can't be used. Turn it on in the Sonos app: Account > Privacy and " +
+        "UPnP is off for this system, so the queue, the sleep timer, the TV input and Night " +
+            "Sound and Speech Enhancement can't be used. Turn it on in the Sonos app: Account > Privacy and " +
             "Security > Connection Security.",
         style = MaterialTheme.typography.bodySmall,
     )

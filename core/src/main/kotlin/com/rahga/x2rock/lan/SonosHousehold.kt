@@ -543,6 +543,13 @@ class SonosHousehold(
         play(groupId)
     }
 
+    /** [groupId]'s own sleep timer, or `null` with none set. See [Upnp.sleepTimer]. */
+    suspend fun sleepTimer(groupId: String): Long? = upnp.sleepTimer(coordinatorHostname(groupId))
+
+    /** Arm [groupId]'s sleep timer for [minutes], or cancel it with `null`. */
+    suspend fun setSleepTimer(groupId: String, minutes: Int?) =
+        upnp.setSleepTimer(coordinatorHostname(groupId), minutes?.let { it * 60_000L })
+
     /** Whether [groupId] is playing from its queue, rather than a station, stream or TV. */
     suspend fun playingFromQueue(groupId: String): Boolean =
         upnp.mediaInfo(coordinatorHostname(groupId)).playingFromQueue

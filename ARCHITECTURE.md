@@ -174,10 +174,11 @@ State in each ViewModel is derived rather than assembled by hand, so it recomput
 something actually changes and at no other time. A command's effect arrives as an event
 like any other, which is why nothing re-fetches after acting.
 
-Four things are asked for rather than pushed, each because nothing pushes it:
+Five things are asked for rather than pushed, each because nothing pushes it:
 - **The queue**, over UPnP — the Control API has none. Stale until re-read.
 - **Night Sound and Speech Enhancement**, from `settings:1 getPlayerSettings`: `homeTheater:1`
   accepts a subscription and never fires. Read once per room and after each write.
+- **The sleep timer**, over AVTransport. Read once per room and after each change.
 - **A track's rating**, from the service. Read once per room and track and after each press.
 - **Favourites**, read when their screen opens.
 
@@ -203,7 +204,8 @@ volume keys. Manages:
 - The home-theatre reading and its optimistic toggles
 - The rating state
 - A notice line: a rating's result, or why a command failed
-- A sleep timer, as a local countdown that pauses the group when it expires
+- The room's sleep timer: Sonos's own, so every controller sees it and the room pauses
+  itself. Read on selection and after a change, counted down locally between reads
 
 The selected room reaches it from `HomeScreen`, which calls `selectGroup` as focus moves.
 
@@ -301,6 +303,7 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | AVTransport | `GetMediaInfo`, `SetAVTransportURI x-rincon-queue:<coordinator>#0` | whether the queue is the source, and making it so before a jump — `Seek` answers 701 otherwise |
 | AVTransport | `SetAVTransportURI x-sonos-htastream:<soundbar>:spdif` | the TV input, sent to the coordinator |
 | RenderingControl | `SetEQ NightMode`, `SetEQ DialogLevel` | the two home-theatre toggles, sent to the soundbar |
+| AVTransport | `GetRemainingSleepTimerDuration`, `ConfigureSleepTimer` | the room's own sleep timer |
 | MusicServices | `ListAvailableServices` | which service a track's id names, for ratings |
 
 Every UPnP call is addressed by `.local` name, because cleartext is permitted for those names
