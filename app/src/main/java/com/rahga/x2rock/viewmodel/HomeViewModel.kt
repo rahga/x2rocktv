@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 /**
@@ -470,6 +471,12 @@ class HomeViewModel @Inject constructor(
     private val _tone = MutableStateFlow<ToneUi?>(null)
     val tone: StateFlow<ToneUi?> = _tone.asStateFlow()
     private var toneJob: kotlinx.coroutines.Job? = null
+    /** One pending write per control, so a burst of presses sends its total once. */
+    private val toneWrites = mutableMapOf<String, Job>()
+    /** Writes go one at a time, in order: two in flight could land in either order. */
+    private val toneSends = kotlinx.coroutines.sync.Mutex()
+    /** Moves on every press, so a read that started before one is known to be stale. */
+    private var toneEdits = 0
 
     /** Read the tone of [groupId]'s own speaker: its coordinator, the room it is named for. */
     fun loadTone(groupId: String) {
@@ -479,48 +486,63 @@ class HomeViewModel @Inject constructor(
         toneJob = viewModelScope.launch { readTone(playerId) }
     }
 
+    /**
+     * Applied only if nothing was pressed while it was out. A read that started before a press
+     * reports the level before it, and showing that would also make the next press step from
+     * it, losing one.
+     */
     private suspend fun readTone(playerId: String) {
+        val edits = toneEdits
         val eq = runCatching { household.playerSettings(playerId).eq }.getOrNull() ?: return
         val trueplay = runCatching { household.trueplay(playerId) }.getOrNull()
+        if (edits != toneEdits) return
         _tone.value = ToneUi(playerId, eq.bass, eq.treble, eq.loudness, trueplay)
     }
 
-    fun stepBass(delta: Int) = stepTone(delta, { it.bass }, { t, v -> t.copy(bass = v) }) { id, v -> household.setBass(id, v) }
-    fun stepTreble(delta: Int) = stepTone(delta, { it.treble }, { t, v -> t.copy(treble = v) }) { id, v -> household.setTreble(id, v) }
-
-    private fun stepTone(
-        delta: Int,
-        read: (ToneUi) -> Int,
-        write: (ToneUi, Int) -> ToneUi,
-        send: suspend (String, Int) -> Unit,
-    ) {
-        val tone = _tone.value ?: return
-        val target = (read(tone) + delta).coerceIn(-10, 10)
-        if (target == read(tone)) return
-        _tone.value = write(tone, target)
-        viewModelScope.launch {
-            runCatching { send(tone.playerId, target) }.onFailure { report("change the tone", it) }
-            readTone(tone.playerId)
+    /**
+     * Shows [edited] now, and writes it after the presses stop, as volume does. A press cancels
+     * only a write still waiting: one already sent has reached the player whatever happens
+     * here, so cancelling it would only lose its read and report a failure that was not one.
+     * The read after waits for every pending write, so it cannot show one control's new level
+     * with another's old one.
+     */
+    private fun editTone(key: String, what: String, edited: ToneUi, send: suspend (String) -> Unit) {
+        toneEdits++
+        _tone.value = edited
+        toneWrites.remove(key)?.cancel()
+        toneWrites[key] = viewModelScope.launch {
+            delay(VOLUME_DEBOUNCE_MILLIS)
+            toneWrites.remove(key)
+            toneSends.withLock {
+                runCatching { send(edited.playerId) }.onFailure { report(what, it) }
+            }
+            if (toneWrites.isEmpty()) readTone(edited.playerId)
         }
+    }
+
+    fun stepBass(delta: Int) {
+        val tone = _tone.value ?: return
+        val target = (tone.bass + delta).coerceIn(-10, 10)
+        if (target != tone.bass) editTone("bass", "change the tone", tone.copy(bass = target)) { household.setBass(it, target) }
+    }
+
+    fun stepTreble(delta: Int) {
+        val tone = _tone.value ?: return
+        val target = (tone.treble + delta).coerceIn(-10, 10)
+        if (target != tone.treble) editTone("treble", "change the tone", tone.copy(treble = target)) { household.setTreble(it, target) }
     }
 
     fun toggleLoudness() {
         val tone = _tone.value ?: return
-        _tone.value = tone.copy(loudness = !tone.loudness)
-        viewModelScope.launch {
-            runCatching { household.setLoudness(tone.playerId, !tone.loudness) }.onFailure { report("change Loudness", it) }
-            readTone(tone.playerId)
-        }
+        val on = !tone.loudness
+        editTone("loudness", "change Loudness", tone.copy(loudness = on)) { household.setLoudness(it, on) }
     }
 
     fun toggleTrueplay() {
         val tone = _tone.value ?: return
         val now = tone.trueplay ?: return
-        _tone.value = tone.copy(trueplay = now.copy(enabled = !now.enabled))
-        viewModelScope.launch {
-            runCatching { household.setTrueplay(tone.playerId, !now.enabled) }.onFailure { report("change TruePlay", it) }
-            readTone(tone.playerId)
-        }
+        val on = !now.enabled
+        editTone("trueplay", "change TruePlay", tone.copy(trueplay = now.copy(enabled = on))) { household.setTrueplay(it, on) }
     }
 
     /** What the app would choose with nothing else to go on. */
