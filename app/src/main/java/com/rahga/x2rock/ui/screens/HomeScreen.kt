@@ -260,6 +260,8 @@ fun HomeScreen(
             val groupVolumes by homeViewModel.groupVolumes.collectAsState()
             val upnpOff by homeViewModel.upnpOff.collectAsState()
             val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
+            val tone by homeViewModel.tone.collectAsState()
+            LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }
             Overlay {
                 RoomPanel(
                     group = liveGroup,
@@ -293,6 +295,11 @@ fun HomeScreen(
                         panelGroup = null
                     },
                     upnpOff = upnpOff,
+                    tone = tone?.takeIf { it.playerId == liveGroup.coordinatorId },
+                    onStepBass = homeViewModel::stepBass,
+                    onStepTreble = homeViewModel::stepTreble,
+                    onToggleLoudness = homeViewModel::toggleLoudness,
+                    onToggleTrueplay = homeViewModel::toggleTrueplay,
                 )
             }
         }

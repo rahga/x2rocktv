@@ -102,6 +102,12 @@ fun RoomPanel(
     onUseTvInput: () -> Unit,
     /** UPnP is off for the household, so the TV input cannot be switched to. */
     upnpOff: Boolean = false,
+    /** This room's tone, or `null` while it is read. */
+    tone: HomeViewModel.ToneUi? = null,
+    onStepBass: (Int) -> Unit = {},
+    onStepTreble: (Int) -> Unit = {},
+    onToggleLoudness: () -> Unit = {},
+    onToggleTrueplay: () -> Unit = {},
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -214,6 +220,24 @@ fun RoomPanel(
         // Both of these need an HDMI socket to mean anything, so a room without one ends at
         // the lists above. The source comes first: it is a thing to *do*, and the setting
         // below it is a thing to state once and never touch again.
+        // Tone, for every room: it is the speaker's, not the soundbar's. Written over UPnP, so
+        // not offered with UPnP off; and not until it has been read, since a row that guessed
+        // a level would step from the wrong one.
+        if (tone != null && !upnpOff) {
+            PanelSection("Sound")
+            ToneRow("Bass", tone.bass, onStepBass)
+            ToneRow("Treble", tone.treble, onStepTreble)
+            AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
+                Text(if (tone.loudness) "Loudness   On" else "Loudness   Off")
+            }
+            // Only where the speaker has a calibration to turn back on; measuring is the app's.
+            tone.trueplay?.takeIf { it.available }?.let { trueplay ->
+                AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
+                }
+            }
+        }
+
         if (info.hasTvInput) {
             // Switching the input is UPnP, so with UPnP off there is no Source to offer; the
             // setting below needs nothing from the speakers and stays.
@@ -386,3 +410,27 @@ private fun VolumeBar(volume: Int?, muted: Boolean = false) {
 
 /** The same step the player pane's volume uses. */
 private const val VOLUME_STEP = 5
+
+/**
+ * Bass or treble: left and right step it, as a level row does, since nothing else in the
+ * panel uses those directions. Select does nothing; the value is the whole row.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
+    AppButton(
+        onClick = {},
+        modifier = Modifier
+            .fillMaxWidth()
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onStep(-1); true }
+                    Key.DirectionRight -> { onStep(+1); true }
+                    else -> false
+                }
+            },
+    ) {
+        Text("$label   ${if (level > 0) "+$level" else "$level"}")
+    }
+}

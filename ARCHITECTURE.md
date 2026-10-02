@@ -309,6 +309,7 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | AVTransport | `GetMediaInfo`, `SetAVTransportURI x-rincon-queue:<coordinator>#0` | whether the queue is the source, and making it so before a jump — `Seek` answers 701 otherwise |
 | AVTransport | `SetAVTransportURI x-sonos-htastream:<soundbar>:spdif` | the TV input, sent to the coordinator |
 | RenderingControl | `SetEQ NightMode`, `SetEQ DialogLevel` | the two home-theatre toggles, sent to the soundbar |
+| RenderingControl | `SetBass`, `SetTreble`, `SetLoudness` (`Channel=Master`), `Get/SetRoomCalibrationStatus` | tone and TruePlay, sent to the speaker itself |
 | AVTransport | `GetRemainingSleepTimerDuration`, `ConfigureSleepTimer` | the room's own sleep timer |
 | MusicServices | `ListAvailableServices` | which service a track's id names, for ratings |
 

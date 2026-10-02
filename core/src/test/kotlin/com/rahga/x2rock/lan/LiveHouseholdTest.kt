@@ -535,6 +535,35 @@ class LiveHouseholdTest {
     }
 
     /**
+     * Only with `-Dx2rock.live.room=<room>`, and put back. Bass moves by one and loudness
+     * flips, each written over UPnP and read back over settings:1 — the two halves that never
+     * meet in a unit test. TruePlay is left alone: turning a room's calibration off is more
+     * than a test should risk.
+     */
+    @Test fun `bass and loudness write over UPnP and read back over settings`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val player = group.coordinatorId
+        val before = household.playerSettings(player).eq ?: error("$mutableRoom reported no eq")
+        val bass = if (before.bass >= 10) before.bass - 1 else before.bass + 1
+        try {
+            household.setBass(player, bass)
+            household.setLoudness(player, !before.loudness)
+            val after = household.playerSettings(player).eq!!
+            assertEquals(bass, after.bass)
+            assertEquals(!before.loudness, after.loudness)
+        } finally {
+            runCatching {
+                household.setBass(player, before.bass)
+                household.setLoudness(player, before.loudness)
+            }
+        }
+        assertEquals("the tone was not put back", before, household.playerSettings(player).eq)
+    }
+
+    /**
      * Read-only, and about the protocol rather than this house: a soundbar answers
      * `settings:1 getPlayerSettings` with a `homeTheater` block. Nothing asserts which way
      * the toggles are set — a household where both happen to be off must pass too.

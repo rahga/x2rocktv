@@ -193,6 +193,20 @@ class HomeViewModelTest {
         assertEquals(mapOf(bedroom to 1), rooms.filterValues { it.offlineSpeakers > 0 }.mapValues { it.value.offlineSpeakers })
     }
 
+    /**
+     * The panel's Sound rows come from the captured settings. With no UPnP to answer here,
+     * TruePlay reads as unknown, and the panel leaves its row out rather than guess.
+     */
+    @Test fun `the panel reads its room's tone`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        viewModel.loadTone(kitchen.id)
+        val tone = withTimeout(5_000) { viewModel.tone.first { it != null } }!!
+        assertEquals(kitchen.coordinatorId, tone.playerId)
+        assertEquals(Triple(0, 0, false), Triple(tone.bass, tone.treble, tone.loudness))
+        assertNull(tone.trueplay)
+    }
+
     /** Mute reaches the room list and the panel's speaker rows, both pushed. */
     @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
         val state = connect()
