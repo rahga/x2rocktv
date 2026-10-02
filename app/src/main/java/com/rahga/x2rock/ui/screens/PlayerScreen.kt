@@ -264,6 +264,15 @@ private fun TrackInfo(state: PlayerUiState) {
                             Text(station, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
+                    // A stream with no text of its own yet — the first ICY title has not come,
+                    // or never will — is named once, by its station or, for a bare URL, its
+                    // host: x2rock's rule, and better than a transport word.
+                    state.isRadio && state.sourceName != null -> Text(
+                        text = state.sourceName,
+                        style = MaterialTheme.typography.displaySmall,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     // "Idle" describes the transport; with nothing loaded at all it is the
                     // wrong thing to say, because the room is not resting between tracks —
                     // there are none. The Sonos app names this state, and so does this.

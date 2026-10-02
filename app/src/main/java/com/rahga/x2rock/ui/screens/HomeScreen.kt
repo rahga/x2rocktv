@@ -85,6 +85,7 @@ import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.swatchColor
 import com.rahga.x2rock.viewmodel.HomeViewModel
+import com.rahga.x2rock.viewmodel.roomRowLines
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.sortGroups
 
@@ -507,28 +508,7 @@ private fun RoomListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // A soundbar on its TV input gets the format it is receiving, then the
-                // source — "Dolby Digital Surround 5.1" over "TV Audio" — because the
-                // format is what changes and what a listener is checking for.
-                val lines = when {
-                    info.onTvInput -> listOfNotNull(
-                        info.inputFormat.ifEmpty { null } ?: (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
-                        info.source,
-                    )
-                    // A track and a streamInfo are not exclusive — a service radio station
-                    // can carry both — so the second line prefers the artist and falls back
-                    // to what the station says, when that says something the title does not.
-                    info.track?.name != null -> listOfNotNull(
-                        info.track.name,
-                        info.track.artist?.name
-                            ?: info.streamInfo?.takeIf { it != info.track.name },
-                    )
-                    // A stream loaded by URL has no track object at all, so this is the only
-                    // thing it can say it is playing — with the station beneath it, the same
-                    // shape as track-over-artist.
-                    info.streamInfo != null -> listOfNotNull(info.streamInfo, info.source)
-                    else -> listOf((group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel())
-                }
+                val lines = roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
                 lines.forEach { line ->
                     Text(
                         text = line,
