@@ -1,0 +1,16 @@
+{
+  "_objectType": "hdmiStatus",
+  "connection": "NO_CONNECTION",
+  "deviceCEC": "READY",
+  "eARCActive": false,
+  "errorARC": "NONE",
+  "errorSAM": "NONE",
+  "errorTV": "OK",
+  "stateARC": "RESET",
+  "stateCEC": "ONLINE",
+  "stateSAM": "RESET",
+  "testAudio": false,
+  "testVideo": false,
+  "tvCECStatus": "UNKNOWN",
+  "tvPowerStatus": "UNKNOWN"
+}

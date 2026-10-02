@@ -566,6 +566,8 @@ class FakePlayer(
             "settingsChanged" -> "effectiveSettings:1"
             // Captured with Bedroom's left surround unplugged.
             "activeZonesChange", "zoneDefinitionsChange" -> "zones:1"
+            // A Beam's HDMI port, with a TV (Bedroom) and with nothing in it (Guest TV).
+            "hdmiStatus" -> "hdmi:1"
             else -> error("no namespace known for $type")
         }
     }

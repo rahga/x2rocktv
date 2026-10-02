@@ -228,7 +228,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   them for ~2s and unsubscribes. A Sub or surround off the network is otherwise invisible. Mark
   the room with a warning glyph. Subscribe at connect and on topology change, not continuously.
   Low priority.
-- [ ] **2.5 `hdmi:1` for the TV badge and detection.** Player-scoped `hdmi:1 subscribe` returns
+- [x] **2.5 `hdmi:1` for the TV badge and detection.** *Done 2026-10-02: each soundbar
+  subscribes to `hdmi:1` on its own socket; a `NO_CONNECTION` port takes its room out of the TV
+  badge, the Source and "This is my TV" rows, and detection's candidates, while Night Sound
+  and Speech Enhancement stay. Captured on Bedroom's Beam (connected, TV on) and Guest TV's
+  (nothing plugged in). `tvPowerStatus` is there too and unused: a TV that is on could settle
+  detection further.* Player-scoped `hdmi:1 subscribe` returns
   `tvPowerStatus` and `connection` (`NO_CONNECTION` is an empty port; Guest TV's Beam has nothing
   plugged in). `TvSoundbar.detect` and the badge key on `HT_PLAYBACK`, which is why three rooms
   qualify. Excluding `NO_CONNECTION` narrows the heuristic and drops the badge from a room that

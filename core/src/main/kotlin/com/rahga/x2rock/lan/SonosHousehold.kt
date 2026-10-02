@@ -148,6 +148,12 @@ data class HouseholdState(
      * says it has gone: the room plays on, quieter, without saying why. From `zones:1`.
      */
     val offlineSpeakers: Map<String, Int> = emptyMap(),
+    /**
+     * Each soundbar's `hdmi:1` `connection`, by player id: `CONNECTED`, or `NO_CONNECTION`
+     * for an HDMI port with nothing in it (Guest TV's Beam, captured 2026-10-02). A soundbar
+     * not yet heard from is absent, and counts as connected.
+     */
+    val hdmiConnection: Map<String, String> = emptyMap(),
 ) {
     /**
      * Whether this group has a TV input to switch to at all.
@@ -158,12 +164,22 @@ data class HouseholdState(
      */
     fun hasTvInput(group: Group): Boolean {
         val byId = players.associateBy { it.id }
-        return group.playerIds.any { HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) }
+        return group.playerIds.any {
+            HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) && hdmiConnection[it] != NO_HDMI_CONNECTION
+        }
     }
 }
 
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
+
+/**
+ * `hdmi:1`'s word for a soundbar's HDMI port with nothing in it. Such a room has an input in
+ * principle and no television in fact, so it gets no TV badge, no Source row and is no
+ * candidate for "the television's room" — but keeps Night Sound and Speech Enhancement, which
+ * are the soundbar's and do not need a TV. Hence [TvSoundbar.hasHdmi] does not consult this.
+ */
+const val NO_HDMI_CONNECTION = "NO_CONNECTION"
 
 /**
  * A live view of one Sonos household over the LAN, and the commands that change it.
@@ -407,6 +423,7 @@ class SonosHousehold(
                     socketForPlayer(player.id)
                         .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
                 }
+                subscribeHdmi(player)
             }
         } catch (e: Exception) {
             // With Authentication on, every Control API command is refused with
@@ -1198,6 +1215,7 @@ class SonosHousehold(
                 socketForPlayer(player.id)
                     .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
             }
+            subscribeHdmi(player)
         }
         if (unsubscribedGroupsRemain()) catchUpLater()
     }
@@ -1229,6 +1247,12 @@ class SonosHousehold(
                 wait = nextBackoff(wait)
             }
         }
+    }
+
+    /** A soundbar's HDMI port, on its own socket: player-scoped. Best-effort, like its volume. */
+    private suspend fun subscribeHdmi(player: Player) {
+        if (HT_PLAYBACK !in player.capabilities.orEmpty()) return
+        runCatching { socketForPlayer(player.id).subscribe(Frames.onPlayer("hdmi:1", "subscribe", player.id)) }
     }
 
     private suspend fun subscribeGroup(group: Group) {
@@ -1313,6 +1337,13 @@ class SonosHousehold(
                             ?: it.actions,
                     )
                 }
+            }
+
+            // Whether a soundbar's HDMI port has anything in it. Only `connection` is kept.
+            "hdmi:1" -> {
+                val playerId = event.header.playerId ?: return
+                val connection = event.body.asJsonObject.string("connection") ?: return
+                _state.update { it.copy(hdmiConnection = it.hdmiConnection + (playerId to connection)) }
             }
 
             // Each zone's members and whether each is connected, captured with a Bedroom surround
