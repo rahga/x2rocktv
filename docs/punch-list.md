@@ -215,7 +215,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 - [x] **2.3 Normalize.** *Done 2026-10-01: "Even out the levels" in the room panel's
   Playing together, shown while member levels differ; fixed line-outs are skipped.* In RoomPanel's "Playing together", an action that sets every member to
   the group's level (`playerVolume:1 setVolume` per member), shown only while levels differ.
-- [ ] **2.4 Bonded speakers that have dropped off.** *Captured 2026-10-01 with Bedroom's left
+- [x] **2.4 Bonded speakers that have dropped off.** *Done 2026-10-02: `zones:1` subscribed
+  on the seed; a room with a bonded speaker `disconnected` gets a warning glyph in the room
+  list. Unverified: whether a later disconnect is pushed while subscribed — x2rock only ever
+  subscribed, read and left. Watch for it the next time a satellite drops.* *Captured 2026-10-01 with Bedroom's left
   surround unplugged: `event.activeZonesChange.json` (that member `disconnected: true`) and
   `event.zoneDefinitionsChange.json` (channel maps, `gainTrimDB`), household-scoped, ids
   redacted to the fixtures' placeholders. Not built yet.* Note for 1.2 too: the Control API

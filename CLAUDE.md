@@ -197,9 +197,13 @@ Two things this costs, both of which were wrong once:
   topology itself** rather than taking the event's copy: it suspends for three round-trips
   per group, so two events close together used to interleave, and whichever run held the
   older snapshot would see the newer group ids as "gone" and drop them. And a failed
-  subscribe is **retried once** rather than swallowed, because leaving a group unsubscribed
-  recreates the frozen-room bug with nothing to retry it until the next topology change,
-  which may never come.
+  subscribe is **retried, with the reconnect's backoff**, until the group is subscribed or
+  leaves the topology, because leaving it unsubscribed recreates the frozen-room bug with
+  nothing to retry it until the next topology change, which may never come. That case was
+  seen, not imagined: Kitchen, unplugged and plugged back in, was listed as its own group
+  throughout and sat frozen. Setup subscribes groups one by one for the same reason — Sonos
+  lists an unplugged speaker for minutes, and one unreachable coordinator used to fail the
+  whole session.
 - **A selected group can simply cease to exist.** `HomeViewModel` follows the *speakers*
   rather than the id: whichever group now holds them is the same room to a listener, even
   though it is a different group. Only if that fails does it fall back to the sorted first.
