@@ -120,6 +120,24 @@ class TvSoundbarTest {
         )
     }
 
+    /**
+     * Guest TV's Beam has an empty HDMI port at home. Hosting a party from it must not send
+     * TV Input to the one soundbar in the group with no television.
+     */
+    @Test fun `a soundbar with a television wins over one without`() {
+        val partied = household.copy(
+            groups = listOf(group("party", "beam-guest", "beam-living", "onesl-kitchen")),
+            hdmiConnection = mapOf("beam-guest" to NO_HDMI_CONNECTION),
+        )
+        assertEquals("beam-living", TvSoundbar.soundbarOf(partied.groups[0], partied))
+    }
+
+    /** An empty port is still a soundbar: Night Sound and Speech Enhancement are its own. */
+    @Test fun `a soundbar alone with an empty port is still its room's soundbar`() {
+        val guest = household.copy(hdmiConnection = mapOf("beam-guest" to NO_HDMI_CONNECTION))
+        assertEquals("beam-guest", TvSoundbar.soundbarOf(guest.groups[1], guest))
+    }
+
     @Test fun `the soundbar is found among members, not only the coordinator`() {
         val joined = group("kitchen-9931", "onesl-kitchen", "beam-living")
         val state = household.copy(groups = listOf(joined))
