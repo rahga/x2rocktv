@@ -9,6 +9,7 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,6 +38,7 @@ import java.net.InetAddress
  * that collapsed to one step, the error that never surfaced. Those are the cases here,
  * because they are the ones that actually happened.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class PlayerViewModelTest {
 
     private lateinit var fake: FakePlayer

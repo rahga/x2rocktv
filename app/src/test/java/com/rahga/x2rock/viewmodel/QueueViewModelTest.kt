@@ -8,6 +8,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,7 @@ import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** The queue screen's edits, against a UPnP fake serving a real ten-track queue. */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class QueueViewModelTest {
 
     private lateinit var fake: FakePlayer

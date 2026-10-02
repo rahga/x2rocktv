@@ -13,6 +13,7 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -41,6 +42,7 @@ private const val VOLUME_DEBOUNCE = 300L
  * as replies to the command that caused them, so nothing re-fetches, and every assertion
  * below is about state that arrived on its own.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class HomeViewModelTest {
 
     private lateinit var fake: FakePlayer

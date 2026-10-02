@@ -10,6 +10,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +39,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * together than a round trip used to race: an early read landed after a later press, put the
  * old level back on screen, and the next press stepped from that.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class ToneStepsTest {
 
     private lateinit var fake: FakePlayer
