@@ -58,6 +58,17 @@ class FavoritesViewModelTest {
         Dispatchers.resetMain()
     }
 
+    /**
+     * Two real favourites and one derived shell — a real album with its service and type
+     * stripped, which is what a removed service leaves. Only the shell goes.
+     */
+    @Test fun `a favourite the household can no longer play is not listed`() = runBlocking<Unit> {
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
+        }
+        assertEquals(listOf("Love Songs Radio", "Ryo Fukui in New York"), state.items.map { it.name })
+    }
+
     @Test fun `playlists are listed after the favourites`() = runBlocking<Unit> {
         val state = withTimeout(5_000) {
             viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
