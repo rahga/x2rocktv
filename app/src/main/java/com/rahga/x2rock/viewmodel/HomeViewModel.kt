@@ -9,6 +9,7 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
+import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -526,4 +527,26 @@ class HomeViewModel @Inject constructor(
         /** The same window the player pane uses, so a held key behaves the same in both. */
         const val VOLUME_DEBOUNCE_MILLIS = 300L
     }
+}
+
+/**
+ * The lines under a room's name in the room list, in order.
+ *
+ * A soundbar on its TV input gets the format it is receiving, then the source — "Dolby
+ * Digital Surround 5.1" over "TV Audio" — because the format is what changes and what a
+ * listener is checking for. A track gives its title, then the artist, falling back to what
+ * the station says when that says something the title does not. A stream loaded by URL has no
+ * track, so its own text is its now-playing, with the station — for a bare URL, the host —
+ * beneath it. And a stream with no text of its own yet is named once, by that station or
+ * host, rather than reduced to "Playing": x2rock's rule.
+ */
+fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<String> = when {
+    info.onTvInput -> listOfNotNull(info.inputFormat.ifEmpty { null } ?: playbackState.toPlaybackLabel(), info.source)
+    info.track?.name != null -> listOfNotNull(
+        info.track.name,
+        info.track.artist?.name ?: info.streamInfo?.takeIf { it != info.track.name },
+    )
+    info.streamInfo != null -> listOfNotNull(info.streamInfo, info.source)
+    info.isRadio && info.source != null -> listOf(info.source)
+    else -> listOf(playbackState.toPlaybackLabel())
 }

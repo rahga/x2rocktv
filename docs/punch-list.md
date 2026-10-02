@@ -316,7 +316,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   Direct HTTP to a third party, off the household's sockets, with its own short timeout — the
   ratings WIP's `@InternetHttp` client is the one to use. Optional: a "Play URL" row with the
   on-screen keyboard (`x-rincon-mp3radio://` for bare streams; `http(s)://` gets 714).
-- [ ] **3.9 A station's ICY text.** Already read as `streamInfo`. x2rock's layout rule: the
+- [x] **3.9 A station's ICY text.** *Done 2026-10-02: headline over host was already right;
+  a stream with no text yet now names itself by its host in the row and the pane, not
+  "Playing". The row's lines are a tested function.* Already read as `streamInfo`. x2rock's layout rule: the
   stream's headline on top, the host below, and a stream with no headline named once by its host;
   never parse the text into artist and title. Check the row and pane against that.
 
