@@ -1,0 +1,23 @@
+{
+  "_note": "_sonos._tcp TXT record, captured off the office One SL 2026-10-02 with avahi-browse; ids, address, location and hash redacted",
+  "service": "Sonos-AA00BBCCDDEE.local",
+  "port": 1443,
+  "txt": {
+    "infohash": "redacted",
+    "locationid": "lc_00000000000000000000000000000000",
+    "vers": "5",
+    "info": "/api/v1/players/RINCON_AA00BBCCDDEE01400/info",
+    "minApiVersion": "1.1.0",
+    "protovers": "1.54.1",
+    "mhhid": "Sonos_ExampleHousehold.ExampleToken",
+    "bootseq": "9",
+    "mdnssequence": "0",
+    "hhid": "Sonos_ExampleHousehold",
+    "wss": "/websocket/api",
+    "location": "http://192.0.2.10:1400/xml/device_description.xml",
+    "sslport": "1443",
+    "uuid": "RINCON_AA00BBCCDDEE01400",
+    "hhsslport": "1843",
+    "variant": "1"
+  }
+}

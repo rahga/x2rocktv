@@ -326,7 +326,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 
 ## Tier 4 — discovery and the network
 
-- [ ] **4.1 mDNS fallback.** `NsdManager` for `_sonos._tcp`; the TXT record carries `uuid`,
+- [x] **4.1 mDNS fallback.** *Done 2026-10-02: SSDP first, then `NsdManager` for
+  `_sonos._tcp`; the TXT record is parsed by `Discovery.fromSonosTxt`, tested against the office
+  One SL's real record, `mhhid` taken and `hhid` never. Untested on a device at the office —
+  the one check that matters, since that LAN is where SSDP fails.* `NsdManager` for `_sonos._tcp`; the TXT record carries `uuid`,
   `location` and `mhhid` (the long id), a complete `DiscoveredPlayer`. Lives in `:app` behind an
   interface like `MulticastGate`; tried after SSDP's 3s window draws nothing. x2rock's port-1443
   connect-scan is the last resort, and `docs/porting-from-x2rock.md` says to re-derive rather

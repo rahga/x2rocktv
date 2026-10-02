@@ -845,6 +845,23 @@ class SonosHouseholdTest {
         assertEquals(bedroom.coordinatorId, TvSoundbar.detect(household.state.value, household.groupStates.value))
     }
 
+    /**
+     * The office LAN: SSDP answers nothing, mDNS answers at once. A cold start with nothing
+     * remembered must still find the household.
+     */
+    @Test fun `a network that drops SSDP is found by mDNS`() = runBlocking<Unit> {
+        val cold = SonosHousehold(
+            scope = scope, addressBook = PlayerAddressBook().also { }, multicast = MulticastGate.None,
+            mdns = { listOf(seedFor(fake)) }, port = fake.port, ssdp = { emptyList() },
+        )
+        try {
+            cold.connect()
+            withTimeout(5_000) { cold.state.first { it.connected } }
+        } finally {
+            cold.disconnect()
+        }
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()
