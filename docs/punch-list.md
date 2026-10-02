@@ -295,7 +295,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   for the firmware it was measured on and not beyond. Check whether it moves on a queue edit
   before choosing it or `UpdateID` as the signal.
 
-- [ ] **3.6 Room settings: tone.** Bass and treble (`RenderingControl Get/SetBass|Treble`,
+- [x] **3.6 Room settings: tone.** *Done 2026-10-02: a Sound section in the room panel for
+  every room — bass and treble on left/right, Loudness and TruePlay on select — for the room
+  the panel was opened on; withdrawn with UPnP off. Live test on Kitchen writes bass and
+  loudness over UPnP, reads them back over settings:1, and restores them. Not yet seen on the
+  Shield.* Bass and treble (`RenderingControl Get/SetBass|Treble`,
   −10..10), loudness (`Get/SetLoudness` needs `Channel=Master`, wire `1`/`0`), TruePlay on/off
   (`Get/SetRoomCalibrationStatus`). Read via `settings:1 getPlayerSettings` `eq{bass, treble,
   loudness}`, already fetched for night/dialog; write over UPnP; setters answer an empty body so

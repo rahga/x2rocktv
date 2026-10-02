@@ -21,6 +21,7 @@ import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.smapi.Auth
 import com.rahga.x2rock.smapi.RatingsCatalogue
 import com.rahga.x2rock.smapi.RatingsMatch
@@ -947,6 +948,21 @@ class SonosHousehold(
             ?: error("cannot derive a hostname for $playerId")
         upnp.setEq(hostname, eqType, on)
     }
+
+    // ---------------------------------------------------------------- tone
+    //
+    // Per speaker, on that speaker: read from settings:1 (see [playerSettings]), written over
+    // RenderingControl because settings:1 refuses writes. Nothing pushes a change, so the room
+    // panel re-reads after each write, as it does for Night Sound.
+
+    suspend fun setBass(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.BASS, level)
+    suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
+    suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
+    suspend fun trueplay(playerId: String): TruePlay = upnp.trueplay(hostnameOf(playerId))
+    suspend fun setTrueplay(playerId: String, on: Boolean) = upnp.setTrueplay(hostnameOf(playerId), on)
+
+    private fun hostnameOf(playerId: String): String =
+        PlayerNames.localHostname(playerId) ?: error("cannot derive a hostname for $playerId")
 
     // ---------------------------------------------------------------- commands
 

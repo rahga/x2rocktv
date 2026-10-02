@@ -170,7 +170,17 @@ data class HomeTheaterOptions(
  * Only the home-theatre block is read; the object carries more (room name, volume mode,
  * spatial audio) that nothing here has a use for.
  */
-data class PlayerSettings(val homeTheater: HomeTheaterOptions? = null)
+data class PlayerSettings(val homeTheater: HomeTheaterOptions? = null, val eq: EqSettings? = null)
+
+/**
+ * A speaker's tone, as `settings:1 getPlayerSettings` reads it. Read-only there — a write is
+ * `ERROR_NO_PERMISSION` — so writes go over UPnP RenderingControl. Per speaker, not per group;
+ * bonded members follow the visible player.
+ */
+data class EqSettings(val bass: Int = 0, val treble: Int = 0, val loudness: Boolean = false)
+
+/** TruePlay, from RenderingControl's room calibration. Only read, and turned off or on. */
+data class TruePlay(val enabled: Boolean, val available: Boolean)
 
 data class ContainerMetadata(
     val name: String? = null,

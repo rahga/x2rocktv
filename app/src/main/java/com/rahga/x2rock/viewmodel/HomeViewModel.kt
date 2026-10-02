@@ -443,6 +443,79 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    // ------------------------------------------------------------ tone
+    //
+    // The room panel's Sound rows, for the room it was opened on. Per speaker, on that
+    // speaker. Read from settings:1 and room calibration, written over UPnP, and nothing
+    // pushes a change: so each write is shown at once and confirmed by a re-read, the way
+    // the TV pane's Night Sound is.
+
+    /** What the room panel shows for its room's tone, or `null` while it is being read. */
+    data class ToneUi(
+        val playerId: String,
+        val bass: Int,
+        val treble: Int,
+        val loudness: Boolean,
+        /** `null` when the speaker would not say; the row is then not offered. */
+        val trueplay: com.rahga.x2rock.model.TruePlay?,
+    )
+
+    private val _tone = MutableStateFlow<ToneUi?>(null)
+    val tone: StateFlow<ToneUi?> = _tone.asStateFlow()
+    private var toneJob: kotlinx.coroutines.Job? = null
+
+    /** Read the tone of [groupId]'s own speaker: its coordinator, the room it is named for. */
+    fun loadTone(groupId: String) {
+        val playerId = findGroup(groupId)?.coordinatorId ?: return
+        if (_tone.value?.playerId != playerId) _tone.value = null
+        toneJob?.cancel()
+        toneJob = viewModelScope.launch { readTone(playerId) }
+    }
+
+    private suspend fun readTone(playerId: String) {
+        val eq = runCatching { household.playerSettings(playerId).eq }.getOrNull() ?: return
+        val trueplay = runCatching { household.trueplay(playerId) }.getOrNull()
+        _tone.value = ToneUi(playerId, eq.bass, eq.treble, eq.loudness, trueplay)
+    }
+
+    fun stepBass(delta: Int) = stepTone(delta, { it.bass }, { t, v -> t.copy(bass = v) }) { id, v -> household.setBass(id, v) }
+    fun stepTreble(delta: Int) = stepTone(delta, { it.treble }, { t, v -> t.copy(treble = v) }) { id, v -> household.setTreble(id, v) }
+
+    private fun stepTone(
+        delta: Int,
+        read: (ToneUi) -> Int,
+        write: (ToneUi, Int) -> ToneUi,
+        send: suspend (String, Int) -> Unit,
+    ) {
+        val tone = _tone.value ?: return
+        val target = (read(tone) + delta).coerceIn(-10, 10)
+        if (target == read(tone)) return
+        _tone.value = write(tone, target)
+        viewModelScope.launch {
+            runCatching { send(tone.playerId, target) }.onFailure { report("change the tone", it) }
+            readTone(tone.playerId)
+        }
+    }
+
+    fun toggleLoudness() {
+        val tone = _tone.value ?: return
+        _tone.value = tone.copy(loudness = !tone.loudness)
+        viewModelScope.launch {
+            runCatching { household.setLoudness(tone.playerId, !tone.loudness) }.onFailure { report("change Loudness", it) }
+            readTone(tone.playerId)
+        }
+    }
+
+    fun toggleTrueplay() {
+        val tone = _tone.value ?: return
+        val now = tone.trueplay ?: return
+        _tone.value = tone.copy(trueplay = now.copy(enabled = !now.enabled))
+        viewModelScope.launch {
+            runCatching { household.setTrueplay(tone.playerId, !now.enabled) }.onFailure { report("change TruePlay", it) }
+            readTone(tone.playerId)
+        }
+    }
+
     /** What the app would choose with nothing else to go on. */
     private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups).firstOrNull()
 

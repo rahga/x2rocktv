@@ -1,6 +1,7 @@
 package com.rahga.x2rock.lan
 
 import com.rahga.x2rock.model.QueueItem
+import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.TrackAlbum
@@ -286,6 +287,45 @@ class Upnp(
         )
     }
 
+    /** Bass or treble, −10..10. The player answers an empty body; re-read to see it. */
+    suspend fun setTone(hostname: String, which: Tone, level: Int): Unit = withContext(Dispatchers.IO) {
+        require(level in TONE_RANGE) { "$level is outside the ${TONE_RANGE.first}..${TONE_RANGE.last} the player accepts" }
+        soap(hostname, Service.RENDERING_CONTROL, which.action, listOf("InstanceID" to "0", which.field to level.toString()))
+    }
+
+    /**
+     * Loudness alone takes a `Channel`, which bass and treble do not; without it the player
+     * answers 402, which reads like a bad value rather than a missing field (x2rock).
+     */
+    suspend fun setLoudness(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.RENDERING_CONTROL, "SetLoudness",
+            listOf("InstanceID" to "0", "Channel" to "Master", "DesiredLoudness" to if (on) "1" else "0"),
+        )
+    }
+
+    /** TruePlay's state, captured off Kitchen's One SL: enabled and available as `1`/`0`. */
+    suspend fun trueplay(hostname: String): TruePlay = withContext(Dispatchers.IO) {
+        val envelope = parse(soap(hostname, Service.RENDERING_CONTROL, "GetRoomCalibrationStatus", listOf("InstanceID" to "0")))
+        TruePlay(
+            enabled = envelope.text("RoomCalibrationEnabled") == "1",
+            available = envelope.text("RoomCalibrationAvailable") == "1",
+        )
+    }
+
+    /** Turn TruePlay's correction off or back on. Measuring a room is the Sonos app's. */
+    suspend fun setTrueplay(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.RENDERING_CONTROL, "SetRoomCalibrationStatus",
+            listOf("InstanceID" to "0", "RoomCalibrationEnabled" to if (on) "1" else "0"),
+        )
+    }
+
+    enum class Tone(val action: String, val field: String) {
+        BASS("SetBass", "DesiredBass"),
+        TREBLE("SetTreble", "DesiredTreble"),
+    }
+
     /**
      * The music services this player knows about — where ratings start. Unlike the queue,
      * nothing here caches the answer: it's a single cheap LAN call, so it's cheaper to ask
@@ -435,6 +475,8 @@ class Upnp(
 
         /** Queues run to tens of thousands of tracks; listing stops here and says so. */
         const val MAX_ITEMS = 1000
+        /** Bass and treble, as the player accepts them. */
+        val TONE_RANGE = -10..10
 
         private val UPNP_ERRORS = mapOf(
             "701" to "no media loaded, or not available in this state",
