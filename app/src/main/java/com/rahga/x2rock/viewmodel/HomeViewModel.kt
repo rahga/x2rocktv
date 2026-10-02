@@ -21,8 +21,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -185,13 +187,19 @@ class HomeViewModel @Inject constructor(
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
 
     init {
+        // A tile names a player, and only the topology can say which group holds it — so a
+        // cold start from a tile waits for it. Selecting the raw id at once, as this did, lost
+        // the room: the id was in no list yet, and the default selection replaced it.
         viewModelScope.launch {
-            pendingRoomDeepLink.groupId.collect { groupId ->
-                if (groupId != null) {
-                    _selectedGroupId.value = groupId
-                    _navigateToRoom.value = true
-                    pendingRoomDeepLink.clear()
-                }
+            pendingRoomDeepLink.roomId.collectLatest { roomId ->
+                if (roomId == null) return@collectLatest
+                val groups = household.state.map { it.groups }.first { it.isNotEmpty() }
+                pendingRoomDeepLink.clear()
+                val group = groups.firstOrNull { it.id == roomId } ?: TvSoundbar.groupOf(roomId, groups)
+                    ?: return@collectLatest
+                lastSelectedPlayers = group.playerIds.toSet()
+                _selectedGroupId.value = group.id
+                _navigateToRoom.value = true
             }
         }
         // Keep a room selected, including through regroupings this app did not perform.

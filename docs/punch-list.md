@@ -358,7 +358,13 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   JVM; not yet watched on a device.* Coil uses the LAN client with no size cap. x2rock: fetch only
   `https://`, or `http://` from a private IPv4 on 1400; at most 2 MB and 8s; refuse
   `Content-Encoding`; check the magic bytes. A Coil interceptor on the shared loader.
-- [ ] **4.5 TV channel tiles.** Program posters are cleartext `.local` URLs the launcher cannot
+- [x] **4.5 TV channel tiles.** *Done 2026-10-02: tiles are keyed and linked by the room's
+  coordinator player id, and a link waits for the topology and opens whichever group holds that
+  player. That also fixed a tile opened from a cold start, which was selecting an id no list yet
+  held and losing it to the default room. Posters name the speaker by address; a service's https
+  art passes through; anything else is no poster. Tested on the JVM. **Not seen on a launcher**:
+  whether Google TV loads a cleartext poster by IP is the open question, and if it does not, a
+  content provider serving the art is the next step.* Program posters are cleartext `.local` URLs the launcher cannot
   fetch, and `x2rock://room/<groupId>` links go stale on every regroup. Resolve posters to an IP
   or drop them; link by player id and resolve to its current group on open (HomeViewModel already
   follows speakers rather than ids).
