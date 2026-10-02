@@ -209,6 +209,8 @@ class SonosHousehold(
      * supplies it.
      */
     private val multicast: MulticastGate = MulticastGate.None,
+    /** Where to look when SSDP finds nothing. See [MdnsDiscovery]. */
+    private val mdns: MdnsDiscovery = MdnsDiscovery.None,
     /**
      * Injected so the *same* client can be handed to the image loader: album art lives on
      * the players at cleartext `.local` URLs, and a loader with its own client would have
@@ -235,6 +237,8 @@ class SonosHousehold(
      * Overridden only by tests, which cannot wait that long for a failure.
      */
     private val settleMillis: Long = UNANSWERED_SETTLE_MILLIS,
+    /** The SSDP sweep. Overridden only by tests, so a cold connect sends no real M-SEARCH. */
+    private val ssdp: suspend () -> List<Discovery.DiscoveredPlayer> = { Discovery.findPlayers(stopAfterFirst = true) },
 ) {
 
     private val gson = Gson()
@@ -347,7 +351,10 @@ class SonosHousehold(
                 addressBook.forget(hostname)
             }
         }
-        return multicast.around { Discovery.findPlayers(stopAfterFirst = true) }.firstOrNull()
+        // SSDP first: one reply carries everything, in well under a second where it works.
+        // Where a network drops it, mDNS carries the same three facts.
+        return multicast.around { ssdp() }.firstOrNull()
+            ?: runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()).firstOrNull()
             ?: error("no Sonos players answered on this network")
     }
 
@@ -1527,6 +1534,9 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/** How long mDNS is given after SSDP draws nothing. The office speaker answered within a second. */
+internal const val MDNS_TIMEOUT_MILLIS = 4_000L
 
 /** How long a loaded item is pressed to play before it is called a failure. x2rock's figure. */
 internal const val LOAD_SETTLE_MILLIS = 12_000L

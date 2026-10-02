@@ -95,4 +95,28 @@ class DiscoveryTest {
         assertEquals("RINCON_48A6B8332C2E01400", player.id)
         assertNull(player.householdId)
     }
+
+    // ---------------------------------------------------------------- mDNS
+
+    private fun sonosTxt(): Map<String, String> =
+        FakePlayer.fixture("mdns.sonos.txt.json").getAsJsonObject("txt").entrySet().associate { it.key to it.value.asString }
+
+    /** The office One SL's record: id, address and the long household, all in one. */
+    @Test fun `a Sonos TXT record is a complete discovered player`() {
+        val player = Discovery.fromSonosTxt(sonosTxt())!!
+        assertEquals("RINCON_AA00BBCCDDEE01400", player.id)
+        assertEquals("192.0.2.10", player.address.hostAddress)
+        assertEquals("Sonos_ExampleHousehold.ExampleToken", player.householdId)
+    }
+
+    /** `hhid` is the short form the Control API refuses; it must never stand in for `mhhid`. */
+    @Test fun `the short household id is never taken`() {
+        val player = Discovery.fromSonosTxt(sonosTxt() - "mhhid")!!
+        assertNull(player.householdId)
+    }
+
+    @Test fun `a record with no player id or no address is no player`() {
+        assertNull(Discovery.fromSonosTxt(sonosTxt() - "uuid"))
+        assertNull(Discovery.fromSonosTxt(sonosTxt() - "location"))
+    }
 }

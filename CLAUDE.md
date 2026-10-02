@@ -244,17 +244,15 @@ Start there before picking up new work; the items below are the standing notes i
   on demand — deep links, `MEDIA_PLAY_FROM_SEARCH`, a broadcast receiver like
   `ChannelSyncReceiver` — needs none. Only hosting a listener the outside world calls into
   does, and that is a design decision, not a gap to be filled by default.
-- **SSDP is not always available, and there is no fallback.** Discovery is SSDP-only. On an
-  office LAN this app was carried to, a raw `M-SEARCH` from the right source address drew
-  **zero replies** while mDNS worked normally and TCP 1443 was reachable throughout — so a
-  first run there would find nothing and never connect, even though every speaker was
-  perfectly usable. `Discovery`'s own note calls a blocked-multicast network unlikely and
-  names a port-1443 connect-scan as the documented fallback; the sibling Rust project
-  implements exactly that and found the speaker on the same network in seconds. **mDNS is
-  the better fallback**: the `_sonos._tcp` TXT record carries `uuid` (the player id),
-  `location` (the address) and `mhhid` (the long household id) — a complete
-  `DiscoveredPlayer` in one record, with no scanning. Android has `NsdManager` for it, so it
-  would live in `:app` behind an interface like `MulticastGate` does.
+- **SSDP is not always available, so mDNS is the fallback.** On an office LAN a raw `M-SEARCH`
+  drew **zero replies** while mDNS worked normally and TCP 1443 was reachable throughout, so
+  a first run there found nothing. When SSDP's window draws nothing, `SonosHousehold` asks
+  `MdnsDiscovery` — `NsdMdnsDiscovery` in `:app`, over `NsdManager` — for `_sonos._tcp`, whose
+  TXT record carries `uuid`, `location` and `mhhid`: a complete `DiscoveredPlayer` with no
+  scanning (`Discovery.fromSonosTxt`, tested against the office One SL's record). Never take
+  `hhid` for `mhhid`; it is the short form the Control API refuses. The port-1443 connect-scan
+  is still not built, and nothing has needed it. **Not yet run on an Android device** on a
+  network that drops SSDP — the parser and the fallback order are tested, NsdManager is not.
 - **Tested on two devices**, and the stricter one raised nothing. An NVIDIA Shield
   (Android 11, Ethernet) and a Google TV Streamer (Android 14, API 34, **Wi-Fi**). The
   Streamer was expected to surface newer local-network policy first and did not: the

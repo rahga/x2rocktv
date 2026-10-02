@@ -23,7 +23,11 @@ import java.net.URI
  * on Wi-Fi a `WifiManager.MulticastLock` must be held across the query (an Android
  * concern, so the caller's job, not this module's), and if multicast is ever blocked
  * outright the documented fallback is an outbound connect-scan of port 1443 — not
- * implemented here, because nothing has needed it.
+ * implemented here.
+ *
+ * **Something did need a fallback, and it is mDNS, not the scan.** On an office LAN a raw
+ * M-SEARCH drew zero replies while `_sonos._tcp` answered at once, and its TXT record is a
+ * complete [DiscoveredPlayer] — see [fromSonosTxt] and [MdnsDiscovery].
  */
 object Discovery {
 
@@ -47,6 +51,20 @@ object Discovery {
     ) {
         /** Null only for a player id shaped unlike any this was verified against. */
         val hostname: String? get() = PlayerNames.localHostname(id)
+    }
+
+    /**
+     * A player from its `_sonos._tcp` TXT record, or `null` if the record lacks what a connect
+     * needs. Captured off the office One SL: `uuid` is the player id, `location` its device
+     * description URL (so its address), and `mhhid` the **long** household id. Not `hhid`: that
+     * is the short form, which the Control API refuses with ERROR_INVALID_OBJECT_ID. With no
+     * `mhhid` the household is left null, and a connect reads it from `/status/zp`.
+     */
+    fun fromSonosTxt(txt: Map<String, String>): DiscoveredPlayer? {
+        val id = txt["uuid"]?.takeIf { it.startsWith("RINCON_") } ?: return null
+        val host = txt["location"]?.let { runCatching { java.net.URI(it).host }.getOrNull() } ?: return null
+        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return null
+        return DiscoveredPlayer(id, address, txt["mhhid"]?.takeIf { it.contains('.') })
     }
 
     private fun mSearch(mx: Int) =
