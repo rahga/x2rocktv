@@ -155,6 +155,12 @@ data class HouseholdState(
      * not yet heard from is absent, and counts as connected.
      */
     val hdmiConnection: Map<String, String> = emptyMap(),
+    /**
+     * More than one Sonos system answered on this network and none is remembered, so the app
+     * must ask which — x2rock's rule is never to guess between households. Empty otherwise.
+     * Picking one is [SonosHousehold.chooseHousehold].
+     */
+    val householdChoices: List<HouseholdChoice> = emptyList(),
 ) {
     /**
      * Whether this group has a TV input to switch to at all.
@@ -170,6 +176,16 @@ data class HouseholdState(
         }
     }
 }
+
+/**
+ * One of several households found on this network. Households have no names of their own, so
+ * [label] is a room in it, as that player's `/status/zp` names it.
+ */
+data class HouseholdChoice(val householdId: String, val label: String, val seed: Discovery.DiscoveredPlayer)
+
+/** Connecting stopped to ask which household: see [HouseholdState.householdChoices]. */
+class HouseholdChoiceNeeded(val choices: List<HouseholdChoice>) :
+    IllegalStateException("${choices.size} Sonos systems answer on this network. Choose one.")
 
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
@@ -238,7 +254,7 @@ class SonosHousehold(
      */
     private val settleMillis: Long = UNANSWERED_SETTLE_MILLIS,
     /** The SSDP sweep. Overridden only by tests, so a cold connect sends no real M-SEARCH. */
-    private val ssdp: suspend () -> List<Discovery.DiscoveredPlayer> = { Discovery.findPlayers(stopAfterFirst = true) },
+    private val ssdp: suspend () -> List<Discovery.DiscoveredPlayer> = { Discovery.findPlayers() },
 ) {
 
     private val gson = Gson()
@@ -313,6 +329,15 @@ class SonosHousehold(
     }
 
     /**
+     * Connect to the household the viewer picked from [HouseholdState.householdChoices]. Its
+     * player is remembered on success, as any connect's is, so the question is not asked again.
+     */
+    suspend fun chooseHousehold(choice: HouseholdChoice) {
+        _state.update { it.copy(householdChoices = emptyList(), error = null) }
+        connect(choice.seed)
+    }
+
+    /**
      * Called when the device changes network, or wakes.
      *
      * **Assume dead, reconnect from scratch.** A resumed TCP session can be a zombie that
@@ -352,8 +377,23 @@ class SonosHousehold(
             }
         }
         // SSDP first: one reply carries everything, in well under a second where it works.
-        // Where a network drops it, mDNS carries the same three facts.
-        return multicast.around { ssdp() }.firstOrNull()
+        // The whole window is waited out rather than the first reply taken, because a network
+        // can hold two households — an office running two systems — and the first to answer
+        // is not a choice. Only a cold start pays for that: a remembered player skips this.
+        val found = multicast.around { ssdp() }
+        val households = found.filter { it.householdId != null }.groupBy { it.householdId!! }
+        if (households.size > 1) {
+            val choices = households.map { (household, players) ->
+                val seed = players.first()
+                seed.hostname?.let { addressBook.register(it, seed.address) }
+                val label = seed.hostname?.let { runCatching { upnp.zoneName(it) }.getOrNull() } ?: seed.address.hostAddress
+                HouseholdChoice(household, label, seed)
+            }.sortedBy { it.label }
+            _state.update { it.copy(householdChoices = choices) }
+            throw HouseholdChoiceNeeded(choices)
+        }
+        // Where a network drops SSDP, mDNS carries the same three facts.
+        return found.firstOrNull()
             ?: runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()).firstOrNull()
             ?: error("no Sonos players answered on this network")
     }
@@ -391,7 +431,7 @@ class SonosHousehold(
             _state.update {
                 it.copy(
                     connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups),
-                    players = groups.players, error = null, authenticationRequired = false,
+                    players = groups.players, error = null, authenticationRequired = false, householdChoices = emptyList(),
                 )
             }
 
@@ -472,8 +512,10 @@ class SonosHousehold(
             var skipSeed = fresh
             while (isActive) {
                 if (backoff > 0) delay(backoff)
-                val recovered = runCatching { establish(rediscover = skipSeed) }.isSuccess
-                if (recovered) return@launch
+                val outcome = runCatching { establish(rediscover = skipSeed) }
+                if (outcome.isSuccess) return@launch
+                // A question for the viewer, not a fault: asking SSDP again will not answer it.
+                if (outcome.exceptionOrNull() is HouseholdChoiceNeeded) return@launch
                 // Only the first attempt after a network change ignores the remembered
                 // address; if discovery then fails too, the memory is worth another try.
                 skipSeed = false

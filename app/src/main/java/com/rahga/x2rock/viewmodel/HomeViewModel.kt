@@ -6,6 +6,7 @@ import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.channel.ChannelSync
+import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
@@ -92,7 +93,8 @@ class HomeViewModel @Inject constructor(
             /** The TV home-screen channels only care about what is playing. */
             val nowPlaying: Map<String, Track?> get() = rooms.mapValues { it.value.track }
         }
-        data class Error(val message: String) : UiState
+        /** [choices] is non-empty when the "error" is two households, and the answer is a pick. */
+        data class Error(val message: String, val choices: List<HouseholdChoice> = emptyList()) : UiState
     }
 
     /**
@@ -103,7 +105,7 @@ class HomeViewModel @Inject constructor(
         combine(household.state, household.groupStates) { state, groupStates ->
             val error = state.error
             when {
-                error != null -> UiState.Error(error)
+                error != null -> UiState.Error(error, state.householdChoices)
                 !state.connected -> UiState.Loading
                 else -> UiState.Success(
                     groups = state.groups,
@@ -275,6 +277,10 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.connect() }
         }
+    }
+
+    fun chooseHousehold(choice: HouseholdChoice) {
+        viewModelScope.launch { runCatching { household.chooseHousehold(choice) } }
     }
 
     fun clearNavigateToRoom() { _navigateToRoom.value = false }

@@ -334,8 +334,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   interface like `MulticastGate`; tried after SSDP's 3s window draws nothing. x2rock's port-1443
   connect-scan is the last resort, and `docs/porting-from-x2rock.md` says to re-derive rather
   than inherit it: measure on the Streamer (Wi-Fi) and the Shield (Ethernet) first.
-- [ ] **4.2 Two households on one network.** `Discovery.stopAfterFirst` takes whichever player
-  answers first. x2rock: never guess between two households; several on one LAN turned up in
+- [x] **4.2 Two households on one network.** *Done 2026-10-02: a cold start waits out SSDP's
+  window and groups replies by household; with more than one it connects to none and the error
+  screen offers each, labelled by a room in it (`/status/zp` `ZoneName`). The pick connects and
+  is remembered like any seed, so a warm start never asks. Tested against `FakePlayer` plus a
+  second household that exists only as a reply; not seen on a real two-system network.*
+  `Discovery.stopAfterFirst` takes whichever player answers first. x2rock: never guess between two households; several on one LAN turned up in
   practice. Collect replies for the window, group by `HOUSEHOLD.SMARTSPEAKER.AUDIO`, and if there
   are two, ask once and remember in `SeedStore`.
 - [ ] **4.3 Network identity.** x2rock keys remembered players by the default gateway's MAC and

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.ui.components.NoticeBanner
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -173,7 +174,8 @@ fun HomeScreen(
                     onOpenPanel = { panelGroup = it },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onRetry = { homeViewModel.setActive(true) }
+                    onRetry = { homeViewModel.setActive(true) },
+                    onChooseHousehold = { homeViewModel.chooseHousehold(it) }
                 )
             }
 
@@ -324,7 +326,8 @@ private fun RoomSidebar(
     onOpenPanel: (Group) -> Unit,
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onChooseHousehold: (HouseholdChoice) -> Unit
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -384,8 +387,21 @@ private fun RoomSidebar(
                 ) {
                     Text(state.message, style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(16.dp))
-                    AppButton(onClick = onRetry, modifier = Modifier.focusRequester(retryFocus)) {
-                        Text("Retry")
+                    if (state.choices.isEmpty()) {
+                        AppButton(onClick = onRetry, modifier = Modifier.focusRequester(retryFocus)) {
+                            Text("Retry")
+                        }
+                    } else {
+                        // Households have no names, so each is offered by a room in it.
+                        state.choices.forEachIndexed { index, choice ->
+                            AppButton(
+                                onClick = { onChooseHousehold(choice) },
+                                modifier = if (index == 0) Modifier.focusRequester(retryFocus) else Modifier
+                            ) {
+                                Text("The system with ${choice.label}")
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
                     }
                 }
             }
