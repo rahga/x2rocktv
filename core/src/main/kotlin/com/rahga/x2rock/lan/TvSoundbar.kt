@@ -46,11 +46,20 @@ object TvSoundbar {
      * is the room the group is *named* after and the one a panel is titled with, so it is
      * the answer a viewer pressing "this room's TV" means. Only when it has no socket of its
      * own does this fall to a member, which is the Kitchen-coordinates-a-Beam case.
+     *
+     * **A socket with a television in it wins over one without.** Guest TV's Beam has nothing
+     * plugged in, so a party it hosts would otherwise send TV Input, and "This is my TV", to
+     * the one soundbar in the group that has no television. An empty port is still a
+     * soundbar, though, and keeps Night Sound and Speech Enhancement, which is why it remains
+     * the answer when it is the only one.
      */
     fun soundbarOf(group: Group, state: HouseholdState): String? {
         val byId = state.players.associateBy { it.id }
         fun hasHdmi(id: String) = HT_PLAYBACK in (byId[id]?.capabilities ?: emptyList())
-        return group.coordinatorId.takeIf { hasHdmi(it) }
+        fun hasTv(id: String) = hasHdmi(id) && state.hdmiConnection[id] != NO_HDMI_CONNECTION
+        return group.coordinatorId.takeIf { hasTv(it) }
+            ?: group.playerIds.firstOrNull { hasTv(it) }
+            ?: group.coordinatorId.takeIf { hasHdmi(it) }
             ?: group.playerIds.firstOrNull { hasHdmi(it) }
     }
 
