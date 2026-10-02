@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.tvprovider.media.tv.Channel
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
+import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,9 +19,16 @@ interface ChannelSync {
     fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>)
 }
 
+/**
+ * One tile per room, keyed and linked by the room's coordinator — a *player* id — rather than
+ * by its group id. A regroup mints new group ids, so a tile linked by one led nowhere after
+ * the next regroup; the coordinator is what stays put, and the app resolves it to whichever
+ * group holds it when the tile is opened.
+ */
 @Singleton
 class RoomsChannelSync @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val addresses: PlayerAddressBook,
 ) : ChannelSync {
     @Volatile private var channelId = NO_ID
     private var lastGroups: List<Group> = emptyList()
@@ -89,7 +97,9 @@ class RoomsChannelSync @Inject constructor(
             }
         }
 
-        val currentIds = groups.map { it.id }.toSet()
+        // Rows keyed by anything else — group ids, from before tiles were keyed by player —
+        // are stale by the same test, so they go on the first sync.
+        val currentIds = groups.map { it.coordinatorId }.toSet()
         existing.keys.filter { it !in currentIds }.forEach { stale ->
             context.contentResolver.delete(
                 TvContractCompat.buildPreviewProgramUri(existing[stale]!!), null, null
@@ -103,16 +113,16 @@ class RoomsChannelSync @Inject constructor(
                 .setType(TvContractCompat.PreviewPrograms.TYPE_CLIP)
                 .setTitle(group.name)
                 .setDescription(track?.name ?: "")
-                .setInternalProviderId(group.id)
+                .setInternalProviderId(group.coordinatorId)
                 .setWeight(groups.size - index)
-                .setIntentUri(Uri.parse("x2rock://room/${Uri.encode(group.id)}"))
+                .setIntentUri(Uri.parse("x2rock://room/${Uri.encode(group.coordinatorId)}"))
 
-            track?.imageUrl?.let { url ->
+            PosterArt.forLauncher(track?.imageUrl, addresses)?.let { url ->
                 builder.setPosterArtUri(Uri.parse(url))
                     .setPosterArtAspectRatio(TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9)
             }
 
-            val existingId = existing[group.id]
+            val existingId = existing[group.coordinatorId]
             if (existingId != null) {
                 context.contentResolver.update(
                     TvContractCompat.buildPreviewProgramUri(existingId),

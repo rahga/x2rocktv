@@ -52,6 +52,7 @@ class HomeViewModelTest {
     private lateinit var prefs: FakePreferences
     private lateinit var roomPrefs: RoomPreferencesStore
     private lateinit var viewModel: HomeViewModel
+    private val deepLink = PendingRoomDeepLink()
 
     @Before fun setUp() {
         Dispatchers.setMain(Dispatchers.Unconfined)
@@ -74,7 +75,7 @@ class HomeViewModelTest {
             themeStore = ThemeStore(prefs),
             roomPrefsStore = roomPrefs,
             channelSync = channels,
-            pendingRoomDeepLink = PendingRoomDeepLink(),
+            pendingRoomDeepLink = deepLink,
         )
     }
 
@@ -92,6 +93,47 @@ class HomeViewModelTest {
         withTimeout(10_000) {
             viewModel.uiState.first { it is HomeViewModel.UiState.Success } as HomeViewModel.UiState.Success
         }
+    }
+
+    // ---------------------------------------------------------------- channel tiles
+
+    /**
+     * A tile opened from a cold start: the link arrives before any room is known. It used to
+     * select the raw id at once, which was in no list yet, so the default room replaced it.
+     */
+    @Test fun `a tile opened from a cold start selects its room`() = runBlocking<Unit> {
+        // Not Bedroom: it sorts first, so it is also the room the old code fell back to, and a
+        // test asking for it passed against the bug.
+        val kitchen = FakePlayer.reachableTopology().getAsJsonArray("groups")
+            .map { it.asJsonObject }.first { it.get("name").asString == "Kitchen" }
+        deepLink.set(kitchen.get("coordinatorId").asString)
+        connect()
+        withTimeout(5_000) { viewModel.navigateToRoom.first { it } }
+        assertEquals(kitchen.get("id").asString, viewModel.selectedGroupId.value)
+    }
+
+    /**
+     * Guest TV's tile names its speaker. After Guest TV joins Kitchen, that speaker is a member
+     * of a group with a new id and a different coordinator — and the tile must still find it.
+     */
+    @Test fun `a tile finds its speaker in whatever group holds it now`() = runBlocking<Unit> {
+        val state = connect()
+        val guestSpeaker = state.groups.first { it.name == "Guest TV" }.coordinatorId
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val joined = withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { guestSpeaker in it.playerIds && it.coordinatorId != guestSpeaker } }
+        }.groups.first { guestSpeaker in it.playerIds }
+
+        deepLink.set(guestSpeaker)
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == joined.id } }
+    }
+
+    /** A tile published before tiles were keyed by player carries a group id; it still opens. */
+    @Test fun `a tile carrying a group id still opens its room`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        deepLink.set(kitchen.id)
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == kitchen.id } }
     }
 
     @Test fun `it is loading until the household answers`() {

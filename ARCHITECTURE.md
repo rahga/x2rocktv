@@ -128,8 +128,12 @@ home  ────────────────────────�
   └─→ favorites?groupId={id}
 ```
 
-There is no login route. `x2rock://room/{groupId}` deep-links from the TV home-screen channel
-tiles, and `x2rock://home` opens the app.
+There is no login route. `x2rock://room/{playerId}` deep-links from the TV home-screen channel
+tiles, and `x2rock://home` opens the app. A tile names its room's coordinator, a *player*, because
+a regroup mints new group ids; `HomeViewModel` waits for the topology and opens whichever group
+holds that player now. A group id, from a tile published before 2026-10-02, still opens while it
+exists. Posters are the speaker's art by address (`PosterArt`), since the launcher cannot resolve
+`.local`.
 
 **HomeScreen** is a split pane:
 - Left: `RoomSidebar` — the settings button, then the rooms. Each row carries a 48dp art slot
