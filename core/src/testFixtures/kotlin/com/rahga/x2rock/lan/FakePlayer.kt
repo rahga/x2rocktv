@@ -230,6 +230,13 @@ class FakePlayer(
     /** Answer nothing to the malformed "what household am I?" frame, as a real One SL did. */
     @Volatile var ignoreHouseholdProbe = false
 
+    /**
+     * The `eq` the settings reply carries, over the captured one's. A tone write goes over UPnP,
+     * which this fake does not serve, so a test that writes sets this to what the player would
+     * now report.
+     */
+    @Volatile var eq: Triple<Int, Int, Boolean>? = null
+
     @Volatile private var upnpAllowed = true
     @Volatile private var securityVersion = 9
 
@@ -451,7 +458,13 @@ class FakePlayer(
         if (namespace == "settings:1" && command == "getPlayerSettings") {
             respond(
                 webSocket, cmdId, namespace, "playerSettings", success = true,
-                body = fixture("getPlayerSettings.reply.json"),
+                body = fixture("getPlayerSettings.reply.json").apply {
+                    eq?.let { (bass, treble, loudness) ->
+                        getAsJsonObject("eq").apply {
+                            addProperty("bass", bass); addProperty("treble", treble); addProperty("loudness", loudness)
+                        }
+                    }
+                },
             )
             return
         }
