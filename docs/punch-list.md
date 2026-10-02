@@ -351,7 +351,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   never scans an unknown network; the app remembers one seed regardless of network. Key the seed
   per network via `ConnectivityManager`/`LinkProperties` so a device carried elsewhere does not
   probe a home address for 3s first. Low priority on a TV bolted to one wall.
-- [ ] **4.4 Cover art bounds.** Coil uses the LAN client with no size cap. x2rock: fetch only
+- [x] **4.4 Cover art bounds.** *Done 2026-10-02: `ArtHttp`, x2rock's rules, with redirects
+  followed and judged before each is fetched, at most three. Found on the way: CDN art went by
+  the LAN client, which trusts any certificate chain; a player's art now goes by that client and
+  a service's by the internet one, and neither can redirect onto the other's side. Tested on the
+  JVM; not yet watched on a device.* Coil uses the LAN client with no size cap. x2rock: fetch only
   `https://`, or `http://` from a private IPv4 on 1400; at most 2 MB and 8s; refuse
   `Content-Encoding`; check the magic bytes. A Coil interceptor on the shared loader.
 - [ ] **4.5 TV channel tiles.** Program posters are cleartext `.local` URLs the launcher cannot

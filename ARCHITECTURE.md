@@ -81,6 +81,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │
 ├── store/Preferences.kt           the key-value seam every store sits on
 ├── net/
+│   ├── ArtHttp.kt                 cover art: bounded, and players and CDNs on separate clients
 │   ├── NetworkMonitor.kt          ConnectivityManager → household.onNetworkChanged()
 │   ├── PrefsSeedStore.kt          SeedStore over preferences, one player per network
 │   ├── NetworkIdentity.kt         which network this is: default gateways + DHCP domain
