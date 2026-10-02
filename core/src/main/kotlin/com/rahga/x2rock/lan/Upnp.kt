@@ -216,12 +216,17 @@ class Upnp(
      * frame, which a One SL on p20.96.1 simply ignored. Not SOAP, so UPnP being off does not
      * stop it.
      */
-    suspend fun householdId(hostname: String): String? = withContext(Dispatchers.IO) {
+    suspend fun householdId(hostname: String): String? =
+        statusZp(hostname)?.let { Regex("<HouseholdControlID>(Sonos_[^<.]+\\.[^<]+)</HouseholdControlID>").find(it)?.groupValues?.get(1) }
+
+    /** The room this player is in, as `/status/zp`'s `ZoneName` says — to put a name to a household. */
+    suspend fun zoneName(hostname: String): String? =
+        statusZp(hostname)?.let { Regex("<ZoneName>([^<]+)</ZoneName>").find(it)?.groupValues?.get(1) }
+
+    private suspend fun statusZp(hostname: String): String? = withContext(Dispatchers.IO) {
         require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
         client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).execute().use { response ->
-            if (!response.isSuccessful) return@withContext null
-            Regex("<HouseholdControlID>(Sonos_[^<.]+\\.[^<]+)</HouseholdControlID>")
-                .find(response.body?.string().orEmpty())?.groupValues?.get(1)
+            if (!response.isSuccessful) null else response.body?.string()
         }
     }
 
