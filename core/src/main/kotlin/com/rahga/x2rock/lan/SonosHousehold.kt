@@ -377,10 +377,12 @@ class SonosHousehold(
             }
         }
         // SSDP first: one reply carries everything, in well under a second where it works.
-        // The whole window is waited out rather than the first reply taken, because a network
-        // can hold two households — an office running two systems — and the first to answer
-        // is not a choice. Only a cold start pays for that: a remembered player skips this.
+        // Where a network drops it, mDNS carries the same three facts. Either way the whole
+        // window is waited out rather than the first reply taken, because a network can hold
+        // two households — an office running two systems — and the first to answer is not a
+        // choice. Only a cold start pays for that: a remembered player skips this.
         val found = multicast.around { ssdp() }
+            .ifEmpty { runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()) }
         val households = found.filter { it.householdId != null }.groupBy { it.householdId!! }
         if (households.size > 1) {
             val choices = households.map { (household, players) ->
@@ -392,10 +394,7 @@ class SonosHousehold(
             _state.update { it.copy(householdChoices = choices) }
             throw HouseholdChoiceNeeded(choices)
         }
-        // Where a network drops SSDP, mDNS carries the same three facts.
-        return found.firstOrNull()
-            ?: runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()).firstOrNull()
-            ?: error("no Sonos players answered on this network")
+        return found.firstOrNull() ?: error("no Sonos players answered on this network")
     }
 
     private suspend fun establish(

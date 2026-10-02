@@ -19,8 +19,8 @@ import kotlin.coroutines.resume
  *
  * The system's own resolver does the multicast, so no `MulticastLock` is needed for this, unlike
  * SSDP. Services are resolved one at a time — before API 34 a second resolve while one is in
- * flight fails with `FAILURE_ALREADY_ACTIVE` — and the first that parses is the answer: one
- * player is all a connect needs, since `getGroups` reports the rest.
+ * flight fails with `FAILURE_ALREADY_ACTIVE` — for the whole window, because one player is all
+ * a connect needs but only all of them show whether there are two households.
  */
 @Singleton
 class NsdMdnsDiscovery @Inject constructor(
@@ -41,15 +41,17 @@ class NsdMdnsDiscovery @Inject constructor(
         if (runCatching { nsd.discoverServices(SERVICE_TYPE, NsdManager.PROTOCOL_DNS_SD, listener) }.isFailure) {
             return emptyList()
         }
+        val players = LinkedHashMap<String, Discovery.DiscoveredPlayer>()
         try {
-            return withTimeoutOrNull(timeoutMillis) {
+            withTimeoutOrNull(timeoutMillis) {
                 for (service in found) {
                     val resolved = resolve(nsd, service) ?: continue
                     val txt = resolved.attributes.mapValues { (_, value) -> value?.decodeToString().orEmpty() }
-                    Discovery.fromSonosTxt(txt)?.let { return@withTimeoutOrNull listOf(it) }
+                    @Suppress("DEPRECATION") // host is deprecated from API 34 in favour of hostAddresses.
+                    Discovery.fromSonosTxt(txt, resolved.host)?.let { players.putIfAbsent(it.id, it) }
                 }
-                emptyList()
-            } ?: emptyList()
+            }
+            return players.values.toList()
         } finally {
             runCatching { nsd.stopServiceDiscovery(listener) }
         }

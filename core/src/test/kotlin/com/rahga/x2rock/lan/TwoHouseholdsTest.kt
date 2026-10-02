@@ -38,6 +38,11 @@ class TwoHouseholdsTest {
 
     private val loopback = InetAddress.getByName("127.0.0.1")
 
+    private fun bothHouseholds() = listOf(
+        Discovery.DiscoveredPlayer(otherId, loopback, otherHousehold),
+        Discovery.DiscoveredPlayer(fake.id, loopback, fake.householdId),
+    )
+
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         val zp = javaClass.getResourceAsStream("/fixtures/status.zp.xml")!!.readBytes().decodeToString()
@@ -66,12 +71,7 @@ class TwoHouseholdsTest {
             },
             port = fake.port,
             upnpPort = status.port,
-            ssdp = {
-                listOf(
-                    Discovery.DiscoveredPlayer(otherId, loopback, otherHousehold),
-                    Discovery.DiscoveredPlayer(fake.id, loopback, fake.householdId),
-                )
-            },
+            ssdp = { bothHouseholds() },
         )
     }
 
@@ -99,6 +99,24 @@ class TwoHouseholdsTest {
         assertEquals(fake.householdId, state.householdId)
         assertTrue(state.householdChoices.isEmpty())
         assertEquals(fake.id, remembered?.id)
+    }
+
+    /** The office case, SSDP dropped, with two systems on it: mDNS must not guess either. */
+    @Test fun `two households found by mDNS are a question too`() = runBlocking<Unit> {
+        val book = PlayerAddressBook()
+        val mdnsOnly = SonosHousehold(
+            scope = scope, addressBook = book, multicast = MulticastGate.None,
+            mdns = { bothHouseholds() }, client = LanHttp.client(book),
+            port = fake.port, upnpPort = status.port, ssdp = { emptyList() },
+        )
+        try {
+            runCatching { mdnsOnly.connect() }
+            val state = mdnsOnly.state.value
+            assertFalse(state.connected)
+            assertEquals(listOf("Kitchen", "Office"), state.householdChoices.map { it.label })
+        } finally {
+            mdnsOnly.disconnect()
+        }
     }
 
     /** One household with several players is the ordinary case, and asks nothing. */

@@ -119,4 +119,11 @@ class DiscoveryTest {
         assertNull(Discovery.fromSonosTxt(sonosTxt() - "uuid"))
         assertNull(Discovery.fromSonosTxt(sonosTxt() - "location"))
     }
+
+    /** The address mDNS resolved stands in for a missing `location`, never over a present one. */
+    @Test fun `the resolved address is used only when location gives none`() {
+        val resolved = java.net.InetAddress.getByName("192.0.2.99")
+        assertEquals("192.0.2.99", Discovery.fromSonosTxt(sonosTxt() - "location", resolved)!!.address.hostAddress)
+        assertEquals("192.0.2.10", Discovery.fromSonosTxt(sonosTxt(), resolved)!!.address.hostAddress)
+    }
 }
