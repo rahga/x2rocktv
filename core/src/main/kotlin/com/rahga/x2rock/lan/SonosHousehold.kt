@@ -361,7 +361,8 @@ class SonosHousehold(
         // After a network change the remembered address is not merely unverified, it is
         // probably wrong — and trying it first would burn the connect timeout before
         // discovery ever runs.
-        if (!rediscover) {
+        // A store keyed by network answers for the new one, so its memory is worth trying.
+        if (!rediscover || seeds.keyedByNetwork) {
             val remembered = withContext(Dispatchers.IO) { seeds.load() }
             val hostname = remembered?.hostname
             if (remembered != null && hostname != null) {
@@ -404,7 +405,7 @@ class SonosHousehold(
         var fromMemory = false
         try {
             val entry = seed ?: findEntryPoint(rediscover).also {
-                fromMemory = !rediscover && it.id == seeds.load()?.id
+                fromMemory = (!rediscover || seeds.keyedByNetwork) && it.id == seeds.load()?.id
             }
 
             // Discovery reports the player's id and address together, so even the very

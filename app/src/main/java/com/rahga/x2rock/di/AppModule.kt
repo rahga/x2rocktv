@@ -13,8 +13,10 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import com.rahga.x2rock.net.PrefsSeedStore
+import com.rahga.x2rock.net.NetworkIdentity
 import com.rahga.x2rock.net.NsdMdnsDiscovery
 import com.rahga.x2rock.net.WifiMulticastGate
+import com.rahga.x2rock.store.Preferences
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +60,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideSeedStore(impl: PrefsSeedStore): SeedStore = impl
+    fun provideSeedStore(prefs: Preferences, network: NetworkIdentity): SeedStore =
+        PrefsSeedStore(prefs, network::current)
 
     @Provides
     @Singleton

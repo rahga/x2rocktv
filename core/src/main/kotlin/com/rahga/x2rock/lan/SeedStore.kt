@@ -12,17 +12,17 @@ package com.rahga.x2rock.lan
  * network will have remembered something irrelevant. Nothing here tries to detect that —
  * [SonosHousehold] falls back to discovery when the remembered player does not answer.
  *
- * That is deliberate rather than lazy. A TV box and the speakers around it are stationary:
- * the same soundbar, the same room, the same network, almost always. The sibling Rust
- * project fingerprints the gateway MAC before trusting a cached address because it runs on
- * a laptop that wakes somewhere new; here the same guard would be complexity spent on a
- * rare case.
+ * A store may remember one player per network instead — see [keyedByNetwork]. That was once
+ * judged complexity spent on a rare case, a TV box being stationary; then a Streamer was
+ * carried between home and an office, and every move cost a probe of the other network's
+ * speaker and overwrote its memory. The Android store keys by network; the sibling Rust
+ * project does the same by gateway MAC.
  *
  * Two things bound the cost of a wrong memory, because "it self-corrects" is only true if
  * it corrects *promptly*:
  *
- * - A **network change** skips the memory entirely and goes straight to discovery. The
- *   address is not merely unverified at that point, it is probably wrong, and trying it
+ * - A **network change** skips an unkeyed memory entirely and goes straight to discovery.
+ *   The address is not merely unverified at that point, it is probably wrong, and trying it
  *   first would spend the connect timeout before discovery ever ran.
  * - Otherwise the memory is probed under a timeout of its own, so a host that accepts a
  *   TCP connect and then says nothing cannot stall startup indefinitely — the client has
@@ -38,6 +38,13 @@ interface SeedStore {
     fun load(): Discovery.DiscoveredPlayer?
     fun save(player: Discovery.DiscoveredPlayer)
     fun clear()
+
+    /**
+     * Whether [load] answers for the network the device is on *now*. When it does, a network
+     * change is no reason to skip it: what it returns was remembered on this network, so it is
+     * the best guess there is rather than the probably-wrong one from wherever the device was.
+     */
+    val keyedByNetwork: Boolean get() = false
 
     /** Remembers nothing; every start discovers. */
     object None : SeedStore {

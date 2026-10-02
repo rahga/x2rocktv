@@ -342,7 +342,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   `Discovery.stopAfterFirst` takes whichever player answers first. x2rock: never guess between two households; several on one LAN turned up in
   practice. Collect replies for the window, group by `HOUSEHOLD.SMARTSPEAKER.AUDIO`, and if there
   are two, ask once and remember in `SeedStore`.
-- [ ] **4.3 Network identity.** x2rock keys remembered players by the default gateway's MAC and
+- [x] **4.3 Network identity.** *Done 2026-10-02: `PrefsSeedStore` keeps one player per network,
+  keyed by `NetworkIdentity` — the default routes' gateways and DHCP domain, since Android
+  hides the gateway's MAC from apps. A network change now tries that network's own player
+  instead of skipping memory; `clear` forgets only the current network's. Tested on the JVM;
+  `LinkProperties` itself not yet read on a device. The old single-seed preferences are not
+  migrated, so the first start after upgrading discovers once.* x2rock keys remembered players by the default gateway's MAC and
   never scans an unknown network; the app remembers one seed regardless of network. Key the seed
   per network via `ConnectivityManager`/`LinkProperties` so a device carried elsewhere does not
   probe a home address for 3s first. Low priority on a TV bolted to one wall.

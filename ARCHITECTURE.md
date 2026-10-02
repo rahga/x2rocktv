@@ -59,7 +59,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── SonosSocket.kt             one socket to one player
 │   ├── Discovery.kt               SSDP: id, address and household in one reply
 │   ├── MulticastGate.kt           whatever the platform must hold for multicast
-│   ├── SeedStore.kt               the last reachable player, for a warm start
+│   ├── SeedStore.kt               the last reachable player (per network), for a warm start
 │   ├── SonosHousehold.kt          state flows, commands, subscriptions, reconnection
 │   ├── Upnp.kt                    cleartext 1400: queue, TV input, EQ, service list
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into
@@ -82,7 +82,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── store/Preferences.kt           the key-value seam every store sits on
 ├── net/
 │   ├── NetworkMonitor.kt          ConnectivityManager → household.onNetworkChanged()
-│   ├── PrefsSeedStore.kt          SeedStore over shared preferences
+│   ├── PrefsSeedStore.kt          SeedStore over preferences, one player per network
+│   ├── NetworkIdentity.kt         which network this is: default gateways + DHCP domain
+│   ├── NsdMdnsDiscovery.kt        _sonos._tcp over NsdManager, when SSDP finds nothing
 │   └── WifiMulticastGate.kt       a MulticastLock held across SSDP
 ├── smapi/PrefsRatingsStore.kt     RatingsStore over Preferences
 ├── media/NowPlayingPublisher.kt   the MediaSession, behind an interface
@@ -232,7 +234,7 @@ developed, and it is worth keeping that way.
 | `SonosSocket.kt` | one socket to one player: handshake, `cmdId` correlation, event flow, keepalive, failure reporting |
 | `Discovery.kt` | SSDP. The reply carries the player id *and* the long household id, which is why the first connection can be made to a verified name |
 | `MulticastGate.kt` | the seam for Android's `MulticastLock`; nothing to hold on Ethernet or a desktop JVM |
-| `SeedStore.kt` | one remembered player, probed first so a warm start skips discovery |
+| `SeedStore.kt` | one remembered player (per network, where the store is keyed), probed first so a warm start skips discovery |
 | `SonosHousehold.kt` | the live view: connections, subscriptions, state flows, commands, reconnection, ratings |
 | `Upnp.kt` | cleartext port 1400 — the queue, the TV input switch, `SetEQ`, and the music-service list |
 | `TvSoundbar.kt` | among the rooms with an HDMI input, the one currently on it |
