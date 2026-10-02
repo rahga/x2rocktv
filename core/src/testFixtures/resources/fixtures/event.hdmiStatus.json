@@ -1,0 +1,16 @@
+{
+  "_objectType": "hdmiStatus",
+  "connection": "CONNECTED",
+  "deviceCEC": "READY",
+  "eARCActive": false,
+  "errorARC": "ABORT_INCORRECT_MODE",
+  "errorSAM": "ABORT_INCORRECT_MODE",
+  "errorTV": "OK",
+  "stateARC": "ERROR",
+  "stateCEC": "ONLINE",
+  "stateSAM": "ERROR",
+  "testAudio": false,
+  "testVideo": false,
+  "tvCECStatus": "ENABLED",
+  "tvPowerStatus": "ON"
+}

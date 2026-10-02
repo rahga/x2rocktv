@@ -804,6 +804,47 @@ class SonosHouseholdTest {
         assertEquals(mapOf(bedroom to 1), offline)
     }
 
+    // ------------------------------------------------------------- HDMI
+
+    private fun pushHdmi(playerId: String, fixture: String) =
+        fake.push("hdmi:1", "hdmiStatus", FakePlayer.fixture(fixture).toString(), groupId = null, playerId = playerId)
+
+    /** Both captures: a Beam with a TV is a TV room, a Beam with an empty port is not. */
+    @Test fun `a soundbar with nothing in its HDMI port has no TV input`() = runBlocking<Unit> {
+        connected()
+        val state = household.state.value
+        val guest = state.groups.first { it.name == "Guest TV" }
+        val bedroom = state.groups.first { it.name == "Bedroom" }
+        assertTrue("a Beam not yet heard from counts", state.hasTvInput(guest))
+
+        pushHdmi(guest.coordinatorId, "event.hdmiStatus.noConnection.json")
+        pushHdmi(bedroom.coordinatorId, "event.hdmiStatus.json")
+        val after = withTimeout(5_000) { household.state.first { it.hdmiConnection.size == 2 } }
+        assertFalse(after.hasTvInput(guest))
+        assertTrue(after.hasTvInput(bedroom))
+    }
+
+    /**
+     * Two rooms on a TV input is an ambiguity detection refuses to guess at — unless one of
+     * them has nothing plugged in, which settles it.
+     */
+    @Test fun `an empty HDMI port takes a room out of TV detection`() = runBlocking<Unit> {
+        connected()
+        val state = household.state.value
+        val guest = state.groups.first { it.name == "Guest TV" }
+        val bedroom = state.groups.first { it.name == "Bedroom" }
+        fake.pushFixture("tvMetadataStatus", guest.id)
+        fake.pushFixture("tvMetadataStatus", bedroom.id)
+        withTimeout(5_000) {
+            household.groupStates.first { it[guest.id]?.onTvInput == true && it[bedroom.id]?.onTvInput == true }
+        }
+        assertNull("two TV rooms must not be guessed between", TvSoundbar.detect(household.state.value, household.groupStates.value))
+
+        pushHdmi(guest.coordinatorId, "event.hdmiStatus.noConnection.json")
+        withTimeout(5_000) { household.state.first { it.hdmiConnection.isNotEmpty() } }
+        assertEquals(bedroom.coordinatorId, TvSoundbar.detect(household.state.value, household.groupStates.value))
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

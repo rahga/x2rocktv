@@ -293,6 +293,8 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | `history:1` | household | recently played, `getHistory` |
 | `playback:1 loadContent` | group (coordinator) | playing a recently played item again: load, then press play until pushed as playing |
 | `settings:1` | player | `getPlayerSettings`: Night Sound and Speech Enhancement, read only |
+| `zones:1` | household (the seed) | bonded speakers that have dropped off, `activeZonesChange` |
+| `hdmi:1` | **each soundbar's own socket** | whether anything is plugged into the HDMI port |
 | `effectiveSettings:1` | player (the seed) | the UPnP switch: `getSettingsGroup {"groupName":"security"}`, followed by `settingsChanged`'s per-group timestamps |
 
 `queue:1`, `playbackQueue:1` and `cloudQueue:1` all answer `ERROR_UNSUPPORTED_NAMESPACE`.
