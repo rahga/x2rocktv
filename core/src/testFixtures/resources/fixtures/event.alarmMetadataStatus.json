@@ -1,0 +1,14 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "objectId": "0",
+      "serviceId": "buzzer"
+    },
+    "images": [],
+    "name": "x-rincon-buzzer:0",
+    "type": "other"
+  }
+}
