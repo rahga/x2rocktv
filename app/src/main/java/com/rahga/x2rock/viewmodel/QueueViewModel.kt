@@ -9,8 +9,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -60,17 +60,20 @@ class QueueViewModel @Inject constructor(
     val notice: StateFlow<String?> = _notice.text
 
     init {
+        // The version the list is read at. Taken before the read, so an edit landing between the
+        // two only costs a second read. Null when the room has not said yet, early in a session:
+        // the first version to arrive is then a change, because nothing says the list has it.
+        val openedAt = household.groupStates.value[groupId]?.queueVersion
         load()
         // Kept current while this screen is open, which is this view model's whole life, by the
         // room's `queueVersion`. Verified at home on 2026-10-01: each edit moved it (26, 27, 28
         // for a move and its undo) and each arrived as a playback event, on an idle room too.
         // So nothing is browsed on a timer or per event; the version moving is the signal.
         viewModelScope.launch {
-            // The first version seen is the one the list was read at, not a change.
             household.groupStates.map { it[groupId]?.queueVersion }
                 .filterNotNull()
                 .distinctUntilChanged()
-                .drop(1)
+                .filter { it != openedAt }
                 .collect { load(quiet = true) }
         }
     }

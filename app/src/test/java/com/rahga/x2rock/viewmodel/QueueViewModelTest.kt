@@ -98,9 +98,41 @@ class QueueViewModelTest {
     @Test fun `a playback event at the same queue version reads nothing`() = runBlocking<Unit> {
         fake.pushFixture("playbackStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+        browses.clear()
         fake.pushFixture("playbackStatus", groupId)
         delay(500)
         assertEquals(0, browses.size)
+    }
+
+    /**
+     * Opened before the room had said which version its queue is at — early in a session, or
+     * on a room whose status has not arrived. The list on screen was read at no known version,
+     * so the first one to arrive must read it again: it may carry an edit the list lacks.
+     */
+    @Test fun `the first queue version after an unknown one reads the queue again`() = runBlocking<Unit> {
+        assertEquals(null, household.groupStates.value[groupId]?.queueVersion)
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { while (fullReads() == 0) delay(20) }
+    }
+
+    /** Opened at a known version: that version arriving again is no change. */
+    @Test fun `a queue opened at a known version does not read it again for that version`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+        // What reading the queue once costs, so the count below is opening and nothing more.
+        browses.clear()
+        viewModel.reload()
+        delay(500)
+        val oneRead = fullReads()
+
+        browses.clear()
+        val reopened = QueueViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)))
+        withTimeout(5_000) { reopened.uiState.first { it is QueueViewModel.UiState.Success } }
+        fake.pushFixture("playbackStatus", groupId)
+        delay(500)
+        assertEquals("opening read the queue more than once", oneRead, fullReads())
     }
 
     @Test fun `a new queue version reads the queue again`() = runBlocking<Unit> {
