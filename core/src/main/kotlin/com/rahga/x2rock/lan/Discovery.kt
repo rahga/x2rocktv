@@ -59,11 +59,17 @@ object Discovery {
      * description URL (so its address), and `mhhid` the **long** household id. Not `hhid`: that
      * is the short form, which the Control API refuses with ERROR_INVALID_OBJECT_ID. With no
      * `mhhid` the household is left null, and a connect reads it from `/status/zp`.
+     *
+     * [resolved] is the address mDNS itself resolved the service to, used only when `location`
+     * gives none — as SSDP falls back to the packet's source when LOCATION is absent.
      */
-    fun fromSonosTxt(txt: Map<String, String>): DiscoveredPlayer? {
+    fun fromSonosTxt(txt: Map<String, String>, resolved: InetAddress? = null): DiscoveredPlayer? {
         val id = txt["uuid"]?.takeIf { it.startsWith("RINCON_") } ?: return null
-        val host = txt["location"]?.let { runCatching { java.net.URI(it).host }.getOrNull() } ?: return null
-        val address = runCatching { InetAddress.getByName(host) }.getOrNull() ?: return null
+        val address = txt["location"]
+            ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
+            ?.let { runCatching { InetAddress.getByName(it) }.getOrNull() }
+            ?: resolved
+            ?: return null
         return DiscoveredPlayer(id, address, txt["mhhid"]?.takeIf { it.contains('.') })
     }
 

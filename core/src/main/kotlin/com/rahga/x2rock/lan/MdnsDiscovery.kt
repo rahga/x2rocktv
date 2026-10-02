@@ -13,7 +13,10 @@ package com.rahga.x2rock.lan
  */
 fun interface MdnsDiscovery {
 
-    /** Players found within [timeoutMillis]; empty when none answered. */
+    /**
+     * Every player found within [timeoutMillis], not the first: a network can hold two
+     * households, and only the whole window shows that. Empty when none answered.
+     */
     suspend fun find(timeoutMillis: Long): List<Discovery.DiscoveredPlayer>
 
     /** For desktops and tests: nothing to browse with. */
