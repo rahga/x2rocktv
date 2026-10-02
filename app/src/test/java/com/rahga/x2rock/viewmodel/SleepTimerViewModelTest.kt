@@ -7,6 +7,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ import java.net.InetAddress
  * The pane's sleep timer is Sonos's, so it shows a timer someone else set, and what it shows
  * after setting one is what the speaker then reports. The replies are the office One SL's.
  */
+@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class SleepTimerViewModelTest {
 
     private lateinit var fake: FakePlayer
