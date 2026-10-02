@@ -238,7 +238,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   plugged in). `TvSoundbar.detect` and the badge key on `HT_PLAYBACK`, which is why three rooms
   qualify. Excluding `NO_CONNECTION` narrows the heuristic and drops the badge from a room that
   will never be on TV. Verify the event shape on hardware and capture it.
-- [ ] **2.6 Favourites the household can no longer play.** x2rock hides them. Check what
+- [x] **2.6 Favourites the household can no longer play.** *Done 2026-10-02: hidden by
+  x2rock's rule — no service and no content type is the shell a removed service leaves. The
+  home household has no such shells, so the test's one is a real album stripped of both.* x2rock hides them. Check what
   `getFavorites` returns for one and whether anything distinguishes it; if nothing, leave as is.
 
 ---

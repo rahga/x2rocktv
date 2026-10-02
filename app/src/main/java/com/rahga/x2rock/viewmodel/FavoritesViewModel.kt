@@ -109,7 +109,10 @@ class FavoritesViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = UiState.Loading
             runCatching {
-                val favs = household.favorites()
+                // Hidden, not greyed: a favourite whose service was removed cannot be played,
+                // and only the Sonos app can delete or re-add it, so a row for it would be one
+                // with nothing behind it. Re-add the service and they return by themselves.
+                val favs = household.favorites().let { it.copy(items = it.items.filter { f -> f.playable }) }
                 // What is playing comes from the subscription, so only the list is fetched.
                 val containerName = household.groupState(groupId).container?.name
                 val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }

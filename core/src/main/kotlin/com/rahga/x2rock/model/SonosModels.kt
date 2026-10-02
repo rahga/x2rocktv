@@ -280,8 +280,21 @@ data class Favorite(
     val id: String,
     val name: String,
     val description: String? = null,
-    val imageUrl: String? = null
-)
+    val imageUrl: String? = null,
+    val service: FavoriteService? = null,
+    val resource: FavoriteResource? = null,
+) {
+    /**
+     * Whether the household can still play this. Not a field the player sends — x2rock's
+     * inference, which the Sonos app's greying agrees with: a favourite whose service was
+     * removed decays into a shell with neither a service nor a content type, and loading one
+     * fails. It cannot catch a live service that recycled an id, only one with nothing left.
+     */
+    val playable: Boolean get() = service?.name != null || resource?.type != null
+}
+data class FavoriteService(val id: String? = null, val name: String? = null)
+/** `STREAM`, `PLAYLIST`, `ALBUM`, `TRACK`, `PROGRAM` — when given. */
+data class FavoriteResource(val type: String? = null)
 /**
  * One Sonos playlist: a saved queue, what the Sonos app lists under its own playlists. A
  * different thing from a favourite, in a different namespace. **The id is bare** (`"6"`),

@@ -1,0 +1,107 @@
+{
+  "_objectType": "favoritesList",
+  "items": [
+    {
+      "_objectType": "favorite",
+      "description": "iHeartRadio",
+      "id": "84",
+      "imageUrl": "https://i.iheart.com/v3/re/assets.streams/67b0d43da19ce5cf02ee9dba",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://i.iheart.com/v3/re/assets.streams/67b0d43da19ce5cf02ee9dba"
+        }
+      ],
+      "name": "Love Songs Radio",
+      "resource": {
+        "_objectType": "contentResource",
+        "explicit": false,
+        "id": {
+          "_objectType": "universalMusicObjectId",
+          "accountId": "sn_24",
+          "objectId": "live_stations.6790",
+          "serviceId": "6"
+        },
+        "images": [],
+        "metadata": {
+          "_objectType": "contentMetadataBlob"
+        },
+        "name": "Love Songs Radio",
+        "playable": true,
+        "type": "STREAM"
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "6",
+        "images": [],
+        "name": "iHeartRadio"
+      }
+    },
+    {
+      "_objectType": "favorite",
+      "description": "YouTube Music",
+      "id": "83",
+      "imageUrl": "https://lh3.googleusercontent.com/U_zpNiKIwKrLtxxZDY62eMrWA_7yz0EcpspV4hFZTb-bCm6Pp3NxlI5hSBeN2BjsqGzUm-qZ56QOmFvI=w544-h544-l90-rj",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://lh3.googleusercontent.com/U_zpNiKIwKrLtxxZDY62eMrWA_7yz0EcpspV4hFZTb-bCm6Pp3NxlI5hSBeN2BjsqGzUm-qZ56QOmFvI=w544-h544-l90-rj"
+        }
+      ],
+      "name": "Ryo Fukui in New York",
+      "resource": {
+        "_objectType": "contentResource",
+        "explicit": false,
+        "id": {
+          "_objectType": "universalMusicObjectId",
+          "accountId": "sn_23",
+          "objectId": "1004004cALkSOiF60SmN3aW6x6j0p5ECA5_qJlToFZPtLSwFkyBNbzYO",
+          "serviceId": "284"
+        },
+        "images": [],
+        "metadata": {
+          "_objectType": "contentMetadataBlob"
+        },
+        "name": "Ryo Fukui in New York",
+        "playable": true,
+        "type": "ALBUM"
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "284",
+        "images": [],
+        "name": "YouTube Music"
+      }
+    },
+    {
+      "_objectType": "favorite",
+      "description": "YouTube Music",
+      "id": "82",
+      "imageUrl": "https://lh3.googleusercontent.com/1DyYARahpOK6evJZL1Nb6r5eHJoLmqxbmjOakg2zalOBRL5pe5ZbxeAGXdjbqzcbVa7b5-lYY-53dl4=w544-h544-l90-rj",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "https://lh3.googleusercontent.com/1DyYARahpOK6evJZL1Nb6r5eHJoLmqxbmjOakg2zalOBRL5pe5ZbxeAGXdjbqzcbVa7b5-lYY-53dl4=w544-h544-l90-rj"
+        }
+      ],
+      "name": "Scenery",
+      "resource": {
+        "_objectType": "contentResource",
+        "explicit": false,
+        "id": {
+          "_objectType": "universalMusicObjectId",
+          "accountId": "sn_23",
+          "objectId": "1004004cALkSOiEcZo4MhgRkgA_oVIenz8sj_cD4Qywb9KvFpeVGhzax",
+          "serviceId": "284"
+        },
+        "images": [],
+        "metadata": {
+          "_objectType": "contentMetadataBlob"
+        },
+        "name": "Scenery",
+        "playable": true
+      }
+    }
+  ],
+  "version": "RINCON_347E5C31AF7401400:221"
+}

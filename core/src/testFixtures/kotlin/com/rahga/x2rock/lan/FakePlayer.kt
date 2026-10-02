@@ -405,6 +405,12 @@ class FakePlayer(
             return
         }
         // Captured off the office One SL, eight items, one a playlist since deleted.
+        // Three of the home household's favourites, one stripped to the shell a removed
+        // service leaves behind.
+        if (namespace == "favorites:1" && command == "getFavorites") {
+            respond(webSocket, cmdId, namespace, "favoritesList", success = true, body = fixture("getFavorites.reply.json"))
+            return
+        }
         if (namespace == "history:1" && command == "getHistory") {
             respond(webSocket, cmdId, namespace, "contentPagedResources", success = true, body = fixture("getHistory.reply.json"))
             return
