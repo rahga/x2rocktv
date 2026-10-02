@@ -141,6 +141,13 @@ data class HouseholdState(
      * because a switch that could not be read must not withdraw anything.
      */
     val upnpOff: Boolean = false,
+    /**
+     * Bonded speakers that have dropped off, by the room they belong to: the room's own player
+     * id — the one `getGroups` lists — to how many of its satellites, surrounds or Sub report
+     * `disconnected`. Such a speaker is not a player in the Control API at all, so nothing else
+     * says it has gone: the room plays on, quieter, without saying why. From `zones:1`.
+     */
+    val offlineSpeakers: Map<String, Int> = emptyMap(),
 ) {
     /**
      * Whether this group has a TV input to switch to at all.
@@ -386,6 +393,10 @@ class SonosHousehold(
             // version each settings group is at, so a flip in the Sonos app is heard without
             // asking again (x2rock verified both directions on the office One SL, 2026-09-28).
             // Best-effort: a firmware without the namespace leaves the switch unknown, read as on.
+            // Bonded speakers that have fallen off the network, which nothing else reports.
+            // Household-scoped; the subscription's first event is the current state.
+            runCatching { seedSocket.subscribe(Frames.onHousehold("zones:1", "subscribe", householdId)) }
+
             seedPlayerId = entry.id
             runCatching { readUpnpSwitch() }
             runCatching { seedSocket.subscribe(Frames.onPlayer("effectiveSettings:1", "subscribe", entry.id)) }
@@ -1302,6 +1313,24 @@ class SonosHousehold(
                             ?: it.actions,
                     )
                 }
+            }
+
+            // Each zone's members and whether each is connected, captured with a Bedroom surround
+            // unplugged. A zone is matched to its room by the member the topology lists as a
+            // player; the rest are its bonded speakers.
+            "zones:1" -> {
+                val body = event.body.asJsonObject
+                if (body.string("_objectType") != "activeZonesChange") return
+                val players = _state.value.players.map { it.id }.toSet()
+                val offline = body.getAsJsonArray("zones")?.mapNotNull { zone ->
+                    val members = zone.asJsonObject.getAsJsonArray("members")?.map { it.asJsonObject }.orEmpty()
+                    val room = members.firstOrNull { it.string("id") in players }?.string("id") ?: return@mapNotNull null
+                    val gone = members.count { member ->
+                        member.getAsJsonObject("state")?.get("disconnected")?.takeIf { it.isJsonPrimitive }?.asBoolean == true
+                    }
+                    if (gone > 0) room to gone else null
+                }?.toMap().orEmpty()
+                _state.update { it.copy(offlineSpeakers = offline) }
             }
 
             // Which settings groups exist, each with its version, and no values. Only the seed's

@@ -181,6 +181,18 @@ class HomeViewModelTest {
         assertEquals("a fixed line-out was set", 1, fake.commandsNamed("setVolume"))
     }
 
+    /** The captured zones event, Bedroom's surround unplugged: Bedroom's row says so, no other. */
+    @Test fun `a room with a bonded speaker offline is marked, and only that room`() = runBlocking<Unit> {
+        val state = connect()
+        fake.pushFixture("activeZonesChange")
+        val rooms = withTimeout(5_000) {
+            viewModel.uiState.first { s -> (s as? HomeViewModel.UiState.Success)?.rooms?.values?.any { it.offlineSpeakers > 0 } == true }
+                as HomeViewModel.UiState.Success
+        }.rooms
+        val bedroom = state.groups.first { it.name == "Bedroom" }.id
+        assertEquals(mapOf(bedroom to 1), rooms.filterValues { it.offlineSpeakers > 0 }.mapValues { it.value.offlineSpeakers })
+    }
+
     /** Mute reaches the room list and the panel's speaker rows, both pushed. */
     @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
         val state = connect()

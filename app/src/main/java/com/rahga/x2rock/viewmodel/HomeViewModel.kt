@@ -68,6 +68,8 @@ class HomeViewModel @Inject constructor(
         val onTvInput: Boolean = false,
         /** The group's volume is muted. A state, so the room list shows it as one. */
         val muted: Boolean = false,
+        /** Bonded speakers of this group's rooms that have dropped off: a Sub, a surround. */
+        val offlineSpeakers: Int = 0,
         /** e.g. "Dolby Digital Surround 5.1"; empty unless on a TV input with a signal. */
         val inputFormat: String = "",
         /** Whether this room has an HDMI input at all, from any of its speakers. */
@@ -111,6 +113,7 @@ class HomeViewModel @Inject constructor(
                             artUrl = pushed?.track?.imageUrl ?: pushed?.container?.imageUrl,
                             onTvInput = pushed?.onTvInput == true,
                             muted = pushed?.volume?.muted == true,
+                            offlineSpeakers = group.playerIds.sumOf { state.offlineSpeakers[it] ?: 0 },
                             inputFormat = pushed?.inputFormat.orEmpty(),
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,

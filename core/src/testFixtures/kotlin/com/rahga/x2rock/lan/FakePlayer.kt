@@ -564,6 +564,8 @@ class FakePlayer(
             "playerVolume" -> "playerVolume:1"
             "groups" -> "groups:1"
             "settingsChanged" -> "effectiveSettings:1"
+            // Captured with Bedroom's left surround unplugged.
+            "activeZonesChange", "zoneDefinitionsChange" -> "zones:1"
             else -> error("no namespace known for $type")
         }
     }

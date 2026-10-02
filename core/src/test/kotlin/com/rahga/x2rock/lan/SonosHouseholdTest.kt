@@ -791,6 +791,19 @@ class SonosHouseholdTest {
         }
     }
 
+    /**
+     * The real capture: Bedroom's left surround unplugged, every other member connected. The
+     * other two zones have members too, so a parser counting members rather than disconnected
+     * ones would put Living Room's four in the map and fail.
+     */
+    @Test fun `a bonded speaker that dropped off is counted against its room`() = runBlocking<Unit> {
+        connected()
+        fake.pushFixture("activeZonesChange")
+        val offline = withTimeout(5_000) { household.state.first { it.offlineSpeakers.isNotEmpty() } }.offlineSpeakers
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }.coordinatorId
+        assertEquals(mapOf(bedroom to 1), offline)
+    }
+
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()

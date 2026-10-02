@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
@@ -545,6 +546,17 @@ private fun RoomListItem(
                         contentDescription = "Has a TV input",
                         modifier = Modifier.size(16.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                    )
+                }
+                // A bonded speaker gone from the network: the room plays on without it and
+                // nothing else would say so. In the error colour, being a fault to see to.
+                if (info.offlineSpeakers > 0) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = if (info.offlineSpeakers == 1) "A speaker in this room is offline"
+                            else "${info.offlineSpeakers} speakers in this room are offline",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.error,
                     )
                 }
                 // Muted is a state, not a capability, so it is not dimmed like the TV badge.
