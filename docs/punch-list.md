@@ -409,6 +409,15 @@ topology change re-subscribing every player. The tenth, a duplicated tone range,
 one-liner. Unverified on a device: the Menu key as a row's second action, and the network
 key during a real change of network.
 
+A second pass the same afternoon found eight more, all fixed: a replay whose load went
+unanswered could resume the old content and call it the item (now it must play something
+*else*); a soundbar whose port subscribe failed was never retried; the network monitor watched
+every internet-capable network rather than the default one, so a Wi-Fi reconnect tore down a
+healthy Ethernet session; a track boundary's BUFFERING re-read the sleep timer; the sleep
+countdown sat on the wall clock, which NTP steps after boot (monotonic now); an mDNS resolve
+could outlive its window and fail the next find's first player; and two tidy-ups. Unverified on
+a device: the default-network callback, and the resolve lock.
+
 ## Found at home, 2026-10-01
 
 - [x] **Deep links to the running app did nothing.** A link to Bedroom left Kitchen selected:
