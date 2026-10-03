@@ -233,7 +233,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   badge, the Source and "This is my TV" rows, and detection's candidates, while Night Sound
   and Speech Enhancement stay. Captured on Bedroom's Beam (connected, TV on) and Guest TV's
   (nothing plugged in). `tvPowerStatus` is there too and unused: a TV that is on could settle
-  detection further.* Player-scoped `hdmi:1 subscribe` returns
+  detection further. **It did nothing on a device until a29ae24**: the event's header carries
+  `playerId: null`, the handler needed it, and the fake had supplied one no player sends — seen
+  on the Shield as Guest TV keeping its badge. Now credited to the socket it came on; on the
+  Shield Guest TV's badge went and Bedroom's stayed.* Player-scoped `hdmi:1 subscribe` returns
   `tvPowerStatus` and `connection` (`NO_CONNECTION` is an empty port; Guest TV's Beam has nothing
   plugged in). `TvSoundbar.detect` and the badge key on `HT_PLAYBACK`, which is why three rooms
   qualify. Excluding `NO_CONNECTION` narrows the heuristic and drops the badge from a room that
@@ -316,7 +319,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   from Favorites — Popular, this country, then a chosen list of genres, since the directory's
   own top tags include `music` and `radio`. `playStream` reports PLAYING, STARTING or SILENT;
   verified on Kitchen at volume 2 against the live directory, a real station PLAYING and a dead
-  URL SILENT. Not seen in the app on a TV. The optional "Play URL" row is not built: it needs
+  URL SILENT. Seen on the Shield 2026-10-02: Favorites → Radio → Popular listed with logos, a
+  press played MANGORADIO into Kitchen and returned to the room with its ICY text and Stop. The
+  room shows the radio glyph, not the station's logo: no image is sent in `stationMetadata`,
+  and whether one is accepted there is untested. The optional "Play URL" row is not built: it needs
   typing, and nothing has asked for it.* Radio Browser API, no key: browse by tag or country, sort by votes
   with `hidebroken=true`, use `url_resolved` never `url`, send a `User-Agent`. Play via
   `playbackSession:1 createSession{appId, appContext}` (group-scoped) → `loadStreamUrl{streamUrl,
@@ -355,7 +361,7 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   keyed by `NetworkIdentity` — the default routes' gateways and DHCP domain, since Android
   hides the gateway's MAC from apps. A network change now tries that network's own player
   instead of skipping memory; `clear` forgets only the current network's. Tested on the JVM;
-  `LinkProperties` itself not yet read on a device. The old single-seed preferences are not
+  On the Shield the seed was stored under a real network key, not the unkeyed slot. The old single-seed preferences are not
   migrated, so the first start after upgrading discovers once.* x2rock keys remembered players by the default gateway's MAC and
   never scans an unknown network; the app remembers one seed regardless of network. Key the seed
   per network via `ConnectivityManager`/`LinkProperties` so a device carried elsewhere does not
@@ -364,14 +370,15 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   followed and judged before each is fetched, at most three. Found on the way: CDN art went by
   the LAN client, which trusts any certificate chain; a player's art now goes by that client and
   a service's by the internet one, and neither can redirect onto the other's side. Tested on the
-  JVM; not yet watched on a device.* Coil uses the LAN client with no size cap. x2rock: fetch only
+  JVM; on the Shield the directory's https station logos load through it.* Coil uses the LAN client with no size cap. x2rock: fetch only
   `https://`, or `http://` from a private IPv4 on 1400; at most 2 MB and 8s; refuse
   `Content-Encoding`; check the magic bytes. A Coil interceptor on the shared loader.
 - [x] **4.5 TV channel tiles.** *Done 2026-10-02: tiles are keyed and linked by the room's
   coordinator player id, and a link waits for the topology and opens whichever group holds that
   player. That also fixed a tile opened from a cold start, which was selecting an id no list yet
   held and losing it to the default room. Posters name the speaker by address; a service's https
-  art passes through; anything else is no poster. Tested on the JVM. **Not seen on a launcher**:
+  art passes through; anything else is no poster. On the Shield a link by Kitchen's player id
+  opened Kitchen. **Not seen on a launcher** — Google TV's Home shows no third-party channel row:
   whether Google TV loads a cleartext poster by IP is the open question, and if it does not, a
   content provider serving the art is the next step.* Program posters are cleartext `.local` URLs the launcher cannot
   fetch, and `x2rock://room/<groupId>` links go stale on every regroup. Resolve posters to an IP
