@@ -101,6 +101,9 @@ class ReplayTest {
     @Test fun `a load the coordinator never answers is judged by whether the room plays`() = runBlocking<Unit> {
         val item = household.history().first()
         val groupId = group()
+        // What the room has before the load is the yardstick, so the room must have said.
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
         fake.holdRepliesTo("loadContent")
         val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
         fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
@@ -109,9 +112,33 @@ class ReplayTest {
         delay(5_500)
         fake.releaseReplies()
         fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "play" }
+        // The late load landed: the room reports the station, then plays.
+        fake.pushFixture("radioMetadataStatus", groupId)
         fake.pushFixture("radioPlaybackStatus", groupId)
         val result = withTimeout(10_000) { call.await() }
         assertTrue("a lost reply was taken for a refusal: ${result.exceptionOrNull()}", result.isSuccess)
+    }
+
+    /**
+     * The other way a lost load ends: the player never applied it, and the press that follows
+     * resumes what was paused. Playing is not enough then — it has to be playing something else.
+     */
+    @Test fun `a lost load that never landed is not passed off as the item`() = runBlocking<Unit> {
+        val item = household.history().first()
+        val groupId = group()
+        // What the room has before the load is the yardstick, so the room must have said.
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
+        fake.holdRepliesTo("loadContent")
+        val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
+        delay(5_500)
+        fake.releaseReplies()
+        fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "play" }
+        // What was paused, playing again: the metadata the room had before the load.
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        val result = withTimeout(10_000) { call.await() }
+        assertTrue("the old content resumed and was reported as the replay", result.isFailure)
     }
 
     @Test fun `an item that loads and never plays is a failure`() = runBlocking<Unit> {
