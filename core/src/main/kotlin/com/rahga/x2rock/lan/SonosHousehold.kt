@@ -1316,7 +1316,7 @@ class SonosHousehold(
         socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
             // One malformed frame from one speaker must not take the process down: an
             // uncaught throw here reaches the thread's default handler, not the scope.
-            socket.events.collect { event -> runCatching { apply(event) } }
+            socket.events.collect { event -> runCatching { apply(event, from = socket.hostname) } }
         }
         socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
             socket.failures.collect { cause -> handleLoss(socket, cause) }
@@ -1429,7 +1429,8 @@ class SonosHousehold(
 
     // ---------------------------------------------------------------- events
 
-    private fun apply(event: SonosEvent) {
+    /** [from] is the hostname of the socket [event] came in on: see `hdmi:1`. */
+    private fun apply(event: SonosEvent, from: String? = null) {
         val groupId = event.header.groupId
         when (event.namespace) {
             "groups:1" -> {
@@ -1500,8 +1501,15 @@ class SonosHousehold(
             }
 
             // Whether a soundbar's HDMI port has anything in it. Only `connection` is kept.
+            // A Beam's hdmi:1 event names no player — `playerId` is null in the header, unlike
+            // playerVolume:1's (both captured 2026-10-02). It is about the player whose socket
+            // it came in on, one socket per speaker, so that is who. Read from the header alone,
+            // every real one was dropped and an empty port was never noticed; the fake had put
+            // an id there that no player sends.
             "hdmi:1" -> {
-                val playerId = event.header.playerId ?: return
+                val playerId = event.header.playerId
+                    ?: from?.let { host -> _state.value.players.firstOrNull { PlayerNames.localHostname(it.id).equals(host, ignoreCase = true) }?.id }
+                    ?: return
                 val connection = event.body.asJsonObject.string("connection") ?: return
                 _state.update { it.copy(hdmiConnection = it.hdmiConnection + (playerId to connection)) }
             }

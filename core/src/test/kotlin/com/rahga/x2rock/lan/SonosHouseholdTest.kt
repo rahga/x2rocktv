@@ -806,8 +806,9 @@ class SonosHouseholdTest {
 
     // ------------------------------------------------------------- HDMI
 
+    /** As a Beam sends it: on its own socket, its header naming no player. */
     private fun pushHdmi(playerId: String, fixture: String) =
-        fake.push("hdmi:1", "hdmiStatus", FakePlayer.fixture(fixture).toString(), groupId = null, playerId = playerId)
+        fake.pushFromPlayer(playerId, "hdmi:1", "hdmiStatus", FakePlayer.fixture(fixture))
 
     /** Both captures: a Beam with a TV is a TV room, a Beam with an empty port is not. */
     @Test fun `a soundbar with nothing in its HDMI port has no TV input`() = runBlocking<Unit> {
