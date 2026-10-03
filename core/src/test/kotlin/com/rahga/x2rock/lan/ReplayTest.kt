@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -90,6 +91,27 @@ class ReplayTest {
         fake.pushFixture("radioPlaybackStatus", groupId)
         val result = withTimeout(5_000) { call.await() }
         assertTrue("gave up on a mid-load refusal: ${result.exceptionOrNull()}", result.isSuccess)
+    }
+
+    /**
+     * No reply is not no, here as for a regroup: a coordinator busy with a load can answer the
+     * load late or never and still do it. The reply timeout is the socket's five seconds, so
+     * this test waits them out; what matters is that the room playing afterwards is a success.
+     */
+    @Test fun `a load the coordinator never answers is judged by whether the room plays`() = runBlocking<Unit> {
+        val item = household.history().first()
+        val groupId = group()
+        fake.holdRepliesTo("loadContent")
+        val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
+        // The hold also stops the fake reading further commands, so it is lifted once the
+        // client has given up waiting; the late reply then arrives for a request nobody holds.
+        delay(5_500)
+        fake.releaseReplies()
+        fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "play" }
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        val result = withTimeout(10_000) { call.await() }
+        assertTrue("a lost reply was taken for a refusal: ${result.exceptionOrNull()}", result.isSuccess)
     }
 
     @Test fun `an item that loads and never plays is a failure`() = runBlocking<Unit> {

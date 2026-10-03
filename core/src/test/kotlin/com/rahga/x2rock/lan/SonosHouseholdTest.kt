@@ -573,6 +573,35 @@ class SonosHouseholdTest {
     // Guest TV joins Kitchen's group, so Guest TV's player is a member and nothing more: its
     // socket carries only its own volume. Kitchen's is a coordinator's.
 
+    private fun playerSubscribes(): Int = fake.received.count {
+        it.get("namespace")?.asString == "playerVolume:1" && it.get("command")?.asString == "subscribe"
+    }
+
+    /**
+     * A regroup is about groups. It used to subscribe every player's level and HDMI port again
+     * as well, each a round trip serialised under the catch-up lock, for speakers that had
+     * not changed.
+     */
+    @Test fun `a topology change does not subscribe unchanged players again`() = runBlocking<Unit> {
+        guestTvJoinsKitchen()
+        fake.clearHistory()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        delay(1_000)
+        assertEquals(0, playerSubscribes())
+    }
+
+    /** A member's socket went; its subscriptions went with it, and the next catch-up redoes them. */
+    @Test fun `a player whose socket was lost is subscribed again at the next catch-up`() = runBlocking<Unit> {
+        val (member, _) = guestTvJoinsKitchen()
+        fake.dropConnection(member)
+        withTimeout(5_000) { household.playerVolumes.first { member !in it } }
+        fake.clearHistory()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        fake.awaitCommand(timeoutMillis = 5_000) {
+            it.get("namespace")?.asString == "playerVolume:1" && it.get("playerId")?.asString == member
+        }
+    }
+
     private fun guestTvJoinsKitchen(): Pair<String, String> = runBlocking {
         connected()
         val before = household.state.value
