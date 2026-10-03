@@ -22,7 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.ui.components.NoticeBanner
-import com.rahga.x2rock.ui.components.dpadLongPress
+import com.rahga.x2rock.ui.components.dpadMenuKey
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -248,9 +248,10 @@ private fun FavoriteRow(
 ) {
     Card(
         onClick = onClick,
+        onLongClick = onLongPress,
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onLongPress != null) Modifier.dpadLongPress(onLongPress) else Modifier)
+            .then(if (onLongPress != null) Modifier.dpadMenuKey(onLongPress) else Modifier)
             .then(
                 if (isActive) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier

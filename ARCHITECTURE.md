@@ -103,7 +103,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   ├── NavGraph.kt                three routes
 │   ├── theme/Theme.kt             5 Material 3 dark colour schemes; AppButton
 │   ├── components/
-│   │   ├── DpadLongPress.kt       hold-select or Menu key, for a remote with no long press
+│   │   ├── DpadMenuKey.kt         the Menu key as a row's second action; a hold is the Card's own onLongClick
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
 │       ├── HomeScreen.kt          room sidebar + detail pane; settings slide-in

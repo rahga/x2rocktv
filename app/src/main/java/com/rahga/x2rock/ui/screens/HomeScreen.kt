@@ -79,7 +79,7 @@ import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
-import com.rahga.x2rock.ui.components.dpadLongPress
+import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
@@ -442,6 +442,7 @@ private fun RoomListItem(
         // Click was doing nothing at all, and it is the press a remote makes on a list.
         // Long-press stays as a synonym rather than the only way in.
         onClick = onOpenPanel,
+        onLongClick = onOpenPanel,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp)
@@ -458,7 +459,7 @@ private fun RoomListItem(
                 } else false
             }
             .onFocusChanged { if (it.isFocused) onFocused() }
-            .dpadLongPress(onOpenPanel)
+            .dpadMenuKey(onOpenPanel)
     ) {
         Row(
             modifier = Modifier
