@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -49,12 +50,20 @@ class NetworkMonitor @Inject constructor(
             // Bookkeeping only — see "Arrival only" above. Nothing here reconnects.
             override fun onLost(network: Network) = identity.lost(network)
         }
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-        // Registering delivers onAvailable for the current network straight away, which is
-        // harmless: the household ignores the signal when nothing is connected yet.
-        runCatching { manager.registerNetworkCallback(request, cb) }
-            .onSuccess { callback = cb }
+        // The *default* network, not every network with internet: a box with Ethernet and
+        // Wi-Fi used to get onAvailable for a Wi-Fi that merely reconnected, tear down a healthy
+        // session over Ethernet, and — once memory was keyed by network — remember the player
+        // under the Wi-Fi's key. Registering delivers onAvailable for the current network
+        // straight away, which is harmless: the household ignores it when nothing is connected.
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                manager.registerDefaultNetworkCallback(cb)
+            } else {
+                val request = NetworkRequest.Builder()
+                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build()
+                manager.registerNetworkCallback(request, cb)
+            }
+        }.onSuccess { callback = cb }
     }
 }
