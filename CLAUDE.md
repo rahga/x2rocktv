@@ -135,7 +135,10 @@ Everything in `core/src/testFixtures/resources/fixtures/` was recorded verbatim 
 and redacted for identifiers only. The invented payloads these replaced had no `_objectType`
 anywhere, no `queueVersion`, no `availablePlaybackActions`, and no stereo pair — a fake
 built from what one *assumes* the protocol looks like tests those assumptions against
-themselves and passes for the wrong reasons. `x2rock`'s `docs/architecture.md` holds more
+themselves and passes for the wrong reasons. **That includes the header a test pushes an event under**, which no
+fixture file holds: a Beam's `hdmi:1` event names no player (`playerId: null`, unlike
+`playerVolume:1`'s), a test helper supplied one, and the feature did nothing on any real device
+until the Shield showed it. `FakePlayer.pushFromPlayer` sends an event the way such a player does. `x2rock`'s `docs/architecture.md` holds more
 verbatim captures worth drawing on.
 
 And the check that stops a green CI quietly becoming a lie: the live suite compares the
