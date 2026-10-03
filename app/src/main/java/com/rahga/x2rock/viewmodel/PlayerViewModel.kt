@@ -80,6 +80,8 @@ data class PlayerUiState(
      * nothing it could play". Stands until the room plays again. See `GroupState.lastError`.
      */
     val playbackError: String? = null,
+    /** The alarm ringing in this room, while it rings: see `GroupState.ringingAlarm`. */
+    val ringingAlarm: Int? = null,
     /** UPnP is switched off for the household: see `HouseholdState.upnpOff`. */
     val upnpOff: Boolean = false,
     /**
@@ -203,6 +205,7 @@ class PlayerViewModel @Inject constructor(
                     actions = state.actions,
                     isRadio = state.isRadio,
                     playbackError = state.lastError?.describe(),
+                    ringingAlarm = state.ringingAlarm,
                     upnpOff = householdState.upnpOff,
                     // Per-speaker rows only mean anything once a group has more than one.
                     playerVolumes = group?.playerIds
@@ -385,6 +388,12 @@ class PlayerViewModel @Inject constructor(
     // Fire and forget. The player answers with an event, and the flows above pick it up.
 
     fun togglePlayPause() = command("play or pause") { household.togglePlayPause(it) }
+
+    /** Silence the ringing alarm for nine minutes; it rings again after. */
+    fun snoozeAlarm() = command("snooze the alarm") { household.snoozeAlarm(it) }
+
+    /** End the ringing alarm. Pausing is what does that; deleting the alarm would not. */
+    fun stopAlarm() = command("stop the alarm") { household.pause(it) }
     fun skipToNextTrack() = command("skip") { household.skipToNextTrack(it) }
     fun skipToPreviousTrack() = command("go back") { household.skipToPreviousTrack(it) }
 

@@ -42,7 +42,14 @@ import javax.xml.parsers.DocumentBuilderFactory
  * Distinct from a transport failure, where nothing came back and the request may yet have
  * been carried out.
  */
-class UpnpRefusedException(message: String) : IOException(message)
+class UpnpRefusedException(
+    message: String,
+    /** UPnP's own error code when the fault carried one — `800` from [Upnp.runningAlarm] is an answer. */
+    val upnpCode: String? = null,
+) : IOException(message)
+
+/** `GetRunningAlarmProperties`'s fault when no alarm is going off. */
+internal const val NO_ALARM_RUNNING = "800"
 
 /** Where `ReorderTracksInQueue` inserts, to move [from] to [to]: x2rock's rule. */
 internal fun insertBefore(from: Int, to: Int): Int = if (to > from) to + 1 else to
@@ -256,6 +263,32 @@ class Upnp(
         )
     }
 
+    /**
+     * The id of the alarm going off in the coordinator's group, or null when none is.
+     *
+     * Captured on Kitchen (2026-10-02): ringing answers `AlarmID`; nothing running answers the
+     * fault **800**, which is the answer rather than a failure. A *snoozed* alarm still answers
+     * its id, with the room `PAUSED_PLAYBACK` — so "ringing" is this and playing, together.
+     */
+    suspend fun runningAlarm(hostname: String): Int? = withContext(Dispatchers.IO) {
+        val reply = try {
+            soap(hostname, Service.AV_TRANSPORT, "GetRunningAlarmProperties", listOf("InstanceID" to "0"))
+        } catch (e: UpnpRefusedException) {
+            if (e.upnpCode == NO_ALARM_RUNNING) return@withContext null
+            throw e
+        }
+        parse(reply).text("AlarmID")?.toIntOrNull()?.takeIf { it != 0 }
+    }
+
+    /**
+     * Silence the group's ringing alarm for [millis]; it rings again after (62s for a minute, on
+     * Kitchen). The room pauses meanwhile. To end an alarm outright, pause it: that leaves it
+     * stopped, where `DestroyAlarm` would delete the alarm and not silence it.
+     */
+    suspend fun snoozeAlarm(hostname: String, millis: Long): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.AV_TRANSPORT, "SnoozeAlarm", listOf("InstanceID" to "0", "Duration" to formatClock(millis)))
+    }
+
     /** Set the transport's source. The coordinator is who is asked; see [useTvInput]. */
     suspend fun setTransportUri(hostname: String, uri: String, metadata: String = ""): Unit =
         withContext(Dispatchers.IO) {
@@ -394,13 +427,15 @@ class Upnp(
                         "Account > Privacy and Security > Connection Security"
                 )
             }
-            throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}")
+            throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}", errorCode(body))
         }
     }
 
+    private fun errorCode(body: String): String? = runCatching { parse(body).text("errorCode") }.getOrNull()
+
     /** UPnP's own error code, when the fault body carries one. */
     private fun describe(body: String): String =
-        runCatching { parse(body).text("errorCode") }.getOrNull()
+        errorCode(body)
             ?.let { code -> "(UPnP $code${UPNP_ERRORS[code]?.let { ": $it" } ?: ""})" }
             ?: ""
 

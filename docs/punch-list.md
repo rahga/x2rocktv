@@ -305,7 +305,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   loudness}`, already fetched for night/dialog; write over UPnP; setters answer an empty body so
   re-read after. Per player, not group; bonded members follow the visible player. Under "Room
   settings" in RoomPanel for every room, not only soundbars.
-- [ ] **3.7 Snooze or dismiss a ringing alarm.** `GetRunningAlarmProperties` (800 means none is
+- [x] **3.7 Snooze or dismiss a ringing alarm.** *Done 2026-10-02: replies captured on Kitchen
+  (see `docs/lan-transport.md`). A room is asked once as it starts playing; `ringingAlarm` holds
+  the id while it plays, and the pane offers Snooze 9 min and Stop; the room list says "Alarm".
+  A snoozed alarm still answers its id but is offered nothing until it rings again. Tested on
+  the JVM against the captures; not yet seen ringing in the app on a TV.* `GetRunningAlarmProperties` (800 means none is
   ringing), `SnoozeAlarm`, and `pause` to stop it (`DestroyAlarm` does not). A remote press is
   the right shape for this; alarm *management* is not (see Tier 5).
 - [ ] **3.8 Radio directory.** Radio Browser API, no key: browse by tag or country, sort by votes
