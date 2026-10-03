@@ -91,8 +91,8 @@ data class PlayerUiState(
      */
     val volumeFixed: Boolean = false,
     /**
-     * When the room's sleep timer will stop it, as a wall-clock moment, or null for none. What
-     * is left is counted down where it is drawn; this view model keeps no clock of its own.
+     * When the room's sleep timer will stop it, on [MonotonicClock], or null for none. What is
+     * left is counted down where it is drawn; this view model keeps no clock of its own.
      */
     val sleepTimerEndsAt: Long? = null,
     /**
@@ -129,6 +129,7 @@ data class HomeTheaterUi(
 class PlayerViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val nowPlaying: NowPlayingPublisher,
+    private val clock: MonotonicClock,
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
@@ -569,17 +570,19 @@ class PlayerViewModel @Inject constructor(
             // A failed read says nothing, rather than a timer that may not exist.
             val remaining = runCatching { household.sleepTimer(groupId) }.getOrNull()
             if (_groupId.value != groupId) return@launch
-            _sleepEndsAt.value = remaining?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it }
+            _sleepEndsAt.value = remaining?.takeIf { it > 0 }?.let { clock.now() + it }
         }
     }
 
     init {
-        // A room that stops playing while a timer is shown has probably been stopped by it.
+        // A room that stops while a timer is shown has probably been stopped by it. Stopped,
+        // not merely not playing: a track boundary passes through BUFFERING, and keying on
+        // that re-read the timer at every track and had the countdown jitter by a round trip.
         viewModelScope.launch {
             household.groupStates
-                .map { all -> _groupId.value?.let { all[it]?.playbackState?.isPlaying() } }
+                .map { all -> _groupId.value?.let { all[it]?.playbackState in STOPPED_STATES } }
                 .distinctUntilChanged()
-                .collect { playing -> if (playing == false && _sleepEndsAt.value != null) loadSleepTimer() }
+                .collect { stopped -> if (stopped == true && _sleepEndsAt.value != null) loadSleepTimer() }
         }
     }
 
@@ -601,5 +604,6 @@ class PlayerViewModel @Inject constructor(
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
+        val STOPPED_STATES = setOf(PlaybackStates.PAUSED, PlaybackStates.IDLE)
     }
 }

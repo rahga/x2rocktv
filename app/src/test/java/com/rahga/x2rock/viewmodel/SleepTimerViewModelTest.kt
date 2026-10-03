@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
@@ -23,6 +24,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -42,6 +44,8 @@ class SleepTimerViewModelTest {
     private lateinit var viewModel: PlayerViewModel
     private lateinit var groupId: String
     @Volatile private var armed = false
+    /** Every read of the timer, so a test can say when one must not happen. */
+    @Volatile private var reads = 0
 
     private fun capture(name: String) =
         FakePlayer::class.java.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
@@ -55,9 +59,9 @@ class SleepTimerViewModelTest {
                     val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
                     val body = request.body.readUtf8()
                     return when (action) {
-                        "GetRemainingSleepTimerDuration" -> MockResponse().setBody(
+                        "GetRemainingSleepTimerDuration" -> if (true) { reads++; MockResponse().setBody(
                             capture(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
-                        )
+                        ) } else MockResponse()
                         "ConfigureSleepTimer" -> {
                             armed = "<NewSleepTimerDuration></NewSleepTimerDuration>" !in body
                             MockResponse().setBody("<s:Envelope><s:Body><u:ConfigureSleepTimerResponse/></s:Body></s:Envelope>")
@@ -74,7 +78,7 @@ class SleepTimerViewModelTest {
             scope = scope, addressBook = book, multicast = MulticastGate.None,
             client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port, upnpPort = upnp.port,
         )
-        viewModel = PlayerViewModel(household, RecordingNowPlaying())
+        viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
         runBlocking {
             household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
             withTimeout(5_000) { household.state.first { it.connected } }
@@ -95,7 +99,7 @@ class SleepTimerViewModelTest {
         armed = true
         viewModel.selectGroup(groupId, "Room")
         val endsAt = withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }.sleepTimerEndsAt!!
-        val remaining = endsAt - System.currentTimeMillis()
+        val remaining = endsAt - testClock.now()
         assertTrue("expected about 45 minutes, got $remaining", remaining in 44 * 60_000L..45 * 60_000L)
     }
 
@@ -113,6 +117,20 @@ class SleepTimerViewModelTest {
         armed = false
         push("PLAYBACK_STATE_PAUSED")
         withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
+    }
+
+    /** A track boundary passes through BUFFERING; keying the re-read on "not playing" read at every track. */
+    @Test fun `a track boundary does not re-read the timer`() = runBlocking<Unit> {
+        armed = true
+        viewModel.selectGroup(groupId, "Room")
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
+        push("PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
+        val before = reads
+        push("PLAYBACK_STATE_BUFFERING")
+        push("PLAYBACK_STATE_PLAYING")
+        delay(500)
+        assertEquals(before, reads)
     }
 
     private fun push(state: String) {

@@ -63,7 +63,7 @@ class PlayerViewModelTest {
             port = fake.port,
         )
         publisher = RecordingNowPlaying()
-        viewModel = PlayerViewModel(household, publisher)
+        viewModel = PlayerViewModel(household, publisher, testClock)
 
         runBlocking {
             household.connect(
