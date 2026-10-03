@@ -31,6 +31,7 @@ import javax.inject.Singleton
 class NetworkMonitor @Inject constructor(
     @ApplicationContext private val context: Context,
     private val household: SonosHousehold,
+    private val identity: NetworkIdentity,
 ) {
 
     private var callback: ConnectivityManager.NetworkCallback? = null
@@ -39,7 +40,14 @@ class NetworkMonitor @Inject constructor(
         if (callback != null) return
         val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
         val cb = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = household.onNetworkChanged()
+            override fun onAvailable(network: Network) {
+                // Told first, so the reconnect keys its memory by the network it is joining.
+                identity.arrived(network)
+                household.onNetworkChanged()
+            }
+
+            // Bookkeeping only — see "Arrival only" above. Nothing here reconnects.
+            override fun onLost(network: Network) = identity.lost(network)
         }
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
