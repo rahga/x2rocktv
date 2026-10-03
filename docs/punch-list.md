@@ -73,8 +73,11 @@ Status: `[ ]` open · `[x]` done · `[-]` decided out
 - [x] **1.3 A group change the coordinator did not answer.** *Done 2026-10-01: on a reply
   timeout, never a refusal, `modifyGroupMembers` waits up to 20s for the pushed topology, then
   checks a fresh `getGroups`; `useTvInput` waits for its `htInputFormat` event and fails if it
-  never comes. Not exercised on hardware: the stall needs a Beam on its TV input at home.
-  The failures still reach no one until 1.4.* Grouping onto a Beam on its TV input
+  never comes. Exercised at home 2026-10-03, from the Shield's room panel with Living Room's
+  Beam on its TV input: Kitchen joined in under 4s and left in under 4s, the panel following
+  each, and the group's level read as the average (10 and 5 gave 7). The stall itself did not
+  show, so the timeout path remains proven only against the fake; what the hardware proved is
+  the ordinary path on the room that stalled x2rock. The failures still reach no one until 1.4.* Grouping onto a Beam on its TV input
   stalled past the 5s reply timeout for 14–20s and then applied (x2rock "The Beam stall",
   "Confirm a group change the coordinator did not answer"). `runCatching` swallows the timeout
   and the panel shows nothing. On timeout only — never on refusal — read `getGroups` fresh and
