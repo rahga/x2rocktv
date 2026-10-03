@@ -20,10 +20,16 @@ import androidx.compose.ui.graphics.Color
  * `onKeyEvent { it.key != Key.Back }` — consumed *every* non-Back key, including the D-pad events
  * Compose's root handler needs in order to move focus at all, so it also froze focus on whichever
  * button opened focused. Cancelling focus *exit* is the targeted version of the same intent.
+ *
+ * **The properties go before the group.** A focus target collects its properties from the
+ * modifiers *above* it in the chain, so `focusGroup().focusProperties { exit }` gave the rule
+ * to the group's children and the group itself never saw it: the trap was a no-op, and a press
+ * up from Settings walked focus to the sidebar's buttons with the panel still open. Seen on
+ * the Shield, 2026-10-03.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.modalFocusTrap(): Modifier =
-    focusGroup().focusProperties { exit = { FocusRequester.Cancel } }
+    focusProperties { exit = { FocusRequester.Cancel } }.focusGroup()
 
 /** Scrim + centred, focus-trapped content. */
 @Composable
