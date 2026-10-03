@@ -549,13 +549,14 @@ private fun PlaybackControls(
             ) { Text("Favorites") }
             // Sonos's own timer, on AVTransport: with UPnP off there is none to set.
             if (!state.upnpOff) {
+                val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
                 AppButton(onClick = {
-                    if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                    if (sleepLeft != null) viewModel.cancelSleepTimer()
                     else onOpenSleepTimer()
                 }) {
                     Text(
-                        if (state.sleepTimerRemainingMillis != null)
-                            "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                        if (sleepLeft != null)
+                            "Sleep: ${sleepLeft.toTimeString()}"
                         else "Sleep Timer"
                     )
                 }
@@ -752,15 +753,16 @@ private fun TvControls(
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Favorites") }
             if (!state.upnpOff) {
+                val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
                 AppButton(
                     onClick = {
-                        if (state.sleepTimerRemainingMillis != null) viewModel.cancelSleepTimer()
+                        if (sleepLeft != null) viewModel.cancelSleepTimer()
                         else onOpenSleepTimer()
                     },
                 ) {
                     Text(
-                        if (state.sleepTimerRemainingMillis != null)
-                            "Sleep: ${state.sleepTimerRemainingMillis.toTimeString()}"
+                        if (sleepLeft != null)
+                            "Sleep: ${sleepLeft.toTimeString()}"
                         else "Sleep Timer"
                     )
                 }
@@ -885,6 +887,26 @@ private fun SleepTimerPickerOverlay(
             }
         }
     }
+}
+
+/**
+ * What is left on the sleep timer, ticking once a second here: the view model holds the moment
+ * it ends and no clock. Null for no timer, or one that has run out — the speaker stops the room
+ * then, and the view model re-reads on that event.
+ */
+@Composable
+private fun rememberSleepCountdown(endsAt: Long?): Long? {
+    var left by remember(endsAt) { mutableStateOf(endsAt?.let { it - System.currentTimeMillis() }?.takeIf { it > 0 }) }
+    LaunchedEffect(endsAt) {
+        if (endsAt == null) return@LaunchedEffect
+        while (true) {
+            val remaining = endsAt - System.currentTimeMillis()
+            left = remaining.takeIf { it > 0 }
+            if (remaining <= 0) break
+            delay(1_000L)
+        }
+    }
+    return left
 }
 
 internal fun Long.toTimeString(): String {

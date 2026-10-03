@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -89,7 +90,11 @@ data class PlayerUiState(
      * the amplifier it feeds, not here. `groupVolume:1`'s `fixed`; x2rock shows "fixed".
      */
     val volumeFixed: Boolean = false,
-    val sleepTimerRemainingMillis: Long? = null,
+    /**
+     * When the room's sleep timer will stop it, as a wall-clock moment, or null for none. What
+     * is left is counted down where it is drawn; this view model keeps no clock of its own.
+     */
+    val sleepTimerEndsAt: Long? = null,
     /**
      * The soundbar in this room, when it has one. Kept because the home-theatre writes are
      * player-scoped and must name the soundbar itself — on a grouped room the coordinator
@@ -128,7 +133,7 @@ class PlayerViewModel @Inject constructor(
 
     private val _groupId = MutableStateFlow<String?>(null)
     private val _groupName = MutableStateFlow("")
-    private val _sleepRemaining = MutableStateFlow<Long?>(null)
+    private val _sleepEndsAt = MutableStateFlow<Long?>(null)
     private val _homeTheater = MutableStateFlow<HomeTheaterUi?>(null)
     private val notice = TransientNotice(viewModelScope)
     /** The last [SonosHousehold.ratingState] answer, with the room it answered for. */
@@ -220,8 +225,8 @@ class PlayerViewModel @Inject constructor(
                     error = householdState.error,
                 )
             }
-        }.combine(_sleepRemaining) { state, remaining ->
-            state.copy(sleepTimerRemainingMillis = remaining)
+        }.combine(_sleepEndsAt) { state, endsAt ->
+            state.copy(sleepTimerEndsAt = endsAt)
         }.combine(_homeTheater) { state, ht ->
             // Merged rather than derived: alone among everything here, these two are not
             // pushed, so they cannot come out of `household.state` with the rest.
@@ -289,7 +294,7 @@ class PlayerViewModel @Inject constructor(
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
         loadHomeTheater()
-        _sleepRemaining.value = null
+        _sleepEndsAt.value = null
         loadSleepTimer()
     }
 
@@ -551,6 +556,12 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * One read, when the room is chosen or the timer changed. The timer is not pushed, but its
+     * firing is: the speaker pauses the room, which arrives as a playback event, and that is
+     * when it is read again (below) — not on a clock of this view model's, which the project
+     * rules out. `00:00:00` is the player's "expired, stopping now", and reads as none.
+     */
     private fun loadSleepTimer() {
         val groupId = _groupId.value ?: return
         sleepTimerJob?.cancel()
@@ -558,21 +569,17 @@ class PlayerViewModel @Inject constructor(
             // A failed read says nothing, rather than a timer that may not exist.
             val remaining = runCatching { household.sleepTimer(groupId) }.getOrNull()
             if (_groupId.value != groupId) return@launch
-            if (remaining == null) {
-                _sleepRemaining.value = null
-                return@launch
-            }
-            val endsAt = System.currentTimeMillis() + remaining
-            while (isActive) {
-                val left = endsAt - System.currentTimeMillis()
-                _sleepRemaining.value = left.coerceAtLeast(0)
-                if (left <= 0) break
-                delay(1_000L)
-            }
-            // The speaker stopped the room itself. Ask once more, so a timer someone re-armed
-            // meanwhile is shown, and an expired one clears.
-            delay(SLEEP_SETTLE_MILLIS)
-            if (isActive && _groupId.value == groupId) loadSleepTimer()
+            _sleepEndsAt.value = remaining?.takeIf { it > 0 }?.let { System.currentTimeMillis() + it }
+        }
+    }
+
+    init {
+        // A room that stops playing while a timer is shown has probably been stopped by it.
+        viewModelScope.launch {
+            household.groupStates
+                .map { all -> _groupId.value?.let { all[it]?.playbackState?.isPlaying() } }
+                .distinctUntilChanged()
+                .collect { playing -> if (playing == false && _sleepEndsAt.value != null) loadSleepTimer() }
         }
     }
 
@@ -594,7 +601,5 @@ class PlayerViewModel @Inject constructor(
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
-        /** `00:00:00` lingers about seven seconds while the room stops; read after it. */
-        const val SLEEP_SETTLE_MILLIS = 8_000L
     }
 }
