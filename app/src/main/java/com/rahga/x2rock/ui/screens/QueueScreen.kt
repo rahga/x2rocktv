@@ -48,7 +48,7 @@ import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.components.Overlay
-import com.rahga.x2rock.ui.components.dpadLongPress
+import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
@@ -226,13 +226,14 @@ private fun QueueRow(
     val item = entry.item
     Card(
         onClick = onClick,
+        onLongClick = onLongPress,
         modifier = modifier
             .fillMaxWidth()
             .then(
                 if (isCurrent) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier
             )
-            .dpadLongPress(onLongPress)
+            .dpadMenuKey(onLongPress)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
