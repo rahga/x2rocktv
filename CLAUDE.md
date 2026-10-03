@@ -271,6 +271,11 @@ Start there before picking up new work; the items below are the standing notes i
   `queueVersion` moves. That is enough on this firmware: every edit moved it and arrived as
   a playback event, on an idle room too (verified at home 2026-10-01). x2rock's firmware sent
   no such field, which is why it re-reads the browse's `UpdateID` on each event instead.
+- **Android's XML parser accepts no Xerces features, and the JVM's does.** `setFeature` for
+  `disallow-doctype-decl` threw on the Shield, so no UPnP reply parsed there while the live
+  suite, on the JVM, passed. `Upnp.parse` guards DOCTYPEs by hand now. The lesson is
+  wider than the parser: a platform API the JVM also has can still behave differently on the
+  device, and only the device shows it. Anything that reads a UPnP reply needs one look on a TV.
 - **`Upnp` keeps its own read timeout, and must.** It is handed the WebSocket's client,
   where `readTimeout(0)` is right because a subscription is meant to sit idle — and fatal
   for request/response, where a player that goes quiet mid-answer would hang the caller

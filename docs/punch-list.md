@@ -314,8 +314,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 - [x] **3.7 Snooze or dismiss a ringing alarm.** *Done 2026-10-02: replies captured on Kitchen
   (see `docs/lan-transport.md`). A room is asked once as it starts playing; `ringingAlarm` holds
   the id while it plays, and the pane offers Snooze 9 min and Stop; the room list says "Alarm".
-  A snoozed alarm still answers its id but is offered nothing until it rings again. Tested on
-  the JVM against the captures; not yet seen ringing in the app on a TV.* `GetRunningAlarmProperties` (800 means none is
+  A snoozed alarm still answers its id but is offered nothing until it rings again. Seen on the
+  Shield 2026-10-03: "Kitchen · Alarm" in the list, Snooze and Stop above the pane, Snooze paused
+  the room and Stop ended it. Found on the way, and fixed: no UPnP reply parsed on the Shield
+  (see `docs/lan-transport.md`, Android's parser), and a press on Snooze left focus on the
+  settings gear. A snooze rang back when the alarm's duration ran out, not after nine minutes.* `GetRunningAlarmProperties` (800 means none is
   ringing), `SnoozeAlarm`, and `pause` to stop it (`DestroyAlarm` does not). A remote press is
   the right shape for this; alarm *management* is not (see Tier 5).
 - [x] **3.8 Radio directory.** *Done 2026-10-02: `RadioDirectory` and a Radio screen, opened
