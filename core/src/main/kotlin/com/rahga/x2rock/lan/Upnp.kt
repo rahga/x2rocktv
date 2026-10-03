@@ -61,10 +61,13 @@ internal fun parseClock(clock: String): Long? {
     return ((parts[0] * 60 + parts[1]) * 60 + parts[2]) * 1_000
 }
 
-/** Milliseconds to `HH:MM:SS`, rounded down to the second. */
+/**
+ * Milliseconds to `HH:MM:SS`, rounded down to the second. In ASCII digits whatever the device's
+ * locale: a TV set to Arabic would otherwise send `٠٠:٣٠:٠٠`, which the player refuses with 402.
+ */
 internal fun formatClock(millis: Long): String {
     val total = (millis / 1_000).coerceAtLeast(0)
-    return "%02d:%02d:%02d".format(total / 3_600, total / 60 % 60, total % 60)
+    return "%02d:%02d:%02d".format(java.util.Locale.ROOT, total / 3_600, total / 60 % 60, total % 60)
 }
 
 /** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
