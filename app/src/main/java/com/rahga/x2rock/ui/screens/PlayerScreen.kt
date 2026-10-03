@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
@@ -564,19 +565,7 @@ private fun PlaybackControls(
                     else Modifier.focusRequester(playPauseFocusRequester),
             ) { Text("Favorites") }
             // Sonos's own timer, on AVTransport: with UPnP off there is none to set.
-            if (!state.upnpOff) {
-                val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
-                AppButton(onClick = {
-                    if (sleepLeft != null) viewModel.cancelSleepTimer()
-                    else onOpenSleepTimer()
-                }) {
-                    Text(
-                        if (sleepLeft != null)
-                            "Sleep: ${sleepLeft.toTimeString()}"
-                        else "Sleep Timer"
-                    )
-                }
-            }
+            if (!state.upnpOff) SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -768,21 +757,7 @@ private fun TvControls(
                 onClick = onOpenFavorites,
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Favorites") }
-            if (!state.upnpOff) {
-                val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
-                AppButton(
-                    onClick = {
-                        if (sleepLeft != null) viewModel.cancelSleepTimer()
-                        else onOpenSleepTimer()
-                    },
-                ) {
-                    Text(
-                        if (sleepLeft != null)
-                            "Sleep: ${sleepLeft.toTimeString()}"
-                        else "Sleep Timer"
-                    )
-                }
-            }
+            if (!state.upnpOff) SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
 
         if (state.playerVolumes.isNotEmpty()) {
@@ -905,18 +880,29 @@ private fun SleepTimerPickerOverlay(
     }
 }
 
+/** The sleep timer's one button: what is left and a cancel while it runs, the picker otherwise. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SleepTimerButton(state: PlayerUiState, viewModel: PlayerViewModel, onOpenSleepTimer: () -> Unit) {
+    val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
+    AppButton(onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() }) {
+        Text(if (sleepLeft != null) "Sleep: ${sleepLeft.toTimeString()}" else "Sleep Timer")
+    }
+}
+
 /**
  * What is left on the sleep timer, ticking once a second here: the view model holds the moment
  * it ends and no clock. Null for no timer, or one that has run out — the speaker stops the room
- * then, and the view model re-reads on that event.
+ * then, and the view model re-reads on that event. On the monotonic clock the view model used,
+ * so an NTP step after boot cannot make a running timer read as expired.
  */
 @Composable
 private fun rememberSleepCountdown(endsAt: Long?): Long? {
-    var left by remember(endsAt) { mutableStateOf(endsAt?.let { it - System.currentTimeMillis() }?.takeIf { it > 0 }) }
+    var left by remember(endsAt) { mutableStateOf(endsAt?.let { it - SystemClock.elapsedRealtime() }?.takeIf { it > 0 }) }
     LaunchedEffect(endsAt) {
         if (endsAt == null) return@LaunchedEffect
         while (true) {
-            val remaining = endsAt - System.currentTimeMillis()
+            val remaining = endsAt - SystemClock.elapsedRealtime()
             left = remaining.takeIf { it > 0 }
             if (remaining <= 0) break
             delay(1_000L)

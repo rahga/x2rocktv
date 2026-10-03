@@ -7,6 +7,9 @@ import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.store.Preferences
 
+/** A monotonic clock the JVM has; Android's SystemClock is not here. */
+val testClock = MonotonicClock { System.nanoTime() / 1_000_000 }
+
 /** In-memory storage, so the stores are just their logic. */
 class FakePreferences : Preferences {
     private val strings = mutableMapOf<String, String?>()

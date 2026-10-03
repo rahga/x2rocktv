@@ -1,5 +1,6 @@
 package com.rahga.x2rock.di
 
+import android.os.SystemClock
 import android.util.Log
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MdnsDiscovery
@@ -18,6 +19,7 @@ import com.rahga.x2rock.net.NsdMdnsDiscovery
 import com.rahga.x2rock.net.WifiMulticastGate
 import com.rahga.x2rock.radio.RadioDirectory
 import com.rahga.x2rock.store.Preferences
+import com.rahga.x2rock.viewmodel.MonotonicClock
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,6 +94,10 @@ object AppModule {
     @Singleton
     @InternetHttp
     fun provideInternetClient(): OkHttpClient = OkHttpClient()
+
+    @Provides
+    @Singleton
+    fun provideMonotonicClock(): MonotonicClock = MonotonicClock { SystemClock.elapsedRealtime() }
 
     @Provides
     @Singleton
