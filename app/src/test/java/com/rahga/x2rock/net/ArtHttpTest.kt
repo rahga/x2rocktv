@@ -16,6 +16,7 @@ import org.junit.Before
 import org.junit.Test
 import java.io.IOException
 import java.net.InetAddress
+import java.util.concurrent.TimeUnit
 
 /**
  * Cover art as a player serves it, `http://sonos-<MAC>.local:1400/getaa`, from a fake on
@@ -79,6 +80,13 @@ class ArtHttpTest {
         server.enqueue(MockResponse().setHeader("Content-Encoding", "gzip").setBody(Buffer().write(jpeg)))
         refused()
         assertEquals("identity", server.takeRequest().getHeader("Accept-Encoding"))
+    }
+
+    /** Art arriving a few bytes at a time: the first read falls short of a WebP's twelve. */
+    @Test fun `a slow image is judged on its first twelve bytes, not its first read`() {
+        val webp = "RIFF".toByteArray() + ByteArray(4) + "WEBP".toByteArray() + ByteArray(400)
+        server.enqueue(MockResponse().setBody(Buffer().write(webp)).throttleBody(4, 10, TimeUnit.MILLISECONDS))
+        assertEquals(webp.size, fetch().size)
     }
 
     @Test fun `a body that is not an image is refused`() {

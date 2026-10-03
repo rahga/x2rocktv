@@ -106,7 +106,12 @@ object ArtHttp {
             }
             val source = Capped(body.source(), MAX_BYTES).buffer()
             if (response.isSuccessful) {
-                val head = source.peek().use { peek -> Buffer().also { peek.read(it, 12) }.readByteArray() }
+                // Asked for, not merely read once: a single read returns what the socket has so
+                // far, and art arriving a few bytes at a time was refused as "not an image".
+                val head = source.peek().use { peek ->
+                    peek.request(12)
+                    peek.readByteArray(minOf(12L, peek.buffer.size))
+                }
                 if (!looksLikeAnImage(head)) {
                     response.close()
                     throw IOException("art refused: not an image")
