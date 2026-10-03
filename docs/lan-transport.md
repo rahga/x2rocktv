@@ -253,6 +253,15 @@ A player answering **HTTP 403** on 1400 has UPnP disabled in the Sonos app under
 Account → Privacy and Security → Connection Security → UPnP (the path x2rock confirmed on
 iPhone and Android, 2026-09-28; an older one was given here).
 
+**A ringing alarm is asked about, on the group's coordinator** (`AVTransport`, captured on
+Kitchen 2026-10-02 with the built-in chime at volume 3). `GetRunningAlarmProperties` answers
+`AlarmID` while it rings, and the fault **800** when nothing is running — an answer, not a
+failure. A `SnoozeAlarm` of `00:01:00` paused the room (`PAUSED_PLAYBACK`) and it rang again
+62s later; **while snoozed it still answers its `AlarmID`**, so "ringing" is that *and* playing.
+`Pause` while it rang left the room `STOPPED` and the next ask answered 800: that ends it.
+What `Pause` does to an alarm that is snoozed, not ringing, was not captured. The chime itself
+arrives as `playbackMetadata:1` with a container named `x-rincon-buzzer:0` and no track.
+
 ---
 
 ## Test evidence

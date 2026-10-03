@@ -88,6 +88,8 @@ class HomeViewModel @Inject constructor(
         val streamInfo: String? = null,
         /** A station rather than a queue of tracks — it gets a radio glyph for its art. */
         val isRadio: Boolean = false,
+        /** An alarm is ringing here: see `GroupState.ringingAlarm`. */
+        val alarmRinging: Boolean = false,
     )
 
     sealed interface UiState {
@@ -125,6 +127,7 @@ class HomeViewModel @Inject constructor(
                             isRadio = pushed?.isRadio == true,
                             hasTvInput = state.hasTvInput(group),
                             source = pushed?.container?.name,
+                            alarmRinging = pushed?.ringingAlarm != null,
                         )
                     },
                 )
@@ -577,6 +580,9 @@ class HomeViewModel @Inject constructor(
  * host, rather than reduced to "Playing": x2rock's rule.
  */
 fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<String> = when {
+    // The chime has no track and no name but `x-rincon-buzzer:0`, so it would read "Playing";
+    // an alarm with music would read as that music. Either way, what is happening is an alarm.
+    info.alarmRinging -> listOfNotNull("Alarm", info.track?.name)
     info.onTvInput -> listOfNotNull(info.inputFormat.ifEmpty { null } ?: playbackState.toPlaybackLabel(), info.source)
     info.track?.name != null -> listOfNotNull(
         info.track.name,

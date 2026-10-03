@@ -90,6 +90,12 @@ data class GroupState(
      * is what the queue screen keeps itself current by.
      */
     val queueVersion: String? = null,
+    /**
+     * The id of the alarm ringing in this group, while it rings. Not pushed: asked for when the
+     * room starts playing, which is how an alarm starts, and dropped when it stops — a snoozed
+     * alarm is still "running" to the player but is not ringing, and is offered nothing here.
+     */
+    val ringingAlarm: Int? = null,
 ) {
     /**
      * Whether this group is on a soundbar's TV input right now.
@@ -669,6 +675,25 @@ class SonosHousehold(
     /** Arm [groupId]'s sleep timer for [minutes], or cancel it with `null`. */
     suspend fun setSleepTimer(groupId: String, minutes: Int?) =
         upnp.setSleepTimer(coordinatorHostname(groupId), minutes?.let { it * 60_000L })
+
+    /**
+     * Snooze [groupId]'s ringing alarm for [minutes] — the clock radio's nine, as x2rock's
+     * default. To stop it outright, [pause]: that ends it, where deleting the alarm would not.
+     */
+    suspend fun snoozeAlarm(groupId: String, minutes: Int = SNOOZE_MINUTES) =
+        upnp.snoozeAlarm(coordinatorHostname(groupId), minutes * 60_000L)
+
+    /**
+     * Ask whether an alarm is why [groupId] just started playing. Off the event path, and kept
+     * only if the room is still playing when the answer comes. A refusal — UPnP off, say — is
+     * no alarm: the room simply offers none.
+     */
+    private fun askForAlarm(groupId: String) {
+        scope.launch {
+            val id = runCatching { upnp.runningAlarm(coordinatorHostname(groupId)) }.getOrNull() ?: return@launch
+            update(groupId) { if (it.playbackState.isPlaying()) it.copy(ringingAlarm = id) else it }
+        }
+    }
 
     /** Whether [groupId] is playing from its queue, rather than a station, stream or TV. */
     suspend fun playingFromQueue(groupId: String): Boolean =
@@ -1377,10 +1402,12 @@ class SonosHousehold(
                     }
                 }
                 val position = body.long("positionMillis")
+                val wasPlaying = _groupStates.value[groupId]?.playbackState?.isPlaying() == true
                 update(groupId) {
                     val playbackState = body.string("playbackState") ?: it.playbackState
                     it.copy(
                         playbackState = playbackState,
+                        ringingAlarm = it.ringingAlarm.takeIf { playbackState.isPlaying() },
                         queueVersion = body.string("queueVersion") ?: it.queueVersion,
                         // Playing again answers the error; anything short of that leaves it
                         // standing, because a failed stream is followed by IDLE statuses.
@@ -1401,6 +1428,9 @@ class SonosHousehold(
                             ?.let { a -> gson.fromJson(a, PlaybackActions::class.java) }
                             ?: it.actions,
                     )
+                }
+                if (!wasPlaying && _groupStates.value[groupId]?.playbackState?.isPlaying() == true) {
+                    askForAlarm(groupId)
                 }
             }
 
@@ -1576,6 +1606,9 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/** What snooze means with no duration given: the clock radio's nine minutes, as x2rock has it. */
+const val SNOOZE_MINUTES = 9
 
 /** How long mDNS is given after SSDP draws nothing. The office speaker answered within a second. */
 internal const val MDNS_TIMEOUT_MILLIS = 4_000L

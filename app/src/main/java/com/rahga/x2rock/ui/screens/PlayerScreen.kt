@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
 import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
+import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
@@ -163,6 +164,7 @@ fun PlayerPane(
                         onOpenSleepTimer = { showSleepTimerPicker = true },
                     )
                 } else {
+                    if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester)
                     TrackInfo(state)
                     PlaybackControls(
                         state = state,
@@ -186,6 +188,30 @@ fun PlayerPane(
                 onDismiss = { showSleepTimerPicker = false }
             )
         }
+    }
+}
+
+/**
+ * A ringing alarm's two answers, above the track while it rings. Play/Pause keeps the focus it
+ * had: pressing it, or the remote's play/pause key, stops the alarm too, which is what someone
+ * half awake reaches for. Snooze is one press up. A snoozed alarm is not offered here: the
+ * player still counts it as running, but nothing is sounding, and it comes back when it rings.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun AlarmControls(viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.focusGroup(),
+    ) {
+        Text("Alarm", style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.width(12.dp))
+        AppButton(
+            onClick = { viewModel.snoozeAlarm() },
+            modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+        ) { Text("Snooze ${SNOOZE_MINUTES} min") }
+        AppButton(onClick = { viewModel.stopAlarm() }) { Text("Stop") }
     }
 }
 
