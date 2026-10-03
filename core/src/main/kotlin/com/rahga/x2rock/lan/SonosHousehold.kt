@@ -294,6 +294,8 @@ class SonosHousehold(
      * the wrong one to have subscribed on.
      */
     private val subscribedGroups = java.util.concurrent.ConcurrentHashMap<String, String>()
+    /** Players whose own subscriptions stand: see [subscribePlayer]. */
+    private val subscribedPlayers: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
     private val resubscribeLock = Mutex()
 
     /**
@@ -479,11 +481,7 @@ class SonosHousehold(
             // Per-speaker volume only matters once rooms are grouped, but subscribing up
             // front means the rows are already populated when a group forms.
             groups.players.forEach { player ->
-                runCatching {
-                    socketForPlayer(player.id)
-                        .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
-                }
-                subscribeHdmi(player)
+                subscribePlayer(player)
             }
         } catch (e: Exception) {
             // With Authentication on, every Control API command is refused with
@@ -565,6 +563,7 @@ class SonosHousehold(
             .filter { PlayerNames.localHostname(it.id).equals(socket.hostname, ignoreCase = true) }
             .map { it.id }
         _playerVolumes.update { it - players.toSet() }
+        subscribedPlayers.removeAll(players.toSet())
     }
 
     /** Whether [hostname] is the seed or any group's coordinator, by the topology as it is now. */
@@ -589,6 +588,7 @@ class SonosHousehold(
         securityVersion = null
         dying.forEach { runCatching { it.cancel() } }
         subscribedGroups.clear()
+        subscribedPlayers.clear()
         addressBook.clear()
         _state.update { it.copy(connected = false) }
         _groupStates.value = emptyMap()
@@ -612,6 +612,7 @@ class SonosHousehold(
         // re-subscribes unconditionally, so this is latent today — but `resubscribe` running
         // against a stale map before a reconnect completes would skip every group in it.
         subscribedGroups.clear()
+        subscribedPlayers.clear()
         _state.value = HouseholdState()
         _groupStates.value = emptyMap()
         _playerVolumes.value = emptyMap()
@@ -695,6 +696,8 @@ class SonosHousehold(
      * no alarm: the room simply offers none.
      */
     private fun askForAlarm(groupId: String) {
+        // Every SOAP call is a 403 then; a room starting to play is not worth one each.
+        if (_state.value.upnpOff) return
         scope.launch {
             val id = runCatching { upnp.runningAlarm(coordinatorHostname(groupId)) }.getOrNull() ?: return@launch
             update(groupId) { if (it.playbackState.isPlaying()) it.copy(ringingAlarm = id) else it }
@@ -839,24 +842,33 @@ class SonosHousehold(
         withTimeoutOrNull(2_000) {
             _groupStates.first { it[groupId]?.playbackState != PlaybackStates.PLAYING }
         }
-        coordinator(groupId).command(
-            Frames.onGroup("playback:1", "loadContent", groupId),
-            JsonObject().apply {
-                add("id", JsonObject().apply {
-                    addProperty("_objectType", "universalMusicObjectId")
-                    item.id.serviceId?.let { addProperty("serviceId", it) }
-                    item.id.accountId?.let { addProperty("accountId", it) }
-                    addProperty("objectId", item.id.objectId)
-                })
-                addProperty("type", item.type)
-            },
-        )
+        // No reply is not no, here as for a regroup: a coordinator busy with a load can answer
+        // late or not at all and do what it was asked. Only a refusal is final; a timeout on
+        // the load or on a press leaves the wait below to judge, by whether the room plays.
+        try {
+            coordinator(groupId).command(
+                Frames.onGroup("playback:1", "loadContent", groupId),
+                JsonObject().apply {
+                    add("id", JsonObject().apply {
+                        addProperty("_objectType", "universalMusicObjectId")
+                        item.id.serviceId?.let { addProperty("serviceId", it) }
+                        item.id.accountId?.let { addProperty("accountId", it) }
+                        addProperty("objectId", item.id.objectId)
+                    })
+                    addProperty("type", item.type)
+                },
+            )
+        } catch (e: ReplyTimeoutException) {
+            // Judged below.
+        }
         val started = withTimeoutOrNull(minOf(settleMillis, LOAD_SETTLE_MILLIS)) {
             while (true) {
                 try {
                     play(groupId)
                 } catch (e: SonosCommandException) {
                     if (!e.detail.startsWith("ERROR_PLAYBACK_NO_CONTENT")) throw e
+                } catch (e: ReplyTimeoutException) {
+                    // Judged below.
                 }
                 val playing = withTimeoutOrNull(1_000) {
                     _groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
@@ -1364,13 +1376,7 @@ class SonosHousehold(
         }
 
         // A player can arrive with a regroup — a speaker taken out of standby, say.
-        current.players.forEach { player ->
-            runCatching {
-                socketForPlayer(player.id)
-                    .subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
-            }
-            subscribeHdmi(player)
-        }
+        current.players.forEach { subscribePlayer(it) }
         if (unsubscribedGroupsRemain()) catchUpLater()
     }
 
@@ -1404,6 +1410,25 @@ class SonosHousehold(
     }
 
     /** A soundbar's HDMI port, on its own socket: player-scoped. Best-effort, like its volume. */
+    /**
+     * A player's own subscriptions, once: its level and, for a soundbar, its HDMI port. Done
+     * once rather than on every topology change, as this used to: a regroup already costs
+     * three round trips per changed group and was costing one per player in the house on top,
+     * each serialised under the catch-up lock. A player whose socket was lost is forgotten in
+     * [handleLoss], so it is subscribed afresh at the next catch-up.
+     */
+    private suspend fun subscribePlayer(player: Player) {
+        if (!subscribedPlayers.add(player.id)) return
+        val subscribed = runCatching {
+            socketForPlayer(player.id).subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
+        }.isSuccess
+        if (!subscribed) {
+            subscribedPlayers.remove(player.id)
+            return
+        }
+        subscribeHdmi(player)
+    }
+
     private suspend fun subscribeHdmi(player: Player) {
         if (HT_PLAYBACK !in player.capabilities.orEmpty()) return
         runCatching { socketForPlayer(player.id).subscribe(Frames.onPlayer("hdmi:1", "subscribe", player.id)) }

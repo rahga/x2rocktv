@@ -109,6 +109,15 @@ class AlarmTest {
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.ringingAlarm == null } }
     }
 
+    /** With UPnP off every SOAP call is a 403, so a room starting to play is not worth one. */
+    @Test fun `a household with UPnP off is not asked`() = runBlocking<Unit> {
+        fake.setUpnpAllowed(false)
+        withTimeout(5_000) { household.state.first { it.upnpOff } }
+        pushState("PLAYBACK_STATE_PLAYING")
+        delay(500)
+        assertEquals(0, asked())
+    }
+
     /** Asked on starting to play, not on every event while playing: nothing polls. */
     @Test fun `a room already playing is not asked again`() = runBlocking<Unit> {
         pushState("PLAYBACK_STATE_PLAYING")
