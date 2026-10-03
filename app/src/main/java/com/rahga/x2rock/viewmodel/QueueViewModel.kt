@@ -28,6 +28,17 @@ fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
     items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
         .filter { !it.item.deleted }
 
+/**
+ * The slots of the entries shown either side of [trackNumber]; null where there is none. Not
+ * `trackNumber ± 1`: a tombstone keeps its slot, so the neighbour on screen can be slots away,
+ * and a move by one landed on the tombstone and looked like nothing happened.
+ */
+fun neighbourSlots(entries: List<QueueEntry>, trackNumber: Int): Pair<Int?, Int?> {
+    val index = entries.indexOfFirst { it.trackNumber == trackNumber }
+    if (index < 0) return null to null
+    return entries.getOrNull(index - 1)?.trackNumber to entries.getOrNull(index + 1)?.trackNumber
+}
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val household: SonosHousehold,
@@ -101,13 +112,13 @@ class QueueViewModel @Inject constructor(
         }
     }
 
-    /** Move a track one place earlier or later. The queue is not pushed, so it is re-read. */
-    fun moveUp(trackNumber: Int) = move(trackNumber, trackNumber - 1)
-    fun moveDown(trackNumber: Int) = move(trackNumber, trackNumber + 1)
+    /** Move a track past the one shown above or below it. The queue is not pushed, so it is re-read. */
+    fun moveUp(trackNumber: Int) = neighbourSlots(entries(), trackNumber).first?.let { move(trackNumber, it) }
+    fun moveDown(trackNumber: Int) = neighbourSlots(entries(), trackNumber).second?.let { move(trackNumber, it) }
+
+    private fun entries() = (uiState.value as? UiState.Success)?.entries.orEmpty()
 
     private fun move(from: Int, to: Int) {
-        val total = (uiState.value as? UiState.Success)?.entries?.size ?: return
-        if (to < 1 || to > total) return
         edit("move that track") { household.moveInQueue(groupId, from, to) }
     }
 
