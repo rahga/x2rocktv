@@ -444,15 +444,25 @@ class Upnp(
 
     // ---------------------------------------------------------------- XML
 
-    private fun parse(xml: String): Element =
-        DocumentBuilderFactory.newInstance().apply {
+    /**
+     * These are LAN replies, but a malformed one must not be able to reach out, so a DOCTYPE is
+     * refused before any parser sees it. Refused *here*, by hand: Android's
+     * `DocumentBuilderFactory` accepts none of Xerces's features, and `setFeature` for the one
+     * that forbids DOCTYPEs threw on every call on the Shield (Android 11) — so there no UPnP
+     * reply parsed at all: no queue, no sleep timer, no alarm, and every fault read as a bare
+     * HTTP 500. Seen 2026-10-03; the JVM, where the feature exists, never could show it. The
+     * feature is still asked for where it is understood.
+     */
+    private fun parse(xml: String): Element {
+        if (DOCTYPE.containsMatchIn(xml)) throw IOException("refusing a UPnP reply that declares a DOCTYPE")
+        return DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = false
-            // These are LAN responses, but a malformed one should not be able to reach out.
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
             isExpandEntityReferences = false
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
         }.newDocumentBuilder()
             .parse(ByteArrayInputStream(xml.toByteArray()))
             .documentElement
+    }
 
     /** First element with this tag name, anywhere; the envelopes here are small and flat. */
     private fun Element.text(tag: String): String? =
@@ -520,6 +530,8 @@ class Upnp(
         const val MAX_ITEMS = 1000
         /** Bass and treble, as the player accepts them. */
         val TONE_RANGE = -10..10
+
+        private val DOCTYPE = Regex("<!DOCTYPE", RegexOption.IGNORE_CASE)
 
         private val UPNP_ERRORS = mapOf(
             "701" to "no media loaded, or not available in this state",
