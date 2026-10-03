@@ -7,6 +7,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.model.PlaybackStates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,16 +94,37 @@ class SleepTimerViewModelTest {
     @Test fun `a timer set elsewhere shows when the room is selected`() = runBlocking<Unit> {
         armed = true
         viewModel.selectGroup(groupId, "Room")
-        val remaining = withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerRemainingMillis != null } }
-            .sleepTimerRemainingMillis!!
+        val endsAt = withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }.sleepTimerEndsAt!!
+        val remaining = endsAt - System.currentTimeMillis()
         assertTrue("expected about 45 minutes, got $remaining", remaining in 44 * 60_000L..45 * 60_000L)
+    }
+
+    /**
+     * The timer is not pushed, but its firing is: the speaker pauses the room. That event is
+     * what re-reads it — not a clock in the view model, which the project rules out — and the
+     * player's `00:00:00`, its "expired, stopping now", reads as no timer.
+     */
+    @Test fun `the room stopping while a timer shows re-reads it`() = runBlocking<Unit> {
+        armed = true
+        viewModel.selectGroup(groupId, "Room")
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
+        push("PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
+        armed = false
+        push("PLAYBACK_STATE_PAUSED")
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
+    }
+
+    private fun push(state: String) {
+        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("playbackState", state) }
+        fake.push("playback:1", "playbackStatus", body.toString(), groupId)
     }
 
     @Test fun `setting and cancelling show what the speaker then reports`() = runBlocking<Unit> {
         viewModel.selectGroup(groupId, "Room")
         viewModel.setSleepTimer(45)
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerRemainingMillis != null } }
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
         viewModel.cancelSleepTimer()
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerRemainingMillis == null } }
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
     }
 }
