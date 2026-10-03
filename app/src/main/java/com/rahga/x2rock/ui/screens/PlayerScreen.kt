@@ -30,6 +30,7 @@ import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -164,7 +165,7 @@ fun PlayerPane(
                         onOpenSleepTimer = { showSleepTimerPicker = true },
                     )
                 } else {
-                    if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester)
+                    if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
                     TrackInfo(state)
                     PlaybackControls(
                         state = state,
@@ -196,14 +197,29 @@ fun PlayerPane(
  * had: pressing it, or the remote's play/pause key, stops the alarm too, which is what someone
  * half awake reaches for. Snooze is one press up. A snoozed alarm is not offered here: the
  * player still counts it as running, but nothing is sounding, and it comes back when it rings.
+ *
+ * This row leaves the screen the moment the room stops, so a press on it takes the focused
+ * button away from under the remote; focus then lands wherever Compose finds first, which on
+ * the Shield was the settings gear. It is handed to Play/Pause instead, the control that was
+ * one press below.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun AlarmControls(viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+private fun AlarmControls(
+    viewModel: PlayerViewModel,
+    exitLeftFocusRequester: FocusRequester,
+    playPauseFocusRequester: FocusRequester,
+) {
+    var hadFocus by remember { mutableStateOf(false) }
+    DisposableEffect(Unit) {
+        onDispose { if (hadFocus) playPauseFocusRequester.requestFocusSafely() }
+    }
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.focusGroup(),
+        modifier = Modifier
+            .focusGroup()
+            .onFocusChanged { hadFocus = it.hasFocus },
     ) {
         Text("Alarm", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.width(12.dp))
