@@ -55,6 +55,7 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 @Composable
 fun FavoritesScreen(
     onBack: () -> Unit,
+    onOpenRadio: (groupId: String) -> Unit,
     playerViewModel: PlayerViewModel,
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
@@ -94,6 +95,7 @@ fun FavoritesScreen(
                         onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
                         onReplay = { item -> viewModel.replay(item, onDone = onBack) },
                         onAppendPlaylist = viewModel::appendPlaylist,
+                        onOpenRadio = { onOpenRadio(viewModel.groupId) },
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -129,6 +131,7 @@ private fun FavoritesList(
     onPlayPlaylist: (Playlist) -> Unit,
     onReplay: (HistoryItem) -> Unit,
     onAppendPlaylist: (Playlist) -> Unit,
+    onOpenRadio: () -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
@@ -153,6 +156,10 @@ private fun FavoritesList(
                 text = if (!anything) "No favorites" else "Favorites",
                 style = MaterialTheme.typography.displaySmall
             )
+            Spacer(Modifier.width(24.dp))
+            // The radio directory: stations no favourite holds, with no account and no typing.
+            // Here because this is where someone looking for something to play already is.
+            AppButton(onClick = onOpenRadio) { Text("Radio") }
         }
         Spacer(Modifier.height(24.dp))
         if (!anything) return@Column

@@ -96,6 +96,12 @@ data class GroupState(
      * alarm is still "running" to the player but is not ringing, and is offered nothing here.
      */
     val ringingAlarm: Int? = null,
+    /**
+     * How many times this group has started playing. A waiter compares it rather than watching
+     * for the state to leave PLAYING and come back: updates close together reach a collector
+     * merged, and BUFFERING then PLAYING can arrive as PLAYING alone.
+     */
+    val playStarts: Int = 0,
 ) {
     /**
      * Whether this group is on a soundbar's TV input right now.
@@ -1122,6 +1128,64 @@ class SonosHousehold(
     }
 
     /**
+     * Play a stream that no service stands behind — a radio directory's station — and say
+     * whether it played.
+     *
+     * `playbackSession:1`: `createSession` on the coordinator, then `loadStreamUrl` in it. It
+     * plays alongside the queue and leaves the queue alone. **The load succeeding is not the
+     * stream playing**: the player accepts a URL it cannot play and sits IDLE without a word
+     * (x2rock), so this waits for the room to play. A stream can buffer four seconds or more.
+     *
+     * Not by the station's name, though Kitchen did echo it as the container (2026-10-02): a
+     * stream loaded without one is named by its *host* — `ice1.somafm.com` in an older capture —
+     * and two stations can share a name. So by the transport: a new *start* of play, counted by
+     * [GroupState.playStarts], because a room already playing would otherwise pass the old
+     * stream off as the new one. A room that never seems to stop and start again is reported as
+     * starting, never playing. Verified on Kitchen: a directory station PLAYING, and a URL that
+     * cannot resolve accepted and then SILENT.
+     */
+    suspend fun playStream(
+        groupId: String,
+        url: String,
+        name: String,
+        startMillis: Long = STREAM_START_MILLIS,
+    ): StreamStart {
+        val socket = coordinator(groupId)
+        val startsBefore = _groupStates.value[groupId]?.playStarts ?: 0
+        val opened = socket.command(
+            Frames.onGroup("playbackSession:1", "createSession", groupId),
+            JsonObject().apply {
+                addProperty("appId", APP_ID)
+                addProperty("appContext", "radio")
+            },
+        )
+        val sessionId = opened.asJsonObject.string("sessionId") ?: error("the player opened a session without naming it")
+        socket.command(
+            Frames.onSession("playbackSession:1", "loadStreamUrl", sessionId),
+            JsonObject().apply {
+                addProperty("streamUrl", url)
+                addProperty("playOnCompletion", true)
+                // Where the name the room shows comes from; without it the stream plays nameless.
+                add("stationMetadata", JsonObject().apply {
+                    addProperty("name", name)
+                    addProperty("type", "station")
+                })
+            },
+        )
+        val playing = withTimeoutOrNull(startMillis) {
+            _groupStates.first { all ->
+                all[groupId]?.let { it.playStarts > startsBefore && it.playbackState.isPlaying() } == true
+            }
+        }
+        if (playing != null) return StreamStart.PLAYING
+        // Decided on the last state rather than the first: a room is briefly IDLE between
+        // taking the URL and buffering it, so an early look would condemn every stream.
+        // The Control API has no STOPPED, which is UPnP's word: a stream that will not play is IDLE.
+        return if (_groupStates.value[groupId]?.playbackState == PlaybackStates.IDLE) StreamStart.SILENT
+            else StreamStart.STARTING
+    }
+
+    /**
      * Move players into or out of [groupId]'s group.
      *
      * A refusal is final. **No answer is not**: grouping onto a soundbar on its TV input
@@ -1408,6 +1472,7 @@ class SonosHousehold(
                     it.copy(
                         playbackState = playbackState,
                         ringingAlarm = it.ringingAlarm.takeIf { playbackState.isPlaying() },
+                        playStarts = if (!wasPlaying && playbackState.isPlaying()) it.playStarts + 1 else it.playStarts,
                         queueVersion = body.string("queueVersion") ?: it.queueVersion,
                         // Playing again answers the error; anything short of that leaves it
                         // standing, because a failed stream is followed by IDLE statuses.
@@ -1606,6 +1671,19 @@ internal const val MAX_BACKOFF_MILLIS = 60_000L
 
 /** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
 internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
+
+/**
+ * What became of a stream after the player accepted it. Three answers, because there are three
+ * (x2rock): it played; it was still buffering when the wait ran out, which is not a failure;
+ * or the room sat idle, which is the silent failure of a URL it cannot play.
+ */
+enum class StreamStart { PLAYING, STARTING, SILENT }
+
+/** How long a stream is given to start. Four seconds is ordinary for SomaFM over https (x2rock). */
+internal const val STREAM_START_MILLIS = 10_000L
+
+/** Names this app to the player when it opens a playback session. */
+internal const val APP_ID = "com.rahga.x2rock"
 
 /** What snooze means with no duration given: the clock radio's nine minutes, as x2rock has it. */
 const val SNOOZE_MINUTES = 9

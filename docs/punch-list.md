@@ -312,7 +312,12 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   the JVM against the captures; not yet seen ringing in the app on a TV.* `GetRunningAlarmProperties` (800 means none is
   ringing), `SnoozeAlarm`, and `pause` to stop it (`DestroyAlarm` does not). A remote press is
   the right shape for this; alarm *management* is not (see Tier 5).
-- [ ] **3.8 Radio directory.** Radio Browser API, no key: browse by tag or country, sort by votes
+- [x] **3.8 Radio directory.** *Done 2026-10-02: `RadioDirectory` and a Radio screen, opened
+  from Favorites — Popular, this country, then a chosen list of genres, since the directory's
+  own top tags include `music` and `radio`. `playStream` reports PLAYING, STARTING or SILENT;
+  verified on Kitchen at volume 2 against the live directory, a real station PLAYING and a dead
+  URL SILENT. Not seen in the app on a TV. The optional "Play URL" row is not built: it needs
+  typing, and nothing has asked for it.* Radio Browser API, no key: browse by tag or country, sort by votes
   with `hidebroken=true`, use `url_resolved` never `url`, send a `User-Agent`. Play via
   `playbackSession:1 createSession{appId, appContext}` (group-scoped) → `loadStreamUrl{streamUrl,
   stationMetadata}`; `TRANSITIONING` can last 4s or more; wait up to ~10s for `PLAYING` and
