@@ -8,6 +8,10 @@ import com.rahga.x2rock.lan.MdnsDiscovery
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,14 +61,26 @@ class NsdMdnsDiscovery @Inject constructor(
         }
     }
 
+    /**
+     * One resolve at a time, and never abandoned: before API 34 a second resolve while one is
+     * in flight fails `FAILURE_ALREADY_ACTIVE`, and the system's cannot be cancelled. A window
+     * that runs out mid-resolve therefore waits for that resolve to finish, a few seconds at
+     * most, rather than leaving it to fail the next find's first player.
+     */
     @Suppress("DEPRECATION") // resolveService is deprecated from API 34; this app runs from 23.
     private suspend fun resolve(nsd: NsdManager, service: NsdServiceInfo): NsdServiceInfo? =
-        suspendCancellableCoroutine { cont ->
-            nsd.resolveService(service, object : NsdManager.ResolveListener {
-                override fun onServiceResolved(info: NsdServiceInfo) { if (cont.isActive) cont.resume(info) }
-                override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) { if (cont.isActive) cont.resume(null) }
-            })
+        resolving.withLock {
+            withContext(NonCancellable) {
+                suspendCancellableCoroutine { cont ->
+                    nsd.resolveService(service, object : NsdManager.ResolveListener {
+                        override fun onServiceResolved(info: NsdServiceInfo) { if (cont.isActive) cont.resume(info) }
+                        override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) { if (cont.isActive) cont.resume(null) }
+                    })
+                }
+            }
         }
+
+    private val resolving = Mutex()
 
     private companion object {
         const val SERVICE_TYPE = "_sonos._tcp"
