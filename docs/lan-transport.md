@@ -269,6 +269,17 @@ failure. A `SnoozeAlarm` of `00:01:00` paused the room (`PAUSED_PLAYBACK`) and i
 `Pause` while it rang left the room `STOPPED` and the next ask answered 800: that ends it.
 What `Pause` does to an alarm that is snoozed, not ringing, was not captured. The chime itself
 arrives as `playbackMetadata:1` with a container named `x-rincon-buzzer:0` and no track.
+Seen again 2026-10-03 from the TV app: a nine-minute snooze on a three-minute alarm rang
+back **when the alarm's duration ran out**, 178s after the snooze — the duration counts from
+the scheduled time (x2rock) and seems to end a snooze early too. Alarms set 40–50s ahead fired
+on the second here, where x2rock's firmware fired one set 82s ahead two minutes late.
+
+**Android's XML parser takes no Xerces features.** `DocumentBuilderFactory.setFeature` for
+`disallow-doctype-decl` throws `ParserConfigurationException` on the Shield (Android 11), so
+there no UPnP reply parsed and every fault read as a bare HTTP 500 — unseen because the JVM's
+parser accepts the feature and the live suite runs there. Found 2026-10-03 when the alarm never
+showed; the DOCTYPE guard is now a string check before the parser, and the queue listed on the
+Shield the same afternoon.
 
 ---
 
