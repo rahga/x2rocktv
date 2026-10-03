@@ -202,10 +202,11 @@ private fun QueueList(
 
         val menuEntry = contextMenuEntry
         if (menuEntry != null) {
+            val neighbours = neighbourSlots(entries, menuEntry.trackNumber)
             QueueItemContextMenu(
                 item = menuEntry.item,
-                canMoveUp = neighbourSlots(entries, menuEntry.trackNumber).first != null,
-                canMoveDown = neighbourSlots(entries, menuEntry.trackNumber).second != null,
+                canMoveUp = neighbours.first != null,
+                canMoveDown = neighbours.second != null,
                 onRemove = { onRemoveItem(menuEntry.trackNumber); contextMenuEntry = null },
                 onMoveUp = { onMoveUp(menuEntry.trackNumber); contextMenuEntry = null },
                 onMoveDown = { onMoveDown(menuEntry.trackNumber); contextMenuEntry = null },
