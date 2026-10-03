@@ -421,7 +421,9 @@ class FakePlayer(
             respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
             return
         }
-        refused[command ?: ""]?.let { errorCode ->
+        // Refusals are keyed by command, or by "namespace/command" for one namespace's — "subscribe"
+        // alone would refuse every subscription in the house.
+        (refused["$namespace/$command"] ?: refused[command ?: ""])?.let { errorCode ->
             respond(
                 webSocket, cmdId, namespace, "globalError", success = false,
                 body = JsonObject().apply { addProperty("errorCode", errorCode) },

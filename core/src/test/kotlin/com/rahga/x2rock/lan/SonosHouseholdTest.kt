@@ -590,6 +590,23 @@ class SonosHouseholdTest {
         assertEquals(0, playerSubscribes())
     }
 
+    /**
+     * A soundbar whose port subscribe failed must be tried again, or for the whole session its
+     * empty socket could not be told from a television. Once marked done after its level alone.
+     */
+    @Test fun `a soundbar whose port subscribe failed is tried again at the next catch-up`() = runBlocking<Unit> {
+        fake.refuse("hdmi:1/subscribe")
+        val state = connected()
+        val beam = state.groups.first { it.name == "Guest TV" }.coordinatorId
+        delay(500)
+        fake.allow("hdmi:1/subscribe")
+        fake.clearHistory()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        fake.awaitCommand(timeoutMillis = 5_000) {
+            it.get("namespace")?.asString == "hdmi:1" && it.get("playerId")?.asString == beam
+        }
+    }
+
     /** A member's socket went; its subscriptions went with it, and the next catch-up redoes them. */
     @Test fun `a player whose socket was lost is subscribed again at the next catch-up`() = runBlocking<Unit> {
         val (member, _) = guestTvJoinsKitchen()

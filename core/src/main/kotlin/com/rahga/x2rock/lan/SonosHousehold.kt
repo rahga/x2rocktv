@@ -844,7 +844,11 @@ class SonosHousehold(
         }
         // No reply is not no, here as for a regroup: a coordinator busy with a load can answer
         // late or not at all and do what it was asked. Only a refusal is final; a timeout on
-        // the load or on a press leaves the wait below to judge, by whether the room plays.
+        // the load or on a press leaves the wait below to judge, by whether the room plays —
+        // and, for a load nobody answered, by whether what plays is something *else*: the
+        // presses below would otherwise resume what was paused and pass it off as the item.
+        val before = _groupStates.value[groupId]?.let { it.track?.id to it.container?.name }
+        var loadLost = false
         try {
             coordinator(groupId).command(
                 Frames.onGroup("playback:1", "loadContent", groupId),
@@ -859,7 +863,7 @@ class SonosHousehold(
                 },
             )
         } catch (e: ReplyTimeoutException) {
-            // Judged below.
+            loadLost = true
         }
         val started = withTimeoutOrNull(minOf(settleMillis, LOAD_SETTLE_MILLIS)) {
             while (true) {
@@ -871,7 +875,12 @@ class SonosHousehold(
                     // Judged below.
                 }
                 val playing = withTimeoutOrNull(1_000) {
-                    _groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
+                    _groupStates.first { all ->
+                        all[groupId]?.let { g ->
+                            g.playbackState == PlaybackStates.PLAYING &&
+                                (!loadLost || (g.track?.id to g.container?.name) != before)
+                        } == true
+                    }
                 }
                 if (playing != null) break
             }
@@ -1421,17 +1430,16 @@ class SonosHousehold(
         if (!subscribedPlayers.add(player.id)) return
         val subscribed = runCatching {
             socketForPlayer(player.id).subscribe(Frames.onPlayer("playerVolume:1", "subscribe", player.id))
-        }.isSuccess
-        if (!subscribed) {
-            subscribedPlayers.remove(player.id)
-            return
-        }
-        subscribeHdmi(player)
+        }.isSuccess && subscribeHdmi(player)
+        // Either failing leaves the player to the next catch-up: a soundbar whose port was never
+        // heard from could not tell an empty socket from a television, for the whole session.
+        if (!subscribed) subscribedPlayers.remove(player.id)
     }
 
-    private suspend fun subscribeHdmi(player: Player) {
-        if (HT_PLAYBACK !in player.capabilities.orEmpty()) return
-        runCatching { socketForPlayer(player.id).subscribe(Frames.onPlayer("hdmi:1", "subscribe", player.id)) }
+    /** True once a soundbar's port is subscribed — or at once for a player that has none. */
+    private suspend fun subscribeHdmi(player: Player): Boolean {
+        if (HT_PLAYBACK !in player.capabilities.orEmpty()) return true
+        return runCatching { socketForPlayer(player.id).subscribe(Frames.onPlayer("hdmi:1", "subscribe", player.id)) }.isSuccess
     }
 
     private suspend fun subscribeGroup(group: Group) {
