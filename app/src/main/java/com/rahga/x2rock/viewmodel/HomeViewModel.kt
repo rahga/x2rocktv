@@ -9,6 +9,7 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
+import com.rahga.x2rock.lan.Upnp
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.model.Group
@@ -533,13 +534,13 @@ class HomeViewModel @Inject constructor(
 
     fun stepBass(delta: Int) {
         val tone = _tone.value ?: return
-        val target = (tone.bass + delta).coerceIn(-10, 10)
+        val target = (tone.bass + delta).coerceIn(Upnp.TONE_RANGE)
         if (target != tone.bass) editTone("bass", "change the tone", tone.copy(bass = target)) { household.setBass(it, target) }
     }
 
     fun stepTreble(delta: Int) {
         val tone = _tone.value ?: return
-        val target = (tone.treble + delta).coerceIn(-10, 10)
+        val target = (tone.treble + delta).coerceIn(Upnp.TONE_RANGE)
         if (target != tone.treble) editTone("treble", "change the tone", tone.copy(treble = target)) { household.setTreble(it, target) }
     }
 
