@@ -387,6 +387,22 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 
 ---
 
+## Found by code review, 2026-10-03
+
+Ten findings over the commits since the last push, all checked against the code first; nine
+fixed, each with a test that fails against the old code (`c939d2f`..`acfd1a8`). The one worth
+remembering: **a hold on a row also fired its click on release**, because the hold was timed
+in `dpadLongPress` and the select key never consumed — holding a playlist row appended it and
+then replaced the queue with it. tv-material3's `Card` has its own `onLongClick`, which
+withholds `onClick` after a hold, and the rows use that now; verified on the Shield. Also:
+locale digits in `HH:MM:SS` (Arabic would be refused 402), a replay taking a lost reply for a
+refusal, art refused on a short first read, queue moves landing on tombstones, the sleep
+timer ticking in the view model, the network memory keyed by `activeNetwork` inside
+`onAvailable` (which still names the old network), an alarm asked with UPnP off, and every
+topology change re-subscribing every player. The tenth, a duplicated tone range, is a
+one-liner. Unverified on a device: the Menu key as a row's second action, and the network
+key during a real change of network.
+
 ## Found at home, 2026-10-01
 
 - [x] **Deep links to the running app did nothing.** A link to Bedroom left Kitchen selected:
