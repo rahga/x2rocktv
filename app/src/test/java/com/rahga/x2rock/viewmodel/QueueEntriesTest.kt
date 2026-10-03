@@ -27,6 +27,16 @@ class QueueEntriesTest {
         assertEquals(listOf(1, 3, 4), entries.map { it.trackNumber })
     }
 
+    /** A move goes past what is shown next to it, which across a tombstone is slots away. */
+    @Test
+    fun `neighbours are the entries shown either side, across tombstones`() {
+        val entries = queueEntries(listOf(item("a"), item("b"), item("gone", deleted = true), item("d")))
+        assertEquals(Pair(null, 2), neighbourSlots(entries, 1))
+        assertEquals(Pair(1, 4), neighbourSlots(entries, 2))
+        assertEquals(Pair(2, null), neighbourSlots(entries, 4))
+        assertEquals(Pair(null, null), neighbourSlots(entries, 3))
+    }
+
     @Test
     fun `an all-deleted queue yields nothing`() {
         assertEquals(emptyList<QueueEntry>(), queueEntries(listOf(item("a", deleted = true))))

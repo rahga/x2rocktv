@@ -52,6 +52,7 @@ import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
+import com.rahga.x2rock.viewmodel.neighbourSlots
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -203,8 +204,8 @@ private fun QueueList(
         if (menuEntry != null) {
             QueueItemContextMenu(
                 item = menuEntry.item,
-                canMoveUp = menuEntry.trackNumber > 1,
-                canMoveDown = menuEntry.trackNumber < entries.size,
+                canMoveUp = neighbourSlots(entries, menuEntry.trackNumber).first != null,
+                canMoveDown = neighbourSlots(entries, menuEntry.trackNumber).second != null,
                 onRemove = { onRemoveItem(menuEntry.trackNumber); contextMenuEntry = null },
                 onMoveUp = { onMoveUp(menuEntry.trackNumber); contextMenuEntry = null },
                 onMoveDown = { onMoveDown(menuEntry.trackNumber); contextMenuEntry = null },
