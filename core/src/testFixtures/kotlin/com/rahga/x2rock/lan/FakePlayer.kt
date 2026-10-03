@@ -427,6 +427,11 @@ class FakePlayer(
             respond(webSocket, cmdId, namespace, "playlistsList", success = true, body = fixture("getPlaylists.reply.json"))
             return
         }
+        // Captured off Kitchen: the session the commands after it are addressed by.
+        if (namespace == "playbackSession:1" && command == "createSession") {
+            respond(webSocket, cmdId, namespace, "sessionStatus", success = true, body = fixture("createSession.reply.json"))
+            return
+        }
         if (namespace == "groups:1" && command == "getGroups") {
             respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
             return

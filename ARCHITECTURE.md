@@ -65,7 +65,9 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into
 │   └── PlayModes.kt               repeat flags ↔ the app's enum
 │
-└── smapi/                         the one path that leaves the LAN
+├── radio/RadioDirectory.kt        Radio Browser: stations by votes, genre or country
+│
+└── smapi/                         a service's own server, for ratings
     ├── Smapi.kt                   presentation map, getExtendedMetadata, rateItem
     ├── RatingsCatalogue.kt        a service's rating rules, fetched on a miss
     └── RatingsStore.kt            where those rules are remembered (seam)
@@ -109,13 +111,15 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── RoomPanel.kt           everything one room can be told to do
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
 │       ├── FavoritesScreen.kt     the household's favourites — click to load
+│       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       └── NowPlayingBar.kt       a compact strip on the queue and favourites screens
 │
 └── viewmodel/
     ├── HomeViewModel.kt
     ├── PlayerViewModel.kt
     ├── QueueViewModel.kt
-    └── FavoritesViewModel.kt
+    ├── FavoritesViewModel.kt
+    └── RadioViewModel.kt
 ```
 
 ---

@@ -253,6 +253,14 @@ A player answering **HTTP 403** on 1400 has UPnP disabled in the Sonos app under
 Account → Privacy and Security → Connection Security → UPnP (the path x2rock confirmed on
 iPhone and Android, 2026-09-28; an older one was given here).
 
+**A directory station plays through `playbackSession:1`**, verified on Kitchen 2026-10-02.
+`createSession {appId, appContext}` is group-scoped and answers a `sessionStatus` naming a
+`sessionId`; `loadStreamUrl {streamUrl, playOnCompletion, stationMetadata}` is then addressed by
+that **`sessionId`**, not the group. The player accepts a URL it cannot play — a dead one went
+straight to IDLE — so whether it played is read from the transport, which `playStream` does by
+counting starts of play. With `stationMetadata.name` given, the room named the container by
+it; a stream loaded without one is named by its host.
+
 **A ringing alarm is asked about, on the group's coordinator** (`AVTransport`, captured on
 Kitchen 2026-10-02 with the built-in chime at volume 3). `GetRunningAlarmProperties` answers
 `AlarmID` while it rings, and the fault **800** when nothing is running — an answer, not a

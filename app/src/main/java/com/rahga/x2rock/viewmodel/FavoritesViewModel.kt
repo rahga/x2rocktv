@@ -21,7 +21,8 @@ class FavoritesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    /** The room this screen plays into; the Radio screen is opened on the same one. */
+    val groupId: String = checkNotNull(savedStateHandle["groupId"])
 
     sealed interface UiState {
         data object Loading : UiState

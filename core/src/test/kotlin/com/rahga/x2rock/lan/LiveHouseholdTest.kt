@@ -472,6 +472,40 @@ class LiveHouseholdTest {
     }
 
     /**
+     * Only with `-Dx2rock.live.room=<room>`, at volume 2, and put back. A real station from the
+     * directory must be reported PLAYING, and a URL that cannot resolve SILENT: the player takes
+     * both without complaint, so the difference is the whole point of [SonosHousehold.playStream].
+     * Prints what the room named the station, which is not what `stationMetadata` said.
+     */
+    @Test fun `a directory station plays, and a dead URL is reported silent`() = runBlocking<Unit> {
+        assumeTrue("set -Dx2rock.live.room=<room> to allow changing a speaker", mutableRoom != null)
+        connected()
+        val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
+            ?: error("no room named $mutableRoom in this household")
+        val station = com.rahga.x2rock.radio.RadioDirectory(okhttp3.OkHttpClient())
+            .stations(tag = "ambient", limit = 5).first()
+        withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
+        val before = household.mediaInfo(group.id)
+        val wasPlaying = household.groupState(group.id).playbackState == PlaybackStates.PLAYING
+        val level = household.groupState(group.id).volume?.volume
+        try {
+            household.setGroupVolume(group.id, 2)
+            // The dead one first, so a room that had nothing to restore is left naming a real
+            // station rather than "Dead".
+            assertEquals(StreamStart.SILENT, household.playStream(group.id, "https://stream.invalid/dead.mp3", "Dead"))
+            assertEquals(StreamStart.PLAYING, household.playStream(group.id, station.url, station.name))
+            val playing = household.groupState(group.id)
+            println("live: \"${station.name}\" played; the room calls it ${playing.container?.name} (${playing.container?.type})")
+        } finally {
+            runCatching {
+                household.restoreSource(group.id, before)
+                if (wasPlaying) resume(group.id) else household.pause(group.id)
+            }
+            level?.let { restoreVolume(group.id, it) }
+        }
+    }
+
+    /**
      * Only with `-Dx2rock.live.room=<room>`, and everything put back: the queue is saved as a
      * playlist first, restored from it at the end, and the playlist deleted. Checks the save's
      * real reply (the unit test's is built), a move and its undo, and a clear. Tracks are told

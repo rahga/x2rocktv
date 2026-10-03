@@ -103,6 +103,16 @@ object Frames {
         addProperty("playerId", playerId)
     }
 
+    /**
+     * A command header for a session `playbackSession:1 createSession` opened. Addressed by the
+     * session, not the group: the player named it, and answers on the same coordinator socket.
+     */
+    fun onSession(namespace: String, command: String, sessionId: String) = JsonObject().apply {
+        addProperty("namespace", namespace)
+        addProperty("command", command)
+        addProperty("sessionId", sessionId)
+    }
+
     /** A command header aimed at the household. Any player's socket will do. */
     fun onHousehold(namespace: String, command: String, householdId: String) = JsonObject().apply {
         addProperty("namespace", namespace)

@@ -16,6 +16,7 @@ import com.rahga.x2rock.net.PrefsSeedStore
 import com.rahga.x2rock.net.NetworkIdentity
 import com.rahga.x2rock.net.NsdMdnsDiscovery
 import com.rahga.x2rock.net.WifiMulticastGate
+import com.rahga.x2rock.radio.RadioDirectory
 import com.rahga.x2rock.store.Preferences
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -91,6 +92,10 @@ object AppModule {
     @Singleton
     @InternetHttp
     fun provideInternetClient(): OkHttpClient = OkHttpClient()
+
+    @Provides
+    @Singleton
+    fun provideRadioDirectory(@InternetHttp client: OkHttpClient): RadioDirectory = RadioDirectory(client)
 
     @Provides
     @Singleton
