@@ -280,6 +280,23 @@ class FakePlayer(
         emit("groups:1", "groups", topology, groupId = null)
     }
 
+    /**
+     * Push an event the way a player sends one about *itself* when its header names nobody: on
+     * that player's own socket, with `playerId` null. A Beam's `hdmi:1` event is shaped so
+     * (captured 2026-10-02); pushing one with the id in the header, as this fake used to, let a
+     * handler that needed it pass here and drop every real one.
+     */
+    fun pushFromPlayer(playerId: String, namespace: String, type: String, body: JsonElement) {
+        val header = JsonObject().apply {
+            addProperty("namespace", namespace)
+            addProperty("type", type)
+            addProperty("householdId", householdId)
+            add("playerId", com.google.gson.JsonNull.INSTANCE)
+        }
+        val ws = sockets[PlayerNames.localHostname(playerId)!!.lowercase()] ?: error("no connection open to $playerId")
+        ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
+    }
+
     /** Push a captured event body verbatim. */
     fun pushFixture(type: String, groupId: String? = null) {
         emit(namespaceFor(type), type, fixture("event.$type.json"), groupId)
