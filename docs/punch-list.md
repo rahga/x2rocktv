@@ -418,6 +418,14 @@ countdown sat on the wall clock, which NTP steps after boot (monotonic now); an 
 could outlive its window and fail the next find's first player; and two tidy-ups. Unverified on
 a device: the default-network callback, and the resolve lock.
 
+A simplification pass followed (2026-10-04, `6be3601`..): one XML parser for UPnP and SMAPI
+— the SMAPI copy still had the Android `setFeature` fault — and one of each lookup, preamble,
+notice and test helper that had been written several times; eleven REST-era models and a few
+dead parameters went. Behaviour unchanged, 404 tests green. Left alone, because each would
+change behaviour: re-reading the queue less after an edit, threading `UpdateID` so a stale
+queue is refused, fast-refusing every SOAP call with UPnP off, moving the fixed-volume guard
+into core, and one app-wide notice banner.
+
 ## Found at home, 2026-10-01
 
 - [x] **Deep links to the running app did nothing.** A link to Bedroom left Kitchen selected:

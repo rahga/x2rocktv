@@ -62,6 +62,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── SeedStore.kt               the last reachable player (per network), for a warm start
 │   ├── SonosHousehold.kt          state flows, commands, subscriptions, reconnection
 │   ├── Upnp.kt                    cleartext 1400: queue, TV input, EQ, service list
+│   ├── Xml.kt                     the one parser for UPnP and SMAPI replies, DOCTYPE refused by hand
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into
 │   └── PlayModes.kt               repeat flags ↔ the app's enum
 │
