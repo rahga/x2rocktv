@@ -327,25 +327,21 @@ class PlayerViewModel @Inject constructor(
      * send the same command again — two presses landing on *on* rather than back where they
      * started.
      */
-    fun toggleNightMode() {
-        val ht = _homeTheater.value ?: return
-        val wanted = !ht.nightMode
-        _homeTheater.value = ht.copy(nightMode = wanted)
-        viewModelScope.launch {
-            runCatching { household.setNightMode(ht.soundbarId, wanted) }
-                .onFailure { report("change Night Sound", it) }
-            loadHomeTheater()
-        }
+    fun toggleNightMode() = editHomeTheater("change Night Sound", { it.copy(nightMode = !it.nightMode) }) { id, ht ->
+        household.setNightMode(id, ht.nightMode)
     }
 
     /** See [toggleNightMode]: applied locally first, then reconciled. */
-    fun toggleSpeechEnhancement() {
-        val ht = _homeTheater.value ?: return
-        val wanted = !ht.speechEnhancement
-        _homeTheater.value = ht.copy(speechEnhancement = wanted)
+    fun toggleSpeechEnhancement() = editHomeTheater("change Speech Enhancement", { it.copy(speechEnhancement = !it.speechEnhancement) }) { id, ht ->
+        household.setSpeechEnhancement(id, ht.speechEnhancement)
+    }
+
+    /** Show [edit] now, send it, and read back what the soundbar then reports. */
+    private fun editHomeTheater(what: String, edit: (HomeTheaterUi) -> HomeTheaterUi, send: suspend (String, HomeTheaterUi) -> Unit) {
+        val edited = edit(_homeTheater.value ?: return)
+        _homeTheater.value = edited
         viewModelScope.launch {
-            runCatching { household.setSpeechEnhancement(ht.soundbarId, wanted) }
-                .onFailure { report("change Speech Enhancement", it) }
+            runCatching { send(edited.soundbarId, edited) }.onFailure { notice.failure(what, it) }
             loadHomeTheater()
         }
     }
@@ -445,7 +441,7 @@ class PlayerViewModel @Inject constructor(
         seekDebounceJob?.cancel()
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.seek(groupId, target) }.onFailure { report("seek", it) }
+            runCatching { household.seek(groupId, target) }.onFailure { notice.failure("seek", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a newer
             // press throws in here, and this is not a suspension point, so clearing
             // unconditionally would delete the target that press just wrote — and the press
@@ -485,7 +481,7 @@ class PlayerViewModel @Inject constructor(
             val step = pendingVolumeDelta
             pendingVolumeDelta = 0
             if (step == 0) return@launch
-            runCatching { household.adjustGroupVolume(groupId, step) }.onFailure { report("change the volume", it) }
+            runCatching { household.adjustGroupVolume(groupId, step) }.onFailure { notice.failure("change the volume", it) }
         }
     }
 
@@ -512,7 +508,7 @@ class PlayerViewModel @Inject constructor(
         )
         viewModelScope.launch {
             runCatching { household.setPlayMode(groupId, transform(current)) }
-                .onFailure { report("change the play mode", it) }
+                .onFailure { notice.failure("change the play mode", it) }
         }
     }
 
@@ -526,7 +522,7 @@ class PlayerViewModel @Inject constructor(
             val step = pendingPlayerDeltas.remove(playerId) ?: return@launch
             if (step == 0) return@launch
             runCatching { household.adjustPlayerVolume(playerId, step) }
-                .onFailure { report("change that speaker's volume", it) }
+                .onFailure { notice.failure("change that speaker's volume", it) }
         }
     }
 
@@ -534,7 +530,7 @@ class PlayerViewModel @Inject constructor(
         val current = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
         viewModelScope.launch {
             runCatching { household.setPlayerMute(playerId, !current.muted) }
-                .onFailure { report(if (current.muted) "unmute that speaker" else "mute that speaker", it) }
+                .onFailure { notice.failure(if (current.muted) "unmute that speaker" else "mute that speaker", it) }
         }
     }
 
@@ -552,7 +548,7 @@ class PlayerViewModel @Inject constructor(
     private fun changeSleepTimer(minutes: Int?, what: String) {
         val groupId = _groupId.value ?: return
         viewModelScope.launch {
-            runCatching { household.setSleepTimer(groupId, minutes) }.onFailure { report(what, it) }
+            runCatching { household.setSleepTimer(groupId, minutes) }.onFailure { notice.failure(what, it) }
             loadSleepTimer()
         }
     }
@@ -594,13 +590,9 @@ class PlayerViewModel @Inject constructor(
 
     private fun command(what: String, block: suspend (String) -> Unit) {
         val groupId = _groupId.value ?: return
-        viewModelScope.launch { runCatching { block(groupId) }.onFailure { report(what, it) } }
+        viewModelScope.launch { runCatching { block(groupId) }.onFailure { notice.failure(what, it) } }
     }
 
-    /** Says why [what] failed, unless it was only cancelled by a newer press. */
-    private fun report(what: String, e: Throwable) {
-        failureNotice(what, e)?.let(notice::post)
-    }
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L

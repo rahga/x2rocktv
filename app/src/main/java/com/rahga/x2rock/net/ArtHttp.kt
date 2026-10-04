@@ -43,6 +43,7 @@ object ArtHttp {
     const val TIMEOUT_SECONDS = 8L
     const val PLAYER_PORT = 1400
     const val MAX_REDIRECTS = 3
+    private val IPV4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
     /** Routes each request to the client it belongs on. [playerPort] is 1400 except in tests. */
     fun callFactory(lan: OkHttpClient, internet: OkHttpClient, playerPort: Int = PLAYER_PORT): Call.Factory {
@@ -74,7 +75,7 @@ object ArtHttp {
 
     /** A literal address only: a name is never resolved here, which would be a lookup to judge a lookup. */
     private fun isPrivateIpv4(host: String): Boolean {
-        if (!host.matches(Regex("""\d{1,3}(\.\d{1,3}){3}"""))) return false
+        if (!host.matches(IPV4)) return false
         val address = runCatching { InetAddress.getByName(host) }.getOrNull() as? Inet4Address ?: return false
         return address.isSiteLocalAddress
     }

@@ -9,6 +9,10 @@ import com.rahga.x2rock.smapi.RatingsStore
 import com.rahga.x2rock.store.Preferences
 import com.rahga.x2rock.store.SharedPreferencesStore
 import dagger.Binds
+import com.rahga.x2rock.lan.MdnsDiscovery
+import com.rahga.x2rock.lan.MulticastGate
+import com.rahga.x2rock.net.NsdMdnsDiscovery
+import com.rahga.x2rock.net.WifiMulticastGate
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -27,6 +31,8 @@ abstract class StoreModule {
     @Binds abstract fun bindPreferences(impl: SharedPreferencesStore): Preferences
 
     @Binds abstract fun bindChannelSync(impl: RoomsChannelSync): ChannelSync
+    @Binds abstract fun bindMulticastGate(impl: WifiMulticastGate): MulticastGate
+    @Binds abstract fun bindMdnsDiscovery(impl: NsdMdnsDiscovery): MdnsDiscovery
 
     @Binds abstract fun bindNowPlayingPublisher(impl: MediaSessionPublisher): NowPlayingPublisher
 

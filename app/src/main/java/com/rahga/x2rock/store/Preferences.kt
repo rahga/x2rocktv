@@ -16,8 +16,6 @@ import javax.inject.Singleton
 interface Preferences {
     fun getString(key: String): String?
     fun putString(key: String, value: String?)
-    fun getStringSet(key: String): Set<String>
-    fun putStringSet(key: String, value: Set<String>)
 }
 
 @Singleton
@@ -33,15 +31,4 @@ class SharedPreferencesStore @Inject constructor(
         prefs.edit().putString(key, value).apply()
     }
 
-    /**
-     * Copied deliberately: `SharedPreferences` hands back its own live instance, documents
-     * that it must not be modified, and this value ends up parked in a `StateFlow` the UI
-     * reads.
-     */
-    override fun getStringSet(key: String): Set<String> =
-        prefs.getStringSet(key, emptySet())?.toSet() ?: emptySet()
-
-    override fun putStringSet(key: String, value: Set<String>) {
-        prefs.edit().putStringSet(key, value).apply()
-    }
 }

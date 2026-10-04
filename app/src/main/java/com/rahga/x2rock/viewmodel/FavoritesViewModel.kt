@@ -12,6 +12,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -55,54 +57,40 @@ class FavoritesViewModel @Inject constructor(
 
     fun reload() = load()
 
-    fun loadFavorite(favoriteId: String, onDone: () -> Unit) {
-        // One at a time: the rows are never disabled — a disabled tv-material3 row keeps focus
-        // and loses its highlight — so this is where a second press is turned away.
-        if (loadingFavoriteId.value != null) return
-        viewModelScope.launch {
-            loadingFavoriteId.value = favoriteId
-            val loaded = runCatching { household.loadFavorite(groupId, favoriteId) }
-            loadingFavoriteId.value = null
-            // Back to the room only once it worked. On failure the list stays, so the reason
-            // is said where the viewer is and another favourite is one press away.
-            loaded
-                .onSuccess { onDone() }
-                .onFailure { e -> failureNotice("play that favourite", e)?.let(_notice::post) }
-        }
-    }
+    fun loadFavorite(favoriteId: String, onDone: () -> Unit) =
+        startOne(favoriteId, "play that favourite", onDone) { household.loadFavorite(groupId, favoriteId) }
 
     /** Play a Sonos playlist in place of the queue, the same way a favourite is played. */
-    fun loadPlaylist(playlistId: String, onDone: () -> Unit) {
-        if (loadingFavoriteId.value != null) return
-        viewModelScope.launch {
-            loadingFavoriteId.value = playlistKey(playlistId)
-            val loaded = runCatching { household.loadPlaylist(groupId, playlistId) }
-            loadingFavoriteId.value = null
-            loaded
-                .onSuccess { onDone() }
-                .onFailure { e -> failureNotice("play that playlist", e)?.let(_notice::post) }
-        }
-    }
+    fun loadPlaylist(playlistId: String, onDone: () -> Unit) =
+        startOne(playlistKey(playlistId), "play that playlist", onDone) { household.loadPlaylist(groupId, playlistId) }
+
+    /** Play something from recently played again. See `SonosHousehold.replay`. */
+    fun replay(item: HistoryItem, onDone: () -> Unit) =
+        startOne(recentKey(item), "play ${item.name}", onDone) { household.replay(groupId, item) }
 
     /** Add a playlist to the end of the queue, leaving what plays alone. */
     fun appendPlaylist(playlist: Playlist) {
         viewModelScope.launch {
             runCatching { household.appendPlaylist(groupId, playlist.id) }
                 .onSuccess { _notice.post("Added \"${playlist.name}\" to the queue") }
-                .onFailure { e -> failureNotice("add that playlist", e)?.let(_notice::post) }
+                .onFailure { _notice.failure("add that playlist", it) }
         }
     }
 
-    /** Play something from recently played again. See `SonosHousehold.replay`. */
-    fun replay(item: HistoryItem, onDone: () -> Unit) {
+    /**
+     * Start one thing playing, marked by [key] while it loads. One at a time: the rows are
+     * never disabled — a disabled tv-material3 row keeps focus and loses its highlight — so
+     * this is where a second press is turned away. Back to the room only once it worked; on
+     * failure the list stays, so the reason is said where the viewer is and another choice is
+     * one press away.
+     */
+    private fun startOne(key: String, what: String, onDone: () -> Unit, block: suspend () -> Unit) {
         if (loadingFavoriteId.value != null) return
         viewModelScope.launch {
-            loadingFavoriteId.value = recentKey(item)
-            val played = runCatching { household.replay(groupId, item) }
+            loadingFavoriteId.value = key
+            val started = runCatching { block() }
             loadingFavoriteId.value = null
-            played
-                .onSuccess { onDone() }
-                .onFailure { e -> failureNotice("play ${item.name}", e)?.let(_notice::post) }
+            started.onSuccess { onDone() }.onFailure { _notice.failure(what, it) }
         }
     }
 
@@ -113,16 +101,21 @@ class FavoritesViewModel @Inject constructor(
                 // Hidden, not greyed: a favourite whose service was removed cannot be played,
                 // and only the Sonos app can delete or re-add it, so a row for it would be one
                 // with nothing behind it. Re-add the service and they return by themselves.
-                val favs = household.favorites().let { it.copy(items = it.items.filter { f -> f.playable }) }
+                // Three reads of the household, none depending on another, so they go out
+                // together: the screen waits for the slowest rather than the sum.
+                val (favs, playlists, history) = coroutineScope {
+                    val favs = async { household.favorites().let { it.copy(items = it.items.filter { f -> f.playable }) } }
+                    // Its own read, and allowed to fail on its own: no playlists must not mean
+                    // no favourites.
+                    val playlists = async { runCatching { household.playlists().playlists }.getOrDefault(emptyList()) }
+                    // Also its own read. With the Sonos app's Personalization off, the household
+                    // refuses it with ERROR_DISALLOWED_BY_POLICY — said, rather than an empty list.
+                    val history = async { runCatching { household.history() } }
+                    Triple(favs.await(), playlists.await(), history.await())
+                }
                 // What is playing comes from the subscription, so only the list is fetched.
                 val containerName = household.groupState(groupId).container?.name
                 val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
-                // Its own read, and allowed to fail on its own: no playlists must not mean no
-                // favourites.
-                val playlists = runCatching { household.playlists().playlists }.getOrDefault(emptyList())
-                // Also its own read. With the Sonos app's Personalization off, the household
-                // refuses it with ERROR_DISALLOWED_BY_POLICY — said, rather than an empty list.
-                val history = runCatching { household.history() }
                 // Not de-duplicated by name: two "The Main Mix" in the office history are two
                 // different Radio Paradise streams, with different ids.
                 val recent = history.getOrDefault(emptyList()).filter { it.playable }

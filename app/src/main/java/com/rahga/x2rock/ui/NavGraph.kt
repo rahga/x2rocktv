@@ -22,7 +22,7 @@ import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
 @Composable
-fun X2RockNavGraph(startDestination: String) {
+fun X2RockNavGraph() {
     val navController = rememberNavController()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
@@ -33,7 +33,7 @@ fun X2RockNavGraph(startDestination: String) {
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            homeViewModel.setActive(true)
+            homeViewModel.connect()
         }
     }
 
@@ -45,7 +45,7 @@ fun X2RockNavGraph(startDestination: String) {
         }
     }
 
-    NavHost(navController = navController, startDestination = startDestination) {
+    NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             HomeScreen(
                 onOpenQueue = { groupId ->

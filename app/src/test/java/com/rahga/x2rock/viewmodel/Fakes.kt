@@ -13,11 +13,8 @@ val testClock = MonotonicClock { System.nanoTime() / 1_000_000 }
 /** In-memory storage, so the stores are just their logic. */
 class FakePreferences : Preferences {
     private val strings = mutableMapOf<String, String?>()
-    private val sets = mutableMapOf<String, Set<String>>()
     override fun getString(key: String) = strings[key]
     override fun putString(key: String, value: String?) { strings[key] = value }
-    override fun getStringSet(key: String) = sets[key] ?: emptySet()
-    override fun putStringSet(key: String, value: Set<String>) { sets[key] = value }
 }
 
 class RecordingChannelSync : ChannelSync {

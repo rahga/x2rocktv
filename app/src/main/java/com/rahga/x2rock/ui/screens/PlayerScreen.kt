@@ -39,6 +39,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -253,20 +254,7 @@ private fun TrackInfo(state: PlayerUiState) {
                 // A station logo is shown where there is one — many services carry it — and
                 // this stands in where there is not. A stream loaded by its URL really does
                 // send `images: []`, so there is nothing to fetch and nothing to wait for.
-                Box(
-                    modifier = Modifier
-                        .size(200.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Radio,
-                        contentDescription = null,
-                        modifier = Modifier.size(88.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                }
+                GlyphTile(Icons.Default.Radio)
                 Spacer(modifier = Modifier.width(32.dp))
             }
             Column {
@@ -564,22 +552,14 @@ private fun PlaybackControls(
                 modifier = if (hasContent) Modifier
                     else Modifier.focusRequester(playPauseFocusRequester),
             ) { Text("Favorites") }
-            // Sonos's own timer, on AVTransport: with UPnP off there is none to set.
-            if (!state.upnpOff) SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
         VolumeRow(state, viewModel, exitLeftFocusRequester)
 
-        if (state.playerVolumes.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Speakers", style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            state.playerVolumes.forEach { entry ->
-                PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
-            }
-        }
+        SpeakerRows(state, viewModel, exitLeftFocusRequester)
     }
 }
 
@@ -656,20 +636,7 @@ private fun TvInfo(state: PlayerUiState) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(200.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Tv,
-                    contentDescription = null,
-                    modifier = Modifier.size(88.dp),
-                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                )
-            }
+            GlyphTile(Icons.Default.Tv)
             Spacer(modifier = Modifier.width(32.dp))
             Column {
                 Text("TV", style = MaterialTheme.typography.displaySmall)
@@ -757,17 +724,10 @@ private fun TvControls(
                 onClick = onOpenFavorites,
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Favorites") }
-            if (!state.upnpOff) SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
 
-        if (state.playerVolumes.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Text("Speakers", style = MaterialTheme.typography.titleSmall)
-            Spacer(modifier = Modifier.height(8.dp))
-            state.playerVolumes.forEach { entry ->
-                PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
-            }
-        }
+        SpeakerRows(state, viewModel, exitLeftFocusRequester)
     }
 }
 
@@ -880,10 +840,47 @@ private fun SleepTimerPickerOverlay(
     }
 }
 
-/** The sleep timer's one button: what is left and a cancel while it runs, the picker otherwise. */
+/** Each speaker's own level, for a group of more than one. Drawn under both panes' volume row. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SpeakerRows(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+    if (state.playerVolumes.isEmpty()) return
+    Spacer(modifier = Modifier.height(24.dp))
+    Text("Speakers", style = MaterialTheme.typography.titleSmall)
+    Spacer(modifier = Modifier.height(8.dp))
+    state.playerVolumes.forEach { entry ->
+        PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
+    }
+}
+
+/** The art tile with a glyph for the source in it, where the source sends no image of its own. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun GlyphTile(icon: ImageVector) {
+    Box(
+        modifier = Modifier
+            .size(200.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(88.dp),
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        )
+    }
+}
+
+/**
+ * The sleep timer's one button: what is left and a cancel while it runs, the picker otherwise.
+ * Sonos's own timer, on AVTransport: with UPnP off there is none to set, and no button.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SleepTimerButton(state: PlayerUiState, viewModel: PlayerViewModel, onOpenSleepTimer: () -> Unit) {
+    if (state.upnpOff) return
     val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
     AppButton(onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() }) {
         Text(if (sleepLeft != null) "Sleep: ${sleepLeft.toTimeString()}" else "Sleep Timer")

@@ -90,7 +90,7 @@ class RadioViewModel @Inject constructor(
                     if (started == StreamStart.SILENT) _notice.post(silentNotice(station))
                     else onDone()
                 }
-                .onFailure { e -> failureNotice("play ${station.name}", e)?.let(_notice::post) }
+                .onFailure { _notice.failure("play ${station.name}", it) }
         }
     }
 }

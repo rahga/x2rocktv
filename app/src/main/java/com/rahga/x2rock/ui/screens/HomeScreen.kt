@@ -174,7 +174,7 @@ fun HomeScreen(
                     onOpenPanel = { panelGroup = it },
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onRetry = { homeViewModel.setActive(true) },
+                    onRetry = { homeViewModel.connect() },
                     onChooseHousehold = { homeViewModel.chooseHousehold(it) }
                 )
             }
