@@ -228,9 +228,7 @@ class RatingsTest {
         assertEquals(0, fake.commandsNamed("skipToNextTrack"))
 
         shouldSkip = true
-        val outcome = household.rate(groupId, up = false)
-        assertTrue(outcome.shouldSkip)
-        assertTrue(outcome.skipped)
+        assertTrue(household.rate(groupId, up = false).skipped)
         fake.awaitCommand { it.get("command")?.asString == "skipToNextTrack" }
         Unit
     }

@@ -65,13 +65,15 @@ object Discovery {
      */
     fun fromSonosTxt(txt: Map<String, String>, resolved: InetAddress? = null): DiscoveredPlayer? {
         val id = txt["uuid"]?.takeIf { it.startsWith("RINCON_") } ?: return null
-        val address = txt["location"]
-            ?.let { runCatching { java.net.URI(it).host }.getOrNull() }
-            ?.let { runCatching { InetAddress.getByName(it) }.getOrNull() }
-            ?: resolved
-            ?: return null
+        val address = addressOf(txt["location"], fallback = resolved) ?: return null
         return DiscoveredPlayer(id, address, txt["mhhid"]?.takeIf { it.contains('.') })
     }
+
+    /** The host a location URL names, or where the record came from when it names none. */
+    private fun addressOf(location: String?, fallback: InetAddress?): InetAddress? =
+        location?.let { runCatching { URI(it).host }.getOrNull() }
+            ?.let { runCatching { InetAddress.getByName(it) }.getOrNull() }
+            ?: fallback
 
     private fun mSearch(mx: Int) =
         "M-SEARCH * HTTP/1.1\r\n" +
@@ -84,16 +86,11 @@ object Discovery {
      * Players that answered, in reply order, one entry per player id.
      *
      * Returns more hosts than there are rooms: surrounds and subs answer too, and they are
-     * `Invisible` in group topology. Any of them is a usable entry point.
-     *
-     * @param stopAfterFirst return as soon as any player answers. Reaching one is enough to
-     *   connect — `getGroups` reports the rest — so a start need not sit out the whole
-     *   window. Pass false only when the full inventory is the point.
+     * `Invisible` in group topology. Any of them is a usable entry point. The whole window is
+     * waited out, because a network can hold two households and the first to answer is not a
+     * choice: see `SonosHousehold.findEntryPoint`.
      */
-    suspend fun findPlayers(
-        timeoutMillis: Int = 3_000,
-        stopAfterFirst: Boolean = false,
-    ): List<DiscoveredPlayer> = withContext(Dispatchers.IO) {
+    suspend fun findPlayers(timeoutMillis: Int = 3_000): List<DiscoveredPlayer> = withContext(Dispatchers.IO) {
         val found = LinkedHashMap<String, DiscoveredPlayer>()
         DatagramSocket().use { socket ->
             socket.soTimeout = timeoutMillis
@@ -113,7 +110,6 @@ object Discovery {
                 }
                 parse(String(packet.data, 0, packet.length), packet.address)
                     ?.let { found.putIfAbsent(it.id, it) }
-                if (stopAfterFirst && found.isNotEmpty()) break
             }
         }
         found.values.toList()
@@ -148,11 +144,7 @@ object Discovery {
             ?.takeIf { it.startsWith("RINCON_") }
             ?: return null
 
-        val address = headers["LOCATION"]
-            ?.let { runCatching { URI(it).host }.getOrNull() }
-            ?.let { runCatching { InetAddress.getByName(it) }.getOrNull() }
-            ?: source
-            ?: return null
+        val address = addressOf(headers["LOCATION"], fallback = source) ?: return null
 
         return DiscoveredPlayer(id, address, headers["HOUSEHOLD.SMARTSPEAKER.AUDIO"])
     }

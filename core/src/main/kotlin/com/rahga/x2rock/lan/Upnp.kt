@@ -14,10 +14,8 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.w3c.dom.Element
 import org.w3c.dom.Node
-import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * The queue, which the Control API does not have.
@@ -100,18 +98,7 @@ class Upnp(
 
     suspend fun browseQueue(hostname: String, start: Int = 0, count: Int = MAX_ITEMS): QueueResponse =
         withContext(Dispatchers.IO) {
-            val response = soap(
-                hostname, Service.CONTENT_DIRECTORY, "Browse",
-                listOf(
-                    "ObjectID" to "Q:0",
-                    "BrowseFlag" to "BrowseDirectChildren",
-                    "Filter" to "*",
-                    "StartingIndex" to start.toString(),
-                    "RequestedCount" to count.toString(),
-                    "SortCriteria" to "",
-                ),
-            )
-            val envelope = parse(response)
+            val envelope = browse(hostname, start, count)
             val total = envelope.text("TotalMatches")?.toIntOrNull() ?: 0
             // The DIDL document arrives as escaped text inside <Result>, so one layer of
             // unescaping has already happened and what is left is XML to parse again.
@@ -384,16 +371,22 @@ class Upnp(
      * which is exactly what should happen when someone else is editing it — so the id is
      * read immediately before use rather than cached.
      */
-    private suspend fun currentUpdateId(hostname: String): String {
-        val response = soap(
+    private fun currentUpdateId(hostname: String): String = browse(hostname, 0, 1).text("UpdateID") ?: "0"
+
+    /** `ContentDirectory Browse` of the queue, `Q:0`, from [start] for up to [count] items. */
+    private fun browse(hostname: String, start: Int, count: Int): Element = parse(
+        soap(
             hostname, Service.CONTENT_DIRECTORY, "Browse",
             listOf(
-                "ObjectID" to "Q:0", "BrowseFlag" to "BrowseDirectChildren", "Filter" to "*",
-                "StartingIndex" to "0", "RequestedCount" to "1", "SortCriteria" to "",
+                "ObjectID" to "Q:0",
+                "BrowseFlag" to "BrowseDirectChildren",
+                "Filter" to "*",
+                "StartingIndex" to start.toString(),
+                "RequestedCount" to count.toString(),
+                "SortCriteria" to "",
             ),
-        )
-        return parse(response).text("UpdateID") ?: "0"
-    }
+        ),
+    )
 
     // ---------------------------------------------------------------- SOAP
 
@@ -408,7 +401,7 @@ class Upnp(
         require(PlayerNames.isLocalName(hostname)) {
             "UPnP must be addressed by a .local name: cleartext is only permitted for those"
         }
-        val params = args.joinToString("") { (name, value) -> "<$name>${escape(value)}</$name>" }
+        val params = args.joinToString("") { (name, value) -> "<$name>${Xml.escape(value)}</$name>" }
         val envelope = """<?xml version="1.0"?>""" +
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"""" +
             """ s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body>""" +
@@ -444,25 +437,7 @@ class Upnp(
 
     // ---------------------------------------------------------------- XML
 
-    /**
-     * These are LAN replies, but a malformed one must not be able to reach out, so a DOCTYPE is
-     * refused before any parser sees it. Refused *here*, by hand: Android's
-     * `DocumentBuilderFactory` accepts none of Xerces's features, and `setFeature` for the one
-     * that forbids DOCTYPEs threw on every call on the Shield (Android 11) — so there no UPnP
-     * reply parsed at all: no queue, no sleep timer, no alarm, and every fault read as a bare
-     * HTTP 500. Seen 2026-10-03; the JVM, where the feature exists, never could show it. The
-     * feature is still asked for where it is understood.
-     */
-    private fun parse(xml: String): Element {
-        if (DOCTYPE.containsMatchIn(xml)) throw IOException("refusing a UPnP reply that declares a DOCTYPE")
-        return DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = false
-            isExpandEntityReferences = false
-            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
-        }.newDocumentBuilder()
-            .parse(ByteArrayInputStream(xml.toByteArray()))
-            .documentElement
-    }
+    private fun parse(xml: String): Element = Xml.parse(xml)
 
     /** First element with this tag name, anywhere; the envelopes here are small and flat. */
     private fun Element.text(tag: String): String? =
@@ -508,19 +483,12 @@ class Upnp(
     private fun absolute(uri: String, hostname: String): String =
         if (uri.startsWith("http")) uri else "http://$hostname:$PORT$uri"
 
-    private fun escape(value: String): String = value
-        .replace("&", "&amp;").replace("<", "&lt;")
-        .replace(">", "&gt;").replace("\"", "&quot;")
-
     companion object {
         /**
          * A soundbar's own HDMI stream, which is a URI rather than a mode: `spdif` is what
          * Sonos calls the input on every model, optical and ARC alike.
          */
         fun tvStreamUri(soundbarId: String) = "x-sonos-htastream:$soundbarId:spdif"
-
-        /** Whether a transport URI is some soundbar's TV input. */
-        fun isTvStream(uri: String) = uri.startsWith("x-sonos-htastream:")
 
         private const val READ_TIMEOUT = 10L
 
@@ -531,7 +499,6 @@ class Upnp(
         /** Bass and treble, as the player accepts them. */
         val TONE_RANGE = -10..10
 
-        private val DOCTYPE = Regex("<!DOCTYPE", RegexOption.IGNORE_CASE)
 
         private val UPNP_ERRORS = mapOf(
             "701" to "no media loaded, or not available in this state",

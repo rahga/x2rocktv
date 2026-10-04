@@ -43,7 +43,7 @@ class UpnpParseTest {
             upnp.mediaInfo(host)
             fail("parsed a reply with a DOCTYPE")
         } catch (e: IOException) {
-            assertEquals("refusing a UPnP reply that declares a DOCTYPE", e.message)
+            assertEquals("refusing a reply that declares a DOCTYPE", e.message)
         }
     }
 }

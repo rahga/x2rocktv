@@ -84,7 +84,7 @@ class SonosSocket private constructor(
      * household am I?", and the cheapest way to ask is to send something invalid and read
      * `householdId` off the reply header.
      */
-    suspend fun send(header: JsonObject, body: JsonObject = JsonObject()): SonosReply {
+    private suspend fun send(header: JsonObject, body: JsonObject = JsonObject()): SonosReply {
         val id = nextId.getAndIncrement().toString()
         val waiter = CompletableDeferred<SonosReply>()
         pending[id] = waiter
@@ -124,10 +124,7 @@ class SonosSocket private constructor(
         failPending(IOException("socket to $hostname closed"))
     }
 
-    private fun failPending(cause: Throwable) {
-        pending.values.forEach { it.completeExceptionally(cause) }
-        pending.clear()
-    }
+    private fun failPending(cause: Throwable) = pending.failAll(cause)
 
     companion object {
         const val PORT = 1443
@@ -190,8 +187,7 @@ class SonosSocket private constructor(
                                 (response?.let { " (http ${it.code})" } ?: ""),
                             t,
                         )
-                        pending.values.forEach { it.completeExceptionally(cause) }
-                        pending.clear()
+                        pending.failAll(cause)
                         if (cont.isActive) cont.resumeWithException(cause) else failures.tryEmit(cause)
                     }
 
@@ -204,15 +200,13 @@ class SonosSocket private constructor(
                     override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                         webSocket.close(1000, null)
                         val cause = IOException("websocket to $hostname closing ($code $reason)")
-                        pending.values.forEach { it.completeExceptionally(cause) }
-                        pending.clear()
+                        pending.failAll(cause)
                         if (!closedByUs.get()) failures.tryEmit(cause)
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                         val cause = IOException("websocket to $hostname closed ($code $reason)")
-                        pending.values.forEach { it.completeExceptionally(cause) }
-                        pending.clear()
+                        pending.failAll(cause)
                         // A close we asked for is not a failure worth reconnecting over.
                         if (!closedByUs.get()) failures.tryEmit(cause)
                     }
@@ -246,4 +240,10 @@ class SonosCommandException(
      * writes EQ over UPnP and never sends it.
      */
     val isPermissionRefusal: Boolean get() = detail.startsWith("ERROR_NO_PERMISSION")
+}
+
+/** A dead socket fails every waiter on it, the one way, wherever its death is learned of. */
+private fun ConcurrentHashMap<String, CompletableDeferred<SonosReply>>.failAll(cause: Throwable) {
+    values.forEach { it.completeExceptionally(cause) }
+    clear()
 }
