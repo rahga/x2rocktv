@@ -1,33 +1,30 @@
 package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import com.rahga.x2rock.lan.Discovery
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import java.net.InetAddress
 
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class FavoritesViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var scope: CoroutineScope
@@ -35,7 +32,6 @@ class FavoritesViewModelTest {
     private lateinit var viewModel: FavoritesViewModel
 
     @Before fun setUp() = runBlocking {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
@@ -47,9 +43,8 @@ class FavoritesViewModelTest {
             seeds = SeedStore.None,
             port = fake.port,
         )
-        household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-        withTimeout(10_000) { household.state.first { it.connected } }
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        household.connectTo(fake, 10_000)
+        val groupId = fake.groupId(household)
         viewModel = FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)))
     }
 
@@ -57,7 +52,6 @@ class FavoritesViewModelTest {
         household.disconnect()
         scope.cancel()
         fake.shutdown()
-        Dispatchers.resetMain()
     }
 
     /**

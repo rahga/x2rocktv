@@ -5,7 +5,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -47,7 +46,7 @@ class QueueSourceTest {
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val body = request.body.readUtf8()
                     return when (action) {
                         "GetMediaInfo" -> {
@@ -84,8 +83,7 @@ class QueueSourceTest {
             upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
     }
 

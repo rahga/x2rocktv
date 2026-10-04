@@ -16,7 +16,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.io.IOException
-import java.net.InetAddress
 
 /**
  * Recently played, and playing one again. The list is the office One SL's own history,
@@ -38,8 +37,7 @@ class ReplayTest {
             client = LanHttp.client(book), port = fake.port, settleMillis = 2_000,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
     }
 
@@ -49,7 +47,7 @@ class ReplayTest {
         fake.shutdown()
     }
 
-    private fun group() = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+    private fun group() = fake.groupId(household)
 
     @Test fun `history lists the household's items with their ids and reachable art`() = runBlocking<Unit> {
         val items = household.history()
@@ -67,12 +65,12 @@ class ReplayTest {
         val item = household.history().first()
         val groupId = group()
         val call = scope.async(Dispatchers.IO) { household.replay(groupId, item) }
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
+        fake.awaitCommand("loadContent", 5_000)
         val body = fake.lastCommandBody("loadContent")!!
         assertEquals("program", body.get("type").asString)
         assertEquals("channel:1:3:resume", body.getAsJsonObject("id").get("objectId").asString)
         assertEquals("sn_20", body.getAsJsonObject("id").get("accountId").asString)
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "play" }
+        fake.awaitCommand("play", 5_000)
         assertTrue("finished before the room said it was playing", !call.isCompleted)
         fake.pushFixture("radioPlaybackStatus", groupId)
         withTimeout(5_000) { call.await() }
@@ -85,9 +83,9 @@ class ReplayTest {
         val groupId = group()
         fake.refuse("play", "ERROR_PLAYBACK_NO_CONTENT")
         val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "play" }
+        fake.awaitCommand("play", 5_000)
         fake.allow("play")
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "play" }
+        fake.awaitCommand("play", 5_000)
         fake.pushFixture("radioPlaybackStatus", groupId)
         val result = withTimeout(5_000) { call.await() }
         assertTrue("gave up on a mid-load refusal: ${result.exceptionOrNull()}", result.isSuccess)
@@ -106,12 +104,12 @@ class ReplayTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
         fake.holdRepliesTo("loadContent")
         val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
+        fake.awaitCommand("loadContent", 5_000)
         // The hold also stops the fake reading further commands, so it is lifted once the
         // client has given up waiting; the late reply then arrives for a request nobody holds.
         delay(5_500)
         fake.releaseReplies()
-        fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "play" }
+        fake.awaitCommand("play", 10_000)
         // The late load landed: the room reports the station, then plays.
         fake.pushFixture("radioMetadataStatus", groupId)
         fake.pushFixture("radioPlaybackStatus", groupId)
@@ -131,10 +129,10 @@ class ReplayTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
         fake.holdRepliesTo("loadContent")
         val call = scope.async(Dispatchers.IO) { runCatching { household.replay(groupId, item) } }
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "loadContent" }
+        fake.awaitCommand("loadContent", 5_000)
         delay(5_500)
         fake.releaseReplies()
-        fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "play" }
+        fake.awaitCommand("play", 10_000)
         // What was paused, playing again: the metadata the room had before the load.
         fake.pushFixture("radioPlaybackStatus", groupId)
         val result = withTimeout(10_000) { call.await() }

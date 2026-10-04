@@ -7,7 +7,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -37,13 +36,13 @@ class ToneTest {
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val fields = Regex("<(\\w+)>([^<]*)</\\1>").findAll(request.body.readUtf8())
                         .associate { it.groupValues[1] to it.groupValues[2] }
                     requests += action to fields
                     return if (action == "GetRoomCalibrationStatus") {
-                        MockResponse().setBody(javaClass.getResourceAsStream("/fixtures/GetRoomCalibrationStatus.reply.xml")!!.readBytes().decodeToString())
-                    } else MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
+                        MockResponse().setBody(FakePlayer.fixtureText("GetRoomCalibrationStatus.reply.xml"))
+                    } else MockResponse().setBody(EMPTY_SOAP)
                 }
             }
             start(InetAddress.getByName("127.0.0.1"), 0)
@@ -55,8 +54,7 @@ class ToneTest {
             client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
     }
 

@@ -1,23 +1,21 @@
 package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import com.rahga.x2rock.lan.Discovery
+import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.lan.connectTo
+import com.rahga.x2rock.lan.soapAction
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -27,13 +25,15 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** The queue screen's edits, against a UPnP fake serving a real ten-track queue. */
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class QueueViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var upnp: MockWebServer
@@ -46,29 +46,26 @@ class QueueViewModelTest {
     /** What the fake reports as the queue's UpdateID; the capture says 58. */
     @Volatile private var updateId = "58"
 
-    private fun capture(name: String) =
-        FakePlayer::class.java.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
 
     @Before fun setUp() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val body = request.body.readUtf8()
                     actions += action
                     return when (action) {
                         "Browse" -> {
                             browses += Regex("<RequestedCount>(\\d+)<").find(body)!!.groupValues[1]
                             MockResponse().setBody(
-                                capture(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
+                                FakePlayer.fixtureText(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                                     .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
                             )
                         }
                         "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
                         "SaveQueue" -> MockResponse().setBody("<s:Envelope><s:Body><u:SaveQueueResponse><AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>")
-                        else -> MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
+                        else -> MockResponse().setBody(EMPTY_SOAP)
                     }
                 }
             }
@@ -81,17 +78,16 @@ class QueueViewModelTest {
             client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port, upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         viewModel = QueueViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)))
         runBlocking { withTimeout(5_000) { viewModel.uiState.first { it is QueueViewModel.UiState.Success } } }
         actions.clear()
         browses.clear()
     }
 
-    private val groupId get() = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+    private val groupId get() = fake.groupId(household)
     private fun fullReads() = browses.count { it != "1" }
 
     // ---------------------------------------------------------------- freshness
@@ -142,8 +138,7 @@ class QueueViewModelTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
         delay(300)
         val before = fullReads()
-        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("queueVersion", "9") }
-        fake.push("playback:1", "playbackStatus", body.toString(), groupId)
+        fake.pushPlaybackStatus(groupId, queueVersion = "9")
         withTimeout(5_000) { while (fullReads() == before) delay(20) }
     }
 
@@ -152,7 +147,6 @@ class QueueViewModelTest {
         scope.cancel()
         fake.shutdown()
         upnp.shutdown()
-        Dispatchers.resetMain()
     }
 
     /** A queue cannot be got back, so one press only arms it. */

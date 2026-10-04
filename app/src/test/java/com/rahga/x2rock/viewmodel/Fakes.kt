@@ -1,11 +1,24 @@
 package com.rahga.x2rock.viewmodel
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.rules.TestWatcher
+import org.junit.runner.Description
 import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.store.Preferences
+
+/** The main dispatcher every view model launches on, set for a test class and reset after it. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class MainDispatcherRule : TestWatcher() {
+    override fun starting(description: Description) = Dispatchers.setMain(Dispatchers.Unconfined)
+    override fun finished(description: Description) = Dispatchers.resetMain()
+}
 
 /** A monotonic clock the JVM has; Android's SystemClock is not here. */
 val testClock = MonotonicClock { System.nanoTime() / 1_000_000 }

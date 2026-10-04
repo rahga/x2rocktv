@@ -3,7 +3,6 @@ package com.rahga.x2rock.viewmodel
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
-import com.rahga.x2rock.lan.Discovery
 import com.google.gson.JsonObject
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.LanHttp
@@ -13,16 +12,12 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.AppColorTheme
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -30,8 +25,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import java.net.InetAddress
 
 private const val VOLUME_DEBOUNCE = 300L
 
@@ -42,8 +37,9 @@ private const val VOLUME_DEBOUNCE = 300L
  * as replies to the command that caused them, so nothing re-fetches, and every assertion
  * below is about state that arrived on its own.
  */
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class HomeViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var scope: CoroutineScope
@@ -55,7 +51,6 @@ class HomeViewModelTest {
     private val deepLink = PendingRoomDeepLink()
 
     @Before fun setUp() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
@@ -83,12 +78,11 @@ class HomeViewModelTest {
         household.disconnect()
         scope.cancel()
         fake.shutdown()
-        Dispatchers.resetMain()
     }
 
     private fun connect() = runBlocking {
         household.connect(
-            Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId)
+            fake.seed
         )
         withTimeout(10_000) {
             viewModel.uiState.first { it is HomeViewModel.UiState.Success } as HomeViewModel.UiState.Success
@@ -156,7 +150,7 @@ class HomeViewModelTest {
 
     @Test fun `now playing follows the pushed metadata`() = runBlocking<Unit> {
         connect()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         fake.pushFixture("metadataStatus", groupId)
 
         val state = withTimeout(10_000) {
@@ -210,10 +204,10 @@ class HomeViewModelTest {
             } as HomeViewModel.UiState.Success
         }.groups.first { it.playerIds.size > 1 }
         val (first, second) = group.playerIds
-        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":false,"fixed":false}""", group.id)
+        fake.pushGroupVolume(group.id, 30)
         withTimeout(5_000) { household.groupStates.first { it[group.id]?.volume?.volume == 30 } }
-        fake.push("playerVolume:1", "playerVolume", """{"volume":20,"muted":false,"fixed":false}""", playerId = first)
-        fake.push("playerVolume:1", "playerVolume", """{"volume":40,"muted":false,"fixed":true}""", playerId = second)
+        fake.pushPlayerVolume(first, 20)
+        fake.pushPlayerVolume(second, 40, fixed = true)
         withTimeout(5_000) { household.playerVolumes.first { it[first] != null && it[second] != null } }
         fake.clearHistory()
 
@@ -255,12 +249,11 @@ class HomeViewModelTest {
     @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
         val state = connect()
         val kitchen = state.groups.first { it.name == "Kitchen" }
-        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":true,"fixed":false}""", kitchen.id)
+        fake.pushGroupVolume(kitchen.id, 30, muted = true)
         withTimeout(5_000) {
             viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.get(kitchen.id)?.muted == true }
         }
-        fake.push("playerVolume:1", "playerVolume", """{"volume":30,"muted":true,"fixed":false}""",
-            playerId = kitchen.coordinatorId)
+        fake.pushPlayerVolume(kitchen.coordinatorId, 30, muted = true)
         withTimeout(5_000) { viewModel.mutedPlayers.first { kitchen.coordinatorId in it } }
     }
 
@@ -295,7 +288,7 @@ class HomeViewModelTest {
         fake.clearHistory()
 
         viewModel.soloGroup(group.id)
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "modifyGroupMembers" }
+        fake.awaitCommand("modifyGroupMembers", 5_000)
         val body = fake.lastCommandBody("modifyGroupMembers")!!
         val removed = body.getAsJsonArray("playerIdsToRemove").map { it.asString }
 
@@ -370,7 +363,7 @@ class HomeViewModelTest {
 
         repeat(4) { viewModel.adjustPlayerVolume(fake.id, +5) }
 
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        fake.awaitCommand("setVolume", 5_000)
         assertEquals(50, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
         delay(600)
         assertEquals(1, fake.commandsNamed("setVolume"))
@@ -381,7 +374,7 @@ class HomeViewModelTest {
         fake.pushPlayerVolume(fake.id, volume = 96)
         awaitPlayerVolume(fake.id, 96)
         repeat(3) { viewModel.adjustPlayerVolume(fake.id, +5) }
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        fake.awaitCommand("setVolume", 5_000)
         assertEquals(100, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
     }
 
@@ -475,7 +468,7 @@ class HomeViewModelTest {
         fake.holdRepliesTo("setVolume")
 
         viewModel.adjustPlayerVolume(fake.id, +5)                        // 25
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" }
+        fake.awaitCommand("setVolume", 5_000)
         // Now suspended inside that command, which is the only place the bug lives.
         viewModel.adjustPlayerVolume(fake.id, +5)                        // 30, cancels it
         delay(60)

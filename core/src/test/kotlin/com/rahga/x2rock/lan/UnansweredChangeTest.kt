@@ -69,8 +69,7 @@ class UnansweredChangeTest {
             settleMillis = SETTLE,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
     }
 
@@ -92,7 +91,7 @@ class UnansweredChangeTest {
         val call = scope.async(Dispatchers.IO) {
             household.modifyGroupMembers(group("Kitchen").id, listOf(group("Guest TV").coordinatorId), emptyList())
         }
-        fake.awaitCommand { it.get("command")?.asString == "modifyGroupMembers" }
+        fake.awaitCommand("modifyGroupMembers")
         // Announced on the seed's socket; Kitchen's is the one stalled.
         fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
         withTimeout(10_000) { call.await() }
@@ -116,7 +115,7 @@ class UnansweredChangeTest {
         val call = scope.async(Dispatchers.IO) {
             household.modifyGroupMembers(group("Kitchen").id, listOf(group("Guest TV").coordinatorId), emptyList())
         }
-        fake.awaitCommand { it.get("command")?.asString == "modifyGroupMembers" }
+        fake.awaitCommand("modifyGroupMembers")
         fake.serveTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
         withTimeout(15_000) { call.await() }
     }

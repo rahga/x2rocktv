@@ -3,23 +3,20 @@ package com.rahga.x2rock.viewmodel
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
-import com.rahga.x2rock.lan.Discovery
+import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.lan.soapAction
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -28,6 +25,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
@@ -39,8 +37,9 @@ import java.util.concurrent.CopyOnWriteArrayList
  * together than a round trip used to race: an early read landed after a later press, put the
  * old level back on screen, and the next press stepped from that.
  */
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class ToneStepsTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var upnp: MockWebServer
@@ -51,12 +50,11 @@ class ToneStepsTest {
     private val basses = CopyOnWriteArrayList<Int>()
 
     @Before fun setUp() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     if (action == "SetBass") {
                         val level = Regex("<DesiredBass>(-?\\d+)<").find(request.body.readUtf8())!!.groupValues[1].toInt()
                         // Slow enough that a press can land while it is out, as one does on a remote.
@@ -66,7 +64,7 @@ class ToneStepsTest {
                     }
                     // The read after a write asks TruePlay too; slow, so a press can land inside it.
                     if (action == "GetRoomCalibrationStatus") Thread.sleep(400)
-                    return MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
+                    return MockResponse().setBody(EMPTY_SOAP)
                 }
             }
             start(InetAddress.getByName("127.0.0.1"), 0)
@@ -86,7 +84,7 @@ class ToneStepsTest {
             pendingRoomDeepLink = PendingRoomDeepLink(),
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
+            household.connect(fake.seed)
             withTimeout(10_000) { viewModel.uiState.first { it is HomeViewModel.UiState.Success } }
         }
     }
@@ -96,7 +94,6 @@ class ToneStepsTest {
         scope.cancel()
         fake.shutdown()
         upnp.shutdown()
-        Dispatchers.resetMain()
     }
 
     private suspend fun openKitchen() {

@@ -37,24 +37,22 @@ class AlarmTest {
     /** Each AVTransport action and its body, in order. */
     private val actions = CopyOnWriteArrayList<Pair<String, String>>()
 
-    private fun capture(name: String) =
-        javaClass.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     actions += action to request.body.readUtf8()
                     return when (action) {
                         "GetRunningAlarmProperties" ->
                             if (refuseWith != null) MockResponse().setResponseCode(500)
-                                .setBody(capture("GetRunningAlarmProperties.none.xml").replace("<errorCode>800<", "<errorCode>$refuseWith<"))
-                            else if (ringing) MockResponse().setBody(capture("GetRunningAlarmProperties.ringing.xml"))
-                            else MockResponse().setResponseCode(500).setBody(capture("GetRunningAlarmProperties.none.xml"))
-                        "SnoozeAlarm" -> MockResponse().setBody(capture("SnoozeAlarm.reply.xml"))
-                        else -> MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
+                                .setBody(FakePlayer.fixtureText("GetRunningAlarmProperties.none.xml").replace("<errorCode>800<", "<errorCode>$refuseWith<"))
+                            else if (ringing) MockResponse().setBody(FakePlayer.fixtureText("GetRunningAlarmProperties.ringing.xml"))
+                            else MockResponse().setResponseCode(500).setBody(FakePlayer.fixtureText("GetRunningAlarmProperties.none.xml"))
+                        "SnoozeAlarm" -> MockResponse().setBody(FakePlayer.fixtureText("SnoozeAlarm.reply.xml"))
+                        else -> MockResponse().setBody(EMPTY_SOAP)
                     }
                 }
             }
@@ -66,8 +64,7 @@ class AlarmTest {
             client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(10_000) { household.state.first { it.connected } }
+            household.connectTo(fake, 10_000)
         }
     }
 
@@ -80,22 +77,18 @@ class AlarmTest {
 
     private val kitchen get() = household.state.value.groups.first { it.name == "Kitchen" }
 
-    private fun pushState(state: String) {
-        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("playbackState", state) }
-        fake.push("playback:1", "playbackStatus", body.toString(), kitchen.id)
-    }
 
     private fun asked() = actions.count { it.first == "GetRunningAlarmProperties" }
 
     @Test fun `a room that starts playing because its alarm rang says which alarm`() = runBlocking<Unit> {
-        pushState("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.ringingAlarm == 15 } }
     }
 
     /** The ordinary case: a room started playing and the player says no alarm is running. */
     @Test fun `a room that starts playing on its own has no alarm`() = runBlocking<Unit> {
         ringing = false
-        pushState("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { while (asked() == 0) delay(20) }
         delay(200)
         assertNull(household.groupStates.value[kitchen.id]?.ringingAlarm)
@@ -103,9 +96,9 @@ class AlarmTest {
 
     /** Snoozed or stopped, the room is not playing, and is no longer offered snooze. */
     @Test fun `an alarm stops ringing when the room stops playing`() = runBlocking<Unit> {
-        pushState("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.ringingAlarm == 15 } }
-        pushState("PLAYBACK_STATE_PAUSED")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PAUSED")
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.ringingAlarm == null } }
     }
 
@@ -113,16 +106,16 @@ class AlarmTest {
     @Test fun `a household with UPnP off is not asked`() = runBlocking<Unit> {
         fake.setUpnpAllowed(false)
         withTimeout(5_000) { household.state.first { it.upnpOff } }
-        pushState("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         delay(500)
         assertEquals(0, asked())
     }
 
     /** Asked on starting to play, not on every event while playing: nothing polls. */
     @Test fun `a room already playing is not asked again`() = runBlocking<Unit> {
-        pushState("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.ringingAlarm == 15 } }
-        repeat(3) { pushState("PLAYBACK_STATE_PLAYING") }
+        repeat(3) { fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING") }
         delay(500)
         assertEquals(1, asked())
     }

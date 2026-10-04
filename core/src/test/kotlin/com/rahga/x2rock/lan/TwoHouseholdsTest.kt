@@ -34,7 +34,7 @@ class TwoHouseholdsTest {
     private lateinit var status: MockWebServer
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
-    private var remembered: Discovery.DiscoveredPlayer? = null
+    private val seeds = FakeSeedStore()
 
     private val loopback = InetAddress.getByName("127.0.0.1")
 
@@ -45,7 +45,7 @@ class TwoHouseholdsTest {
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
-        val zp = javaClass.getResourceAsStream("/fixtures/status.zp.xml")!!.readBytes().decodeToString()
+        val zp = FakePlayer.fixtureText("status.zp.xml")
         val otherHost = PlayerNames.localHostname(otherId)!!
         status = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
@@ -64,11 +64,7 @@ class TwoHouseholdsTest {
             addressBook = book,
             multicast = MulticastGate.None,
             client = LanHttp.client(book),
-            seeds = object : SeedStore {
-                override fun load() = remembered
-                override fun save(seed: Discovery.DiscoveredPlayer) { remembered = seed }
-                override fun clear() { remembered = null }
-            },
+            seeds = seeds,
             port = fake.port,
             upnpPort = status.port,
             ssdp = { bothHouseholds() },
@@ -88,7 +84,7 @@ class TwoHouseholdsTest {
         assertFalse("must not join whichever answered first", state.connected)
         assertEquals(listOf("Kitchen", "Office"), state.householdChoices.map { it.label })
         assertEquals(setOf(fake.householdId, otherHousehold), state.householdChoices.map { it.householdId }.toSet())
-        assertEquals(null, remembered)
+        assertEquals(null, seeds.held)
     }
 
     @Test fun `the chosen household is connected and remembered`() = runBlocking<Unit> {
@@ -98,7 +94,7 @@ class TwoHouseholdsTest {
         val state = withTimeout(10_000) { household.state.first { it.connected } }
         assertEquals(fake.householdId, state.householdId)
         assertTrue(state.householdChoices.isEmpty())
-        assertEquals(fake.id, remembered?.id)
+        assertEquals(fake.id, seeds.held?.id)
     }
 
     /** The office case, SSDP dropped, with two systems on it: mDNS must not guess either. */

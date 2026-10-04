@@ -170,10 +170,10 @@ class RatingsTest {
     /** Connected, with the captured Plex track playing — or, given a service, that track re-homed there. */
     private fun playing(serviceId: String? = null): String = runBlocking {
         household.connect(
-            Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId)
+            fake.seed
         )
         withTimeout(5_000) { household.state.first { it.connected } }
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         val metadata = FakePlayer.fixture("event.metadataStatus.json")
         if (serviceId != null) {
             metadata.getAsJsonObject("currentItem").getAsJsonObject("track").add("id", JsonObject().apply {
@@ -229,7 +229,7 @@ class RatingsTest {
 
         shouldSkip = true
         assertTrue(household.rate(groupId, up = false).skipped)
-        fake.awaitCommand { it.get("command")?.asString == "skipToNextTrack" }
+        fake.awaitCommand("skipToNextTrack")
         Unit
     }
 
