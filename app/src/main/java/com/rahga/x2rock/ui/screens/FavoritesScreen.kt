@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -134,7 +133,6 @@ private fun FavoritesList(
     onOpenRadio: () -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
-    val listState = rememberLazyListState()
 
     val anything = items.isNotEmpty() || playlists.isNotEmpty() || recent.isNotEmpty()
     LaunchedEffect(anything) {
@@ -165,7 +163,6 @@ private fun FavoritesList(
         if (!anything) return@Column
 
         LazyColumn(
-            state = listState,
             contentPadding = PaddingValues(bottom = 48.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {

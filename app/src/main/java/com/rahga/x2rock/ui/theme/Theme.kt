@@ -119,13 +119,11 @@ private fun androidx.compose.material3.ColorScheme.toTvColorScheme() = darkColor
 fun AppButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
     Button(
         onClick = onClick,
         modifier = modifier,
-        enabled = enabled,
         colors = ButtonDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.primary,
             focusedContentColor = MaterialTheme.colorScheme.onPrimary,

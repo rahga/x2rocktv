@@ -15,8 +15,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import com.rahga.x2rock.net.PrefsSeedStore
 import com.rahga.x2rock.net.NetworkIdentity
-import com.rahga.x2rock.net.NsdMdnsDiscovery
-import com.rahga.x2rock.net.WifiMulticastGate
 import com.rahga.x2rock.radio.RadioDirectory
 import com.rahga.x2rock.store.Preferences
 import com.rahga.x2rock.viewmodel.MonotonicClock
@@ -52,14 +50,6 @@ object AppModule {
             Log.e("x2rock", "uncaught in application scope", e)
         }
     )
-
-    @Provides
-    @Singleton
-    fun provideMulticastGate(impl: WifiMulticastGate): MulticastGate = impl
-
-    @Provides
-    @Singleton
-    fun provideMdnsDiscovery(impl: NsdMdnsDiscovery): MdnsDiscovery = impl
 
     @Provides
     @Singleton

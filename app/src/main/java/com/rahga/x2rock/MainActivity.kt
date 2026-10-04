@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val theme by themeStore.theme.collectAsState()
             X2RockTheme(colorTheme = theme) {
-                X2RockNavGraph(startDestination = "home")
+                X2RockNavGraph()
             }
         }
     }

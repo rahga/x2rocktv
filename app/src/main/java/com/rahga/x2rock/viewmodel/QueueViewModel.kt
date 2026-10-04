@@ -96,7 +96,7 @@ class QueueViewModel @Inject constructor(
             runCatching { household.skipToQueueItem(groupId, trackNumber) }
                 // Re-read on success: the queue may just have become the source again.
                 .onSuccess { load(quiet = true) }
-                .onFailure { e -> failureNotice("play that track", e)?.let(_notice::post) }
+                .onFailure { _notice.failure("play that track", it) }
         }
     }
 
@@ -108,7 +108,7 @@ class QueueViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.removeFromQueue(groupId, trackNumber) }
                 .onSuccess { load(quiet = true) }
-                .onFailure { e -> failureNotice("remove that track", e)?.let(_notice::post) }
+                .onFailure { _notice.failure("remove that track", it) }
         }
     }
 
@@ -157,14 +157,14 @@ class QueueViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.saveQueue(groupId, name) }
                 .onSuccess { _notice.post("Saved as \"$name\"") }
-                .onFailure { e -> failureNotice("save the queue", e)?.let(_notice::post) }
+                .onFailure { _notice.failure("save the queue", it) }
         }
     }
 
     /** An edit, then a re-read either way: on a refusal the queue may have moved under it. */
     private fun edit(what: String, block: suspend () -> Unit) {
         viewModelScope.launch {
-            runCatching { block() }.onFailure { e -> failureNotice(what, e)?.let(_notice::post) }
+            runCatching { block() }.onFailure { _notice.failure(what, it) }
             load(quiet = true)
         }
     }

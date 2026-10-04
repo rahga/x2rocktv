@@ -23,6 +23,11 @@ class TransientNotice(private val scope: CoroutineScope, private val millis: Lon
     val text: StateFlow<String?> = _text.asStateFlow()
     private var clearing: Job? = null
 
+    /** Says why [what] failed, unless it was only cancelled by a newer press: see [failureNotice]. */
+    fun failure(what: String, e: Throwable) {
+        failureNotice(what, e)?.let(::post)
+    }
+
     fun post(message: String) {
         _text.value = message
         // A newer message restarts the clock, so it is never cut short by an older one's.

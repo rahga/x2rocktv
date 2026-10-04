@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -281,12 +283,10 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Connects on the way in. Previously this gated a poll loop; now it is the connection
-     * itself, and staying connected while hidden is what keeps state warm for the next
-     * frame rather than something to be avoided.
+     * Connects on the way in. Staying connected while hidden is what keeps state warm for
+     * the next frame rather than something to be avoided, so nothing undoes this.
      */
-    fun setActive(active: Boolean) {
-        if (!active) return
+    fun connect() {
         viewModelScope.launch {
             runCatching { household.connect() }
         }
@@ -310,7 +310,7 @@ class HomeViewModel @Inject constructor(
         val source = findGroup(sourceGroupId) ?: return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(targetGroupId, add = source.playerIds, remove = emptyList()) }
-                .onFailure { report("add ${source.name}", it) }
+                .onFailure { _notice.failure("add ${source.name}", it) }
         }
     }
 
@@ -321,14 +321,14 @@ class HomeViewModel @Inject constructor(
         if (others.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = others) }
-                .onFailure { report("separate ${group.name}", it) }
+                .onFailure { _notice.failure("separate ${group.name}", it) }
         }
     }
 
     fun removePlayerFromGroup(groupId: String, playerId: String) {
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = listOf(playerId)) }
-                .onFailure { report("remove ${household.playerName(playerId)}", it) }
+                .onFailure { _notice.failure("remove ${household.playerName(playerId)}", it) }
         }
     }
 
@@ -353,7 +353,7 @@ class HomeViewModel @Inject constructor(
         if (joiners.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
-                .onFailure { report("start the party", it) }
+                .onFailure { _notice.failure("start the party", it) }
         }
     }
 
@@ -367,7 +367,7 @@ class HomeViewModel @Inject constructor(
         val named = roomPrefsStore.tvPlayerId.value
         viewModelScope.launch {
             runCatching { household.useTvInput(groupId, preferSoundbar = named) }
-                .onFailure { report("switch to the TV", it) }
+                .onFailure { _notice.failure("switch to the TV", it) }
         }
     }
 
@@ -402,7 +402,7 @@ class HomeViewModel @Inject constructor(
         groupVolumeJobs[groupId]?.cancel()
         groupVolumeJobs[groupId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setGroupVolume(groupId, target) }.onFailure { report("change the volume", it) }
+            runCatching { household.setGroupVolume(groupId, target) }.onFailure { _notice.failure("change the volume", it) }
             // Only if it is still ours — see [adjustPlayerVolume].
             _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
         }
@@ -418,7 +418,7 @@ class HomeViewModel @Inject constructor(
         playerVolumeJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setPlayerVolume(playerId, target) }
-                .onFailure { report("change that speaker's volume", it) }
+                .onFailure { _notice.failure("change that speaker's volume", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a
             // newer press throws in here, and this line is not a suspension point, so
             // clearing unconditionally would delete the target that press just wrote —
@@ -440,9 +440,6 @@ class HomeViewModel @Inject constructor(
      */
     val notice: StateFlow<String?> = _notice.text
 
-    private fun report(what: String, e: Throwable) {
-        failureNotice(what, e)?.let(_notice::post)
-    }
 
     /**
      * Every speaker in [groupId] set to the group's own level — the desktop widget's
@@ -458,7 +455,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             members.forEach { playerId ->
                 runCatching { household.setPlayerVolume(playerId, level) }
-                    .onFailure { report("even out ${household.playerName(playerId)}", it) }
+                    .onFailure { _notice.failure("even out ${household.playerName(playerId)}", it) }
             }
         }
     }
@@ -505,9 +502,14 @@ class HomeViewModel @Inject constructor(
      */
     private suspend fun readTone(playerId: String) {
         val edits = toneEdits
-        val eq = runCatching { household.playerSettings(playerId).eq }.getOrNull() ?: return
-        val trueplay = runCatching { household.trueplay(playerId) }.getOrNull()
-        if (edits != toneEdits) return
+        // Two reads of the same speaker, one over its socket and one over UPnP, neither
+        // needing the other: together, so the Sound rows wait for one latency, not two.
+        val (eq, trueplay) = coroutineScope {
+            val eq = async { runCatching { household.playerSettings(playerId).eq }.getOrNull() }
+            val trueplay = async { runCatching { household.trueplay(playerId) }.getOrNull() }
+            eq.await() to trueplay.await()
+        }
+        if (eq == null || edits != toneEdits) return
         _tone.value = ToneUi(playerId, eq.bass, eq.treble, eq.loudness, trueplay)
     }
 
@@ -526,7 +528,7 @@ class HomeViewModel @Inject constructor(
             delay(VOLUME_DEBOUNCE_MILLIS)
             toneWrites.remove(key)
             toneSends.withLock {
-                runCatching { send(edited.playerId) }.onFailure { report(what, it) }
+                runCatching { send(edited.playerId) }.onFailure { _notice.failure(what, it) }
             }
             if (toneWrites.isEmpty()) readTone(edited.playerId)
         }
