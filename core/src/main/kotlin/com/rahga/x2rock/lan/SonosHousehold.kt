@@ -50,7 +50,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.IOException
-import java.net.InetAddress
 import java.net.URI
 
 /** What is playing in one group. Every field arrives by push; nothing here is polled. */
@@ -146,7 +145,6 @@ data class HouseholdState(
      * naming the switch. Cleared by the next session that stands up — turning the switch off
      * is the fix, and a retry is all it takes.
      */
-    val authenticationRequired: Boolean = false,
     /**
      * The household has UPnP switched off in the Sonos app's Connection Security, so every
      * SOAP call on port 1400 answers 403: the queue, the TV input and the Night Sound and
@@ -174,6 +172,9 @@ data class HouseholdState(
      */
     val householdChoices: List<HouseholdChoice> = emptyList(),
 ) {
+    /** Every Control API command is refused: the Sonos app's Authentication switch is on. */
+    val authenticationRequired: Boolean get() = error == AUTHENTICATION_REQUIRED
+
     /**
      * Whether this group has a TV input to switch to at all.
      *
@@ -196,8 +197,8 @@ data class HouseholdState(
 data class HouseholdChoice(val householdId: String, val label: String, val seed: Discovery.DiscoveredPlayer)
 
 /** Connecting stopped to ask which household: see [HouseholdState.householdChoices]. */
-class HouseholdChoiceNeeded(val choices: List<HouseholdChoice>) :
-    IllegalStateException("${choices.size} Sonos systems answer on this network. Choose one.")
+class HouseholdChoiceNeeded(count: Int) :
+    IllegalStateException("$count Sonos systems answer on this network. Choose one.")
 
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
@@ -407,7 +408,7 @@ class SonosHousehold(
                 HouseholdChoice(household, label, seed)
             }.sortedBy { it.label }
             _state.update { it.copy(householdChoices = choices) }
-            throw HouseholdChoiceNeeded(choices)
+            throw HouseholdChoiceNeeded(choices.size)
         }
         return found.firstOrNull() ?: error("no Sonos players answered on this network")
     }
@@ -425,8 +426,7 @@ class SonosHousehold(
             // Discovery reports the player's id and address together, so even the very
             // first connection is made to the name on the certificate. There is no point
             // in the flow where hostname verification has to be relaxed.
-            val hostname = entry.hostname
-                ?: error("cannot derive a certificate hostname for ${entry.id}")
+            val hostname = hostnameOf(entry.id)
             addressBook.register(hostname, entry.address)
             val seedSocket = socketForHostname(hostname)
             seedHostname = hostname
@@ -445,7 +445,7 @@ class SonosHousehold(
             _state.update {
                 it.copy(
                     connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups),
-                    players = groups.players, error = null, authenticationRequired = false, householdChoices = emptyList(),
+                    players = groups.players, error = null, householdChoices = emptyList(),
                 )
             }
 
@@ -500,7 +500,6 @@ class SonosHousehold(
                 it.copy(
                     connected = false,
                     error = if (refused) AUTHENTICATION_REQUIRED else e.message ?: e.toString(),
-                    authenticationRequired = refused,
                 )
             }
             throw e
@@ -559,9 +558,7 @@ class SonosHousehold(
             reconnect()
             return
         }
-        val players = _state.value.players
-            .filter { PlayerNames.localHostname(it.id).equals(socket.hostname, ignoreCase = true) }
-            .map { it.id }
+        val players = playersOn(socket.hostname)
         _playerVolumes.update { it - players.toSet() }
         subscribedPlayers.removeAll(players.toSet())
     }
@@ -570,27 +567,35 @@ class SonosHousehold(
     private fun carriesSession(hostname: String): Boolean {
         if (hostname.equals(seedHostname, ignoreCase = true)) return true
         val coordinators = _state.value.groups.map { it.coordinatorId } + subscribedGroups.values
-        return coordinators.any { PlayerNames.localHostname(it).equals(hostname, ignoreCase = true) }
+        return playersOn(hostname).any { it in coordinators }
     }
 
     private suspend fun teardown() = lock.withLock {
+        // cancel(), not close(): this runs on the premise that the peer may be gone, and a
+        // graceful close waits for a handshake a dead peer will never send.
+        clearSession { runCatching { it.cancel() } }
+        _state.update { it.copy(connected = false) }
+    }
+
+    /**
+     * Everything a session holds, let go, with [dispose] applied to each socket. Sockets leave
+     * the pool before they are disposed of, so the failures that raises are recognised as a
+     * previous session's and ignored; the subscription maps go for the same reason — nothing
+     * should go on believing it holds a subscription over a socket that no longer exists.
+     */
+    private fun clearSession(dispose: (SonosSocket) -> Unit) {
         generation++
         catchUpJob?.cancel()
         takeJobs().forEach { it.cancel() }
-        // Out of the pool before they are cancelled, so the failures cancelling raises are
-        // recognised as a previous session's and ignored. cancel(), not close(): this runs on
-        // the premise that the peer may be gone, and a graceful close waits for a handshake a
-        // dead peer will never send.
-        val dying = sockets.values.toList()
+        val gone = sockets.values.toList()
         sockets.clear()
         seedHostname = null
         seedPlayerId = null
         securityVersion = null
-        dying.forEach { runCatching { it.cancel() } }
+        gone.forEach(dispose)
         subscribedGroups.clear()
         subscribedPlayers.clear()
         addressBook.clear()
-        _state.update { it.copy(connected = false) }
         _groupStates.value = emptyMap()
         _playerVolumes.value = emptyMap()
     }
@@ -599,23 +604,8 @@ class SonosHousehold(
         wantConnection = false
         reconnectJob?.cancel()
         reconnectJob = null
-        generation++
-        catchUpJob?.cancel()
-        takeJobs().forEach { it.cancel() }
-        val closing = sockets.values.toList()
-        sockets.clear()
-        seedHostname = null
-        closing.forEach { it.close() }
-        addressBook.clear()
-        // Cleared for the same reason [teardown] clears it: nothing should go on believing
-        // it holds a subscription over a socket that no longer exists. `establish`
-        // re-subscribes unconditionally, so this is latent today — but `resubscribe` running
-        // against a stale map before a reconnect completes would skip every group in it.
-        subscribedGroups.clear()
-        subscribedPlayers.clear()
+        clearSession { it.close() }
         _state.value = HouseholdState()
-        _groupStates.value = emptyMap()
-        _playerVolumes.value = emptyMap()
     }
 
     // ---------------------------------------------------------------- reads
@@ -669,7 +659,7 @@ class SonosHousehold(
      * after a switch, or on a paused room, the transport would otherwise sit stopped on it.
      */
     suspend fun skipToQueueItem(groupId: String, trackNumber: Int) {
-        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        val group = group(groupId)
         val hostname = coordinatorHostname(groupId)
         if (!upnp.mediaInfo(hostname).playingFromQueue) upnp.useQueue(hostname, group.coordinatorId)
         upnp.skipToQueueItem(hostname, trackNumber)
@@ -718,10 +708,8 @@ class SonosHousehold(
         upnp.setTransportUri(coordinatorHostname(groupId), info.currentUri, info.currentUriMetaData)
 
     private fun coordinatorHostname(groupId: String): String {
-        val group = _state.value.groups.firstOrNull { it.id == groupId }
-            ?: error("no group $groupId")
-        return PlayerNames.localHostname(group.coordinatorId)
-            ?: error("cannot derive a hostname for ${group.coordinatorId}")
+        val group = group(groupId)
+        return hostnameOf(group.coordinatorId)
     }
 
     /**
@@ -737,7 +725,7 @@ class SonosHousehold(
      * this waits for that event, and fails if it never comes, rather than say nothing.
      */
     suspend fun useTvInput(groupId: String, preferSoundbar: String? = null) {
-        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        val group = group(groupId)
         // A group can hold more than one soundbar — party mode across a household with
         // three Beams is enough — and then "the first player with an HDMI socket" is an
         // arbitrary one. If the viewer has said which soundbar their television is, switch
@@ -766,9 +754,7 @@ class SonosHousehold(
 
     /** The household's Sonos playlists — its saved queues. `playlists:1`, household-scoped. */
     suspend fun playlists(): PlaylistsResponse {
-        val household = _state.value.householdId ?: error("not connected")
-        val socket = sockets.values.firstOrNull() ?: error("not connected")
-        val body = socket.command(Frames.onHousehold("playlists:1", "getPlaylists", household))
+        val body = householdCommand("playlists:1", "getPlaylists")
         return gson.fromJson(body, PlaylistsResponse::class.java) ?: PlaylistsResponse()
     }
 
@@ -780,28 +766,21 @@ class SonosHousehold(
      * on a four-track queue left twelve (x2rock, verified 2026-09-04). `loadFavorite` replaces
      * without being asked; the two sibling commands do not agree.
      */
-    suspend fun loadPlaylist(groupId: String, playlistId: String) {
-        coordinator(groupId).command(
-            Frames.onGroup("playlists:1", "loadPlaylist", groupId),
-            JsonObject().apply {
-                addProperty("playlistId", playlistId)
-                addProperty("playOnCompletion", true)
-                addProperty("action", "REPLACE")
-            },
-        )
-    }
+    suspend fun loadPlaylist(groupId: String, playlistId: String) = loadPlaylist(groupId, playlistId, "REPLACE", play = true)
 
     /**
      * Add [playlistId] to the end of [groupId]'s queue, leaving what plays alone — the
      * default the player has for `loadPlaylist`, said explicitly, and without playing it.
      */
-    suspend fun appendPlaylist(groupId: String, playlistId: String) {
+    suspend fun appendPlaylist(groupId: String, playlistId: String) = loadPlaylist(groupId, playlistId, "APPEND", play = false)
+
+    private suspend fun loadPlaylist(groupId: String, playlistId: String, action: String, play: Boolean) {
         coordinator(groupId).command(
             Frames.onGroup("playlists:1", "loadPlaylist", groupId),
             JsonObject().apply {
                 addProperty("playlistId", playlistId)
-                addProperty("playOnCompletion", false)
-                addProperty("action", "APPEND")
+                addProperty("playOnCompletion", play)
+                addProperty("action", action)
             },
         )
     }
@@ -812,9 +791,7 @@ class SonosHousehold(
      * `ERROR_DISALLOWED_BY_POLICY` ("History is disabled"), and nothing is recorded back.
      */
     suspend fun history(): List<HistoryItem> {
-        val household = _state.value.householdId ?: error("not connected")
-        val socket = sockets.values.firstOrNull() ?: error("not connected")
-        val body = socket.command(Frames.onHousehold("history:1", "getHistory", household))
+        val body = householdCommand("history:1", "getHistory")
         // Its art is served by a player, by path; any coordinator will answer for it.
         val anyCoordinator = _state.value.groups.firstOrNull()?.coordinatorId
         return (gson.fromJson(body, HistoryResponse::class.java) ?: HistoryResponse()).resources.map { item ->
@@ -890,9 +867,7 @@ class SonosHousehold(
     }
 
     suspend fun favorites(): FavoritesResponse {
-        val household = _state.value.householdId ?: error("not connected")
-        val socket = sockets.values.firstOrNull() ?: error("not connected")
-        val body = socket.command(Frames.onHousehold("favorites:1", "getFavorites", household))
+        val body = householdCommand("favorites:1", "getFavorites")
         return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
     }
 
@@ -909,11 +884,9 @@ class SonosHousehold(
     data class RateOutcome(
         val up: Boolean,
         val serviceName: String,
-        val shouldSkip: Boolean,
-        /** Whether [shouldSkip] was actually acted on — a failed skip must not read as the
-         * rating itself having failed, since it already landed. */
+        /** Whether the service's "skip after rating" was acted on — a failed skip must not read
+         * as the rating itself having failed, since it already landed. */
         val skipped: Boolean,
-        val message: String?,
     )
 
     /** Where the current track stands with its service, when it can be rated at all. */
@@ -985,9 +958,7 @@ class SonosHousehold(
         return RateOutcome(
             up = up,
             serviceName = rateable.service.name,
-            shouldSkip = result.shouldSkip == true,
             skipped = skipped,
-            message = result.messageStringId,
         )
     }
 
@@ -1045,9 +1016,7 @@ class SonosHousehold(
         require(TvSoundbar.hasHdmi(playerId, _state.value)) {
             "$eqType is a soundbar setting and $playerId has no TV input"
         }
-        val hostname = PlayerNames.localHostname(playerId)
-            ?: error("cannot derive a hostname for $playerId")
-        upnp.setEq(hostname, eqType, on)
+        upnp.setEq(hostnameOf(playerId), eqType, on)
     }
 
     // ---------------------------------------------------------------- tone
@@ -1064,6 +1033,13 @@ class SonosHousehold(
 
     private fun hostnameOf(playerId: String): String =
         PlayerNames.localHostname(playerId) ?: error("cannot derive a hostname for $playerId")
+
+    private fun group(groupId: String): Group =
+        _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+
+    /** The players whose certificate name is [hostname]: one socket per speaker, so usually one. */
+    private fun playersOn(hostname: String): List<String> =
+        _state.value.players.map { it.id }.filter { PlayerNames.localHostname(it).equals(hostname, ignoreCase = true) }
 
     // ---------------------------------------------------------------- commands
 
@@ -1219,7 +1195,7 @@ class SonosHousehold(
      * the id this was called with names nothing once the change has happened.
      */
     suspend fun modifyGroupMembers(groupId: String, add: List<String>, remove: List<String>) {
-        val group = _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
+        val group = group(groupId)
         try {
             coordinator(groupId).command(
                 Frames.onGroup("groups:1", "modifyGroupMembers", groupId),
@@ -1265,6 +1241,13 @@ class SonosHousehold(
         return gson.fromJson(body, GroupsResponse::class.java)?.groups.orEmpty()
     }
 
+    /** A household-scoped command. Any player's socket answers for the household, so the first will do. */
+    private suspend fun householdCommand(namespace: String, command: String): JsonElement {
+        val household = _state.value.householdId ?: error("not connected")
+        val socket = sockets.values.firstOrNull() ?: error("not connected")
+        return socket.command(Frames.onHousehold(namespace, command, household))
+    }
+
     private suspend fun onGroup(groupId: String, command: String) {
         coordinator(groupId).command(Frames.onGroup("playback:1", command, groupId))
     }
@@ -1273,15 +1256,12 @@ class SonosHousehold(
 
     /** The coordinator's socket, opened on first use and reused after. */
     private suspend fun coordinator(groupId: String): SonosSocket {
-        val group = _state.value.groups.firstOrNull { it.id == groupId }
-            ?: error("no group $groupId")
+        val group = group(groupId)
         return socketForPlayer(group.coordinatorId)
     }
 
     private suspend fun socketForPlayer(playerId: String): SonosSocket {
-        val name = PlayerNames.localHostname(playerId)
-            ?: error("cannot derive a certificate hostname for $playerId")
-        return socketForHostname(name)
+        return socketForHostname(hostnameOf(playerId))
     }
 
     /**
@@ -1541,7 +1521,7 @@ class SonosHousehold(
             // an id there that no player sends.
             "hdmi:1" -> {
                 val playerId = event.header.playerId
-                    ?: from?.let { host -> _state.value.players.firstOrNull { PlayerNames.localHostname(it.id).equals(host, ignoreCase = true) }?.id }
+                    ?: from?.let { playersOn(it).firstOrNull() }
                     ?: return
                 val connection = event.body.asJsonObject.string("connection") ?: return
                 _state.update { it.copy(hdmiConnection = it.hdmiConnection + (playerId to connection)) }
@@ -1558,7 +1538,7 @@ class SonosHousehold(
                     val members = zone.asJsonObject.getAsJsonArray("members")?.map { it.asJsonObject }.orEmpty()
                     val room = members.firstOrNull { it.string("id") in players }?.string("id") ?: return@mapNotNull null
                     val gone = members.count { member ->
-                        member.getAsJsonObject("state")?.get("disconnected")?.takeIf { it.isJsonPrimitive }?.asBoolean == true
+                        member.getAsJsonObject("state")?.bool("disconnected") == true
                     }
                     if (gone > 0) room to gone else null
                 }?.toMap().orEmpty()
@@ -1675,11 +1655,6 @@ class SonosHousehold(
         }
     }
 
-    private fun JsonObject.string(name: String): String? =
-        get(name)?.takeIf { it.isJsonPrimitive }?.asString
-
-    private fun JsonObject.long(name: String): Long? =
-        get(name)?.takeIf { it.isJsonPrimitive }?.asLong
 }
 
 /**

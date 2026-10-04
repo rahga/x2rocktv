@@ -16,7 +16,7 @@ object PlayModes {
     /** `playModes` off a `playbackStatus` body. */
     fun fromJson(playModes: JsonObject?): PlayModeState {
         if (playModes == null) return PlayModeState()
-        fun flag(name: String) = playModes.get(name)?.takeIf { it.isJsonPrimitive }?.asBoolean ?: false
+        fun flag(name: String) = playModes.bool(name) ?: false
         return PlayModeState(
             repeat = when {
                 flag("repeatOne") -> RepeatModes.ONE

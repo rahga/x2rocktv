@@ -7,11 +7,10 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import com.rahga.x2rock.lan.Xml
 import org.w3c.dom.Element
-import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
-import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * SMAPI: rating a track directly against the music service that carries it — not a Sonos
@@ -150,7 +149,7 @@ class SmapiClient(client: OkHttpClient) {
      */
     suspend fun extendedMetadata(service: Service, token: Token?, id: String): List<Pair<String, String>> =
         withContext(Dispatchers.IO) {
-            parseDynamicProperties(call(service, token, "getExtendedMetadata", "<id>${escape(id)}</id>"))
+            parseDynamicProperties(call(service, token, "getExtendedMetadata", "<id>${Xml.escape(id)}</id>"))
         }
 
     /** Rate the currently playing item. `rating` is a [Rating.id] from the current [RatingsMatch]. */
@@ -159,7 +158,7 @@ class SmapiClient(client: OkHttpClient) {
             parseRateResult(
                 call(
                     service, token, "rateItem",
-                    "<id>${escape(id)}</id><rating>${escape(rating)}</rating>",
+                    "<id>${Xml.escape(id)}</id><rating>${Xml.escape(rating)}</rating>",
                 )
             )
         }
@@ -196,7 +195,7 @@ class SmapiClient(client: OkHttpClient) {
             if (body.isBlank()) {
                 throw SmapiException("${service.name} answered HTTP ${response.code} with an empty body")
             }
-            val root = runCatching { parseXml(body) }.getOrNull()
+            val root = runCatching { Xml.parse(body) }.getOrNull()
             root?.let { faultMessage(it) }?.let { fault ->
                 throw SmapiException("${service.name} refused $action: $fault")
             }
@@ -209,8 +208,8 @@ class SmapiClient(client: OkHttpClient) {
 
     private fun envelope(action: String, params: String, token: Token?): String {
         val login = token?.let {
-            val household = it.household?.let { h -> "<householdId>${escape(h)}</householdId>" }.orEmpty()
-            "<loginToken><token>${escape(it.token)}</token><key>${escape(it.key)}</key>$household</loginToken>"
+            val household = it.household?.let { h -> "<householdId>${Xml.escape(h)}</householdId>" }.orEmpty()
+            "<loginToken><token>${Xml.escape(it.token)}</token><key>${Xml.escape(it.key)}</key>$household</loginToken>"
         }.orEmpty()
         return "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
             "<s:Header><credentials xmlns=\"$NS\"><deviceProvider>Sonos</deviceProvider>$login</credentials></s:Header>" +
@@ -225,7 +224,7 @@ class SmapiClient(client: OkHttpClient) {
 
 /** `ListAvailableServices`'s `AvailableServiceDescriptorList`, unescaped XML by the time it gets here. */
 fun parseServices(descriptorList: String): List<Service> {
-    val root = parseXml(descriptorList)
+    val root = Xml.parse(descriptorList)
     return root.allNamed("Service").mapNotNull { node ->
         val id = node.getAttribute("Id").ifEmpty { return@mapNotNull null }
         val uri = node.getAttribute("SecureUri").ifEmpty { node.getAttribute("Uri") }
@@ -250,7 +249,7 @@ fun parseServices(descriptorList: String): List<Service> {
  * rather than the plain name, matched by prefix the way openphonos does.
  */
 fun parseRatingsMap(body: String): List<RatingsMatch> {
-    val root = parseXml(body)
+    val root = Xml.parse(body)
     return root.allNamed("PresentationMap")
         .filter { it.getAttribute("type").startsWith("NowPlayingRatings") }
         .flatMap { it.allNamed("Match") }
@@ -267,7 +266,7 @@ fun parseRatingsMap(body: String): List<RatingsMatch> {
 
 /** The `dynamic/property` `(name, value)` pairs out of a `getExtendedMetadata` response. */
 fun parseDynamicProperties(body: String): List<Pair<String, String>> {
-    val root = parseXml(body)
+    val root = Xml.parse(body)
     return root.allNamed("property").mapNotNull { p ->
         val name = p.firstChildNamed("name")?.textContent
         val value = p.firstChildNamed("value")?.textContent
@@ -277,7 +276,7 @@ fun parseDynamicProperties(body: String): List<Pair<String, String>> {
 
 /** A `rateItem` response. Neither field is required — an error-free reply may carry neither. */
 fun parseRateResult(body: String): RateResult {
-    val root = parseXml(body)
+    val root = Xml.parse(body)
     return RateResult(
         shouldSkip = root.firstNamed("shouldSkip")?.textContent?.toBooleanStrictOrNull(),
         messageStringId = root.firstNamed("messageStringId")?.textContent,
@@ -298,19 +297,6 @@ private fun faultMessage(root: Element): String? {
         ?: root.firstNamed("Reason")?.firstChildNamed("Text")?.textContent
     return listOfNotNull(code, message).joinToString(": ").ifEmpty { "a fault with no message" }
 }
-
-private fun escape(value: String): String = value
-    .replace("&", "&amp;").replace("<", "&lt;")
-    .replace(">", "&gt;").replace("\"", "&quot;")
-
-private fun parseXml(xml: String): Element =
-    DocumentBuilderFactory.newInstance().apply {
-        isNamespaceAware = false
-        setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-        isExpandEntityReferences = false
-    }.newDocumentBuilder()
-        .parse(ByteArrayInputStream(xml.toByteArray()))
-        .documentElement
 
 /** Every descendant named [tag], ignoring whatever namespace prefix the server used for it. */
 private fun Element.allNamed(tag: String): List<Element> {

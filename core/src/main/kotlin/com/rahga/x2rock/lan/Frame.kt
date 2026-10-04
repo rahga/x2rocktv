@@ -54,9 +54,9 @@ data class SonosReply(
         if (isSuccess) return null
         val obj = body as? JsonObject
         val code = header.errorCode
-            ?: obj?.get("errorCode")?.takeIf { it.isJsonPrimitive }?.asString
+            ?: obj?.string("errorCode")
         val reason = header.reason
-            ?: obj?.get("reason")?.takeIf { it.isJsonPrimitive }?.asString
+            ?: obj?.string("reason")
         return listOfNotNull(code, reason).joinToString(": ").ifEmpty { "refused, with no reason given" }
     }
 }
@@ -120,3 +120,10 @@ object Frames {
         addProperty("householdId", householdId)
     }
 }
+
+/** A field as a primitive, or null when absent or structured — Gson's `asString` throws on an object. */
+internal fun JsonObject.string(name: String): String? = get(name)?.takeIf { it.isJsonPrimitive }?.asString
+
+internal fun JsonObject.long(name: String): Long? = get(name)?.takeIf { it.isJsonPrimitive }?.asLong
+
+internal fun JsonObject.bool(name: String): Boolean? = get(name)?.takeIf { it.isJsonPrimitive }?.asBoolean
