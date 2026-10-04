@@ -13,7 +13,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Before
 import org.junit.Test
-import java.net.InetAddress
 
 /**
  * Playing a directory station: a session, a load, and then finding out whether it played,
@@ -37,8 +36,7 @@ class StreamTest {
             client = LanHttp.client(book), port = fake.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(10_000) { household.state.first { it.connected } }
+            household.connectTo(fake, 10_000)
         }
     }
 
@@ -50,10 +48,6 @@ class StreamTest {
 
     private val kitchen get() = household.state.value.groups.first { it.name == "Kitchen" }
 
-    private fun push(state: String) {
-        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("playbackState", state) }
-        fake.push("playback:1", "playbackStatus", body.toString(), kitchen.id)
-    }
 
     /**
      * Wait for the load to reach the player, so what is pushed next comes after it. Blocking,
@@ -73,8 +67,8 @@ class StreamTest {
         assertEquals(true, body.get("playOnCompletion").asBoolean)
         assertEquals("SomaFM Groove Salad", body.getAsJsonObject("stationMetadata").get("name").asString)
 
-        push("PLAYBACK_STATE_BUFFERING")
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_BUFFERING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         assertEquals(StreamStart.PLAYING, started.await())
     }
 
@@ -82,7 +76,7 @@ class StreamTest {
     @Test fun `a stream the room cannot play is reported as silent`() = runBlocking<Unit> {
         val started = async(Dispatchers.Default) { household.playStream(kitchen.id, url, "Dead", startMillis = 1_500) }
         awaitLoad()
-        push("PLAYBACK_STATE_IDLE")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_IDLE")
         assertEquals(StreamStart.SILENT, started.await())
     }
 
@@ -90,7 +84,7 @@ class StreamTest {
     @Test fun `a stream still buffering is reported as starting`() = runBlocking<Unit> {
         val started = async(Dispatchers.Default) { household.playStream(kitchen.id, url, "Slow", startMillis = 1_500) }
         awaitLoad()
-        push("PLAYBACK_STATE_BUFFERING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_BUFFERING")
         assertEquals(StreamStart.STARTING, started.await())
     }
 
@@ -99,18 +93,18 @@ class StreamTest {
      * for the new one it would report a dead station as playing.
      */
     @Test fun `a room already playing must be seen to change before it counts`() = runBlocking<Unit> {
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.playbackState == "PLAYBACK_STATE_PLAYING" } }
 
         val unchanged = async(Dispatchers.Default) { household.playStream(kitchen.id, url, "Same", startMillis = 1_500) }
         awaitLoad()
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         assertEquals(StreamStart.STARTING, unchanged.await())
 
         val changed = async(Dispatchers.Default) { household.playStream(kitchen.id, url, "Next") }
         awaitLoad()
-        push("PLAYBACK_STATE_BUFFERING")
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_BUFFERING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         assertEquals(StreamStart.PLAYING, changed.await())
     }
 }

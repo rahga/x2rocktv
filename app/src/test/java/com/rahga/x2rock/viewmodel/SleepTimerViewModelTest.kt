@@ -1,23 +1,21 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.lan.Discovery
+import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.lan.connectTo
+import com.rahga.x2rock.lan.soapAction
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.PlaybackStates
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -27,6 +25,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import java.net.InetAddress
 
@@ -34,8 +33,9 @@ import java.net.InetAddress
  * The pane's sleep timer is Sonos's, so it shows a timer someone else set, and what it shows
  * after setting one is what the speaker then reports. The replies are the office One SL's.
  */
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class SleepTimerViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var upnp: MockWebServer
@@ -47,21 +47,21 @@ class SleepTimerViewModelTest {
     /** Every read of the timer, so a test can say when one must not happen. */
     @Volatile private var reads = 0
 
-    private fun capture(name: String) =
-        FakePlayer::class.java.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
 
     @Before fun setUp() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val body = request.body.readUtf8()
                     return when (action) {
-                        "GetRemainingSleepTimerDuration" -> if (true) { reads++; MockResponse().setBody(
-                            capture(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
-                        ) } else MockResponse()
+                        "GetRemainingSleepTimerDuration" -> {
+                            reads++
+                            MockResponse().setBody(
+                            FakePlayer.fixtureText(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
+                        )
+                        }
                         "ConfigureSleepTimer" -> {
                             armed = "<NewSleepTimerDuration></NewSleepTimerDuration>" !in body
                             MockResponse().setBody("<s:Envelope><s:Body><u:ConfigureSleepTimerResponse/></s:Body></s:Envelope>")
@@ -80,10 +80,9 @@ class SleepTimerViewModelTest {
         )
         viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
-        groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        groupId = fake.groupId(household)
     }
 
     @After fun tearDown() {
@@ -91,7 +90,6 @@ class SleepTimerViewModelTest {
         scope.cancel()
         fake.shutdown()
         upnp.shutdown()
-        Dispatchers.resetMain()
     }
 
     /** Set from the Sonos app, say: the old timer lived in this view model and never knew. */
@@ -112,10 +110,10 @@ class SleepTimerViewModelTest {
         armed = true
         viewModel.selectGroup(groupId, "Room")
         withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
         armed = false
-        push("PLAYBACK_STATE_PAUSED")
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PAUSED")
         withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
     }
 
@@ -124,19 +122,15 @@ class SleepTimerViewModelTest {
         armed = true
         viewModel.selectGroup(groupId, "Room")
         withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
         val before = reads
-        push("PLAYBACK_STATE_BUFFERING")
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_BUFFERING")
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         delay(500)
         assertEquals(before, reads)
     }
 
-    private fun push(state: String) {
-        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("playbackState", state) }
-        fake.push("playback:1", "playbackStatus", body.toString(), groupId)
-    }
 
     @Test fun `setting and cancelling show what the speaker then reports`() = runBlocking<Unit> {
         viewModel.selectGroup(groupId, "Room")

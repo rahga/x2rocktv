@@ -11,7 +11,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -28,11 +27,6 @@ class NetworkChangeTest {
     private lateinit var scope: CoroutineScope
     private val sweeps = AtomicInteger()
 
-    private class Store(override val keyedByNetwork: Boolean, private var held: Discovery.DiscoveredPlayer?) : SeedStore {
-        override fun load() = held
-        override fun save(player: Discovery.DiscoveredPlayer) { held = player }
-        override fun clear() { held = null }
-    }
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
@@ -44,11 +38,11 @@ class NetworkChangeTest {
         fake.shutdown()
     }
 
-    private fun seed() = Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId)
+    private fun seed() = fake.seed
 
     private fun household(keyed: Boolean) = SonosHousehold(
         scope = scope, addressBook = PlayerAddressBook(), multicast = MulticastGate.None,
-        seeds = Store(keyed, seed()), port = fake.port,
+        seeds = FakeSeedStore(keyed, seed()), port = fake.port,
         ssdp = { sweeps.incrementAndGet(); listOf(seed()) },
     )
 

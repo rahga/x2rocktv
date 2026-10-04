@@ -75,10 +75,11 @@ class FakePlayer(
      * [received] is a queue and [awaitCommand] *polls* it, so anything waited for is gone
      * afterwards — counting it after a wait reports zero. This is the log to count.
      */
-    private val commandLog = mutableListOf<String>()
+    private val commandLog = mutableListOf<Pair<String?, String>>()
 
     @Synchronized
-    fun commandsNamed(command: String): Int = commandLog.count { it == command }
+    fun commandsNamed(command: String, namespace: String? = null): Int =
+        commandLog.count { (ns, c) -> c == command && (namespace == null || ns == namespace) }
 
     @Synchronized
     fun clearHistory() {
@@ -310,11 +311,38 @@ class FakePlayer(
      * A speaker's own level, which a player addresses by `playerId` rather than by group —
      * the only event here that is not group-scoped, and the reason [emit] takes both.
      */
-    fun pushPlayerVolume(playerId: String, volume: Int? = null) {
-        val body = fixture("event.playerVolume.json").asJsonObject
-        volume?.let { body.addProperty("volume", it) }
-        emit("playerVolume:1", "playerVolume", body, groupId = null, playerId = playerId)
+    fun pushPlayerVolume(playerId: String, volume: Int? = null, muted: Boolean? = null, fixed: Boolean? = null) {
+        emit("playerVolume:1", "playerVolume", volumeBody("event.playerVolume.json", volume, muted, fixed), groupId = null, playerId = playerId)
     }
+
+    /** A group's level, from the captured event with any of its three fields overridden. */
+    fun pushGroupVolume(groupId: String, volume: Int? = null, muted: Boolean? = null, fixed: Boolean? = null) {
+        emit("groupVolume:1", "groupVolume", volumeBody("event.groupVolume.json", volume, muted, fixed), groupId)
+    }
+
+    private fun volumeBody(capture: String, volume: Int?, muted: Boolean?, fixed: Boolean?) =
+        fixture(capture).apply {
+            volume?.let { addProperty("volume", it) }
+            muted?.let { addProperty("muted", it) }
+            fixed?.let { addProperty("fixed", it) }
+        }
+
+    /** A playback status from the capture, with the state or queue version a test is about. */
+    fun pushPlaybackStatus(groupId: String, state: String? = null, queueVersion: String? = null) {
+        val body = fixture("event.playbackStatus.json").apply {
+            state?.let { addProperty("playbackState", it) }
+            queueVersion?.let { addProperty("queueVersion", it) }
+        }
+        emit("playback:1", "playbackStatus", body, groupId)
+    }
+
+    /** This player as a connect seed: itself, on loopback, in its household. */
+    val seed: Discovery.DiscoveredPlayer
+        get() = Discovery.DiscoveredPlayer(id, InetAddress.getByName("127.0.0.1"), householdId)
+
+    /** The group this player coordinates in [household]'s topology now. */
+    fun groupId(household: SonosHousehold): String =
+        household.state.value.groups.first { it.coordinatorId == id }.id
 
     private fun emit(
         namespace: String,
@@ -361,6 +389,10 @@ class FakePlayer(
         releaseLatch.get().await(10, TimeUnit.SECONDS)
     }
 
+    /** Blocks until the client sends [command], or fails. */
+    fun awaitCommand(command: String, timeoutMillis: Long = 2_000): JsonObject =
+        awaitCommand(timeoutMillis) { it.get("command")?.asString == command }
+
     /** Blocks until the client sends a command matching [predicate], or fails. */
     fun awaitCommand(timeoutMillis: Long = 2_000, predicate: (JsonObject) -> Boolean): JsonObject {
         val deadline = System.currentTimeMillis() + timeoutMillis
@@ -399,7 +431,7 @@ class FakePlayer(
                 val body = frame[1].takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
                 synchronized(this@FakePlayer) {
                     bodies += command to body
-                    commandLog += command
+                    commandLog += header.get("namespace")?.asString to command
                 }
             }
             received += header
@@ -515,12 +547,13 @@ class FakePlayer(
 
     companion object {
 
-        /** Reads a verbatim capture from `src/testFixtures/resources/fixtures/`. */
-        fun fixture(name: String): JsonObject {
-            val stream = FakePlayer::class.java.getResourceAsStream("/fixtures/$name")
+        /** Reads a verbatim capture from `src/testFixtures/resources/fixtures/`, as JSON. */
+        fun fixture(name: String): JsonObject = JsonParser.parseString(fixtureText(name)).asJsonObject
+
+        /** The same, as text: the UPnP replies and `/status/zp` are XML. */
+        fun fixtureText(name: String): String =
+            FakePlayer::class.java.getResourceAsStream("/fixtures/$name")?.readBytes()?.decodeToString()
                 ?: error("missing fixture $name — capture it from a real player, do not write one")
-            return JsonParser.parseReader(stream.reader()).asJsonObject
-        }
 
         fun knownPlayerIds(): Set<String> =
             fixture("getGroups.reply.json").getAsJsonArray("players")

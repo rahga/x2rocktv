@@ -1,6 +1,7 @@
 package com.rahga.x2rock.radio
 
 import com.google.gson.JsonParser
+import com.rahga.x2rock.lan.FakePlayer
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -16,7 +17,7 @@ class RadioDirectoryTest {
 
     private lateinit var server: MockWebServer
     private lateinit var directory: RadioDirectory
-    private val capture = javaClass.getResourceAsStream("/fixtures/radiobrowser.stations.jazz.json")!!.readBytes().decodeToString()
+    private val capture = FakePlayer.fixtureText("radiobrowser.stations.jazz.json")
 
     @Before fun setUp() {
         server = MockWebServer().apply { start() }

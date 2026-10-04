@@ -34,7 +34,7 @@ class HouseholdIdTest {
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         fake.ignoreHouseholdProbe = true
-        val zp = javaClass.getResourceAsStream("/fixtures/status.zp.xml")!!.readBytes().decodeToString()
+        val zp = FakePlayer.fixtureText("status.zp.xml")
         status = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest) =
@@ -62,7 +62,7 @@ class HouseholdIdTest {
     }
 
     @Test fun `a seed with no household learns the long id from status zp`() = runBlocking<Unit> {
-        household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), householdId = null))
+        household.connect(fake.seed.copy(householdId = null))
         val state = withTimeout(10_000) { household.state.first { it.connected } }
         assertEquals(fake.householdId, state.householdId)
     }

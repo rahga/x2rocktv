@@ -1,8 +1,8 @@
 package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import com.rahga.x2rock.lan.Discovery
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
@@ -10,15 +10,11 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.radio.RadioDirectory
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -28,12 +24,13 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import java.net.InetAddress
 import java.util.Locale
 
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class RadioViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var directoryServer: MockWebServer
@@ -45,7 +42,6 @@ class RadioViewModelTest {
         .readBytes().decodeToString()
 
     @Before fun setUp() {
-        Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         directoryServer = MockWebServer().apply {
             dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
@@ -60,8 +56,7 @@ class RadioViewModelTest {
             client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(10_000) { household.state.first { it.connected } }
+            household.connectTo(fake, 10_000)
         }
         viewModel = RadioViewModel(
             household,
@@ -75,15 +70,10 @@ class RadioViewModelTest {
         scope.cancel()
         fake.shutdown()
         directoryServer.shutdown()
-        Dispatchers.resetMain()
     }
 
     private val kitchen get() = household.state.value.groups.first { it.name == "Kitchen" }
 
-    private fun push(state: String) {
-        val body = FakePlayer.fixture("event.playbackStatus.json").apply { addProperty("playbackState", state) }
-        fake.push("playback:1", "playbackStatus", body.toString(), kitchen.id)
-    }
 
     @Test fun `the most voted come first, then this country, then genres`() {
         val us = categoriesFor(Locale.US)
@@ -99,7 +89,7 @@ class RadioViewModelTest {
         var done = false
         viewModel.play(station) { done = true }
         fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
-        push("PLAYBACK_STATE_PLAYING")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { while (!done) delay(20) }
     }
 
@@ -110,7 +100,7 @@ class RadioViewModelTest {
         var done = false
         viewModel.play(station) { done = true }
         fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
-        push("PLAYBACK_STATE_IDLE")
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_IDLE")
         // The whole start window: the silent answer is only known once it has run out.
         val said = withTimeout(15_000) { viewModel.notice.first { it != null } }
         assertEquals(silentNotice(station), said)

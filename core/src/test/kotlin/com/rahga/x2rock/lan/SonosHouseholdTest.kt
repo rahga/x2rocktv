@@ -19,7 +19,6 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.net.InetAddress
 
 /**
  * Behaviour of the live household, against a [FakePlayer] rather than real speakers.
@@ -29,35 +28,19 @@ import java.net.InetAddress
  */
 class SonosHouseholdTest {
 
-    private companion object {
-        const val VOLUME_42 = "{\"volume\":42,\"muted\":false,\"fixed\":false}"
-        const val VOLUME_9 = "{\"volume\":9,\"muted\":false,\"fixed\":false}"
-    }
-
 
     private lateinit var fake: FakePlayer
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
-    private lateinit var seeds: InMemorySeedStore
+    private lateinit var seeds: FakeSeedStore
 
-    private class InMemorySeedStore(private var held: Discovery.DiscoveredPlayer? = null) : SeedStore {
-        override fun load() = held
-        override fun save(player: Discovery.DiscoveredPlayer) { held = player }
-        override fun clear() { held = null }
-        fun peek() = held
-    }
 
     /** Always seeded: an unseeded connect would run real SSDP and find the actual house. */
-    private fun seedFor(player: FakePlayer) = Discovery.DiscoveredPlayer(
-        id = player.id,
-        address = InetAddress.getByName("127.0.0.1"),
-        householdId = player.householdId,
-    )
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
-        seeds = InMemorySeedStore(seedFor(fake))
+        seeds = FakeSeedStore(held = fake.seed)
         val book = PlayerAddressBook()
         household = SonosHousehold(
             scope = scope,
@@ -77,7 +60,7 @@ class SonosHouseholdTest {
     }
 
     private fun connected() = runBlocking {
-        household.connect(seedFor(fake))
+        household.connect(fake.seed)
         withTimeout(5_000) { household.state.first { it.connected } }
     }
 
@@ -101,7 +84,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a live stream permits neither skipping nor pausing`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("playbackStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.actions?.canSkip == true } }
@@ -134,7 +117,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a service station carries a track and a logo where a URL stream carries neither`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("stationMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
@@ -155,7 +138,7 @@ class SonosHouseholdTest {
     /** What a source *is*, which decides its artwork rather than its controls. */
     @Test fun `a station is recognised as radio`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("metadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
@@ -178,7 +161,7 @@ class SonosHouseholdTest {
      */
     @Test fun `hasTrackId follows the track's own id, not whether it is radio`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("metadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
@@ -197,7 +180,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a URL stream reports its now-playing through streamInfo`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("radioMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
@@ -212,7 +195,7 @@ class SonosHouseholdTest {
     /** A station between titles sends an empty string, which must read as absent. */
     @Test fun `a blank streamInfo is treated as absent`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("radioMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
@@ -251,7 +234,7 @@ class SonosHouseholdTest {
 
     @Test fun `subscribes to the group-scoped namespaces on the coordinator`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
             val cmd = fake.awaitCommand {
                 it.get("namespace")?.asString == namespace && it.get("command")?.asString == "subscribe"
@@ -264,9 +247,9 @@ class SonosHouseholdTest {
 
     @Test fun `a pushed event with no success reaches the state flow`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
-        fake.push("groupVolume:1", "groupVolume", """{"volume":37,"muted":false,"fixed":false}""", groupId)
+        fake.pushGroupVolume(groupId, 37)
         val volume = withTimeout(5_000) {
             household.groupStates.first { it[groupId]?.volume != null }[groupId]!!.volume!!
         }
@@ -282,7 +265,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a playback error is kept as an error, not read as a status`() = runBlocking<Unit> {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         fake.pushFixture("radioPlaybackStatus", groupId)
         val playing = withTimeout(5_000) {
             household.groupStates.first { it[groupId]?.playbackState == PlaybackStates.PLAYING }
@@ -318,7 +301,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a playback error clears when the source changes, not when it repeats`() = runBlocking<Unit> {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         fake.pushFixture("stationMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
         fake.pushFixture("playbackError", groupId)
@@ -334,7 +317,7 @@ class SonosHouseholdTest {
 
     @Test fun `a playback event without playModes leaves the play mode alone`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.push(
             "playback:1", "playbackStatus",
@@ -355,7 +338,7 @@ class SonosHouseholdTest {
     /** Regression: positionUpdatedAt used to move even with no position, rewinding the UI. */
     @Test fun `an event without a position does not restart the progress clock`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.push("playback:1", "playbackStatus", """{"positionMillis":5000}""", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.positionMillis == 5000L } }
@@ -380,7 +363,7 @@ class SonosHouseholdTest {
      */
     @Test fun `switching to a TV input clears the interrupted track's duration`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.pushFixture("metadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
@@ -409,7 +392,7 @@ class SonosHouseholdTest {
      */
     @Test fun `a playback event alone does not count as metadata having arrived`() = runBlocking<Unit> {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
 
         fake.push("playback:1", "playbackStatus", """{"positionMillis":1000}""", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.positionMillis == 1000L } }
@@ -447,9 +430,9 @@ class SonosHouseholdTest {
 
     @Test fun `a command is addressed to the group and the player answers`() = runBlocking {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         household.togglePlayPause(groupId)
-        val cmd = fake.awaitCommand { it.get("command")?.asString == "togglePlayPause" }
+        val cmd = fake.awaitCommand("togglePlayPause")
         assertEquals("playback:1", cmd.get("namespace").asString)
         assertEquals(groupId, cmd.get("groupId").asString)
     }
@@ -549,7 +532,7 @@ class SonosHouseholdTest {
         }
 
         // And it then receives state, which is the thing that was actually broken.
-        fake.push("groupVolume:1", "groupVolume", VOLUME_42, merged.id)
+        fake.pushGroupVolume(merged.id, 42)
         val volume = withTimeout(5_000) {
             household.groupStates.first { it[merged.id]?.volume != null }[merged.id]!!.volume!!
         }
@@ -560,7 +543,7 @@ class SonosHouseholdTest {
     @Test fun `a group that disappears is forgotten`() = runBlocking<Unit> {
         connected()
         val doomed = household.state.value.groups.first { it.name == "Guest TV" }
-        fake.push("groupVolume:1", "groupVolume", VOLUME_9, doomed.id)
+        fake.pushGroupVolume(doomed.id, 9)
         withTimeout(5_000) { household.groupStates.first { it[doomed.id]?.volume != null } }
 
         fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
@@ -573,9 +556,7 @@ class SonosHouseholdTest {
     // Guest TV joins Kitchen's group, so Guest TV's player is a member and nothing more: its
     // socket carries only its own volume. Kitchen's is a coordinator's.
 
-    private fun playerSubscribes(): Int = fake.received.count {
-        it.get("namespace")?.asString == "playerVolume:1" && it.get("command")?.asString == "subscribe"
-    }
+    private fun playerSubscribes(): Int = fake.commandsNamed("subscribe", namespace = "playerVolume:1")
 
     /**
      * A regroup is about groups. It used to subscribe every player's level and HDMI port again
@@ -598,7 +579,8 @@ class SonosHouseholdTest {
         fake.refuse("hdmi:1/subscribe")
         val state = connected()
         val beam = state.groups.first { it.name == "Guest TV" }.coordinatorId
-        delay(500)
+        // The refused subscribe has to have gone out before the refusal is lifted.
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("namespace")?.asString == "hdmi:1" && it.get("playerId")?.asString == beam }
         fake.allow("hdmi:1/subscribe")
         fake.clearHistory()
         fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
@@ -630,7 +612,7 @@ class SonosHouseholdTest {
         }
         // The catch-up has finished once the new group is subscribed on Kitchen.
         val joined = household.state.value.groups.first { it.coordinatorId == coordinator }.id
-        fake.push("groupVolume:1", "groupVolume", VOLUME_42, joined)
+        fake.pushGroupVolume(joined, 42)
         withTimeout(10_000) { household.groupStates.first { it[joined]?.volume != null } }
         fake.pushPlayerVolume(member, volume = 9)
         withTimeout(5_000) { household.playerVolumes.first { it[member]?.volume == 9 } }
@@ -713,7 +695,7 @@ class SonosHouseholdTest {
         val refused = household.state.value
         assertTrue(refused.authenticationRequired)
         assertEquals(AUTHENTICATION_REQUIRED, refused.error)
-        assertNotNull("a refusing player is still the right one to remember", seeds.peek())
+        assertNotNull("a refusing player is still the right one to remember", seeds.held)
 
         fake.allow("getGroups")
         household.connect()
@@ -730,7 +712,7 @@ class SonosHouseholdTest {
 
     @Test fun `a household with UPnP on reads as on`() {
         connected()
-        runBlocking { fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "getSettingsGroup" } }
+        runBlocking { fake.awaitCommand("getSettingsGroup", 5_000) }
         assertFalse(household.state.value.upnpOff)
     }
 
@@ -745,7 +727,7 @@ class SonosHouseholdTest {
     /** Every settings group's version rides in every event; only a moved `security` is news. */
     @Test fun `an event at the version already read asks nothing`() = runBlocking<Unit> {
         connected()
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "getSettingsGroup" }
+        fake.awaitCommand("getSettingsGroup", 5_000)
         delay(200)
         val reads = fake.commandsNamed("getSettingsGroup")
         // From the seed, or it is ignored for the wrong reason and this could not fail.
@@ -796,7 +778,7 @@ class SonosHouseholdTest {
     /** The captured status carries a queueVersion. */
     @Test fun `a playback status carries the queue version`() = runBlocking<Unit> {
         connected()
-        val groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        val groupId = fake.groupId(household)
         fake.pushFixture("playbackStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
     }
@@ -815,7 +797,7 @@ class SonosHouseholdTest {
         assertTrue(state.connected)
         assertNull(state.error)
         val dining = state.groups.first { it.name == "Dining Room" }.id
-        fake.push("groupVolume:1", "groupVolume", VOLUME_42, dining)
+        fake.pushGroupVolume(dining, 42)
         withTimeout(5_000) { household.groupStates.first { it[dining]?.volume?.volume == 42 } }
     }
 
@@ -899,7 +881,7 @@ class SonosHouseholdTest {
     @Test fun `a network that drops SSDP is found by mDNS`() = runBlocking<Unit> {
         val cold = SonosHousehold(
             scope = scope, addressBook = PlayerAddressBook().also { }, multicast = MulticastGate.None,
-            mdns = { listOf(seedFor(fake)) }, port = fake.port, ssdp = { emptyList() },
+            mdns = { listOf(fake.seed) }, port = fake.port, ssdp = { emptyList() },
         )
         try {
             cold.connect()
@@ -912,7 +894,7 @@ class SonosHouseholdTest {
     /** The whole point of the seed store: a warm start skips discovery. */
     @Test fun `a successful connect is remembered`() {
         connected()
-        val remembered = seeds.peek()
+        val remembered = seeds.held
         assertNotNull(remembered)
         assertEquals(fake.id, remembered!!.id)
         assertEquals(fake.householdId, remembered.householdId)

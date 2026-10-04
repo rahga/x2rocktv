@@ -5,7 +5,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -33,8 +32,6 @@ class QueueEditTest {
     /** `action` followed by the request's own fields, in order. */
     private val requests = CopyOnWriteArrayList<Pair<String, Map<String, String>>>()
 
-    private fun capture(name: String) =
-        javaClass.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
 
     private fun fields(body: String): Map<String, String> =
         Regex("<(\\w+)>([^<]*)</\\1>").findAll(body).associate { it.groupValues[1] to it.groupValues[2] }
@@ -44,20 +41,20 @@ class QueueEditTest {
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val f = fields(request.body.readUtf8())
                     requests += action to f
                     return when (action) {
                         // Six a time, as the capture was taken; a page past the end is the second.
                         "Browse" -> MockResponse().setBody(
-                            capture(if (f["StartingIndex"] == "0") "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
+                            FakePlayer.fixtureText(if (f["StartingIndex"] == "0") "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                         )
                         "SaveQueue" -> MockResponse().setBody(
                             "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>" +
                                 "<u:SaveQueueResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">" +
                                 "<AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>"
                         )
-                        else -> MockResponse().setBody("<s:Envelope><s:Body/></s:Envelope>")
+                        else -> MockResponse().setBody(EMPTY_SOAP)
                     }
                 }
             }
@@ -70,8 +67,7 @@ class QueueEditTest {
             client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
         requests.clear()
     }

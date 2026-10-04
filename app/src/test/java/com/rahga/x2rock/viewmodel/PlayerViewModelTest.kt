@@ -1,6 +1,5 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.lan.Discovery
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
@@ -9,16 +8,12 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.test.resetMain
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,8 +22,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
-import java.net.InetAddress
 
 /**
  * The view model against a real socket to a [FakePlayer], rather than a stubbed repository.
@@ -38,8 +33,9 @@ import java.net.InetAddress
  * that collapsed to one step, the error that never surfaced. Those are the cases here,
  * because they are the ones that actually happened.
  */
-@OptIn(ExperimentalCoroutinesApi::class) // Dispatchers.setMain and resetMain
 class PlayerViewModelTest {
+    @get:Rule val mainDispatcher = MainDispatcherRule()
+
 
     private lateinit var fake: FakePlayer
     private lateinit var scope: CoroutineScope
@@ -49,8 +45,6 @@ class PlayerViewModelTest {
     private lateinit var groupId: String
 
     @Before fun setUp() {
-        // ViewModel coroutines need a main dispatcher; the household keeps its own scope.
-        kotlinx.coroutines.Dispatchers.setMain(Dispatchers.Unconfined)
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
@@ -67,11 +61,11 @@ class PlayerViewModelTest {
 
         runBlocking {
             household.connect(
-                Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId)
+                fake.seed
             )
             withTimeout(5_000) { household.state.first { it.connected } }
         }
-        groupId = household.state.value.groups.first { it.coordinatorId == fake.id }.id
+        groupId = fake.groupId(household)
         viewModel.selectGroup(groupId, "Test Room")
     }
 
@@ -79,14 +73,7 @@ class PlayerViewModelTest {
         household.disconnect()
         scope.cancel()
         fake.shutdown()
-        Dispatchers.resetMain()
     }
-
-    private fun pushVolume(volume: Int) = fake.push(
-        "groupVolume:1", "groupVolume",
-        """{"volume":$volume,"muted":false,"fixed":false}""",
-        groupId,
-    )
 
     private suspend fun awaitVolume(volume: Int) = withTimeout(5_000) {
         viewModel.uiState.first { it.volume == volume }
@@ -109,7 +96,7 @@ class PlayerViewModelTest {
      */
     @Test fun `a step before a volume is known moves it by the step`() = runBlocking<Unit> {
         viewModel.adjustVolume(+5)
-        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setRelativeVolume" }
+        fake.awaitCommand("setRelativeVolume", 3_000)
         assertEquals(5, sentDelta())
         assertEquals("no absolute level may be sent from a guess", 0, fake.commandsNamed("setVolume"))
     }
@@ -117,7 +104,7 @@ class PlayerViewModelTest {
     @Test fun `muting before a volume is known sends nothing`() = runBlocking<Unit> {
         viewModel.toggleMute()
         delay(600)
-        assertFalse(fake.received.any { it.get("command")?.asString == "setMute" })
+        assertEquals(0, fake.commandsNamed("setMute"))
     }
 
     // ---------------------------------------------------------------- accumulation
@@ -127,7 +114,7 @@ class PlayerViewModelTest {
      * all read the same unchanged volume and the speaker moved one step instead of five.
      */
     @Test fun `repeated presses accumulate into one command`() = runBlocking<Unit> {
-        pushVolume(30)
+        fake.pushGroupVolume(groupId, 30)
         awaitVolume(30)
         fake.clearHistory()
 
@@ -151,7 +138,7 @@ class PlayerViewModelTest {
      * set that way — so the event is the captured groupVolume shape with `fixed` true.
      */
     @Test fun `a step on a fixed volume sends nothing and says why`() = runBlocking<Unit> {
-        fake.push("groupVolume:1", "groupVolume", """{"volume":100,"muted":false,"fixed":true}""", groupId)
+        fake.pushGroupVolume(groupId, 100, fixed = true)
         withTimeout(5_000) { viewModel.uiState.first { it.volumeFixed } }
         fake.clearHistory()
         viewModel.adjustVolume(+5)
@@ -163,10 +150,10 @@ class PlayerViewModelTest {
 
     /** Muted is not a reason to refuse a step: the player unmutes on either setter. */
     @Test fun `a step on a muted room is sent`() = runBlocking<Unit> {
-        fake.push("groupVolume:1", "groupVolume", """{"volume":30,"muted":true,"fixed":false}""", groupId)
+        fake.pushGroupVolume(groupId, 30, muted = true)
         withTimeout(5_000) { viewModel.uiState.first { it.isMuted } }
         viewModel.adjustVolume(-5)
-        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setRelativeVolume" }
+        fake.awaitCommand("setRelativeVolume", 3_000)
         assertEquals(-5, sentDelta())
     }
 
@@ -186,7 +173,7 @@ class PlayerViewModelTest {
         fake.clearHistory()
 
         viewModel.toggleShuffle()
-        fake.awaitCommand(timeoutMillis = 3_000) { it.get("command")?.asString == "setPlayModes" }
+        fake.awaitCommand("setPlayModes", 3_000)
         val modes = fake.lastCommandBody("setPlayModes")!!.getAsJsonObject("playModes")
         assertTrue("shuffle should have been turned on", modes.get("shuffle").asBoolean)
         // The repeat the speaker reported must survive a shuffle toggle.
@@ -309,14 +296,14 @@ class PlayerViewModelTest {
      * `runCatching` sees it.
      */
     @Test fun `a volume send cancelled by a newer press says nothing`() = runBlocking<Unit> {
-        pushVolume(20)
+        fake.pushGroupVolume(groupId, 20)
         awaitVolume(20)
         fake.holdRepliesTo("setRelativeVolume")
         viewModel.adjustVolume(+5)
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setRelativeVolume" }
+        fake.awaitCommand("setRelativeVolume", 5_000)
         viewModel.adjustVolume(+5)
         fake.releaseReplies()
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setRelativeVolume" }
+        fake.awaitCommand("setRelativeVolume", 5_000)
         delay(500)
         assertNull("a cancelled send was reported as a failure", viewModel.uiState.value.notice)
         // The first step had already gone when it was cancelled, so the second sends its own.
@@ -361,7 +348,7 @@ class PlayerViewModelTest {
      * teardown clears — so a dead household spun forever instead of saying so.
      */
     @Test fun `losing the household surfaces an error rather than a spinner`() = runBlocking<Unit> {
-        pushVolume(20)
+        fake.pushGroupVolume(groupId, 20)
         awaitVolume(20)
 
         fake.dropConnection()

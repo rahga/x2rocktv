@@ -5,7 +5,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -32,19 +31,17 @@ class SleepTimerTest {
     /** Every `NewSleepTimerDuration` sent, in order. */
     private val durations = CopyOnWriteArrayList<String>()
 
-    private fun capture(name: String) =
-        javaClass.getResourceAsStream("/fixtures/$name")!!.readBytes().decodeToString()
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = request.getHeader("SOAPAction").orEmpty().substringAfter('#').trim('"')
+                    val action = soapAction(request)
                     val body = request.body.readUtf8()
                     return when (action) {
                         "GetRemainingSleepTimerDuration" -> MockResponse().setBody(
-                            capture(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
+                            FakePlayer.fixtureText(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
                         )
                         "ConfigureSleepTimer" -> {
                             val duration = Regex("<NewSleepTimerDuration>([^<]*)</NewSleepTimerDuration>").find(body)!!.groupValues[1]
@@ -65,8 +62,7 @@ class SleepTimerTest {
             client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
         )
         runBlocking {
-            household.connect(Discovery.DiscoveredPlayer(fake.id, InetAddress.getByName("127.0.0.1"), fake.householdId))
-            withTimeout(5_000) { household.state.first { it.connected } }
+            household.connectTo(fake)
         }
     }
 
