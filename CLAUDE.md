@@ -336,6 +336,15 @@ prevented from doing so.
 Per-room volume lives in the room panel instead, on left/right, where it is asked for
 explicitly rather than intercepted.
 
+**Taking them even in the panel is not possible on a CEC setup, as it turned out.** Fine
+control on the remote's volume keys while a panel row had focus was tried on the Streamer
+(2026-10-05) and backed out: the row never received a key. Google TV hands volume to HDMI-CEC
+before any app sees it, and the soundbar on the other end — Bedroom's Beam — moved 2 per press,
+which at first looked like the app applying each press twice. The keys already control what is
+audible there, which is the point of this section; a device without CEC volume would deliver
+them, but none in this house does that has been checked, and the Shield's showing up in
+`getevent` says only that the kernel saw them.
+
 ### The room panel
 
 Click (DPAD centre) on a room opens `RoomPanel`: everything that room can be told to do, on
