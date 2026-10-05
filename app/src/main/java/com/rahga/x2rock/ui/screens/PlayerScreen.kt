@@ -79,6 +79,7 @@ import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
@@ -700,7 +701,7 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StepMark("\u2212", showSteps) { onStep(-VOLUME_STEP) }
+            StepMark("\u2212", showSteps, MaterialTheme.typography.titleMedium) { onStep(-VOLUME_STEP) }
             Icon(
                 imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
                 else Icons.AutoMirrored.Filled.VolumeUp,
@@ -717,22 +718,9 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
                 // Wide enough for "100", so the control does not change size as the level moves.
                 modifier = Modifier.widthIn(min = 40.dp),
             )
-            StepMark("+", showSteps) { onStep(+VOLUME_STEP) }
+            StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+VOLUME_STEP) }
         }
     }
-}
-
-/** − or +: always laid out, drawn only when it can be used, and a tap target of its own. */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun StepMark(mark: String, shown: Boolean, onStep: () -> Unit) {
-    Text(
-        text = mark,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier
-            .alpha(if (shown) 1f else 0f)
-            .then(if (shown) Modifier.tapToClick(onStep) else Modifier),
-    )
 }
 
 /**
