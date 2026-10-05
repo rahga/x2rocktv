@@ -428,14 +428,24 @@ class PlayerViewModel @Inject constructor(
 
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
-        val groupId = _groupId.value ?: return
         val state = uiState.value
         val base = pendingSeekMillis ?: run {
             val elapsed = if (state.playbackState.isPlaying())
                 System.currentTimeMillis() - state.positionUpdatedAt else 0L
             state.positionMillis + elapsed
         }
-        val target = (base + deltaMillis)
+        seekTo(base + deltaMillis)
+    }
+
+    /**
+     * Seek to [positionMillis] in the track: a tap on the progress bar. Debounced with [seekBy],
+     * so a tap and then a press move from where the tap aimed, not from a position that has
+     * not caught up yet.
+     */
+    fun seekTo(positionMillis: Long) {
+        val groupId = _groupId.value ?: return
+        val state = uiState.value
+        val target = positionMillis
             .coerceIn(0, state.durationMillis.takeIf { it > 0 } ?: Long.MAX_VALUE)
         pendingSeekMillis = target
         seekDebounceJob?.cancel()
