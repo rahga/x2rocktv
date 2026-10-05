@@ -161,6 +161,25 @@ fun HomeScreen(
         }
     }
 
+    // The rooms arrive after the first frame — some seconds after it on a cold start on the
+    // Streamer — so the resume request above finds no row to take focus, quietly fails, and
+    // Compose gives focus to the first thing that will have it: the settings gear. Seen there,
+    // 2026-10-05. So once, when the list first has its selected row, focus goes where it was
+    // meant to start; not if something has been opened meanwhile, which has its own.
+    var startFocused by remember { mutableStateOf(false) }
+    val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
+    LaunchedEffect(listReady) {
+        if (!listReady || startFocused) return@LaunchedEffect
+        startFocused = true
+        if (modalVisible) return@LaunchedEffect
+        // The row is composed in the frames after the list arrives; asked at once, it is not
+        // there yet — the same wait the resume request makes.
+        withFrameNanos { }
+        withFrameNanos { }
+        if (sidebarVisible) sidebarFocusRequester.requestFocusSafely()
+        else detailFocusRequester.requestFocusSafely()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(
