@@ -165,7 +165,7 @@ class HomeViewModel @Inject constructor(
      *
      * Pushed off `playerVolume:1`, so it follows someone turning a speaker up from the
      * Sonos app rather than needing a re-read. Overlaid with whatever a press just asked
-     * for, until the speaker confirms it — see [adjustPlayerVolume].
+     * for, until the speaker confirms it — see [setPlayerVolume].
      */
     val playerVolumes: StateFlow<Map<String, Int>> =
         combine(household.playerVolumes, _pendingPlayerVolumes) { pushed, pending ->
@@ -395,24 +395,37 @@ class HomeViewModel @Inject constructor(
 
     /** A whole group's level, from a row that offers to join it. */
     fun adjustGroupVolume(groupId: String, delta: Int) {
-        if (household.groupState(groupId).volume?.fixed == true) return _notice.post(FIXED_VOLUME)
         val current = groupVolumes.value[groupId] ?: return
-        val target = (current + delta).coerceIn(0, 100)
+        setGroupVolume(groupId, current + delta)
+    }
+
+    /** A group's level set outright, as a touch on its bar does; presses go through here too. */
+    fun setGroupVolume(groupId: String, volume: Int) {
+        if (household.groupState(groupId).volume?.fixed == true) return _notice.post(FIXED_VOLUME)
+        // Unknown until the speaker has said; a level set from nothing would be a guess.
+        if (groupVolumes.value[groupId] == null) return
+        val target = volume.coerceIn(0, 100)
         _pendingGroupVolumes.update { it + (groupId to target) }
         groupVolumeJobs[groupId]?.cancel()
         groupVolumeJobs[groupId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             runCatching { household.setGroupVolume(groupId, target) }.onFailure { _notice.failure("change the volume", it) }
-            // Only if it is still ours — see [adjustPlayerVolume].
+            // Only if it is still ours — see [setPlayerVolume].
             _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
         }
     }
 
     /** One speaker's own level, accumulating presses the way the group volume does. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
-        if (household.playerVolumes.value[playerId]?.fixed == true) return _notice.post(FIXED_VOLUME)
         val current = playerVolumes.value[playerId] ?: return
-        val target = (current + delta).coerceIn(0, 100)
+        setPlayerVolume(playerId, current + delta)
+    }
+
+    /** One speaker's level set outright; see [setGroupVolume]. */
+    fun setPlayerVolume(playerId: String, volume: Int) {
+        if (household.playerVolumes.value[playerId]?.fixed == true) return _notice.post(FIXED_VOLUME)
+        if (playerVolumes.value[playerId] == null) return
+        val target = volume.coerceIn(0, 100)
         _pendingPlayerVolumes.update { it + (playerId to target) }
         playerVolumeJobs[playerId]?.cancel()
         playerVolumeJobs[playerId] = viewModelScope.launch {
