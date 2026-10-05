@@ -13,12 +13,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.text.style.TextAlign
+import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.setValue
@@ -445,15 +450,20 @@ private const val VOLUME_STEP = 5
 
 /**
  * Bass or treble: left and right step it, as a level row does, since nothing else in the
- * panel uses those directions. Select does nothing; the value is the whole row.
+ * panel uses those directions, and − and + say so while it has focus. By touch those are
+ * the two targets. Select does nothing, and nor does a tap between them; the value is the
+ * whole row.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val shown = focused || LocalInputModeManager.current.inputMode == InputMode.Touch
     AppButton(
         onClick = {},
         modifier = Modifier
             .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -463,6 +473,18 @@ private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
                 }
             },
     ) {
-        Text("$label   ${if (level > 0) "+$level" else "$level"}")
+        // The marks bracket the value at the end rather than the row, so the label stays in
+        // line with Loudness and TruePlay below whether they are drawn or not.
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, modifier = Modifier.weight(1f))
+            StepMark("\u2212", shown) { onStep(-1) }
+            Text(
+                text = if (level > 0) "+$level" else "$level",
+                textAlign = TextAlign.Center,
+                // Wide enough for "+10", so the marks stay put as the value moves.
+                modifier = Modifier.widthIn(min = 36.dp),
+            )
+            StepMark("+", shown) { onStep(+1) }
+        }
     }
 }
