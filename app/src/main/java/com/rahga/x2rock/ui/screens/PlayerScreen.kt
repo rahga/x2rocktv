@@ -637,7 +637,11 @@ private fun PlaybackControls(
                     if (hasContent) Modifier else Modifier.focusRequester(playPauseFocusRequester)
                 ),
             ) { Text("Favorites") }
-            SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            // With nothing loaded there is nothing for a timer to stop, so it goes with the
+            // transport. Kept while one is running, so a timer is never there and unseen.
+            if (hasContent || state.sleepTimerEndsAt != null) {
+                SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            }
             // A setting of the room rather than of the track, so it sits with these rather than
             // the transport; the Sonos app keeps it a level further away still, in a menu.
             if (hasContent && state.actions.canCrossfade) {
