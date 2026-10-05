@@ -85,6 +85,13 @@ who did not already have a Gradle to regenerate it with. The cause was the blank
 `.gitignore`'s "Package Files" block; there is now an explicit negation for it. If it goes
 missing again, look there first.
 
+**Put release builds on the TVs, not debug ones.** `./gradlew :app:assembleRelease` signs with
+the local debug key, so it installs over a debug install with `adb install -r`. A debug build
+is several times slower on a TV box — 4.7s to the room list on the Streamer, against 0.6-0.8s
+for release — so judge nothing about speed from one. The release build is shrunk by R8: Gson
+reads this project's classes by field name, so `app/proguard-rules.pro` keeps them all, and the
+first release ever run crashed on launch until it did.
+
 An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
 **There are no credentials to supply** — no client id, no secret, nothing in
 `local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
