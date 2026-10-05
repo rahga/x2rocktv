@@ -90,14 +90,17 @@ class QueueEditTest {
     }
 
     /** Down inserts one past the target, because the track leaves its own place first. */
-    @Test fun `moving a track names where to insert it, and the queue version`() = runBlocking<Unit> {
-        household.moveInQueue(group(), from = 2, to = 5)
+    @Test fun `moving a track names where to insert it, and the queue version it was read at`() = runBlocking<Unit> {
+        household.moveInQueue(group(), from = 2, to = 5, updateId = "58")
         val down = requests.last { it.first == "ReorderTracksInQueue" }.second
         assertEquals("2", down["StartingIndex"])
         assertEquals("6", down["InsertBefore"])
         assertEquals("58", down["UpdateID"])
+        // The id is the caller's, from the list it shows; a Browse for a fresh one here would
+        // always match and could never be refused as stale.
+        assertEquals(0, requests.count { it.first == "Browse" })
 
-        household.moveInQueue(group(), from = 5, to = 2)
+        household.moveInQueue(group(), from = 5, to = 2, updateId = "58")
         assertEquals("2", requests.last { it.first == "ReorderTracksInQueue" }.second["InsertBefore"])
     }
 

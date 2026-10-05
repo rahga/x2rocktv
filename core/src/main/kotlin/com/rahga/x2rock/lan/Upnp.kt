@@ -106,9 +106,11 @@ class Upnp(
             QueueResponse(items = parseDidl(didl, hostname, start), totalItems = total, updateId = envelope.text("UpdateID"))
         }
 
-    /** `Q:0/<n>` is one-based, matching the track numbers the UI shows. */
-    suspend fun removeFromQueue(hostname: String, trackNumber: Int): Unit = withContext(Dispatchers.IO) {
-        val updateId = currentUpdateId(hostname)
+    /**
+     * `Q:0/<n>` is one-based, matching the track numbers the UI shows. [updateId] is the
+     * queue's version the caller's list was read at — see [moveInQueue].
+     */
+    suspend fun removeFromQueue(hostname: String, trackNumber: Int, updateId: String): Unit = withContext(Dispatchers.IO) {
         soap(
             hostname, Service.AV_TRANSPORT, "RemoveTrackFromQueue",
             listOf("InstanceID" to "0", "ObjectID" to "Q:0/$trackNumber", "UpdateID" to updateId),
@@ -118,11 +120,13 @@ class Upnp(
     /**
      * Move track [from] to position [to], both 1-based. `ReorderTracksInQueue` names where to
      * insert, which is one past [to] when moving down — the track leaves its old place first.
-     * Quotes a fresh `UpdateID`, as every edit here does, so an edit made against a queue
-     * someone else has since changed is refused (1028) rather than moving the wrong track.
+     *
+     * [updateId] is the queue's `UpdateID` as the caller's list was read, so an edit made
+     * against a queue someone else has since changed is refused (1028) rather than moving the
+     * wrong track. This used to fetch a fresh id here first, which cost a Browse per edit and
+     * meant the refusal could never happen: a fresh id always matches.
      */
-    suspend fun moveInQueue(hostname: String, from: Int, to: Int): Unit = withContext(Dispatchers.IO) {
-        val updateId = currentUpdateId(hostname)
+    suspend fun moveInQueue(hostname: String, from: Int, to: Int, updateId: String): Unit = withContext(Dispatchers.IO) {
         soap(
             hostname, Service.AV_TRANSPORT, "ReorderTracksInQueue",
             listOf(
@@ -371,8 +375,6 @@ class Upnp(
      * which is exactly what should happen when someone else is editing it — so the id is
      * read immediately before use rather than cached.
      */
-    private fun currentUpdateId(hostname: String): String = browse(hostname, 0, 1).text("UpdateID") ?: "0"
-
     /** `ContentDirectory Browse` of the queue, `Q:0`, from [start] for up to [count] items. */
     private fun browse(hostname: String, start: Int, count: Int): Element = parse(
         soap(
@@ -397,10 +399,18 @@ class Upnp(
         MUSIC_SERVICES("/MusicServices/Control", "urn:schemas-upnp-org:service:MusicServices:1"),
     }
 
+    /**
+     * Whether the household's UPnP switch is off, as `effectiveSettings:1` last said. Every
+     * SOAP call is a 403 then, so each is refused here, at once and with the same words,
+     * rather than after a round trip to be told so — and no caller need check first.
+     */
+    @Volatile var switchedOff = false
+
     private fun soap(hostname: String, service: Service, action: String, args: List<Pair<String, String>>): String {
         require(PlayerNames.isLocalName(hostname)) {
             "UPnP must be addressed by a .local name: cleartext is only permitted for those"
         }
+        if (switchedOff) throw UpnpRefusedException(switchedOffMessage(hostname))
         val params = args.joinToString("") { (name, value) -> "<$name>${Xml.escape(value)}</$name>" }
         val envelope = """<?xml version="1.0"?>""" +
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"""" +
@@ -417,17 +427,15 @@ class Upnp(
         client.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
             if (response.isSuccessful) return body
-            if (response.code == 403) {
-                throw UpnpRefusedException(
-                    "$hostname refused UPnP (403). Turn UPnP on in the Sonos app: " +
-                        "Account > Privacy and Security > Connection Security"
-                )
-            }
+            if (response.code == 403) throw UpnpRefusedException(switchedOffMessage(hostname))
             throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}", errorCode(body))
         }
     }
 
     private fun errorCode(body: String): String? = runCatching { parse(body).text("errorCode") }.getOrNull()
+
+    private fun switchedOffMessage(hostname: String) =
+        "$hostname refused UPnP (403). Turn UPnP on in the Sonos app: Account > Privacy and Security > Connection Security"
 
     /** UPnP's own error code, when the fault body carries one. */
     private fun describe(body: String): String =

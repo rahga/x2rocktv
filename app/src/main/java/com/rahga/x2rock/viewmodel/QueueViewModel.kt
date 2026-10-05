@@ -104,13 +104,7 @@ class QueueViewModel @Inject constructor(
      * Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`), and
      * the queue has no event to tell us it changed, so it is re-read after.
      */
-    fun removeItem(trackNumber: Int) {
-        viewModelScope.launch {
-            runCatching { household.removeFromQueue(groupId, trackNumber) }
-                .onSuccess { load(quiet = true) }
-                .onFailure { _notice.failure("remove that track", it) }
-        }
-    }
+    fun removeItem(trackNumber: Int) = edit("remove that track") { household.removeFromQueue(groupId, trackNumber, updateId) }
 
     /** Move a track past the one shown above or below it. The queue is not pushed, so it is re-read. */
     fun moveUp(trackNumber: Int) = neighbourSlots(entries(), trackNumber).first?.let { move(trackNumber, it) }
@@ -119,7 +113,7 @@ class QueueViewModel @Inject constructor(
     private fun entries() = (uiState.value as? UiState.Success)?.entries.orEmpty()
 
     private fun move(from: Int, to: Int) {
-        edit("move that track") { household.moveInQueue(groupId, from, to) }
+        edit("move that track") { household.moveInQueue(groupId, from, to, updateId) }
     }
 
     private val _clearArmed = MutableStateFlow(false)
@@ -161,11 +155,24 @@ class QueueViewModel @Inject constructor(
         }
     }
 
-    /** An edit, then a re-read either way: on a refusal the queue may have moved under it. */
+    /** The queue's `UpdateID` as the list on screen was read; every edit quotes it. */
+    private var updateId = "0"
+
+    /**
+     * An edit, then a re-read only where one is needed. This firmware pushes a new
+     * `queueVersion` for every edit and the watcher above re-reads on it, so re-reading here
+     * as well cost a second full Browse per press. A refusal still re-reads: the queue may
+     * have moved under the edit (1028), and the list must show what it moved to. A firmware
+     * that sends no version — x2rock's did not — keeps the re-read here.
+     */
     private fun edit(what: String, block: suspend () -> Unit) {
         viewModelScope.launch {
-            runCatching { block() }.onFailure { _notice.failure(what, it) }
-            load(quiet = true)
+            runCatching { block() }
+                .onSuccess { if (household.groupStates.value[groupId]?.queueVersion == null) load(quiet = true) }
+                .onFailure {
+                    _notice.failure(what, it)
+                    load(quiet = true)
+                }
         }
     }
 
@@ -180,6 +187,7 @@ class QueueViewModel @Inject constructor(
                 // The queue is the one thing still asked for rather than pushed; what is
                 // playing is already known from the household's subscriptions.
                 val queue = household.queue(groupId)
+                updateId = queue.updateId ?: "0"
                 // Unknown counts as in use: a failed read must not hide the marker it can't
                 // disprove, and the play path checks again for itself.
                 val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)

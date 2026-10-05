@@ -46,6 +46,9 @@ import java.net.InetAddress
  */
 class LiveHouseholdTest {
 
+    /** What this suite itself leaves in the household's history. */
+    private val LEFTOVERS = setOf("x2rock live test", "Dead")
+
     private val target: String? = System.getProperty("x2rock.live")?.takeIf { it.isNotBlank() }
     private val mutableRoom: String? = System.getProperty("x2rock.live.room")?.takeIf { it.isNotBlank() }
 
@@ -455,7 +458,10 @@ class LiveHouseholdTest {
         connected()
         val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
             ?: error("no room named $mutableRoom in this household")
-        val item = runCatching { household.history() }.getOrDefault(emptyList()).firstOrNull { it.playable }
+        // Not this suite's own leftovers: the playlist the queue test saves and deletes, and the
+        // dead stream the directory test plays, both sit at the top of the history afterwards.
+        val item = runCatching { household.history() }.getOrDefault(emptyList())
+            .firstOrNull { it.playable && it.name !in LEFTOVERS }
         assumeTrue("this household has no recently played item", item != null)
         withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
         val before = household.mediaInfo(group.id)
@@ -482,8 +488,10 @@ class LiveHouseholdTest {
         connected()
         val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
             ?: error("no room named $mutableRoom in this household")
-        val station = com.rahga.x2rock.radio.RadioDirectory(okhttp3.OkHttpClient())
-            .stations(tag = "ambient", limit = 5).first()
+        // A directory row is a stranger's URL and the directory's own check of it is days old:
+        // the top one was dead on 2026-10-04, having played the day before. So up to five are
+        // tried, and only all five silent is a failure.
+        val stations = com.rahga.x2rock.radio.RadioDirectory(okhttp3.OkHttpClient()).stations(tag = "ambient", limit = 5)
         withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
         val before = household.mediaInfo(group.id)
         val wasPlaying = household.groupState(group.id).playbackState == PlaybackStates.PLAYING
@@ -493,9 +501,10 @@ class LiveHouseholdTest {
             // The dead one first, so a room that had nothing to restore is left naming a real
             // station rather than "Dead".
             assertEquals(StreamStart.SILENT, household.playStream(group.id, "https://stream.invalid/dead.mp3", "Dead"))
-            assertEquals(StreamStart.PLAYING, household.playStream(group.id, station.url, station.name))
+            val played = stations.firstOrNull { household.playStream(group.id, it.url, it.name) == StreamStart.PLAYING }
+            assertTrue("none of ${stations.map { it.name }} played", played != null)
             val playing = household.groupState(group.id)
-            println("live: \"${station.name}\" played; the room calls it ${playing.container?.name} (${playing.container?.type})")
+            println("live: \"${played!!.name}\" played; the room calls it ${playing.container?.name} (${playing.container?.type})")
         } finally {
             runCatching {
                 household.restoreSource(group.id, before)
@@ -519,7 +528,8 @@ class LiveHouseholdTest {
         connected()
         val group = household.state.value.groups.firstOrNull { it.name == mutableRoom }
             ?: error("no room named $mutableRoom in this household")
-        val original = household.queue(group.id).items.map { it.track?.imageUrl }
+        val read = household.queue(group.id)
+        val original = read.items.map { it.track?.imageUrl }
         assumeTrue("$mutableRoom needs two queued tracks", original.size >= 2)
         withTimeout(10_000) { household.groupStates.first { it[group.id]?.metadataSeen == true } }
         val source = household.mediaInfo(group.id)
@@ -529,10 +539,14 @@ class LiveHouseholdTest {
         assertTrue("SaveQueue answered no id: '$saved'", saved.startsWith("SQ:"))
         val bareId = saved.removePrefix("SQ:")
         try {
-            household.moveInQueue(group.id, from = 1, to = 2)
-            val moved = household.queue(group.id).items.map { it.track?.imageUrl }
+            household.moveInQueue(group.id, from = 1, to = 2, updateId = read.updateId!!)
+            val afterMove = household.queue(group.id)
+            val moved = afterMove.items.map { it.track?.imageUrl }
             assertEquals(listOf(original[1], original[0]) + original.drop(2), moved)
-            household.moveInQueue(group.id, from = 2, to = 1)
+            // The id the first read gave is stale now; the player must refuse it, not move again.
+            val stale = runCatching { household.moveInQueue(group.id, from = 1, to = 2, updateId = read.updateId!!) }.exceptionOrNull()
+            assertEquals("a stale UpdateID must be refused with 1028, got $stale", "1028", (stale as? UpnpRefusedException)?.upnpCode)
+            household.moveInQueue(group.id, from = 2, to = 1, updateId = afterMove.updateId!!)
             assertEquals(original, household.queue(group.id).items.map { it.track?.imageUrl })
 
             household.clearQueue(group.id)

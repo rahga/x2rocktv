@@ -596,6 +596,7 @@ class SonosHousehold(
         subscribedGroups.clear()
         subscribedPlayers.clear()
         addressBook.clear()
+        upnp.switchedOff = false
         _groupStates.value = emptyMap()
         _playerVolumes.value = emptyMap()
     }
@@ -637,8 +638,9 @@ class SonosHousehold(
     }
 
 
-    suspend fun moveInQueue(groupId: String, from: Int, to: Int) =
-        upnp.moveInQueue(coordinatorHostname(groupId), from, to)
+    /** [updateId] is the version the caller's list was read at, from [queue]: see [Upnp.moveInQueue]. */
+    suspend fun moveInQueue(groupId: String, from: Int, to: Int, updateId: String) =
+        upnp.moveInQueue(coordinatorHostname(groupId), from, to, updateId)
 
     suspend fun clearQueue(groupId: String) = upnp.clearQueue(coordinatorHostname(groupId))
 
@@ -646,8 +648,8 @@ class SonosHousehold(
     suspend fun saveQueue(groupId: String, title: String): String =
         upnp.saveQueue(coordinatorHostname(groupId), title)
 
-    suspend fun removeFromQueue(groupId: String, trackNumber: Int) =
-        upnp.removeFromQueue(coordinatorHostname(groupId), trackNumber)
+    suspend fun removeFromQueue(groupId: String, trackNumber: Int, updateId: String) =
+        upnp.removeFromQueue(coordinatorHostname(groupId), trackNumber, updateId)
 
     /**
      * Play the queue from [trackNumber], whatever the room is playing now.
@@ -686,8 +688,6 @@ class SonosHousehold(
      * no alarm: the room simply offers none.
      */
     private fun askForAlarm(groupId: String) {
-        // Every SOAP call is a 403 then; a room starting to play is not worth one each.
-        if (_state.value.upnpOff) return
         scope.launch {
             val id = runCatching { upnp.runningAlarm(coordinatorHostname(groupId)) }.getOrNull() ?: return@launch
             update(groupId) { if (it.playbackState.isPlaying()) it.copy(ringingAlarm = id) else it }
@@ -1231,6 +1231,7 @@ class SonosHousehold(
             ?.takeIf { it.isJsonPrimitive }?.asBoolean ?: return
         securityVersion = body.string("timestamp")
         _state.update { it.copy(upnpOff = !allowed) }
+        upnp.switchedOff = !allowed
     }
 
     /** The topology as the seed reports it now, for a check the pushed copy could not settle. */

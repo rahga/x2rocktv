@@ -5,6 +5,7 @@ import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
+import com.rahga.x2rock.lan.soapFields
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
@@ -43,8 +44,14 @@ class QueueViewModelTest {
     private val actions = CopyOnWriteArrayList<String>()
     /** Every Browse's RequestedCount: "1" is the version check, anything else a full read. */
     private val browses = CopyOnWriteArrayList<String>()
+    /** One per read of the whole queue, which is two Browse pages of this capture. */
+    private val loads = CopyOnWriteArrayList<Unit>()
     /** What the fake reports as the queue's UpdateID; the capture says 58. */
     @Volatile private var updateId = "58"
+    /** The UpdateID each edit quoted. */
+    private val editVersions = CopyOnWriteArrayList<String>()
+    /** Refuse every edit as made against a queue that has changed: UPnP 1028. */
+    @Volatile private var refuseEdits = false
 
 
     @Before fun setUp() {
@@ -55,9 +62,16 @@ class QueueViewModelTest {
                     val action = soapAction(request)
                     val body = request.body.readUtf8()
                     actions += action
+                    if (action == "ReorderTracksInQueue" || action == "RemoveTrackFromQueue") {
+                        editVersions += soapFields(body)["UpdateID"].orEmpty()
+                        if (refuseEdits) return MockResponse().setResponseCode(500).setBody(
+                            "<s:Envelope><s:Body><s:Fault><detail><UPnPError><errorCode>1028</errorCode></UPnPError></detail></s:Fault></s:Body></s:Envelope>"
+                        )
+                    }
                     return when (action) {
                         "Browse" -> {
                             browses += Regex("<RequestedCount>(\\d+)<").find(body)!!.groupValues[1]
+                            if ("<StartingIndex>0<" in body) loads += Unit
                             MockResponse().setBody(
                                 FakePlayer.fixtureText(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                                     .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
@@ -150,6 +164,38 @@ class QueueViewModelTest {
     }
 
     /** A queue cannot be got back, so one press only arms it. */
+    /** The watcher re-reads on the pushed version; a second read from the edit itself was waste. */
+    @Test fun `an edit with the version known reads the queue once`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+        loads.clear()
+        viewModel.moveDown(1)
+        withTimeout(5_000) { while ("ReorderTracksInQueue" !in actions) delay(20) }
+        fake.pushPlaybackStatus(groupId, queueVersion = "9")
+        withTimeout(5_000) { while (loads.isEmpty()) delay(20) }
+        delay(500)
+        assertEquals(1, loads.size)
+    }
+
+    /** Refused as stale (1028): the list must show what the queue moved to. */
+    @Test fun `a refused edit re-reads the queue and says so`() = runBlocking<Unit> {
+        refuseEdits = true
+        loads.clear()
+        viewModel.moveDown(1)
+        withTimeout(5_000) { while (loads.isEmpty()) delay(20) }
+        withTimeout(5_000) { viewModel.notice.first { it != null } }
+        delay(300)
+        assertEquals(1, loads.size)
+    }
+
+    /** The version the list on screen was read at, not one fetched fresh, so stale is possible. */
+    @Test fun `an edit quotes the version the list was read at`() = runBlocking<Unit> {
+        viewModel.moveDown(1)
+        withTimeout(5_000) { while (editVersions.isEmpty()) delay(20) }
+        assertEquals(listOf("58"), editVersions.toList())
+    }
+
     @Test fun `clear needs a second press`() = runBlocking<Unit> {
         viewModel.clearQueue()
         assertTrue(viewModel.clearArmed.value)

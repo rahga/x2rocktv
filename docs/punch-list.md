@@ -421,10 +421,13 @@ a device: the default-network callback, and the resolve lock.
 A simplification pass followed (2026-10-04, `6be3601`..): one XML parser for UPnP and SMAPI
 — the SMAPI copy still had the Android `setFeature` fault — and one of each lookup, preamble,
 notice and test helper that had been written several times; eleven REST-era models and a few
-dead parameters went. Behaviour unchanged, 404 tests green. Left alone, because each would
-change behaviour: re-reading the queue less after an edit, threading `UpdateID` so a stale
-queue is refused, fast-refusing every SOAP call with UPnP off, moving the fixed-volume guard
-into core, and one app-wide notice banner.
+dead parameters went. Behaviour unchanged, 404 tests green. Three behaviour changes followed once the owner
+okayed them: a queue edit quotes the `UpdateID` its list was read at, so an edit against a
+queue that changed underneath is refused (1028, **seen on Dining Room**) and the list re-read
+rather than the wrong track moved — it used to fetch a fresh id first, which could never be
+stale and cost a Browse per edit; an edit re-reads once, not twice; and with UPnP off every
+SOAP call is refused at once rather than after its 403. Left alone: the fixed-volume guard
+(moving it into core would show a level change and snatch it back) and one app-wide banner.
 
 ## Found at home, 2026-10-01
 
