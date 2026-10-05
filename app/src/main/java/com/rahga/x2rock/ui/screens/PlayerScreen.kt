@@ -2,6 +2,9 @@ package com.rahga.x2rock.ui.screens
 
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.draw.alpha
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -352,6 +355,30 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
 
     val progress = (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f)
     var isFocused by remember { mutableStateOf(false) }
+
+    // The running total of a burst of seek presses, shown under the bar and faded out once the
+    // presses stop, so a viewer holding left can see how far back they are going. Clamped to
+    // the track, as the seek itself is; a fresh burst starts from nothing.
+    var seekTotal by remember { mutableLongStateOf(0L) }
+    var seekFrom by remember { mutableLongStateOf(0L) }
+    var seekPresses by remember { mutableStateOf(0) }
+    var seekShown by remember { mutableStateOf(false) }
+    val seekAlpha by animateFloatAsState(if (seekShown) 1f else 0f, animationSpec = tween(400), label = "seekTotal")
+    LaunchedEffect(seekPresses) {
+        if (seekPresses == 0) return@LaunchedEffect
+        delay(SEEK_TOTAL_SHOWN_MILLIS)
+        seekShown = false
+    }
+    fun seek(delta: Long) {
+        if (!seekShown) {
+            seekTotal = 0L
+            seekFrom = displayPositionMillis
+        }
+        seekTotal = (seekTotal + delta).coerceIn(-seekFrom, state.durationMillis - seekFrom)
+        seekShown = true
+        seekPresses++
+        onSeekBy(delta)
+    }
     val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
     Column {
@@ -363,8 +390,8 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
-                        Key.DirectionLeft -> { onSeekBy(-30_000L); true }
-                        Key.DirectionRight -> { onSeekBy(+30_000L); true }
+                        Key.DirectionLeft -> { seek(-30_000L); true }
+                        Key.DirectionRight -> { seek(+30_000L); true }
                         else -> false
                     }
                 }
@@ -381,8 +408,14 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
-            if (isFocused) {
-                Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            when {
+                seekAlpha > 0f -> Text(
+                    seekTotal.toSeekLabel(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.alpha(seekAlpha),
+                )
+                isFocused -> Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
             }
             Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
         }
@@ -922,6 +955,16 @@ private fun rememberSleepCountdown(endsAt: Long?): Long? {
         }
     }
     return left
+}
+
+/** How long a seek burst's total stays up after the last press, before it fades. */
+private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
+
+/** A seek total as a viewer reads it: −30s, +1:00, −1:30. */
+internal fun Long.toSeekLabel(): String {
+    val sign = if (this < 0) "−" else "+"
+    val seconds = kotlin.math.abs(this) / 1_000
+    return if (seconds < 60) "$sign${seconds}s" else sign + (seconds * 1_000).toTimeString()
 }
 
 internal fun Long.toTimeString(): String {
