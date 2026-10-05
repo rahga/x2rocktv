@@ -101,7 +101,22 @@ data class GroupState(
      * merged, and BUFFERING then PLAYING can arrive as PLAYING alone.
      */
     val playStarts: Int = 0,
+    /**
+     * When the sleep timer runs out, in milliseconds of [monotonicMillis], or null for none.
+     *
+     * Pushed: `sleepTimer:1` is in no published reference, and subscribing to it was found to
+     * send a `sleepTimerStatus` at once and again on every set and cancel, whoever made it
+     * (office One SL, 2026-10-05). A report says what was left *when it was sent* and is not
+     * re-sent as the time runs down, so the end is fixed here as it arrives: a room looked at
+     * ten minutes after its report still shows the right time, and the same length set again
+     * later is a later end. Read it through [sleepTimerLeftMillis].
+     */
+    val sleepTimerEndsAt: Long? = null,
 ) {
+    /** What is left on the sleep timer now, or null for none or one that has run out. */
+    fun sleepTimerLeftMillis(now: Long = monotonicMillis()): Long? =
+        sleepTimerEndsAt?.let { it - now }?.takeIf { it > 0 }
+
     /**
      * Whether this group is on a soundbar's TV input right now.
      *
@@ -1430,6 +1445,10 @@ class SonosHousehold(
         listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
             socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id))
         }
+        // Allowed to fail on its own. It is not in Sonos's reference, so a firmware without it
+        // is plausible, and a room with no sleep timer shown is far better than a room frozen
+        // because its fourth subscription was refused.
+        runCatching { socket.subscribe(Frames.onGroup("sleepTimer:1", "subscribe", group.id)) }
         subscribedGroups[group.id] = group.coordinatorId
     }
 
@@ -1603,6 +1622,15 @@ class SonosHousehold(
                 update(groupId) { it.copy(volume = volume) }
             }
 
+            "sleepTimer:1" -> {
+                if (groupId == null) return
+                val body = event.body.asJsonObject
+                val left = if (body.get("active")?.asBoolean == true) {
+                    body.string("remainingTimeDuration")?.let(::isoDurationMillis)
+                } else null
+                update(groupId) { it.copy(sleepTimerEndsAt = left?.let { ms -> monotonicMillis() + ms }) }
+            }
+
             "playerVolume:1" -> {
                 val playerId = event.header.playerId ?: return
                 val volume = gson.fromJson(event.body, GroupVolume::class.java) ?: return
@@ -1725,3 +1753,22 @@ internal const val PROBE_TIMEOUT_MILLIS = 3_000L
 
 internal fun nextBackoff(current: Long): Long =
     (if (current <= 0) MIN_BACKOFF_MILLIS else current * 2).coerceAtMost(MAX_BACKOFF_MILLIS)
+
+/** The JVM's monotonic clock in milliseconds: what [GroupState.sleepTimerEndsAt] is measured on. */
+fun monotonicMillis(): Long = System.nanoTime() / 1_000_000
+
+/**
+ * An ISO 8601 duration as milliseconds — `sleepTimer:1` sends `PT0H15M0S` — or null for
+ * anything else. By hand rather than `java.time.Duration`, which this app's minSdk predates.
+ */
+internal fun isoDurationMillis(text: String): Long? {
+    val match = ISO_DURATION.matchEntire(text.trim()) ?: return null
+    val (days, hours, minutes, seconds) = match.destructured
+    if (days.isEmpty() && hours.isEmpty() && minutes.isEmpty() && seconds.isEmpty()) return null
+    return (days.toLongOrNull() ?: 0) * 86_400_000 +
+        (hours.toLongOrNull() ?: 0) * 3_600_000 +
+        (minutes.toLongOrNull() ?: 0) * 60_000 +
+        ((seconds.toDoubleOrNull() ?: 0.0) * 1000).toLong()
+}
+
+private val ISO_DURATION = Regex("""P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?""")

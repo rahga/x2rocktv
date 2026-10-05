@@ -937,4 +937,66 @@ class SonosHouseholdTest {
         )
         assertTrue(!household.state.value.connected)
     }
+
+    // ---------------------------------------------------------------- sleep timer
+
+    /**
+     * Set elsewhere — `x2rock sleep 15` was the case that found it — and seen here because
+     * `sleepTimer:1` pushes. The capture's `PT0H15M0S` is fifteen minutes, and a cancel's
+     * `active: false` clears it.
+     */
+    @Test fun `a sleep timer set and cancelled elsewhere is followed`() = runBlocking<Unit> {
+        connected()
+        val groupId = fake.groupId(household)
+
+        fake.pushSleepTimer(groupId, active = true)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.sleepTimerEndsAt != null } }
+        val left = household.groupState(groupId).sleepTimerLeftMillis()!!
+        assertTrue("expected about 15 minutes, got $left", left in 14 * 60_000L..15 * 60_000L)
+
+        fake.pushSleepTimer(groupId, active = false)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.sleepTimerEndsAt == null } }
+    }
+
+    /**
+     * A report is what was left when it was sent. The same length set again later is a later
+     * end — and a room looked at long after its report must not count from the look.
+     */
+    @Test fun `the same length set again later ends later`() = runBlocking<Unit> {
+        connected()
+        val groupId = fake.groupId(household)
+        fake.pushSleepTimer(groupId, active = true)
+        val first = withTimeout(5_000) { household.groupStates.first { it[groupId]?.sleepTimerEndsAt != null } }[groupId]!!.sleepTimerEndsAt!!
+        delay(50)
+        fake.pushSleepTimer(groupId, active = true)
+        withTimeout(5_000) { household.groupStates.first { (it[groupId]?.sleepTimerEndsAt ?: 0) > first } }
+    }
+
+    /**
+     * Not in Sonos's reference, so a firmware without it is plausible. A refusal there must not
+     * cost the room its other subscriptions, or the room sits frozen with nothing to retry it.
+     */
+    @Test fun `a refused sleep timer subscription leaves the room subscribed`() = runBlocking<Unit> {
+        fake.refuse("sleepTimer:1/subscribe", "ERROR_UNSUPPORTED_NAMESPACE")
+        connected()
+        val groupId = fake.groupId(household)
+        fake.pushGroupVolume(groupId, volume = 23)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.volume?.volume == 23 } }
+        // Once per group and no more: a group whose setup failed is retried with backoff, so a
+        // refusal that failed the group would show here as repeated subscribes.
+        delay(1_500)
+        assertEquals(
+            "a group was subscribed again, so its setup failed",
+            household.state.value.groups.size,
+            fake.commandsNamed("subscribe", "groupVolume:1"),
+        )
+    }
+
+    @Test fun `ISO 8601 durations as the player sends them`() {
+        assertEquals(15 * 60_000L, isoDurationMillis("PT0H15M0S"))
+        assertEquals(90 * 60_000L, isoDurationMillis("PT1H30M0S"))
+        assertEquals(42_500L, isoDurationMillis("PT42.5S"))
+        assertEquals(null, isoDurationMillis("15:00"))
+        assertEquals(null, isoDurationMillis("PT"))
+    }
 }

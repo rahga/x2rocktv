@@ -1,6 +1,5 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
@@ -9,7 +8,6 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
-import com.rahga.x2rock.model.PlaybackStates
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -30,12 +28,12 @@ import org.junit.Test
 import java.net.InetAddress
 
 /**
- * The pane's sleep timer is Sonos's, so it shows a timer someone else set, and what it shows
- * after setting one is what the speaker then reports. The replies are the office One SL's.
+ * The pane's sleep timer is Sonos's, and `sleepTimer:1` pushes it: a timer set or cancelled
+ * by anyone shows here, and what shows after setting one is what the speaker then reports.
+ * The reports are the office One SL's; setting still goes over UPnP, the only way there is.
  */
 class SleepTimerViewModelTest {
     @get:Rule val mainDispatcher = MainDispatcherRule()
-
 
     private lateinit var fake: FakePlayer
     private lateinit var upnp: MockWebServer
@@ -43,27 +41,25 @@ class SleepTimerViewModelTest {
     private lateinit var household: SonosHousehold
     private lateinit var viewModel: PlayerViewModel
     private lateinit var groupId: String
-    @Volatile private var armed = false
-    /** Every read of the timer, so a test can say when one must not happen. */
+    /** The duration of each `ConfigureSleepTimer` sent, empty for a cancel. */
+    private val configured = java.util.concurrent.CopyOnWriteArrayList<String>()
+    /** Every UPnP read of the timer, which the push leaves no reason to make. */
     @Volatile private var reads = 0
-
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
-                    val action = soapAction(request)
                     val body = request.body.readUtf8()
-                    return when (action) {
+                    return when (soapAction(request)) {
                         "GetRemainingSleepTimerDuration" -> {
                             reads++
-                            MockResponse().setBody(
-                            FakePlayer.fixtureText(if (armed) "GetRemainingSleepTimerDuration.armed.xml" else "GetRemainingSleepTimerDuration.none.xml")
-                        )
+                            MockResponse().setBody(FakePlayer.fixtureText("GetRemainingSleepTimerDuration.none.xml"))
                         }
                         "ConfigureSleepTimer" -> {
-                            armed = "<NewSleepTimerDuration></NewSleepTimerDuration>" !in body
+                            configured += Regex("<NewSleepTimerDuration>([^<]*)</NewSleepTimerDuration>")
+                                .find(body)?.groupValues?.get(1).orEmpty()
                             MockResponse().setBody("<s:Envelope><s:Body><u:ConfigureSleepTimerResponse/></s:Body></s:Envelope>")
                         }
                         else -> MockResponse().setResponseCode(404)
@@ -79,9 +75,7 @@ class SleepTimerViewModelTest {
             client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port, upnpPort = upnp.port,
         )
         viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
-        runBlocking {
-            household.connectTo(fake)
-        }
+        runBlocking { household.connectTo(fake) }
         groupId = fake.groupId(household)
     }
 
@@ -92,51 +86,46 @@ class SleepTimerViewModelTest {
         upnp.shutdown()
     }
 
-    /** Set from the Sonos app, say: the old timer lived in this view model and never knew. */
-    @Test fun `a timer set elsewhere shows when the room is selected`() = runBlocking<Unit> {
-        armed = true
+    private fun left(): Long = viewModel.uiState.value.sleepTimerEndsAt!! - testClock.now()
+
+    /** `x2rock sleep 15` from a laptop, say: the old reads, made on selecting, never saw it. */
+    @Test fun `a timer set elsewhere shows while the room is open`() = runBlocking<Unit> {
         viewModel.selectGroup(groupId, "Room")
-        val endsAt = withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }.sleepTimerEndsAt!!
-        val remaining = endsAt - testClock.now()
-        assertTrue("expected about 45 minutes, got $remaining", remaining in 44 * 60_000L..45 * 60_000L)
+        fake.pushSleepTimer(groupId, active = true)
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
+        assertTrue("expected about 15 minutes, got ${left()}", left() in 14 * 60_000L..15 * 60_000L)
+    }
+
+    @Test fun `a timer cancelled elsewhere goes`() = runBlocking<Unit> {
+        viewModel.selectGroup(groupId, "Room")
+        fake.pushSleepTimer(groupId, active = true)
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
+        fake.pushSleepTimer(groupId, active = false)
+        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
     }
 
     /**
-     * The timer is not pushed, but its firing is: the speaker pauses the room. That event is
-     * what re-reads it — not a clock in the view model, which the project rules out — and the
-     * player's `00:00:00`, its "expired, stopping now", reads as no timer.
+     * Reported before the room was opened: the time left is counted from the report, not from
+     * opening it, or a room looked at late would show more time than it has.
      */
-    @Test fun `the room stopping while a timer shows re-reads it`() = runBlocking<Unit> {
-        armed = true
+    @Test fun `a timer reported before the room is opened counts from the report`() = runBlocking<Unit> {
+        fake.pushSleepTimer(groupId, active = true)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.sleepTimerEndsAt != null } }
+        delay(1_200)
         viewModel.selectGroup(groupId, "Room")
         withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
-        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
-        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
-        armed = false
-        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PAUSED")
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
+        assertTrue("counted from the opening: ${left()}", left() <= 15 * 60_000L - 1_000)
     }
 
-    /** A track boundary passes through BUFFERING; keying the re-read on "not playing" read at every track. */
-    @Test fun `a track boundary does not re-read the timer`() = runBlocking<Unit> {
-        armed = true
-        viewModel.selectGroup(groupId, "Room")
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
-        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
-        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == PlaybackStates.PLAYING } }
-        val before = reads
-        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_BUFFERING")
-        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
-        delay(500)
-        assertEquals(before, reads)
-    }
-
-
-    @Test fun `setting and cancelling show what the speaker then reports`() = runBlocking<Unit> {
+    /** Setting goes over UPnP; what shows afterwards is the speaker's own report, and nothing is read. */
+    @Test fun `setting and cancelling send the timer and read nothing back`() = runBlocking<Unit> {
         viewModel.selectGroup(groupId, "Room")
         viewModel.setSleepTimer(45)
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt != null } }
+        withTimeout(5_000) { while (configured.isEmpty()) delay(20) }
         viewModel.cancelSleepTimer()
-        withTimeout(5_000) { viewModel.uiState.first { it.sleepTimerEndsAt == null } }
+        withTimeout(5_000) { while (configured.size < 2) delay(20) }
+        assertEquals(listOf("00:45:00", ""), configured.toList())
+        delay(300)
+        assertEquals("the timer was read back instead of waiting for its report", 0, reads)
     }
 }

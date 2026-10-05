@@ -336,6 +336,15 @@ class FakePlayer(
         emit("playback:1", "playbackStatus", body, groupId)
     }
 
+    /**
+     * A sleep timer report, as `sleepTimer:1` sends one on a set or a cancel: the captured
+     * 15-minute timer, or the capture of none.
+     */
+    fun pushSleepTimer(groupId: String, active: Boolean) {
+        val capture = if (active) "event.sleepTimerStatus.json" else "event.sleepTimerStatus.none.json"
+        emit("sleepTimer:1", "sleepTimerStatus", fixture(capture), groupId)
+    }
+
     /** This player as a connect seed: itself, on loopback, in its household. */
     val seed: Discovery.DiscoveredPlayer
         get() = Discovery.DiscoveredPlayer(id, InetAddress.getByName("127.0.0.1"), householdId)
@@ -637,6 +646,8 @@ class FakePlayer(
             "metadataStatus", "tvMetadataStatus", "tvSurroundMetadataStatus",
             "radioMetadataStatus", "stationMetadataStatus" -> "playbackMetadata:1"
             "groupVolume" -> "groupVolume:1"
+            // Captured off the office One SL, 2026-10-05: a 15-minute timer set by x2rock.
+            "sleepTimerStatus" -> "sleepTimer:1"
             "playerVolume" -> "playerVolume:1"
             "groups" -> "groups:1"
             "settingsChanged" -> "effectiveSettings:1"
