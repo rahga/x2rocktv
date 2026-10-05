@@ -180,6 +180,27 @@ class PlayerViewModelTest {
         assertTrue("repeat was cleared by toggling shuffle", modes.get("repeat").asBoolean)
     }
 
+    // ---------------------------------------------------------------- going back
+
+    /**
+     * The captured status is a queue's first track: `canSkipToPrevious` false, `canSeek` true —
+     * what shuffle reports on every track. Prev there goes back to the start of the track, as
+     * the Sonos app's does, rather than asking for a previous track the player says is not
+     * there.
+     */
+    @Test fun `going back with no previous track restarts this one`() = runBlocking<Unit> {
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { viewModel.uiState.first { it.actions.canSeek && !it.actions.canSkipToPrevious } }
+        assertTrue("Prev would not be drawn", viewModel.uiState.value.actions.canGoBack)
+        fake.clearHistory()
+
+        viewModel.skipToPreviousTrack()
+
+        fake.awaitCommand("seek", 3_000)
+        assertEquals(0, fake.lastCommandBody("seek")!!.get("positionMillis").asInt)
+        assertEquals(0, fake.commandsNamed("skipToPreviousTrack"))
+    }
+
     // ---------------------------------------------------------------- publishing
 
     @Test fun `metadata reaches the system when a track arrives`() = runBlocking<Unit> {

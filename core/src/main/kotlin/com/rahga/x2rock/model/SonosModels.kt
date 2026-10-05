@@ -225,7 +225,16 @@ data class PlaybackActions(
     val canRepeat: Boolean = true,
     val canShuffle: Boolean = true,
     val canCrossfade: Boolean = true,
-)
+) {
+    /**
+     * Whether a Prev control belongs on screen. Not [canSkipToPrevious] alone: the player says
+     * false wherever there is no previous *item* — on a queue's first track, and with shuffle
+     * on always, since a shuffled queue is renumbered so the current track is item 1 (seen on
+     * the office One SL, 2026-10-05). The Sonos app still draws Prev there, as "back to the
+     * start of this track", which needs only a seek.
+     */
+    val canGoBack: Boolean get() = canSkipToPrevious || canSeek
+}
 
 data class PlaybackMetadata(
     val currentItem: CurrentItem? = null,

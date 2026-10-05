@@ -141,7 +141,7 @@ class MediaSessionPublisher @Inject constructor(
             advertised = advertised or PlaybackState.ACTION_PLAY_PAUSE
         }
         if (actions.canSkip) advertised = advertised or PlaybackState.ACTION_SKIP_TO_NEXT
-        if (actions.canSkipToPrevious) advertised = advertised or PlaybackState.ACTION_SKIP_TO_PREVIOUS
+        if (actions.canGoBack) advertised = advertised or PlaybackState.ACTION_SKIP_TO_PREVIOUS
         if (actions.canSeek) advertised = advertised or PlaybackState.ACTION_SEEK_TO
         val state = when {
             idle -> PlaybackState.STATE_NONE

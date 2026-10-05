@@ -545,7 +545,7 @@ private fun PlaybackControls(
                     modifier = Modifier.claimExit(transportExit),
                 )
             }
-            if (state.actions.canSkipToPrevious) {
+            if (state.actions.canGoBack) {
                 AppButton(
                     onClick = { viewModel.skipToPreviousTrack() },
                     modifier = Modifier.claimExit(transportExit),
