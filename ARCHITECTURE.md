@@ -107,8 +107,8 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   │   ├── DpadMenuKey.kt         the Menu key as a row's second action; a hold is the Card's own onLongClick
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
-│       ├── HomeScreen.kt          room sidebar + detail pane; settings slide-in
-│       ├── PlayerScreen.kt        the music pane and the TV pane
+│       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
+│       ├── PlayerScreen.kt        the player pane (`PlayerPane`), in its music and TV forms
 │       ├── RoomPanel.kt           everything one room can be told to do
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
 │       ├── FavoritesScreen.kt     the household's favourites — click to load

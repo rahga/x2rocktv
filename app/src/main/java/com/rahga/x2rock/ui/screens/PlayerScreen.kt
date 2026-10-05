@@ -461,7 +461,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
 }
 
 /**
- * A left-press here leaves the room view for the rooms panel.
+ * A left-press here leaves the player pane for the room list.
  *
  * Put on the leftmost control of each row. Declaring `left` on the pane instead does not
  * work: a focus search starting inside it escapes rather than being redirected, and focus
