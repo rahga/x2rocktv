@@ -201,8 +201,10 @@ The time left is ISO 8601 and is what was left *when the event was sent*; it is 
 it runs down, so the household fixes the end as each report arrives. `getSleepTimer` answers
 the same body. Nothing in the namespace sets one — `setSleepTimer`, `set`, `cancel`, `start` and
 the rest are `ERROR_UNSUPPORTED_COMMAND` — so setting stays `ConfigureSleepTimer` over UPnP.
-Not yet seen: whether a timer running out sends `active: false`. The countdown reads none at
-zero either way.
+A timer running out sends `active: false` too, and the room pauses a few seconds after it:
+a 20-second timer (`x2rock sleep 20s`) on the playing Media Room was reported as
+`PT0H0M20S`, then `active: false`, and the transport went PLAYING → PAUSED about five seconds
+after the countdown reached zero (2026-10-05, 16:49).
 
 ---
 
