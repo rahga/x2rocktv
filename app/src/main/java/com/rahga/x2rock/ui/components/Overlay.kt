@@ -31,17 +31,31 @@ import androidx.compose.ui.graphics.Color
 fun Modifier.modalFocusTrap(): Modifier =
     focusProperties { exit = { FocusRequester.Cancel } }.focusGroup()
 
-/** Scrim + centred, focus-trapped content. */
+/**
+ * Scrim + centred, focus-trapped content. A tap on the scrim is [onDismiss], as Back is.
+ *
+ * The scrim has to take taps either way: without a handler of its own a tap passes through it
+ * to whichever control is drawn behind, which the viewer cannot see is there.
+ */
 @Composable
-fun Overlay(content: @Composable () -> Unit) {
+fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.5f)),
+            .background(Color.Black.copy(alpha = 0.5f))
+            .tapToClick(onDismiss),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.modalFocusTrap()) {
+        Box(modifier = Modifier.modalFocusTrap().keepTaps()) {
             content()
         }
     }
 }
+
+/**
+ * Takes the taps that land on a surface's own background, so they close nothing. A tap goes
+ * to the innermost handler under it and then outwards, so one on a dialog's title or padding
+ * would otherwise reach the scrim it sits on and dismiss it.
+ */
+@Composable
+fun Modifier.keepTaps(): Modifier = tapToClick(onClick = {})

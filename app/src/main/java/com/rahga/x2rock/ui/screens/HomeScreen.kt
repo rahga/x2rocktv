@@ -82,6 +82,7 @@ import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.dpadMenuKey
+import com.rahga.x2rock.ui.components.keepTaps
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
@@ -228,7 +229,12 @@ fun HomeScreen(
         }
 
         AnimatedVisibility(visible = showSettings, enter = fadeIn(), exit = fadeOut()) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .tapToClick(onClick = { showSettings = false })
+            )
         }
 
         AnimatedVisibility(
@@ -269,7 +275,7 @@ fun HomeScreen(
             val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
             val tone by homeViewModel.tone.collectAsState()
             LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }
-            Overlay {
+            Overlay(onDismiss = { panelGroup = null }) {
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
@@ -603,6 +609,7 @@ private fun SettingsPanel(
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .modalFocusTrap()
+            .keepTaps()
     ) {
         Column(
             modifier = Modifier

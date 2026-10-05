@@ -292,7 +292,7 @@ private fun QueueItemContextMenu(
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
 
-    Overlay {
+    Overlay(onDismiss) {
         Column(
             modifier = Modifier
                 .width(320.dp)
