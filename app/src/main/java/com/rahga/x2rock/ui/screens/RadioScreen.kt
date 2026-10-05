@@ -41,6 +41,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.radio.Station
 import com.rahga.x2rock.ui.components.NoticeBanner
+import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.RadioViewModel
@@ -133,7 +134,7 @@ fun RadioScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun StationRow(station: Station, isStarting: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().tapToClick(onClick)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

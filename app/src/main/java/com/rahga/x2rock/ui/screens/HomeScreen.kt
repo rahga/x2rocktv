@@ -9,6 +9,7 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.input.pointer.pointerInput
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.ui.components.NoticeBanner
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -81,6 +83,7 @@ import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.modalFocusTrap
+import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -214,6 +217,7 @@ fun HomeScreen(
                             .align(Alignment.TopStart)
                             .padding(16.dp)
                             .size(40.dp)
+                            .tapToClick(onClick = { homeViewModel.toggleSidebar() })
                     ) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                             Text("▶", style = MaterialTheme.typography.bodyLarge)
@@ -460,6 +464,13 @@ private fun RoomListItem(
             }
             .onFocusChanged { if (it.isFocused) onFocused() }
             .dpadMenuKey(onOpenPanel)
+            // A remote selects a room by moving onto it and opens it with a press; a tap does
+            // both in turn — the first selects, a tap on the selected room opens it — and a
+            // hold opens it straight away.
+            .tapToClick(
+                onClick = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
+                onLongClick = onOpenPanel,
+            )
     ) {
         Row(
             modifier = Modifier
@@ -626,6 +637,13 @@ private fun ThemeSelector(
         onClick = {},
         modifier = modifier
             .fillMaxWidth()
+            // The arrows drawn at either end, as a tap: the left half steps back, the right on.
+            .pointerInput(currentIndex) {
+                detectTapGestures { offset ->
+                    val step = if (offset.x < size.width / 2) themes.size - 1 else 1
+                    onThemeSelected(themes[(currentIndex + step) % themes.size])
+                }
+            }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -674,7 +692,7 @@ private fun ThemeSelector(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SidebarIconButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Surface(onClick = onClick, modifier = Modifier.size(36.dp)) {
+    Surface(onClick = onClick, modifier = Modifier.size(36.dp).tapToClick(onClick)) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
             content()
         }

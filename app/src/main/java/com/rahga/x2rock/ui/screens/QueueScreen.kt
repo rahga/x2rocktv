@@ -44,6 +44,7 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -231,6 +232,7 @@ private fun QueueRow(
         onLongClick = onLongPress,
         modifier = modifier
             .fillMaxWidth()
+            .tapToClick(onClick, onLongPress)
             .then(
                 if (isCurrent) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
                 else Modifier
