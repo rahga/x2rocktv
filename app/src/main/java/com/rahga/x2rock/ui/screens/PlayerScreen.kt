@@ -535,13 +535,28 @@ private fun PlaybackControls(
                     Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Where to go from here, in a row of its own. It used to share the modes' row, and at
+        // 1080p on a TV — 960dp across, a third of it the room list — six buttons do not fit:
+        // Favorites was squeezed to a sliver with its label wrapped a letter to a line, which
+        // made the row hundreds of pixels tall and pushed the volume below the screen, and
+        // Sleep Timer was off the edge entirely. Seen on the Shield and the emulator alike.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.focusGroup()
+        ) {
+            val placesExit = booleanArrayOf(false)
             // Queue keeps its place whatever the source permits: it is a way to look at what
             // is loaded rather than an action on the current item. Only UPnP being off takes
             // it away, since the queue lives nowhere else; the pane says so below.
             if (!state.upnpOff) {
                 AppButton(
                     onClick = onOpenQueue,
-                    modifier = Modifier.claimExit(modeExit),
+                    modifier = Modifier.claimExit(placesExit),
                 ) { Text("Queue") }
             }
             // With no transport drawn there is nothing for a right-press from the room list
@@ -549,8 +564,9 @@ private fun PlaybackControls(
             // helps, being how an empty room is given something to play.
             AppButton(
                 onClick = onOpenFavorites,
-                modifier = if (hasContent) Modifier
-                    else Modifier.focusRequester(playPauseFocusRequester),
+                modifier = Modifier.claimExit(placesExit).then(
+                    if (hasContent) Modifier else Modifier.focusRequester(playPauseFocusRequester)
+                ),
             ) { Text("Favorites") }
             SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
