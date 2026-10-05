@@ -385,8 +385,12 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .focusable()
+                // Before focusable(), not after: onFocusChanged sees focus on what follows it,
+                // and placed after it never saw the bar take focus — so the bar never changed
+                // colour and its hint never showed, and landing on it looked like landing on
+                // nothing.
                 .onFocusChanged { isFocused = it.isFocused }
+                .focusable()
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
@@ -408,14 +412,19 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
-            when {
-                seekAlpha > 0f -> Text(
+            // The total's slot is always laid out, invisible when there is nothing to say: it is
+            // taller than the times beside it, and appearing only on a press made the row grow
+            // and nudged every row below it down the screen.
+            Box(contentAlignment = Alignment.Center) {
+                Text(
                     seekTotal.toSeekLabel(),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.alpha(seekAlpha),
                 )
-                isFocused -> Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                if (seekAlpha == 0f && isFocused) {
+                    Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                }
             }
             Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
         }
@@ -470,10 +479,11 @@ private fun PlaybackControls(
         if (hasContent)
 
         Row(
-            // Tighter than the rows below it: with a duration this row grows from three
-            // buttons to five, and at 24.dp the last one overflowed and wrapped its label
-            // down the screen a letter at a time.
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            // Three at most. Seeking is the progress bar's, left and right on it, as it was all
+            // along: the −30s and +30s buttons that also sat here are the Sonos app's, which
+            // draws them as icons; as labelled buttons across a room they crowded this row
+            // into overflowing, and said what the bar already does.
+            horizontalArrangement = Arrangement.spacedBy(24.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
@@ -485,12 +495,6 @@ private fun PlaybackControls(
                     onClick = { viewModel.skipToPreviousTrack() },
                     modifier = Modifier.claimExit(transportExit),
                 ) { Text("⏮  Prev") }
-            }
-            if (state.durationMillis > 0 && state.actions.canSeek) {
-                AppButton(
-                    onClick = { viewModel.seekBy(-30_000L) },
-                    modifier = Modifier.claimExit(transportExit),
-                ) { Text("−30s") }
             }
             AppButton(
                 onClick = { viewModel.togglePlayPause() },
@@ -512,9 +516,6 @@ private fun PlaybackControls(
                         else -> "⏹  Stop"
                     }
                 )
-            }
-            if (state.durationMillis > 0 && state.actions.canSeek) {
-                AppButton(onClick = { viewModel.seekBy(+30_000L) }) { Text("+30s") }
             }
             if (state.actions.canSkip) {
                 AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
