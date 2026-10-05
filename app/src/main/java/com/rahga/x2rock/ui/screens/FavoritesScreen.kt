@@ -40,6 +40,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
@@ -248,6 +249,7 @@ private fun FavoriteRow(
         onLongClick = onLongPress,
         modifier = modifier
             .fillMaxWidth()
+            .tapToClick(onClick, onLongPress)
             .then(if (onLongPress != null) Modifier.dpadMenuKey(onLongPress) else Modifier)
             .then(
                 if (isActive) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))

@@ -16,6 +16,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
 import com.rahga.x2rock.model.AppColorTheme
+import com.rahga.x2rock.ui.components.tapToClick
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -123,7 +124,7 @@ fun AppButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier,
+        modifier = modifier.tapToClick(onClick),
         colors = ButtonDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.primary,
             focusedContentColor = MaterialTheme.colorScheme.onPrimary,
