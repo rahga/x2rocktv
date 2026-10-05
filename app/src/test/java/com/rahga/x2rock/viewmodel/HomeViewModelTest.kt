@@ -387,6 +387,36 @@ class HomeViewModelTest {
         assertEquals(0, fake.commandsNamed("setVolume"))
     }
 
+    /**
+     * A drag on the room panel's bar sets a level at every move. Only where the finger came
+     * to rest reaches the speaker: one command, not one per frame of the drag.
+     */
+    @Test fun `a drag across a member's bar sends only where it ended`() = runBlocking<Unit> {
+        connect()
+        fake.pushPlayerVolume(fake.id, volume = 30)
+        awaitPlayerVolume(fake.id, 30)
+        fake.clearHistory()
+
+        listOf(34, 41, 55, 62).forEach { viewModel.setPlayerVolume(fake.id, it) }
+
+        fake.awaitCommand("setVolume", 5_000)
+        assertEquals(62, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+        delay(600)
+        assertEquals(1, fake.commandsNamed("setVolume"))
+    }
+
+    /**
+     * A touch on the bar names a level outright, so unlike a press it is not aiming from an
+     * unknown one — but the bar it was aimed on was drawn empty, so it is still a guess.
+     */
+    @Test fun `setting a member before its level is known sends nothing`() = runBlocking<Unit> {
+        connect()
+        fake.clearHistory()
+        viewModel.setPlayerVolume(fake.id, 62)
+        delay(600)
+        assertEquals(0, fake.commandsNamed("setVolume"))
+    }
+
     // -------------------------------------------------- naming the TV's soundbar
 
     /**

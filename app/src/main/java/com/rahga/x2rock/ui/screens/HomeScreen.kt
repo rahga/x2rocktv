@@ -301,6 +301,8 @@ fun HomeScreen(
                     onRemovePlayer = { homeViewModel.removePlayerFromGroup(liveGroup.id, it) },
                     onAdjustPlayerVolume = homeViewModel::adjustPlayerVolume,
                     onAdjustGroupVolume = homeViewModel::adjustGroupVolume,
+                    onSetPlayerVolume = homeViewModel::setPlayerVolume,
+                    onSetGroupVolume = homeViewModel::setGroupVolume,
                     onJoin = { homeViewModel.joinGroup(it.id, liveGroup.id) },
                     onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {

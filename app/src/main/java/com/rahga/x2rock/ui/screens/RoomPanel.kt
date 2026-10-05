@@ -1,6 +1,8 @@
 package com.rahga.x2rock.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.setValue
@@ -44,6 +48,7 @@ import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.viewmodel.HomeViewModel
+import kotlin.math.roundToInt
 
 /**
  * Everything one room can be told to do, on one surface.
@@ -97,6 +102,8 @@ fun RoomPanel(
     onRemovePlayer: (playerId: String) -> Unit,
     onAdjustPlayerVolume: (playerId: String, delta: Int) -> Unit,
     onAdjustGroupVolume: (groupId: String, delta: Int) -> Unit,
+    onSetPlayerVolume: (playerId: String, volume: Int) -> Unit,
+    onSetGroupVolume: (groupId: String, volume: Int) -> Unit,
     onJoin: (Group) -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
@@ -179,6 +186,7 @@ fun RoomPanel(
                 action = if (coordinator) null else "leave",
                 onActivate = { if (!coordinator) onRemovePlayer(playerId) },
                 onAdjust = { delta -> onAdjustPlayerVolume(playerId, delta) },
+                onSet = { level -> onSetPlayerVolume(playerId, level) },
             )
         }
 
@@ -207,6 +215,7 @@ fun RoomPanel(
                     action = "join",
                     onActivate = { onJoin(other) },
                     onAdjust = { delta -> onAdjustGroupVolume(other.id, delta) },
+                    onSet = { level -> onSetGroupVolume(other.id, level) },
                 )
             }
         } else if (members > 1) {
@@ -281,9 +290,10 @@ private fun PanelSection(title: String) {
 /**
  * One room, in either list: its level on left and right, and Enter for what [action] says.
  *
- * The level is a read-out rather than something to aim at, because a remote has no drag —
- * left and right are the whole gesture, and the bar is there to be watched while they are
- * held. Both lists use this so a level is never somewhere a room is not.
+ * On a remote the level is a read-out rather than something to aim at, because a remote has
+ * no drag — left and right are the whole gesture, and the bar is there to be watched while
+ * they are held. By touch the bar is the slider: [onSet] takes where it was touched. Both
+ * lists use this so a level is never somewhere a room is not.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -295,6 +305,7 @@ private fun RoomRow(
     action: String?,
     onActivate: () -> Unit,
     onAdjust: (Int) -> Unit,
+    onSet: (Int) -> Unit,
     subtitle: String? = null,
     /** Kept at its level and dimmed, the way the desktop widget draws a muted room. */
     muted: Boolean = false,
@@ -354,7 +365,7 @@ private fun RoomRow(
                         VolumeLevel(volume, muted)
                     }
                 }
-                VolumeBar(volume, muted)
+                VolumeBar(volume, muted, onSet)
             }
             if (action != null) {
                 Spacer(Modifier.width(16.dp))
@@ -386,24 +397,45 @@ private fun VolumeLevel(volume: Int?, muted: Boolean = false) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun VolumeBar(volume: Int?, muted: Boolean = false) {
+private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
     // Muted keeps the level and dims it: the speaker remembers where it was, and so does this.
     val ink = LocalContentColor.current.let { if (muted) it.copy(alpha = it.alpha * 0.4f) else it }
+    val set by rememberUpdatedState(onSet)
+    // A tap or a drag on the bar sets the level under the finger. It takes the touch before
+    // the row does, so touching the bar never also joins or leaves. The strip is taller than
+    // the 4dp it draws, which no finger would hit.
+    fun levelAt(x: Float, width: Int) = (x / width * 100).roundToInt().coerceIn(0, 100)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(4.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(ink.copy(alpha = 0.25f)),
+            .pointerInput(Unit) { detectTapGestures { set(levelAt(it.x, size.width)) } }
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures(
+                    onDragStart = { set(levelAt(it.x, size.width)) },
+                    onHorizontalDrag = { change, _ ->
+                        change.consume()
+                        set(levelAt(change.position.x, size.width))
+                    },
+                )
+            }
+            .padding(vertical = 10.dp),
     ) {
-        if (volume != null && volume > 0) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(volume / 100f)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(ink),
-            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(ink.copy(alpha = 0.25f)),
+        ) {
+            if (volume != null && volume > 0) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(volume / 100f)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(ink),
+                )
+            }
         }
     }
 }
