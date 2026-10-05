@@ -283,6 +283,79 @@ Shield the same afternoon.
 
 ---
 
+## Recorded by x2rock, and relied on here
+
+The sibling project measured these on its own household's hardware between 2026-09-04 and
+2026-10-01. They are protocol facts rather than facts about one house, so they are kept here
+with the rest; where this repo has since seen one for itself, that is said, and where the code
+leans on one, the place is named.
+
+**Messages and namespaces**
+
+- **A namespace resolves by prefix** — `home:1` answers as `homeTheater:1` — so read the
+  namespace echoed in the reply's header rather than assuming the one sent. 41 namespaces were
+  enumerated on API 1.54.1; `info:1 getInfo` gives the player's `restUrl`, its API version and
+  its capabilities.
+- **An event that omits a field is not setting it false.** Merge each one into what is held
+  (`SonosHousehold` does, field by field) rather than replacing it.
+
+**Volume**
+
+- **Both volume setters unmute** — `setVolume` and `setRelativeVolume`, group and player. A
+  muted room stepped by a remote press therefore unmutes as it moves, which is the behaviour
+  the player pane leaves to the speaker rather than reproducing. Seen here too, on the Shield
+  (punch list 1.9).
+- **A second volume command within about 260ms is deferred**, and `getVolume` reads stale
+  inside that window, so a read straight after a write can report the old level. Never treat a
+  read-after-write as confirmation; the pushed event is the answer. The view models' 300ms
+  volume debounce keeps a held key from sending a second command inside that window at all.
+- **A group's volume is its members' average**, and moving the group scales the members. The
+  room panel draws both without doing the arithmetic, because both arrive as events.
+
+**Playback**
+
+- **A live stream is known only by `container.type == "station"`** (`isRadio`). Nothing in
+  the track says so.
+- **TuneIn sends `canPause: false`, and a pause sends it to IDLE**, not PAUSED; Sonos Radio
+  sends `canPause: true`, and resuming restarts the track. `PlaybackActions` reads
+  `canPause` as a fact for that reason.
+- **`queueVersion`** was absent on the firmware x2rock measured, but is sent by the office
+  One SL and the home household, and appears in this repo's captures (punch list 3.5). UPnP's
+  `UpdateID` is the signal known to work everywhere. A queue item's `itemId` is its 1-based
+  position while the queue is driving and an opaque hash otherwise, and **it renumbers on
+  every edit** — never hold one across an edit.
+
+**Home theatre**
+
+- **`homeTheater:1 subscribe` succeeds and never fires.** Night Sound and dialog travel only
+  in UPnP eventing's `LastChange`, which this app does not use, so they are re-read after a
+  write rather than waited for. `getPlayerSettings` reflects a `SetEQ` write at once, which
+  is what makes that re-read correct.
+- **`homeTheater:1 loadHomeTheaterPlayback` switches a solo soundbar to its TV** over the
+  Control API. A grouped room needs the UPnP route described under "Switching a room to its TV
+  input" in `CLAUDE.md`, which is the one this app uses for both.
+- **`DialogLevel` is 0 or 1 on a Beam**; 1-4 exist only on hardware neither household has.
+
+**The household's security switches**
+
+- They are the `effectiveSettings:1` security group: **Authentication**, **UPnP** and **Guest
+  Access**.
+- **Authentication on: every Control API command answers `ERROR_NO_PERMISSION`**
+  (`SonosCommandException.isPermissionRefusal`), `getGroups` first, while UPnP keeps answering.
+- **UPnP off: every SOAP call answers HTTP 403**, while the Control API and `getaa` album art
+  keep working. `Upnp.switchedOff` follows the switch from `effectiveSettings:1` so the pane can
+  say why the queue and TV input are gone before anyone presses them.
+
+**The player itself**
+
+- **The TLS certificate** is leaf-only, `CN=<MAC>`, with SANs `sonos-<MAC>.local`,
+  `urn:sonos:udn:RINCON_…` and `sonos-<MAC>.smartspeaker.audio`; valid for about six months;
+  issued by "Sonos Device Authentication Root CA". See "TLS" above for what that costs.
+- **Open ports:** 1400 (UPnP, cleartext), 1410 (answers 404 to everything), 1443 (the
+  Control API) and 7000 (AirPlay).
+
+---
+
 ## Test evidence
 
 Run 2026-09-07 against a Shield (`ro.build.version.sdk=30`, `eth0`) and five Sonos players.

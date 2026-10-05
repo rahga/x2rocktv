@@ -478,6 +478,10 @@ SOAP call is refused at once rather than after its 403. Left alone: the fixed-vo
 
 ## Protocol facts to copy into `docs/lan-transport.md` (no code change)
 
+*Done 2026-10-05: all copied into `docs/lan-transport.md`, "Recorded by x2rock, and relied on
+here", each with where it came from and what in this repo leans on it. Kept below as the
+record of what was carried over.*
+
 Recorded by x2rock since 2026-09-04 and relevant here:
 
 - ~~`playback:1` sends `playbackStatus` and `playbackError`~~ — copied in with 1.1. An event
