@@ -882,7 +882,7 @@ private fun SleepTimerPickerOverlay(
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
 
-    Overlay {
+    Overlay(onDismiss) {
         Column(
             modifier = Modifier
                 .width(280.dp)
