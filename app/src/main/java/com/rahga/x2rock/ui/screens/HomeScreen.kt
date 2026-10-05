@@ -445,7 +445,7 @@ private fun RoomListItem(
     info: HomeViewModel.RoomInfo,
     isSelected: Boolean,
     focusRequester: FocusRequester,
-    /** Right from a room crosses into the room view, at its primary control. */
+    /** Right from a room crosses into the player pane, at its primary control. */
     detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
     onOpenPanel: () -> Unit
