@@ -151,10 +151,10 @@ exists. Posters are the speaker's art by address (`PosterArt`), since the launch
 name, and opposite it the group's volume (speaker, wedge, level; select mutes, left and right
 step it while focused).
 - **Music:** art, track and artist (or a stream's own text and its station), a progress bar
-  where there is a duration, then three rows — transport (only what `availablePlaybackActions`
-  permits, plus the rating thumbs where a press can succeed), modes (shuffle, repeat,
-  crossfade, each gated the same way), and places (queue, favourites, sleep timer) — with a
-  row per speaker when the room is grouped. A room with nothing loaded says so and offers
+  where there is a duration, then two rows — transport, flanked by shuffle and repeat as icons
+  the way the Sonos app draws them (each only where `availablePlaybackActions` permits it, plus
+  the rating thumbs where a press can succeed), and places (queue, favourites, sleep timer)
+  with crossfade's icon at the end — with a row per speaker when the room is grouped. A room with nothing loaded says so and offers
   Favorites.
 - **TV:** a television glyph with the input format, Night Sound and Speech Enhancement, and a
   way back into music through Favorites.
