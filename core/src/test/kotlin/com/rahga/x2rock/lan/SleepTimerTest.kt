@@ -5,12 +5,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
@@ -87,6 +89,16 @@ class SleepTimerTest {
     }
 
     /** Expired and about to stop is a time, zero — not "no timer", which is the empty element. */
+    /** With the switch off every SOAP call is a 403; it is refused here, without the round trip. */
+    @Test fun `with UPnP off a read is refused before it is sent`() = runBlocking<Unit> {
+        fake.setUpnpAllowed(false)
+        withTimeout(5_000) { household.state.first { it.upnpOff } }
+        val before = upnp.requestCount
+        val refused = runCatching { household.sleepTimer(fake.groupId(household)) }.exceptionOrNull()
+        assertTrue("expected a refusal, got $refused", refused is UpnpRefusedException && "Turn UPnP on" in refused.message!!)
+        assertEquals("the call reached the player", before, upnp.requestCount)
+    }
+
     @Test fun `the clock reads HH MM SS, and zero is a time`() {
         assertEquals(0L, parseClock("00:00:00"))
         assertEquals(3_723_000L, parseClock("01:02:03"))
