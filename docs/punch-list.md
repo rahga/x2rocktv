@@ -406,8 +406,9 @@ refusal, art refused on a short first read, queue moves landing on tombstones, t
 timer ticking in the view model, the network memory keyed by `activeNetwork` inside
 `onAvailable` (which still names the old network), an alarm asked with UPnP off, and every
 topology change re-subscribing every player. The tenth, a duplicated tone range, is a
-one-liner. Unverified on a device: the Menu key as a row's second action, and the network
-key during a real change of network.
+one-liner. Unverified on a device: ~~the Menu key as a row's second action~~ (*done
+2026-10-05 on the Bedroom Streamer, by the owner*), and the network key during a real change of
+network.
 
 A second pass the same afternoon found eight more, all fixed: a replay whose load went
 unanswered could resume the old content and call it the item (now it must play something
@@ -459,6 +460,13 @@ SOAP call is refused at once rather than after its 403. Left alone: the fixed-vo
   one sign-in that suits a remote: SMAPI `getDeviceLinkCode` shows a short code on the TV, the
   viewer enters it on a phone, and `getDeviceAuthToken` is polled for the token. That reopens
   Tier 5's "no linking" decision for this one flow — the owner's call.
+
+## Checked by hand, 2026-10-05
+
+On the Bedroom Streamer, release build, by the owner: the player pane's header volume (left and
+right ±5, select mutes), Bass/Treble and the room panel's level by touch and by key, Prev with
+shuffle on going back to the start of the track, the Zzz sleep timer set and cancelled from the
+app, and the Menu key on a row. All as intended.
 
 ## Tier 5 — decided out, or waiting on a decision
 
