@@ -20,6 +20,12 @@ android {
 
     buildTypes {
         release {
+            // Signed with the local debug key, so a release build installs on this household's
+            // own TVs — over a debug install, with no uninstall and no lost settings. Debug
+            // builds run several times slower on a TV box: 4.7s to the room list on the
+            // Streamer against 0.6-0.8s for this (2026-10-05). Publishing anywhere would need
+            // a real upload key in place of this line.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
