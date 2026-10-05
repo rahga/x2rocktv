@@ -397,7 +397,16 @@ class PlayerViewModel @Inject constructor(
     /** End the ringing alarm. Pausing is what does that; deleting the alarm would not. */
     fun stopAlarm() = command("stop the alarm") { household.pause(it) }
     fun skipToNextTrack() = command("skip") { household.skipToNextTrack(it) }
-    fun skipToPreviousTrack() = command("go back") { household.skipToPreviousTrack(it) }
+    /**
+     * Back a track, or back to the start of this one where the player has no previous track
+     * to go to — see [PlaybackActions.canGoBack]. The remote's media key and the system's own
+     * controls come through here too, so all three agree.
+     */
+    fun skipToPreviousTrack() {
+        val actions = uiState.value.actions
+        if (!actions.canSkipToPrevious && actions.canSeek) seekTo(0)
+        else command("go back") { household.skipToPreviousTrack(it) }
+    }
 
     // ------------------------------------------------------------ ratings
     //
