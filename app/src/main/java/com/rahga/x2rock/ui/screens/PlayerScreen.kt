@@ -5,8 +5,18 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOn
+import androidx.compose.material.icons.filled.RepeatOneOn
+import androidx.compose.material.icons.filled.Shuffle
+import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.vector.PathBuilder
+import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -509,17 +519,32 @@ private fun PlaybackControls(
         if (hasContent)
 
         Row(
-            // Three at most. Seeking is the progress bar's, left and right on it, as it was all
-            // along: the −30s and +30s buttons that also sat here are the Sonos app's, which
-            // draws them as icons; as labelled buttons across a room they crowded this row
-            // into overflowing, and said what the bar already does.
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            // Five at most, and the thumbs. Seeking is the progress bar's, left and right on it,
+            // as it was all along: the −30s and +30s buttons that also sat here are the Sonos
+            // app's, which draws them as icons; as labelled buttons across a room they crowded
+            // this row into overflowing, and said what the bar already does. Spaced closer than
+            // the other rows: with shuffle and repeat at either end, 24dp gaps ran past the
+            // pane at 1080p and squeezed Repeat.
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
             // Drawn only where the source permits them. A live stream refuses skip, seek
             // and shuffle outright, and a row of controls that cannot act is worse on a
             // remote than a shorter row: each is still a focus stop that does nothing.
+            //
+            // Shuffle and repeat flank the transport as icons, where the Sonos app puts them.
+            // Like the rest of this row they are not drawn with no content, even though the
+            // player reports both as available: `availablePlaybackActions` answers "what may I
+            // do to this content", not "is there any".
+            if (state.actions.canShuffle) {
+                ModeButton(
+                    icon = if (state.shuffle) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
+                    description = if (state.shuffle) "Shuffle, on" else "Shuffle, off",
+                    onClick = { viewModel.toggleShuffle() },
+                    modifier = Modifier.claimExit(transportExit),
+                )
+            }
             if (state.actions.canSkipToPrevious) {
                 AppButton(
                     onClick = { viewModel.skipToPreviousTrack() },
@@ -550,6 +575,21 @@ private fun PlaybackControls(
             if (state.actions.canSkip) {
                 AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
             }
+            if (state.actions.canRepeat) {
+                ModeButton(
+                    icon = when (state.repeat) {
+                        RepeatModes.ALL -> Icons.Filled.RepeatOn
+                        RepeatModes.ONE -> Icons.Filled.RepeatOneOn
+                        else -> Icons.Filled.Repeat
+                    },
+                    description = when (state.repeat) {
+                        RepeatModes.ALL -> "Repeat all"
+                        RepeatModes.ONE -> "Repeat one"
+                        else -> "Repeat, off"
+                    },
+                    onClick = { viewModel.cycleRepeat() },
+                )
+            }
             // Drawn only where a press can succeed: the track has an id, its service needs no
             // account and publishes ratings. A Live broadcast — this household's ordinary
             // iHeartRadio listening — has no track id, so it never shows them.
@@ -566,44 +606,8 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.focusGroup()
-        ) {
-            val modeExit = booleanArrayOf(false)
-            // Hidden with no content, even though the player reports all three as available.
-            // `availablePlaybackActions` answers "what may I do to this content", not "is
-            // there any" — and the Sonos app hides them here for the same reason.
-            if (hasContent && state.actions.canShuffle) {
-                AppButton(
-                    onClick = { viewModel.toggleShuffle() },
-                    modifier = Modifier.claimExit(modeExit),
-                ) {
-                    Text(if (state.shuffle) "Shuffle ON" else "Shuffle OFF")
-                }
-            }
-            if (hasContent && state.actions.canRepeat) {
-                AppButton(
-                    onClick = { viewModel.cycleRepeat() },
-                    modifier = Modifier.claimExit(modeExit),
-                ) {
-                    Text(state.repeat.toRepeatLabel())
-                }
-            }
-            if (hasContent && state.actions.canCrossfade) {
-                AppButton(
-                    onClick = { viewModel.toggleCrossfade() },
-                    modifier = Modifier.claimExit(modeExit),
-                ) {
-                    Text(if (state.crossfade) "Crossfade ON" else "Crossfade OFF")
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Where to go from here, in a row of its own. It used to share the modes' row, and at
+        // Where to go from here, and crossfade. These used to share a row with shuffle and repeat
+        // as labelled buttons, and at
         // 1080p on a TV — 960dp across, a third of it the room list — six buttons do not fit:
         // Favorites was squeezed to a sliver with its label wrapped a letter to a line, which
         // made the row hundreds of pixels tall and pushed the volume below the screen, and
@@ -633,6 +637,15 @@ private fun PlaybackControls(
                 ),
             ) { Text("Favorites") }
             SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            // A setting of the room rather than of the track, so it sits with these rather than
+            // the transport; the Sonos app keeps it a level further away still, in a menu.
+            if (hasContent && state.actions.canCrossfade) {
+                ModeButton(
+                    icon = if (state.crossfade) CrossfadeOnIcon else CrossfadeIcon,
+                    description = if (state.crossfade) "Crossfade, on" else "Crossfade, off",
+                    onClick = { viewModel.toggleCrossfade() },
+                )
+            }
         }
 
         SpeakerRows(state, viewModel, exitLeftFocusRequester)
@@ -1055,10 +1068,62 @@ internal fun Long.toTimeString(): String {
            else "%d:%02d".format(java.util.Locale.ROOT, minutes, seconds)
 }
 
-private fun String.toRepeatLabel(): String = when (this) {
-    RepeatModes.ALL -> "Repeat All"
-    RepeatModes.ONE -> "Repeat One"
-    else -> "Repeat OFF"
+/**
+ * A play mode as an icon. Its state is in the glyph's shape — Material's "on" forms sit in a
+ * filled square — rather than in colour alone, which a focused button's own colour would hide.
+ */
+@Composable
+private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AppButton(onClick = onClick, modifier = modifier) {
+        // Larger than the default 24dp: at three metres the "on" forms' filled square was all
+        // that read, not the glyph inside it.
+        Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(30.dp))
+    }
+}
+
+/**
+ * Crossfade, which Material has no icon for: a fade-out and a fade-in crossing, the bowtie
+ * audio editors draw. On, it is cut out of a filled square, as Material's ShuffleOn and
+ * RepeatOn are, so the three modes say "on" the same way.
+ */
+private val CrossfadeIcon: ImageVector = crossfadeIcon(on = false)
+private val CrossfadeOnIcon: ImageVector = crossfadeIcon(on = true)
+
+private fun crossfadeIcon(on: Boolean): ImageVector =
+    ImageVector.Builder(
+        name = if (on) "CrossfadeOn" else "Crossfade",
+        defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
+            if (on) {
+                moveTo(5f, 3f)
+                lineTo(19f, 3f)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 21f, 5f)
+                lineTo(21f, 19f)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 19f, 21f)
+                lineTo(5f, 21f)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 3f, 19f)
+                lineTo(3f, 5f)
+                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 5f, 3f)
+                close()
+                bowtie(left = 6.5f, right = 17.5f, top = 8f, bottom = 16f)
+            } else {
+                bowtie(left = 3f, right = 21f, top = 6f, bottom = 18f)
+            }
+        }
+    }.build()
+
+/** Two triangles meeting at the centre: one tall on the left, the other tall on the right. */
+private fun PathBuilder.bowtie(left: Float, right: Float, top: Float, bottom: Float) {
+    val midX = (left + right) / 2
+    val midY = (top + bottom) / 2
+    moveTo(left, top)
+    lineTo(midX, midY)
+    lineTo(right, top)
+    lineTo(right, bottom)
+    lineTo(midX, midY)
+    lineTo(left, bottom)
+    close()
 }
 
 /** A thumb, filled once the track is already rated that way and outlined otherwise. */
