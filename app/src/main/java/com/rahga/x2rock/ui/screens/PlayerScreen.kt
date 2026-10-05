@@ -2,6 +2,8 @@ package com.rahga.x2rock.ui.screens
 
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -337,7 +339,7 @@ private fun TrackInfo(state: PlayerUiState) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
+private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit) {
     if (state.durationMillis <= 0) return
 
     var displayPositionMillis by remember(state.positionUpdatedAt) {
@@ -379,6 +381,16 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
         seekPresses++
         onSeekBy(delta)
     }
+    // A tap aims at a point rather than stepping, so it is sent as one; the total under the
+    // bar still says how far that is from where the tap began.
+    fun seekToFraction(fraction: Float) {
+        val target = (fraction.coerceIn(0f, 1f) * state.durationMillis).toLong()
+        if (!seekShown) seekFrom = displayPositionMillis
+        seekTotal = target - seekFrom
+        seekShown = true
+        seekPresses++
+        onSeekTo(target)
+    }
     val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
     Column {
@@ -391,6 +403,13 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit) {
                 // nothing.
                 .onFocusChanged { isFocused = it.isFocused }
                 .focusable()
+                // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
+                // never sends a tap, so on a TV this is inert. The strip is taller than the bar
+                // drawn in it, or an 8dp line would be a hard thing to hit.
+                .pointerInput(state.durationMillis) {
+                    detectTapGestures { offset -> seekToFraction(offset.x / size.width) }
+                }
+                .padding(vertical = 12.dp)
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
@@ -472,7 +491,7 @@ private fun PlaybackControls(
     val hasContent = state.actions.canPlay
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) })
+        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) })
         if (hasContent) Spacer(modifier = Modifier.height(24.dp))
 
         val transportExit = booleanArrayOf(false)
