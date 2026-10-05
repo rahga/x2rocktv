@@ -142,7 +142,6 @@ class PlayerViewModel @Inject constructor(
 
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
-    private var sleepTimerJob: Job? = null
     private var seekDebounceJob: Job? = null
     private var homeTheaterJob: Job? = null
 
@@ -295,8 +294,6 @@ class PlayerViewModel @Inject constructor(
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
         loadHomeTheater()
-        _sleepEndsAt.value = null
-        loadSleepTimer()
     }
 
     /**
@@ -556,9 +553,10 @@ class PlayerViewModel @Inject constructor(
     // ------------------------------------------------------------ sleep timer
     //
     // Sonos's own timer, so the Sonos app and every other controller see it, and it outlives
-    // this one: the room pauses itself when it fires. It is not pushed, so it is read when a
-    // room is selected and after each change, and counted down here between reads for the
-    // display alone — nothing is asked of the speaker on a timer.
+    // this one: the room pauses itself when it fires. Set and cancelled over UPnP, the only
+    // way there is; what it is comes from `sleepTimer:1`, which pushes every set and cancel
+    // whoever made it — `x2rock sleep 15` was the case that showed it was needed. Counted down
+    // where it is drawn, for the display alone: nothing is asked of the speaker on a timer.
 
     fun setSleepTimer(minutes: Int) = changeSleepTimer(minutes, "set the sleep timer")
 
@@ -568,36 +566,17 @@ class PlayerViewModel @Inject constructor(
         val groupId = _groupId.value ?: return
         viewModelScope.launch {
             runCatching { household.setSleepTimer(groupId, minutes) }.onFailure { notice.failure(what, it) }
-            loadSleepTimer()
-        }
-    }
-
-    /**
-     * One read, when the room is chosen or the timer changed. The timer is not pushed, but its
-     * firing is: the speaker pauses the room, which arrives as a playback event, and that is
-     * when it is read again (below) — not on a clock of this view model's, which the project
-     * rules out. `00:00:00` is the player's "expired, stopping now", and reads as none.
-     */
-    private fun loadSleepTimer() {
-        val groupId = _groupId.value ?: return
-        sleepTimerJob?.cancel()
-        sleepTimerJob = viewModelScope.launch {
-            // A failed read says nothing, rather than a timer that may not exist.
-            val remaining = runCatching { household.sleepTimer(groupId) }.getOrNull()
-            if (_groupId.value != groupId) return@launch
-            _sleepEndsAt.value = remaining?.takeIf { it > 0 }?.let { clock.now() + it }
         }
     }
 
     init {
-        // A room that stops while a timer is shown has probably been stopped by it. Stopped,
-        // not merely not playing: a track boundary passes through BUFFERING, and keying on
-        // that re-read the timer at every track and had the countdown jitter by a round trip.
+        // The household fixes the end as each report arrives, on its own clock; it is moved
+        // onto [clock] here, when it is seen — for a room selected long after its report as
+        // much as for one that has just reported.
         viewModelScope.launch {
-            household.groupStates
-                .map { all -> _groupId.value?.let { all[it]?.playbackState in STOPPED_STATES } }
-                .distinctUntilChanged()
-                .collect { stopped -> if (stopped == true && _sleepEndsAt.value != null) loadSleepTimer() }
+            combine(_groupId, household.groupStates) { id, all -> id to id?.let { all[it] } }
+                .distinctUntilChanged { (a, x), (b, y) -> a == b && x?.sleepTimerEndsAt == y?.sleepTimerEndsAt }
+                .collect { (_, state) -> _sleepEndsAt.value = state?.sleepTimerLeftMillis()?.let { clock.now() + it } }
         }
     }
 
@@ -615,6 +594,5 @@ class PlayerViewModel @Inject constructor(
 
     private companion object {
         const val VOLUME_DEBOUNCE_MILLIS = 300L
-        val STOPPED_STATES = setOf(PlaybackStates.PAUSED, PlaybackStates.IDLE)
     }
 }

@@ -185,6 +185,25 @@ It arrived after three IDLE statuses, not before them. x2rock's capture of an ex
 was `ERROR_PLAYBACK_FAILED` / `ERROR_CANT_REACH_SERVER` with a `trackName` and an `itemId`,
 and a second error three seconds later had no `itemId`; no field can be relied on.
 
+**The sleep timer is pushed, by `sleepTimer:1`** — a namespace in no published reference, found
+in x2rock's prefix walk and first probed here (office One SL, 2026-10-05). Group-scoped: player
+and household scope answer `ERROR_MISSING_PARAMETERS (Missing groupId)`. `subscribe` answers
+empty and then sends the state as an event, and sends one again on every set and cancel,
+whoever made it — `x2rock sleep 15` and `sleep off`, here. Captured verbatim
+(`core/src/testFixtures/resources/fixtures/event.sleepTimerStatus.json` and `.none.json`):
+
+```json
+{"_objectType":"sleepTimerStatus","active":true,"remainingTimeDuration":"PT0H15M0S"}
+{"_objectType":"sleepTimerStatus","active":false}
+```
+
+The time left is ISO 8601 and is what was left *when the event was sent*; it is not re-sent as
+it runs down, so the household fixes the end as each report arrives. `getSleepTimer` answers
+the same body. Nothing in the namespace sets one — `setSleepTimer`, `set`, `cancel`, `start` and
+the rest are `ERROR_UNSUPPORTED_COMMAND` — so setting stays `ConfigureSleepTimer` over UPnP.
+Not yet seen: whether a timer running out sends `active: false`. The countdown reads none at
+zero either way.
+
 ---
 
 ## Discovery: SSDP works here
