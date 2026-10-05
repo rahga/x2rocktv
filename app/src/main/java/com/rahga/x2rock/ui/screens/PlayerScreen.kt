@@ -2,6 +2,12 @@ package com.rahga.x2rock.ui.screens
 
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Canvas
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
@@ -32,6 +38,9 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
 import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.tv.material3.ClickableSurfaceDefaults
+import androidx.tv.material3.LocalContentColor
 import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.material3.LinearProgressIndicator
@@ -70,6 +79,7 @@ import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -162,7 +172,7 @@ fun PlayerPane(
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
                 if (state.onTvInput) {
-                    TvInfo(state)
+                    TvInfo(state, viewModel)
                     TvControls(
                         state = state,
                         viewModel = viewModel,
@@ -173,7 +183,7 @@ fun PlayerPane(
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
-                    TrackInfo(state)
+                    TrackInfo(state, viewModel)
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
@@ -240,9 +250,9 @@ private fun AlarmControls(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TrackInfo(state: PlayerUiState) {
+private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel) {
     Column {
-        Text(state.groupName, style = MaterialTheme.typography.titleMedium)
+        PaneHeader(state, viewModel)
         Spacer(modifier = Modifier.height(24.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (state.albumArtUrl != null) {
@@ -624,68 +634,132 @@ private fun PlaybackControls(
             SleepTimerButton(state, viewModel, onOpenSleepTimer)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        VolumeRow(state, viewModel, exitLeftFocusRequester)
-
         SpeakerRows(state, viewModel, exitLeftFocusRequester)
     }
 }
 
 /**
- * The group's level, identical on the music pane and the TV one.
- *
- * Shared rather than duplicated on purpose: volume is the one control that means the same
- * thing whatever the room is playing, and it has to sit in the same place and answer the
- * same presses when the source changes. A separate copy for the TV pane would drift.
+ * The room's name, and opposite it the group's level — identical on the music pane and the
+ * TV one, because volume is the one control that means the same thing whatever the room is
+ * playing, and it has to sit in the same place and answer the same presses when the source
+ * changes.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun VolumeRow(
-    state: PlayerUiState,
-    viewModel: PlayerViewModel,
-    exitLeftFocusRequester: FocusRequester,
-) {
+private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.focusGroup()
     ) {
-        // A fixed line-out has no level to step, so −/+ are not drawn — hidden rather than
-        // disabled, for the reason below — and Mute takes over as the row's left exit.
-        if (state.volumeFixed) {
-            Text("Volume: fixed", style = MaterialTheme.typography.bodyLarge)
-        } else {
-            // Never disabled. A disabled tv-material3 button still takes focus and draws no
-            // highlight, and these once were, until a level was known and while muted. A step
-            // is relative, so it needs no level, and on a muted room it unmutes as the player
-            // does.
-            AppButton(
-                onClick = { viewModel.adjustVolume(-5) },
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) { Text("Vol \u2212") }
-            // A muted room keeps its level — the Control API reports it through mute — so it
-            // is shown, and said to be muted, rather than replaced by the word.
+        Text(
+            text = state.groupName,
+            style = MaterialTheme.typography.titleMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        HeaderVolume(state, onStep = { viewModel.adjustVolume(it) }, onToggleMute = { viewModel.toggleMute() })
+    }
+}
+
+/**
+ * Speaker, wedge, level: one control. Select mutes; left and right step the level while it
+ * has focus, with − and + drawn either side to say so. Deliberately small — the remote's own
+ * volume keys are the television's (see CLAUDE.md), and the system draws its own display
+ * for those, so this is for the room rather than a second volume screen.
+ *
+ * Left steps down rather than leaving for the room list, as the room panel's levels do; up
+ * and down move on. The − and + keep their space when hidden, so focusing the control
+ * does not shift the room name. By touch they are always shown, and are their own targets;
+ * a tap anywhere else on the control mutes.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMute: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val touch = LocalInputModeManager.current.inputMode == InputMode.Touch
+    // A fixed line-out has no level to step: the view model says so if a step is tried.
+    val showSteps = !state.volumeFixed && (focused || touch)
+    Surface(
+        onClick = onToggleMute,
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        modifier = Modifier
+            .onFocusChanged { focused = it.isFocused }
+            .onKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                when (event.key) {
+                    Key.DirectionLeft -> { onStep(-VOLUME_STEP); true }
+                    Key.DirectionRight -> { onStep(+VOLUME_STEP); true }
+                    else -> false
+                }
+            }
+            .tapToClick(onToggleMute),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            StepMark("\u2212", showSteps) { onStep(-VOLUME_STEP) }
+            Icon(
+                imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
+                else Icons.AutoMirrored.Filled.VolumeUp,
+                contentDescription = if (state.isMuted) "Unmute" else "Mute",
+            )
+            if (!state.volumeFixed) VolumeWedge(state.volume, state.isMuted)
             Text(
                 text = when {
-                    state.volume == null -> "Volume: \u2014"
-                    state.isMuted -> "Volume: ${state.volume} (muted)"
-                    else -> "Volume: ${state.volume}"
+                    state.volumeFixed -> "Fixed"
+                    state.volume == null -> "\u2014"
+                    else -> state.volume.toString()
                 },
-                style = MaterialTheme.typography.bodyLarge
+                style = MaterialTheme.typography.titleMedium,
+                // Wide enough for "100", so the control does not change size as the level moves.
+                modifier = Modifier.widthIn(min = 40.dp),
             )
-            AppButton(onClick = { viewModel.adjustVolume(+5) }) { Text("Vol +") }
-        }
-        // Needs the current state to toggle, so a press in the moment before the first
-        // snapshot does nothing — the view model says why in its own comment.
-        AppButton(
-            onClick = { viewModel.toggleMute() },
-            modifier = if (state.volumeFixed) Modifier.exitLeftTo(exitLeftFocusRequester) else Modifier,
-        ) {
-            Text(if (state.isMuted) "Unmute" else "Mute")
+            StepMark("+", showSteps) { onStep(+VOLUME_STEP) }
         }
     }
 }
+
+/** − or +: always laid out, drawn only when it can be used, and a tap target of its own. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun StepMark(mark: String, shown: Boolean, onStep: () -> Unit) {
+    Text(
+        text = mark,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .alpha(if (shown) 1f else 0f)
+            .then(if (shown) Modifier.tapToClick(onStep) else Modifier),
+    )
+}
+
+/**
+ * The level as a wedge rising left to right, filled up to it — the shape Android's own volume
+ * display uses. In the content colour, so it inverts with the focused container as the room
+ * panel's bars do; dimmed while muted, keeping the level the speaker remembers.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun VolumeWedge(volume: Int?, muted: Boolean) {
+    val ink = LocalContentColor.current.let { if (muted) it.copy(alpha = it.alpha * 0.4f) else it }
+    Canvas(modifier = Modifier.size(width = 56.dp, height = 20.dp)) {
+        val wedge = Path().apply {
+            moveTo(0f, size.height)
+            lineTo(size.width, 0f)
+            lineTo(size.width, size.height)
+            close()
+        }
+        drawPath(wedge, ink.copy(alpha = ink.alpha * 0.25f))
+        if (volume != null && volume > 0) {
+            clipRect(right = size.width * volume / 100f) { drawPath(wedge, ink) }
+        }
+    }
+}
+
+/** The same step the room panel's levels use. */
+private const val VOLUME_STEP = 5
 
 /**
  * The header for a room on its television input, in place of [TrackInfo].
@@ -697,9 +771,9 @@ private fun VolumeRow(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TvInfo(state: PlayerUiState) {
+private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel) {
     Column {
-        Text(state.groupName, style = MaterialTheme.typography.titleMedium)
+        PaneHeader(state, viewModel)
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -728,7 +802,7 @@ private fun TvInfo(state: PlayerUiState) {
  * Not the music controls with the inapplicable ones removed: skip, shuffle, repeat and the
  * queue have nothing to act on here, and a grid that loses buttons when the source changes
  * is worse on a remote than a different grid. So this is its own surface, sharing only
- * [VolumeRow] — which is the one control that does mean the same thing either way.
+ * the header's volume — which is the one control that does mean the same thing either way.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -779,9 +853,6 @@ private fun TvControls(
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-        VolumeRow(state, viewModel, exitLeftFocusRequester)
-
-        Spacer(modifier = Modifier.height(16.dp))
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier.focusGroup(),
@@ -909,7 +980,7 @@ private fun SleepTimerPickerOverlay(
     }
 }
 
-/** Each speaker's own level, for a group of more than one. Drawn under both panes' volume row. */
+/** Each speaker's own level, for a group of more than one. Drawn under both panes' controls. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SpeakerRows(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {

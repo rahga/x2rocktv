@@ -369,7 +369,7 @@ class LiveHouseholdTest {
     }
 
     /**
-     * Only with `-Dx2rock.live.room=<room>`, and restored afterwards. The Vol −/+ buttons send
+     * Only with `-Dx2rock.live.room=<room>`, and restored afterwards. The player pane's volume steps send
      * `setRelativeVolume`, so the step is checked against what the player then reports.
      */
     @Test fun `a relative volume step comes back as an event`() = runBlocking<Unit> {

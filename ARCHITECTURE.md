@@ -147,15 +147,17 @@ exists. Posters are the speaker's art by address (`PosterArt`), since the launch
   is not on it. Selection follows focus. Click, hold-select or the Menu key opens `RoomPanel`.
 - Right: `PlayerScreen` for the selected room.
 
-**PlayerScreen** draws one of two panes:
+**PlayerScreen** — the player pane — draws one of two panes under a shared header: the room's
+name, and opposite it the group's volume (speaker, wedge, level; select mutes, left and right
+step it while focused).
 - **Music:** art, track and artist (or a stream's own text and its station), a progress bar
   where there is a duration, then three rows — transport (only what `availablePlaybackActions`
   permits, plus the rating thumbs where a press can succeed), modes (shuffle, repeat,
-  crossfade, each gated the same way; queue, favourites, sleep timer), and volume, with a row
-  per speaker when the room is grouped. A room with nothing loaded says so and offers
+  crossfade, each gated the same way), and places (queue, favourites, sleep timer) — with a
+  row per speaker when the room is grouped. A room with nothing loaded says so and offers
   Favorites.
-- **TV:** a television glyph with the input format, Night Sound and Speech Enhancement, the
-  volume row, and a way back into music through Favorites.
+- **TV:** a television glyph with the input format, Night Sound and Speech Enhancement, and a
+  way back into music through Favorites.
 
 **RoomPanel** — see "The room panel" in `CLAUDE.md` for its shape and the reasons for it.
 
