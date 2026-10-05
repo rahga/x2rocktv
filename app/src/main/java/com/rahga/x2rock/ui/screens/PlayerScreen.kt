@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
@@ -1024,7 +1025,42 @@ private fun SleepTimerButton(state: PlayerUiState, viewModel: PlayerViewModel, o
     if (state.upnpOff) return
     val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
     AppButton(onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() }) {
-        Text(if (sleepLeft != null) "Sleep: ${sleepLeft.toTimeString()}" else "Sleep Timer")
+        Icon(
+            imageVector = SleepIcon,
+            contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
+            else "Sleep timer",
+            modifier = Modifier.size(30.dp),
+        )
+        if (sleepLeft != null) {
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(sleepLeft.toTimeString())
+        }
+    }
+}
+
+/**
+ * The sleep timer as "Zzz", drawn: Material has nothing that means sleep and nothing else.
+ * The moon is Night Sound's — the Sonos app's symbol for it, and on the TV pane the two sit a
+ * row apart — and Snooze's alarm clock is already the ringing alarm's Snooze button.
+ */
+private val SleepIcon: ImageVector =
+    ImageVector.Builder(
+        name = "Sleep", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
+    ).apply {
+        // Three Zs, each smaller and higher than the last, with clear space between them —
+        // touching, they read as a staircase. The strokes thin with them so the smallest is
+        // still a Z at three metres rather than a blot.
+        zee(left = 1.5f, top = 16f, right = 7.5f, bottom = 22f, weight = 1.7f)
+        zee(left = 11f, top = 9f, right = 15f, bottom = 13f, weight = 1.4f)
+        zee(left = 18f, top = 2.5f, right = 21f, bottom = 5.5f, weight = 1.2f)
+    }.build()
+
+private fun ImageVector.Builder.zee(left: Float, top: Float, right: Float, bottom: Float, weight: Float) {
+    path(stroke = SolidColor(Color.Black), strokeLineWidth = weight, strokeLineJoin = StrokeJoin.Miter) {
+        moveTo(left, top)
+        lineTo(right, top)
+        lineTo(left, bottom)
+        lineTo(right, bottom)
     }
 }
 
@@ -1083,8 +1119,8 @@ private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Un
 
 /**
  * Crossfade, which Material has no icon for: a fade-out and a fade-in crossing, the bowtie
- * audio editors draw. On, it is cut out of a filled square, as Material's ShuffleOn and
- * RepeatOn are, so the three modes say "on" the same way.
+ * audio editors draw — outlined when off. On, it is cut out of a filled square, as Material's
+ * ShuffleOn and RepeatOn are, so the three modes say "on" the same way.
  */
 private val CrossfadeIcon: ImageVector = crossfadeIcon(on = false)
 private val CrossfadeOnIcon: ImageVector = crossfadeIcon(on = true)
@@ -1094,8 +1130,8 @@ private fun crossfadeIcon(on: Boolean): ImageVector =
         name = if (on) "CrossfadeOn" else "Crossfade",
         defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
     ).apply {
-        path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
-            if (on) {
+        if (on) {
+            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
                 moveTo(5f, 3f)
                 lineTo(19f, 3f)
                 arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 21f, 5f)
@@ -1107,8 +1143,10 @@ private fun crossfadeIcon(on: Boolean): ImageVector =
                 arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 5f, 3f)
                 close()
                 bowtie(left = 6.5f, right = 17.5f, top = 8f, bottom = 16f)
-            } else {
-                bowtie(left = 3f, right = 21f, top = 6f, bottom = 18f)
+            }
+        } else {
+            path(stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineJoin = StrokeJoin.Round) {
+                bowtie(left = 4f, right = 20f, top = 7f, bottom = 17f)
             }
         }
     }.build()
