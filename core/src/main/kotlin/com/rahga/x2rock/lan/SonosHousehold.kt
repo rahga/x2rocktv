@@ -435,9 +435,12 @@ class SonosHousehold(
         // window is waited out rather than the first reply taken, because a network can hold
         // two households — an office running two systems — and the first to answer is not a
         // choice. Only a cold start pays for that: a remembered player skips this.
+        // The speaker that went is passed over only when another answers. Where it is the only
+        // one — the office's single One SL — and it is back, it is the answer; skipping it then
+        // left a one-speaker household unable to reconnect at all.
         val found = multicast.around { ssdp() }
             .ifEmpty { runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()) }
-            .filterNot { avoid != null && it.hostname.equals(avoid, ignoreCase = true) }
+            .let { all -> all.filterNot { it.hostname.equals(avoid, ignoreCase = true) }.ifEmpty { all } }
         val households = found.filter { it.householdId != null }.groupBy { it.householdId!! }
         if (households.size > 1) {
             val choices = households.map { (household, players) ->
@@ -565,15 +568,18 @@ class SonosHousehold(
             teardown()
             var backoff = if (immediate) 0L else MIN_BACKOFF_MILLIS
             var skipSeed = fresh
+            var passOver = avoid
             while (isActive) {
                 if (backoff > 0) delay(backoff)
-                val outcome = runCatching { establish(rediscover = skipSeed, avoid = avoid) }
+                val outcome = runCatching { establish(rediscover = skipSeed, avoid = passOver) }
                 if (outcome.isSuccess) return@launch
                 // A question for the viewer, not a fault: asking SSDP again will not answer it.
                 if (outcome.exceptionOrNull() is HouseholdChoiceNeeded) return@launch
                 // Only the first attempt after a network change ignores the remembered
                 // address; if discovery then fails too, the memory is worth another try.
                 skipSeed = false
+                // Likewise the speaker that went: once is enough to have tried the others first.
+                passOver = null
                 backoff = nextBackoff(backoff)
             }
         }

@@ -192,7 +192,7 @@ fun PlayerPane(
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
                 if (state.onTvInput) {
-                    TvInfo(state, viewModel)
+                    TvInfo(state, viewModel, sidebarFocusRequester)
                     TvControls(
                         state = state,
                         viewModel = viewModel,
@@ -204,7 +204,7 @@ fun PlayerPane(
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
-                    TrackInfo(state, viewModel)
+                    TrackInfo(state, viewModel, sidebarFocusRequester)
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
@@ -272,9 +272,9 @@ private fun AlarmControls(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel) {
+private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     Column {
-        PaneHeader(state, viewModel)
+        PaneHeader(state, viewModel, exitLeftFocusRequester)
         Spacer(modifier = Modifier.height(24.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (state.albumArtUrl != null) {
@@ -434,7 +434,10 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                 // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
                 // never sends a tap, so on a TV this is inert. The strip is taller than the bar
                 // drawn in it, or an 8dp line would be a hard thing to hit.
-                .pointerInput(state.durationMillis) {
+                // Keyed on positionUpdatedAt too: the displayed position is a new state each time
+                // the speaker reports one, and a tap read through a stale handler measured its
+                // total from where the track stood at the last change of duration.
+                .pointerInput(state.durationMillis, state.positionUpdatedAt) {
                     detectTapGestures { offset -> seekToFraction(offset.x / size.width) }
                 }
                 .padding(vertical = 12.dp)
@@ -672,7 +675,7 @@ private fun PlaybackControls(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel) {
+private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -684,7 +687,12 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel) {
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        HeaderVolume(state, onStep = { viewModel.adjustVolume(it) }, onToggleMute = { viewModel.toggleMute() })
+        HeaderVolume(
+            state,
+            onStep = { viewModel.adjustVolume(it) },
+            onToggleMute = { viewModel.toggleMute() },
+            onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
+        )
     }
 }
 
@@ -701,7 +709,7 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMute: () -> Unit) {
+private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMute: () -> Unit, onExitLeft: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val touch = LocalInputModeManager.current.inputMode == InputMode.Touch
     // A fixed line-out has no level to step: the view model says so if a step is tried.
@@ -714,7 +722,10 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
-                    Key.DirectionLeft -> { onStep(-VOLUME_STEP); true }
+                    // A fixed line-out has no level to step, so left does what it does from any
+                    // row's leftmost control: back to the room list. Otherwise every press only
+                    // posted the "fixed" notice and the remote stayed put.
+                    Key.DirectionLeft -> { if (state.volumeFixed) onExitLeft() else onStep(-VOLUME_STEP); true }
                     Key.DirectionRight -> { onStep(+VOLUME_STEP); true }
                     else -> false
                 }
@@ -784,9 +795,9 @@ private const val VOLUME_STEP = 5
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel) {
+private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     Column {
-        PaneHeader(state, viewModel)
+        PaneHeader(state, viewModel, exitLeftFocusRequester)
         Spacer(modifier = Modifier.height(24.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
