@@ -6,6 +6,7 @@ import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.RoomPreferencesStore
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.channel.ChannelSync
+import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
@@ -101,6 +102,9 @@ class HomeViewModel @Inject constructor(
         data class Success(val groups: List<Group>, val rooms: Map<String, RoomInfo>) : UiState {
             /** The TV home-screen channels only care about what is playing. */
             val nowPlaying: Map<String, Track?> get() = rooms.mapValues { it.value.track }
+
+            /** Each room's home-screen tile: its track and its picture, as the list shows them. */
+            val tiles: Map<String, RoomTile> get() = rooms.mapValues { RoomTile(it.value.track?.name, it.value.artUrl) }
         }
         /** [choices] is non-empty when the "error" is two households, and the answer is a pick. */
         data class Error(val message: String, val choices: List<HouseholdChoice> = emptyList()) : UiState
@@ -122,7 +126,7 @@ class HomeViewModel @Inject constructor(
                         val pushed = groupStates[group.id]
                         group.id to RoomInfo(
                             track = pushed?.track,
-                            artUrl = pushed?.track?.imageUrl ?: pushed?.container?.imageUrl,
+                            artUrl = pushed?.artUrl,
                             onTvInput = pushed?.onTvInput == true,
                             muted = pushed?.volume?.muted == true,
                             offlineSpeakers = group.playerIds.sumOf { state.offlineSpeakers[it] ?: 0 },
@@ -278,7 +282,7 @@ class HomeViewModel @Inject constructor(
         // The TV home-screen channels follow whatever the household last said.
         viewModelScope.launch(Dispatchers.IO) {
             uiState.collect { state ->
-                if (state is UiState.Success) channelSync.sync(state.groups, state.nowPlaying)
+                if (state is UiState.Success) channelSync.sync(state.groups, state.tiles)
             }
         }
     }

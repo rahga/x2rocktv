@@ -132,6 +132,14 @@ data class GroupState(
      */
     val isRadio: Boolean get() = container?.type == "station"
 
+    /**
+     * The room's picture: the track's art, else the container's. A station sends a logo on the
+     * container and nothing on the track — iHeartRadio does, captured — so taking the track's
+     * alone left a radio room with none. The room list and the home-screen tiles both use this,
+     * so they cannot disagree.
+     */
+    val artUrl: String? get() = track?.imageUrl ?: container?.imageUrl
+
     /** e.g. "Silence 2.0", "Dolby Digital 5.1", or "No Signal" with the television off. */
     val inputFormat: String get() = container?.htInputFormat?.summary().orEmpty()
 
