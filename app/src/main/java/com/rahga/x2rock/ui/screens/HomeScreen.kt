@@ -178,7 +178,7 @@ fun HomeScreen(
         // The row is composed, and may scroll into view, in the frames after it arrives.
         repeat(10) {
             withFrameNanos { }
-            if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
+            if (target.requestFocusSafely()) return@LaunchedEffect
         }
     }
 

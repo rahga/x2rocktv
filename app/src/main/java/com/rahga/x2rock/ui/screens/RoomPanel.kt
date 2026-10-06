@@ -19,11 +19,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.text.style.TextAlign
 import com.rahga.x2rock.ui.components.StepMark
+import com.rahga.x2rock.ui.components.VOLUME_STEP
+import com.rahga.x2rock.ui.components.mutedInk
+import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.runtime.setValue
@@ -44,7 +45,6 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
@@ -404,7 +404,7 @@ private fun VolumeLevel(volume: Int?, muted: Boolean = false) {
 @Composable
 private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
     // Muted keeps the level and dims it: the speaker remembers where it was, and so does this.
-    val ink = LocalContentColor.current.let { if (muted) it.copy(alpha = it.alpha * 0.4f) else it }
+    val ink = mutedInk(muted)
     val set by rememberUpdatedState(onSet)
     // A tap or a drag on the bar sets the level under the finger. It takes the touch before
     // the row does, so touching the bar never also joins or leaves. The strip is taller than
@@ -445,8 +445,6 @@ private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
     }
 }
 
-/** The same step the player pane's volume uses. */
-private const val VOLUME_STEP = 5
 
 /**
  * Bass or treble: left and right step it, as a level row does, since nothing else in the
@@ -458,7 +456,7 @@ private const val VOLUME_STEP = 5
 @Composable
 private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val shown = focused || LocalInputModeManager.current.inputMode == InputMode.Touch
+    val shown = stepMarksShown(focused)
     AppButton(
         onClick = {},
         modifier = Modifier

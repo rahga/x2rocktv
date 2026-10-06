@@ -922,6 +922,28 @@ class SonosHouseholdTest {
     }
 
     /**
+     * A household remembering the fake and finding [ssdp] on discovery, connected — for the
+     * reconnect tests, which need discovery the shared one does not have.
+     */
+    private suspend fun seededWithDiscovery(ssdp: suspend () -> List<Discovery.DiscoveredPlayer>): SonosHousehold {
+        val book = PlayerAddressBook()
+        return SonosHousehold(
+            scope = scope, addressBook = book, multicast = MulticastGate.None,
+            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
+            ssdp = ssdp,
+        ).also {
+            it.connect()
+            withTimeout(5_000) { it.state.first { s -> s.connected } }
+        }
+    }
+
+    /** Every state [household] passes through from now on, until the test's scope ends. */
+    private fun recording(household: SonosHousehold): List<HouseholdState> =
+        java.util.concurrent.CopyOnWriteArrayList<HouseholdState>().also { seen ->
+            scope.launch { household.state.collect { seen += it } }
+        }
+
+    /**
      * The Shield's case: the speaker the session ran through is unplugged — there, Living Room's
      * Beam, pulled from a group. That used to put the socket's failure on screen as the error
      * and then spend the probe timeout on the very speaker that had gone, because it is the one
@@ -933,17 +955,9 @@ class SonosHouseholdTest {
         val other = household.state.value.groups.first { it.coordinatorId != fake.id }.coordinatorId
         household.disconnect()
         val loopback = java.net.InetAddress.getByName("127.0.0.1")
-        val book = PlayerAddressBook()
-        val local = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
-            ssdp = { listOf(Discovery.DiscoveredPlayer(other, loopback, fake.householdId)) },
-        )
+        val local = seededWithDiscovery { listOf(Discovery.DiscoveredPlayer(other, loopback, fake.householdId)) }
         try {
-            local.connect()
-            withTimeout(5_000) { local.state.first { it.connected } }
-            val seen = java.util.concurrent.CopyOnWriteArrayList<HouseholdState>()
-            val watching = scope.launch { local.state.collect { seen += it } }
+            val seen = recording(local)
 
             fake.stallHandshakesTo(fake.id, 10_000)
             fake.dropConnection(fake.id)
@@ -951,7 +965,6 @@ class SonosHouseholdTest {
             withTimeout(5_000) { local.state.first { !it.connected } }
             withTimeout(15_000) { local.state.first { it.connected } }
             val took = System.currentTimeMillis() - lostAt
-            watching.cancel()
 
             assertEquals("an error was shown for an unplugged speaker", emptyList<String>(), seen.mapNotNull { it.error })
             assertTrue("never said it was reconnecting", seen.any { it.reconnecting })
@@ -969,22 +982,13 @@ class SonosHouseholdTest {
     @Test fun `a one-speaker household reconnects to the speaker it lost`() = runBlocking<Unit> {
         connected()
         household.disconnect()
-        val book = PlayerAddressBook()
-        val local = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
-            ssdp = { listOf(fake.seed) },
-        )
+        val local = seededWithDiscovery { listOf(fake.seed) }
         try {
-            local.connect()
-            withTimeout(5_000) { local.state.first { it.connected } }
-            val seen = java.util.concurrent.CopyOnWriteArrayList<HouseholdState>()
-            val watching = scope.launch { local.state.collect { seen += it } }
+            val seen = recording(local)
 
             fake.dropConnection(fake.id)
             withTimeout(5_000) { local.state.first { !it.connected } }
             withTimeout(5_000) { local.state.first { it.connected } }
-            watching.cancel()
             assertEquals("an error was shown on the way back", emptyList<String>(), seen.mapNotNull { it.error })
         } finally {
             local.disconnect()
