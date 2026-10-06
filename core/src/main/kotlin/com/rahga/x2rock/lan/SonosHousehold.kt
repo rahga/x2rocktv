@@ -35,6 +35,7 @@ import com.rahga.x2rock.smapi.RatingsCatalogue
 import com.rahga.x2rock.smapi.RatingsMatch
 import com.rahga.x2rock.smapi.RatingsStore
 import com.rahga.x2rock.smapi.Service
+import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.smapi.SmapiClient
 import com.rahga.x2rock.smapi.StoredAccounts
 import com.rahga.x2rock.smapi.Thumb
@@ -938,7 +939,12 @@ class SonosHousehold(
                 ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
                 ?: emptyList()
         }.getOrDefault(emptyList())
-        linkedServices(services, accounts, household).also { searchable = it }
+        // Apple Music is reached through its own iTunes-backed screen, not here: the household's
+        // stored Apple credential has an empty key and its SMAPI refuses every call (x2rock), so a
+        // row for it would only ever dead-end. Dropped rather than shown and left to fail.
+        linkedServices(services, accounts, household)
+            .filterNot { it.service.id == AppleMusic.SERVICE_ID }
+            .also { searchable = it }
     }
 
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
@@ -960,6 +966,21 @@ class SonosHousehold(
      */
     suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) =
         replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
+
+    /**
+     * Add a service [item] to the end of [groupId]'s queue, leaving what plays alone — a track, or
+     * a container that holds tracks (an album, a playlist), which the player expands into its rows.
+     * The URI and DIDL are built from the item's own id and the account's cdudn, so no stream is
+     * fetched. Fails for a container of containers (an artist), which a queue cannot take, and for
+     * a service the player's type list gives no cdudn for.
+     */
+    suspend fun queueServiceItem(groupId: String, linked: LinkedService, item: Item) {
+        require(ServiceContent.canEnqueue(item)) { "${item.title} is not something a queue can hold" }
+        val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
+            ?: error("${linked.service.name} has no account to queue through")
+        val uri = ServiceContent.enqueueUri(item, linked.service.id, linked.accountId?.removePrefix("sn_"))
+        upnp.addToQueue(coordinatorHostname(groupId), uri, ServiceContent.enqueueDidl(item, cdudn))
+    }
 
     /**
      * Play [item] in [groupId] again, in place of what it is playing.

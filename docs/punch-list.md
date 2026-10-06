@@ -497,15 +497,21 @@ app, and the Menu key on a row. All as intended.
     AES/MD5 the SoCo #1010 way) and played through `loadContent` like Recently Played. Core:
     `StoredAccounts` (decrypt), `AccountCapture` (the one-shot GENA capture), `Smapi` (search /
     getMetadata / getMediaURI), `LinkedServices` (which services a token unlocks); household API
-    `searchableServices`/`searchService`/`browseService`/`playServiceItem`; UI `ServiceBrowseScreen`
-    (Favorites → Music Services). **Verified against the office household** (`StoredAccountsLiveTest`,
-    `-Dx2rock.capture=<ip>`): capture + decrypt reproduced x2rock's `--from-household` byte-for-byte
-    (11 records), and a credentialed search returned real hits from Deezer (30), Qobuz (1000) and
-    Saavn. The `User-Agent` header is required — Deezer and Amazon answer an empty 500/200 without
-    one. **Not on a TV device yet** — the on-device inbound GENA socket and `.local` address path
-    need one run on a Shield/Streamer; the JVM capture is the same code. Amazon Music answers its
-    `search` with HTTP 500 here (x2rock saw the same); generic queue-append (vs. play-now) is not
-    built. iHeart ratings (0.1a) can now reuse this token read instead of a device link.
+    `searchableServices`/`searchService`/`browseService`/`playServiceItem`/`queueServiceItem`; UI
+    `ServiceBrowseScreen` (Favorites → Music Services), press to play/open, hold or Menu to queue.
+    **Verified against the office household** (`StoredAccountsLiveTest`, `-Dx2rock.capture=<ip>`):
+    capture + decrypt reproduced x2rock's `--from-household` byte-for-byte (11 records), a credentialed
+    search returned real hits from Deezer (30), Qobuz (1000) and Saavn, and a browse (`getMetadata`
+    root) returned Deezer's own containers. Integration and VM navigation are covered by
+    `ServiceSearchTest` and `ServiceBrowseViewModelTest` (both mutation-checked); queue URI/DIDL by
+    `ServiceContentTest`. The `User-Agent` header is required — Deezer and Amazon answer an empty
+    500/200 without one. Also **demonstrated end to end on the office Google TV emulator** by seeding
+    the envelope past its NAT (the capture leg only; see `DebugSwitches.serviceEnvelope`).
+    **Still untried on a real TV**: the on-device inbound GENA socket and `.local`→IP path want one
+    run on a Shield/Streamer (the JVM capture is the same code), and `queueServiceItem`'s live
+    `AddURIToQueue` leg has only been unit-tested — it mutates a room, so it waits for home. Amazon
+    Music answers its `search` with HTTP 500 here (x2rock saw the same). iHeart ratings (0.1a) can
+    now reuse this token read instead of a device link.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;
