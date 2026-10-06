@@ -188,7 +188,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    sockets it had; relaunched, the room list named the switch and its path, with Retry focused.
    Off again, Retry: every room came back, selection and focus on Living Room.* Sonos app → Account → Privacy and Security → Connection Security → Authentication
    on, relaunch: the room list names the switch. Off again, Retry: rooms come back.
-7. **1.7** Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
+7. ~~**1.7**~~ *Done 2026-10-05/06, around midnight, on the Shield, never relaunched. Off: Queue,
+   the sleep timer, Night Sound and Speech Enhancement, the panel's TV Input and tone all went.
+   The note saying why was on every pane at first; at the owner's word it is now said once, at
+   the foot of the room list (`d80c3b9`). On again: every one came back and the note went.* Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
    without a relaunch. On again: they return.
 8. ~~**1.9**~~ *Done on the Shield: muted Kitchen, Vol + from the remote, unmuted at 24.* Mute a room, press Vol +: it unmutes and steps.
 9. ~~**1.10**~~ *Done: Bedroom's live station advertised 518 (play, pause, play/pause);
