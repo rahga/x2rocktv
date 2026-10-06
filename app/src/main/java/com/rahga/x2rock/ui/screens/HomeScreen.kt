@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.ui.components.NoticeBanner
@@ -368,6 +369,26 @@ private fun RoomSidebar(
     val iconRowFocusRequester = remember { FocusRequester() }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
+
+    // The room row that has focus, while the list holds it. A regroup mints new group ids, so
+    // the focused row can simply leave the list — tonight's case was Living Room joining Dining
+    // Room — and Compose then hands focus to the first thing that takes it: the settings gear.
+    // The selection already follows the speakers to whichever group now holds them; focus
+    // follows the selection. Only if it was here: focus in the pane or a panel stays put.
+    var focusedRowId by remember { mutableStateOf<String?>(null) }
+    val currentIds by rememberUpdatedState(sorted.map { it.id }.toSet())
+    LaunchedEffect(sorted, selectedGroupId) {
+        val lost = focusedRowId ?: return@LaunchedEffect
+        if (lost in currentIds) return@LaunchedEffect
+        // Wait for the selection to catch up with the new topology; this runs again when it does.
+        if (sorted.none { it.id == selectedGroupId }) return@LaunchedEffect
+        focusedRowId = null
+        // The row may still be scrolling into view and not yet composed, so a few frames' grace.
+        repeat(10) {
+            withFrameNanos { }
+            if (runCatching { sidebarFocusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
+    }
     LaunchedEffect(selectedGroupId, sorted) {
         if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
     }
@@ -437,7 +458,14 @@ private fun RoomSidebar(
                 }
             }
             is HomeViewModel.UiState.Success -> {
-                LazyColumn(state = listState) {
+                LazyColumn(
+                    state = listState,
+                    // Leaving the list on purpose forgets the row; losing focus because the row
+                    // itself went does not — that is the case above, and it needs to know.
+                    modifier = Modifier.onFocusChanged {
+                        if (!it.hasFocus && focusedRowId in currentIds) focusedRowId = null
+                    },
+                ) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId
                         val itemFocus = remember(group.id) { FocusRequester() }
@@ -447,7 +475,10 @@ private fun RoomSidebar(
                             isSelected = isSelected,
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
-                            onFocused = { onFocused(group) },
+                            onFocused = {
+                                focusedRowId = group.id
+                                onFocused(group)
+                            },
                             onOpenPanel = { onOpenPanel(group) }
                         )
                     }
