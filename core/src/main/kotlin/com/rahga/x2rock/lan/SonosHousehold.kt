@@ -966,8 +966,18 @@ class SonosHousehold(
      * `itemType` as the load type (`track`, `album`, `playlist`). Only for a playable item, not
      * a container to descend into.
      */
-    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) =
+    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) {
+        // A radio station is not queue content: it has no universalMusicObjectId to load, and the
+        // service resolves it to a stream URL instead, which plays through `playbackSession` the way
+        // the radio directory's stations do (x2rock: TuneIn and SomaFM hand back a direct stream).
+        // Everything else — a track, an album — rides `loadContent`.
+        if (item.itemType.equals("stream", ignoreCase = true)) {
+            val url = smapi.mediaUri(linked.service, linked.token, item.id)
+            playStream(groupId, url, item.title)
+            return
+        }
         replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
+    }
 
     /**
      * Resume an audiobook in [groupId] where it was left off. The book itself is not playable — it

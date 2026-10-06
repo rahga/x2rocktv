@@ -2,6 +2,8 @@ package com.rahga.x2rock.lan
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -61,6 +63,11 @@ class ServiceSearchTest {
                 """<mediaCollection><id>album:9</id><itemType>album</itemType><title>ASTROWORLD</title></mediaCollection>""" +
                 """</getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
 
+        fun mediaUriResponse() =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
+                """<getMediaURIResponse><getMediaURIResult>http://stream.example/jazz.pls</getMediaURIResult>""" +
+                """</getMediaURIResponse></s:Body></s:Envelope>"""
+
     }
 
     private lateinit var fake: FakePlayer
@@ -81,7 +88,13 @@ class ServiceSearchTest {
                     "/map" -> MockResponse().setBody(MAP)
                     "/smapi" -> {
                         val body = request.body.readUtf8().also { smapiCalls += it }
-                        MockResponse().setBody(if ("<getMetadata" in body) metadataResponse() else searchResponse())
+                        MockResponse().setBody(
+                            when {
+                                "<getMediaURI" in body -> mediaUriResponse()
+                                "<getMetadata" in body -> metadataResponse()
+                                else -> searchResponse()
+                            }
+                        )
                     }
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -210,6 +223,25 @@ class ServiceSearchTest {
         // The URI expands the container; the DIDL's cdudn names Qobuz's account by its selector.
         assertTrue(body, "x-rincon-cpcontainer:1004206calbum%3a9?sid=31&amp;flags=8300&amp;sn=14" in body)
         assertTrue(body, "SA_RINCON7943_X_#Svc7943-6c0ffea0-Token" in body)
+    }
+
+    @Test fun `a stream plays through a session from its media URI, not loadContent`() = runBlocking {
+        val groupId = connected()
+        val radio = household.searchableServices().first { it.service.id == RADIO }
+        val station = com.rahga.x2rock.smapi.Item(
+            id = "s249973", title = "Smooth Jazz", itemType = "stream", summary = null, artUrl = null, container = false,
+        )
+        val started = async(Dispatchers.Default) {
+            household.playServiceItem(groupId, radio, station)
+        }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "createSession" }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        started.await()
+        // The URL came from getMediaURI, and the station did not go down the loadContent path.
+        assertTrue(smapiCalls.any { "<getMediaURI" in it })
+        assertEquals(0, fake.commandsNamed("loadContent"))
+        assertEquals("http://stream.example/jazz.pls", fake.lastCommandBody("loadStreamUrl")!!.get("streamUrl").asString)
     }
 
     @Test fun `queuing an artist is refused before anything is sent`() = runBlocking {
