@@ -29,6 +29,9 @@ class MainActivity : ComponentActivity() {
             DebugSwitches.mdnsOnly = true
             seeds.clear()
         }
+        if (BuildConfig.DEBUG) {
+            intent.getStringExtra("debugServiceEnvelope")?.let { DebugSwitches.serviceEnvelope = it }
+        }
         handleIntent(intent)
         // There is no sign-in step any more: the speakers are on the LAN and answer
         // without an account, so the app opens straight onto the rooms.

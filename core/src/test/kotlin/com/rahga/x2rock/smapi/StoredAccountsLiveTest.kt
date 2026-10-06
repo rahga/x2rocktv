@@ -32,6 +32,19 @@ class StoredAccountsLiveTest {
         assumeTrue("set -Dx2rock.capture=<player-ip> to run against a real player", player != null)
     }
 
+    /**
+     * Capture the envelope and write it to a file, for seeding a debug build (the emulator can't
+     * receive the callback). Prints only its length, never its content. Opt-in on top of the IP:
+     * `-Dx2rock.capture=<ip> -Dx2rock.capture.out=<path> --tests '*StoredAccountsLiveTest.captureToFile'`.
+     */
+    @Test fun captureToFile() = runBlocking {
+        val out = System.getProperty("x2rock.capture.out")
+        assumeTrue("set -Dx2rock.capture.out=<path> to write the envelope out", out != null)
+        val envelope = requireNotNull(AccountCapture.captureEnvelope(player!!, 15_000)) { "no account event arrived" }
+        java.io.File(out!!).writeText(envelope)
+        println("wrote ${envelope.length} base64 chars to $out")
+    }
+
     @Test fun `the household's own tokens capture and decrypt`() = runBlocking {
         val ip = player!!
         val statusZp = URL("http://$ip:1400/status/zp").readText()
