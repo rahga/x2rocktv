@@ -33,7 +33,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -41,8 +40,8 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.radio.Station
 import com.rahga.x2rock.ui.components.NoticeBanner
-import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.RadioViewModel
 
@@ -134,7 +133,7 @@ fun RadioScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun StationRow(station: Station, isStarting: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth().tapToClick(onClick)) {
+    AppCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

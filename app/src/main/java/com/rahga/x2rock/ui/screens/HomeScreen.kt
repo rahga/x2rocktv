@@ -171,9 +171,22 @@ fun HomeScreen(
     // selection arrives. Not while a panel is open, which has its own, nor with focus in the
     // player pane, which the viewer put there.
     var paneHasFocus by remember { mutableStateOf(false) }
+    // And not while the list already holds it: the sidebar selects on focus, so arrowing down
+    // the rooms changes the selection at every press, and each would otherwise re-request the
+    // row it is already on.
+    var listHasFocus by remember { mutableStateOf(false) }
+
+    // Back from the player pane goes to the room list. A BackHandler rather than a key handler
+    // on the pane: the key handler took every Back pressed inside the pane, a menu drawn there
+    // included, so the sleep timer menu could not be closed with it. Handlers registered later
+    // win, so a menu's own still does; this one is off while a panel outside the pane is open.
+    BackHandler(enabled = paneHasFocus && !modalVisible) {
+        if (!sidebarVisible) homeViewModel.toggleSidebar()
+        sidebarFocusRequester.requestFocusSafely()
+    }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
     LaunchedEffect(listReady, selectedGroupId) {
-        if (!listReady || modalVisible || paneHasFocus) return@LaunchedEffect
+        if (!listReady || modalVisible || paneHasFocus || listHasFocus) return@LaunchedEffect
         val target = if (sidebarVisible) sidebarFocusRequester else detailFocusRequester
         // The row is composed, and may scroll into view, in the frames after it arrives.
         repeat(10) {
@@ -202,6 +215,7 @@ fun HomeScreen(
                     onRetry = { homeViewModel.connect() },
                     onChooseHousehold = { homeViewModel.chooseHousehold(it) },
                     upnpOff = homeViewModel.upnpOff.collectAsState().value,
+                    onListFocusChanged = { listHasFocus = it },
                 )
             }
 
@@ -212,13 +226,6 @@ fun HomeScreen(
                     .onFocusChanged { paneHasFocus = it.hasFocus }
                     .focusGroup()
                     .focusProperties { left = sidebarFocusRequester }
-                    .onKeyEvent { event ->
-                        if (event.type == KeyEventType.KeyDown && event.key == Key.Back) {
-                            if (!sidebarVisible) homeViewModel.toggleSidebar()
-                            sidebarFocusRequester.requestFocusSafely()
-                            true
-                        } else false
-                    }
             ) {
                 if (selectedGroupId == null) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -365,6 +372,8 @@ private fun RoomSidebar(
     onChooseHousehold: (HouseholdChoice) -> Unit,
     /** The household's UPnP switch is off: said here once, at the foot of the list. */
     upnpOff: Boolean = false,
+    /** Whether a room row holds focus, as opposed to the gear or nothing. */
+    onListFocusChanged: (Boolean) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -449,7 +458,7 @@ private fun RoomSidebar(
                 LazyColumn(
                     state = listState,
                     // The rest of the height, so the UPnP note below sits at the foot of the list.
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f).onFocusChanged { onListFocusChanged(it.hasFocus) },
                 ) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId

@@ -1,6 +1,7 @@
 package com.rahga.x2rock.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
@@ -12,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.tv.material3.Button
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.darkColorScheme
@@ -132,6 +134,26 @@ fun AppButton(
             pressedContentColor = MaterialTheme.colorScheme.onPrimary,
         ),
         content = content
+    )
+}
+
+/**
+ * A tv-material3 Card that answers a tap as well as the select key, as [AppButton] does: a row of
+ * a list, with an optional second action on a hold. Card on its own ignores touch entirely.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun AppCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Card(
+        onClick = onClick,
+        onLongClick = onLongClick,
+        modifier = modifier.tapToClick(onClick, onLongClick),
+        content = content,
     )
 }
 
