@@ -44,7 +44,7 @@ class ChannelSyncReceiver : BroadcastReceiver() {
                     val state = household.state.first { it.connected && it.groups.isNotEmpty() }
                     household.groupStates.first { pushed -> pushed.isNotEmpty() }
 
-                    val tiles = state.groups.associate { it.id to RoomTile.of(household.groupState(it.id)) }
+                    val tiles = state.groups.associate { it.id to household.groupState(it.id).let { s -> RoomTile(s.track?.name, s.artUrl) } }
                     channelSync.sync(state.groups, tiles)
                 }
             } catch (_: TimeoutCancellationException) {

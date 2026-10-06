@@ -75,8 +75,6 @@ class HomeViewModel @Inject constructor(
         val track: Track? = null,
         /** Track art, falling back to the container's: radio has a station logo, not a cover. */
         val artUrl: String? = null,
-        /** This room's home-screen tile, by [RoomTile.of] — the one rule for it. */
-        val tile: RoomTile = RoomTile(null, null),
         val onTvInput: Boolean = false,
         /** The group's volume is muted. A state, so the room list shows it as one. */
         val muted: Boolean = false,
@@ -104,7 +102,7 @@ class HomeViewModel @Inject constructor(
         data class Loading(val reconnecting: Boolean = false) : UiState
         data class Success(val groups: List<Group>, val rooms: Map<String, RoomInfo>) : UiState {
             /** The TV home-screen channel's tiles, one per room. */
-            val tiles: Map<String, RoomTile> get() = rooms.mapValues { it.value.tile }
+            val tiles: Map<String, RoomTile> get() = rooms.mapValues { RoomTile(it.value.track?.name, it.value.artUrl) }
         }
         /** [choices] is non-empty when the "error" is two households, and the answer is a pick. */
         data class Error(val message: String, val choices: List<HouseholdChoice> = emptyList()) : UiState
@@ -127,7 +125,6 @@ class HomeViewModel @Inject constructor(
                         group.id to RoomInfo(
                             track = pushed?.track,
                             artUrl = pushed?.artUrl,
-                            tile = RoomTile.of(pushed ?: GroupState()),
                             onTvInput = pushed?.onTvInput == true,
                             muted = pushed?.volume?.muted == true,
                             offlineSpeakers = group.playerIds.sumOf { state.offlineSpeakers[it] ?: 0 },

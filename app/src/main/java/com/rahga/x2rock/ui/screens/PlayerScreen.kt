@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.RepeatOn
 import androidx.compose.material.icons.filled.RepeatOneOn
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -18,7 +19,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.path
-import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
@@ -49,9 +49,7 @@ import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
 import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
-import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.tv.material3.ClickableSurfaceDefaults
-import androidx.tv.material3.LocalContentColor
 import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.material3.LinearProgressIndicator
@@ -91,6 +89,9 @@ import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.StepMark
+import com.rahga.x2rock.ui.components.VOLUME_STEP
+import com.rahga.x2rock.ui.components.mutedInk
+import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
@@ -155,7 +156,7 @@ fun PlayerPane(
         when {
             showSleepTimerPicker -> pickerOpened = true
             !pickerOpened -> detailFocusRequester.requestFocusSafely()
-            runCatching { sleepFocusRequester.requestFocus() }.isFailure -> detailFocusRequester.requestFocusSafely()
+            !sleepFocusRequester.requestFocusSafely() -> detailFocusRequester.requestFocusSafely()
         }
     }
 
@@ -399,26 +400,25 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
         delay(SEEK_TOTAL_SHOWN_MILLIS)
         seekShown = false
     }
-    fun seek(delta: Long) {
-        if (!seekShown) {
-            seekTotal = 0L
-            seekFrom = displayPositionMillis
-        }
-        seekTotal = (seekTotal + delta).coerceIn(-seekFrom, state.durationMillis - seekFrom)
+    // A burst of presses or taps is measured from where its first one began.
+    fun showSeek(total: (from: Long) -> Long) {
+        if (!seekShown) seekFrom = displayPositionMillis
+        seekTotal = total(seekFrom)
         seekShown = true
         seekPresses++
+    }
+    fun seek(delta: Long) {
+        showSeek { from -> ((if (seekShown) seekTotal else 0L) + delta).coerceIn(-from, state.durationMillis - from) }
         onSeekBy(delta)
     }
     // A tap aims at a point rather than stepping, so it is sent as one; the total under the
     // bar still says how far that is from where the tap began.
     fun seekToFraction(fraction: Float) {
         val target = (fraction.coerceIn(0f, 1f) * state.durationMillis).toLong()
-        if (!seekShown) seekFrom = displayPositionMillis
-        seekTotal = target - seekFrom
-        seekShown = true
-        seekPresses++
+        showSeek { from -> target - from }
         onSeekTo(target)
     }
+    val tapAt by rememberUpdatedState(::seekToFraction)
     val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
     Column {
@@ -434,11 +434,11 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                 // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
                 // never sends a tap, so on a TV this is inert. The strip is taller than the bar
                 // drawn in it, or an 8dp line would be a hard thing to hit.
-                // Keyed on positionUpdatedAt too: the displayed position is a new state each time
-                // the speaker reports one, and a tap read through a stale handler measured its
-                // total from where the track stood at the last change of duration.
-                .pointerInput(state.durationMillis, state.positionUpdatedAt) {
-                    detectTapGestures { offset -> seekToFraction(offset.x / size.width) }
+                // Started once and reading the latest handler, as tapToClick does: the displayed
+                // position is a new state at every report, and a stale handler measured from an
+                // old one.
+                .pointerInput(Unit) {
+                    detectTapGestures { offset -> tapAt(offset.x / size.width) }
                 }
                 .padding(vertical = 12.dp)
                 .onKeyEvent { event ->
@@ -711,9 +711,8 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLef
 @Composable
 private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMute: () -> Unit, onExitLeft: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val touch = LocalInputModeManager.current.inputMode == InputMode.Touch
     // A fixed line-out has no level to step: the view model says so if a step is tried.
-    val showSteps = !state.volumeFixed && (focused || touch)
+    val showSteps = !state.volumeFixed && stepMarksShown(focused)
     Surface(
         onClick = onToggleMute,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
@@ -767,7 +766,7 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun VolumeWedge(volume: Int?, muted: Boolean) {
-    val ink = LocalContentColor.current.let { if (muted) it.copy(alpha = it.alpha * 0.4f) else it }
+    val ink = mutedInk(muted)
     Canvas(modifier = Modifier.size(width = 56.dp, height = 20.dp)) {
         val wedge = Path().apply {
             moveTo(0f, size.height)
@@ -782,8 +781,6 @@ private fun VolumeWedge(volume: Int?, muted: Boolean) {
     }
 }
 
-/** The same step the room panel's levels use. */
-private const val VOLUME_STEP = 5
 
 /**
  * The header for a room on its television input, in place of [TrackInfo].

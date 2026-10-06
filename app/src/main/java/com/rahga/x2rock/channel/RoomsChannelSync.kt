@@ -8,7 +8,6 @@ import android.util.Log
 import androidx.tvprovider.media.tv.Channel
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
-import com.rahga.x2rock.lan.GroupState
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.Group
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -22,13 +21,9 @@ interface ChannelSync {
 
 /**
  * What a room's tile shows beyond its name: the track under it, and the room's picture
- * ([GroupState.artUrl]). Only these, so a volume change or a seek does not rewrite every tile.
+ * ([com.rahga.x2rock.lan.GroupState.artUrl]). Only these, so a volume change or a seek does not rewrite every tile.
  */
-data class RoomTile(val subtitle: String?, val artUrl: String?) {
-    companion object {
-        fun of(state: GroupState) = RoomTile(state.track?.name, state.artUrl)
-    }
-}
+data class RoomTile(val subtitle: String?, val artUrl: String?)
 
 /**
  * One tile per room, keyed and linked by the room's coordinator — a *player* id — rather than

@@ -8,6 +8,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.soapFields
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -58,8 +59,7 @@ class SleepTimerViewModelTest {
                             MockResponse().setBody(FakePlayer.fixtureText("GetRemainingSleepTimerDuration.none.xml"))
                         }
                         "ConfigureSleepTimer" -> {
-                            configured += Regex("<NewSleepTimerDuration>([^<]*)</NewSleepTimerDuration>")
-                                .find(body)?.groupValues?.get(1).orEmpty()
+                            configured += soapFields(body)["NewSleepTimerDuration"].orEmpty()
                             MockResponse().setBody("<s:Envelope><s:Body><u:ConfigureSleepTimerResponse/></s:Body></s:Envelope>")
                         }
                         else -> MockResponse().setResponseCode(404)
