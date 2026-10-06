@@ -961,6 +961,36 @@ class SonosHouseholdTest {
         }
     }
 
+    /**
+     * The other side of passing the lost speaker over: where it is the only one — the office's
+     * single One SL — and it comes straight back, it is the answer. Passed over every time, a
+     * one-speaker household never reconnected at all.
+     */
+    @Test fun `a one-speaker household reconnects to the speaker it lost`() = runBlocking<Unit> {
+        connected()
+        household.disconnect()
+        val book = PlayerAddressBook()
+        val local = SonosHousehold(
+            scope = scope, addressBook = book, multicast = MulticastGate.None,
+            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
+            ssdp = { listOf(fake.seed) },
+        )
+        try {
+            local.connect()
+            withTimeout(5_000) { local.state.first { it.connected } }
+            val seen = java.util.concurrent.CopyOnWriteArrayList<HouseholdState>()
+            val watching = scope.launch { local.state.collect { seen += it } }
+
+            fake.dropConnection(fake.id)
+            withTimeout(5_000) { local.state.first { !it.connected } }
+            withTimeout(5_000) { local.state.first { it.connected } }
+            watching.cancel()
+            assertEquals("an error was shown on the way back", emptyList<String>(), seen.mapNotNull { it.error })
+        } finally {
+            local.disconnect()
+        }
+    }
+
     @Test fun `disconnect stops everything and does not reconnect`() = runBlocking<Unit> {
         connected()
         household.disconnect()

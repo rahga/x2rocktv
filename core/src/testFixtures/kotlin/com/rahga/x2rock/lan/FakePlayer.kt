@@ -338,7 +338,9 @@ class FakePlayer(
 
     /**
      * A sleep timer report, as `sleepTimer:1` sends one on a set or a cancel: the captured
-     * 15-minute timer, or the capture of none.
+     * 15-minute timer, or the capture of none. The header is the real one's too, not assumed:
+     * the office One SL sent `groupId` set and `playerId` null (watched with x2rock, 2026-10-05),
+     * which is what this emits — and a timer set by `x2rock sleep 15` showed on a real device.
      */
     fun pushSleepTimer(groupId: String, active: Boolean) {
         val capture = if (active) "event.sleepTimerStatus.json" else "event.sleepTimerStatus.none.json"

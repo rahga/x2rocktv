@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import com.rahga.x2rock.lan.HouseholdChoice
@@ -163,23 +162,24 @@ fun HomeScreen(
         }
     }
 
-    // The rooms arrive after the first frame — some seconds after it on a cold start on the
-    // Streamer — so the resume request above finds no row to take focus, quietly fails, and
-    // Compose gives focus to the first thing that will have it: the settings gear. Seen there,
-    // 2026-10-05. So once, when the list first has its selected row, focus goes where it was
-    // meant to start; not if something has been opened meanwhile, which has its own.
-    var startFocused by remember { mutableStateOf(false) }
+    // Focus goes to the selected room's row whenever the list has it again. Three ways of
+    // losing it all left focus on the settings gear, the first thing Compose finds: a cold
+    // start, where the rooms arrive after the resume request above has found no row; a regroup,
+    // which mints new group ids so the focused row simply leaves (the selection follows the
+    // speakers to the new one); and a reconnect, which withdraws the list while it runs. Keyed
+    // on the selection too, for a regroup whose old row goes in the same frame the new
+    // selection arrives. Not while a panel is open, which has its own, nor with focus in the
+    // player pane, which the viewer put there.
+    var paneHasFocus by remember { mutableStateOf(false) }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
-    LaunchedEffect(listReady) {
-        if (!listReady || startFocused) return@LaunchedEffect
-        startFocused = true
-        if (modalVisible) return@LaunchedEffect
-        // The row is composed in the frames after the list arrives; asked at once, it is not
-        // there yet — the same wait the resume request makes.
-        withFrameNanos { }
-        withFrameNanos { }
-        if (sidebarVisible) sidebarFocusRequester.requestFocusSafely()
-        else detailFocusRequester.requestFocusSafely()
+    LaunchedEffect(listReady, selectedGroupId) {
+        if (!listReady || modalVisible || paneHasFocus) return@LaunchedEffect
+        val target = if (sidebarVisible) sidebarFocusRequester else detailFocusRequester
+        // The row is composed, and may scroll into view, in the frames after it arrives.
+        repeat(10) {
+            withFrameNanos { }
+            if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -209,6 +209,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .onFocusChanged { paneHasFocus = it.hasFocus }
                     .focusGroup()
                     .focusProperties { left = sidebarFocusRequester }
                     .onKeyEvent { event ->
@@ -374,25 +375,6 @@ private fun RoomSidebar(
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 
-    // The room row that has focus, while the list holds it. A regroup mints new group ids, so
-    // the focused row can simply leave the list — tonight's case was Living Room joining Dining
-    // Room — and Compose then hands focus to the first thing that takes it: the settings gear.
-    // The selection already follows the speakers to whichever group now holds them; focus
-    // follows the selection. Only if it was here: focus in the pane or a panel stays put.
-    var focusedRowId by remember { mutableStateOf<String?>(null) }
-    val currentIds by rememberUpdatedState(sorted.map { it.id }.toSet())
-    LaunchedEffect(sorted, selectedGroupId) {
-        val lost = focusedRowId ?: return@LaunchedEffect
-        if (lost in currentIds) return@LaunchedEffect
-        // Wait for the selection to catch up with the new topology; this runs again when it does.
-        if (sorted.none { it.id == selectedGroupId }) return@LaunchedEffect
-        focusedRowId = null
-        // The row may still be scrolling into view and not yet composed, so a few frames' grace.
-        repeat(10) {
-            withFrameNanos { }
-            if (runCatching { sidebarFocusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
-        }
-    }
     LaunchedEffect(selectedGroupId, sorted) {
         if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
     }
@@ -467,12 +449,7 @@ private fun RoomSidebar(
                 LazyColumn(
                     state = listState,
                     // The rest of the height, so the UPnP note below sits at the foot of the list.
-                    modifier = Modifier.weight(1f)
-                        // Leaving the list on purpose forgets the row; losing focus because the
-                        // row itself went does not — that is the case above, and it needs to know.
-                        .onFocusChanged {
-                            if (!it.hasFocus && focusedRowId in currentIds) focusedRowId = null
-                        },
+                    modifier = Modifier.weight(1f),
                 ) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId
@@ -483,10 +460,7 @@ private fun RoomSidebar(
                             isSelected = isSelected,
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
-                            onFocused = {
-                                focusedRowId = group.id
-                                onFocused(group)
-                            },
+                            onFocused = { onFocused(group) },
                             onOpenPanel = { onOpenPanel(group) }
                         )
                     }

@@ -155,10 +155,10 @@ class HomeViewModelTest {
 
         val state = withTimeout(10_000) {
             viewModel.uiState.first {
-                it is HomeViewModel.UiState.Success && it.nowPlaying[groupId] != null
+                it is HomeViewModel.UiState.Success && it.rooms[groupId]?.track != null
             } as HomeViewModel.UiState.Success
         }
-        assertNotNull(state.nowPlaying[groupId])
+        assertNotNull(state.rooms[groupId]?.track)
     }
 
     @Test fun `the TV home-screen channel follows the room list`() = runBlocking<Unit> {
