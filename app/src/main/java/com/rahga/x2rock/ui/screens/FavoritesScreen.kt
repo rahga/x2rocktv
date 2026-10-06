@@ -33,15 +33,14 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
@@ -244,12 +243,11 @@ private fun FavoriteRow(
     modifier: Modifier = Modifier,
     onLongPress: (() -> Unit)? = null,
 ) {
-    Card(
+    AppCard(
         onClick = onClick,
         onLongClick = onLongPress,
         modifier = modifier
             .fillMaxWidth()
-            .tapToClick(onClick, onLongPress)
             .then(if (onLongPress != null) Modifier.dpadMenuKey(onLongPress) else Modifier)
             .then(
                 if (isActive) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
