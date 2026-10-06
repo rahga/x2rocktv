@@ -312,6 +312,13 @@ class SonosHousehold(
     private val settleMillis: Long = UNANSWERED_SETTLE_MILLIS,
     /** The SSDP sweep. Overridden only by tests, so a cold connect sends no real M-SEARCH. */
     private val ssdp: suspend () -> List<Discovery.DiscoveredPlayer> = { Discovery.findPlayers() },
+    /**
+     * How the encrypted service-token envelope is obtained from a player at a given IP. Captured
+     * off its initial GENA event by default; overridden by a debug build so the emulator — whose
+     * NAT drops the inbound callback, as it drops discovery — can be handed one captured on the
+     * host instead. Returns `null` when none can be had, which leaves only anonymous services.
+     */
+    private val accountCapture: suspend (String) -> String? = { AccountCapture.captureEnvelope(it) },
 ) {
 
     private val gson = Gson()
@@ -926,7 +933,7 @@ class SonosHousehold(
         val services = parseServices(answer.descriptors, answer.types)
         val accounts = runCatching {
             val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress ?: return@runCatching emptyList()
-            AccountCapture.captureEnvelope(ip)
+            accountCapture(ip)
                 // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
                 ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
                 ?: emptyList()

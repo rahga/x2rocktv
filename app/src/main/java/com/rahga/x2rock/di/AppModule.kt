@@ -11,6 +11,7 @@ import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.smapi.AccountCapture
 import com.rahga.x2rock.smapi.RatingsStore
 import dagger.Module
 import dagger.Provides
@@ -115,5 +116,8 @@ object AppModule {
         scope, addressBook, multicast, mdns, client, seeds, internetClient, ratingsStore,
         // Asked at each discovery, so a debug launch can switch SSDP off: see DebugSwitches.
         ssdp = { if (DebugSwitches.mdnsOnly) emptyList() else Discovery.findPlayers() },
+        // A debug launch can hand over a host-captured envelope, for the emulator whose NAT drops
+        // the player's callback the way it drops discovery: see DebugSwitches.serviceEnvelope.
+        accountCapture = { ip -> DebugSwitches.serviceEnvelope ?: AccountCapture.captureEnvelope(ip) },
     )
 }
