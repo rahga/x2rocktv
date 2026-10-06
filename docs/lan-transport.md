@@ -266,9 +266,11 @@ only correction is that no mDNS lookup is involved.
 
 Queue reads use `ContentDirectory` `Browse` with `ObjectID=Q:0`; the control paths and SOAP
 envelope are in `../x2rock/src/sonos/upnp.rs`. Note two things when porting: **do not port
-`dechunk`** (OkHttp handles `Transfer-Encoding: chunked`), and **do not add UPnP eventing
-(GENA)** — it requires the player to connect back to the app, which is a worse idea on a TV
-than a request when you need one.
+`dechunk`** (OkHttp handles `Transfer-Encoding: chunked`), and **do not add standing UPnP
+eventing (GENA)** — it requires the player to connect back to the app, which is a worse idea on
+a TV than a request when you need one. (There is **one bounded exception**: the household-token
+read below opens a listener for a single GENA NOTIFY and closes it. That is a one-shot capture,
+not standing eventing — nothing hosts a listener between captures.)
 
 A player answering **HTTP 403** on 1400 has UPnP disabled in the Sonos app under
 Account → Privacy and Security → Connection Security → UPnP (the path x2rock confirmed on
@@ -321,6 +323,48 @@ later, and play ~30ms after that hung the Dining Room Symfonisk pair (86.10) ent
 too — until it restarted itself two minutes later. Three times from the app, once from `:core`
 alone; the same commands a second apart played every time. `replay` now waits 1.5s after the load
 before its first press.
+
+## The household's own service tokens, and searching with them
+
+Every other music service the household has added — Qobuz, TIDAL, Deezer, Saavn, Amazon, Sonos
+Radio — can be **searched and browsed** from the TV, with no account linking and no browser,
+because the credential is never minted here: it is **read off a player**. The player publishes
+every configured account, encrypted, in the **initial `ZoneGroupTopology` GENA event** under a
+variable named `ThirdPartyMediaServersX`, and the key to it is derived from the household id,
+which any device on the LAN can ask for. This is the SoCo #1010 technique; x2rock reimplemented
+it in Rust (`src/sonos/stored.rs`), and this is the Kotlin port of that (`:core`'s `smapi`
+package). Linking an account and `match` stay out — those do need a browser.
+
+- **Capture** (`AccountCapture`): SUBSCRIBE to the player's `/ZoneGroupTopology/Event` on
+  cleartext 1400 with a `CALLBACK` naming a listener the app opens for the moment; the player
+  POSTs its initial state back; pull the one variable out; UNSUBSCRIBE. This is the one time a
+  player reaches *out* to the app — a one-shot capture, not standing eventing. On a laptop a
+  firewall must allow the inbound TCP; on Android the app's own listening socket needs no such
+  rule.
+- **Decrypt** (`StoredAccounts`): the value is `2:` + base64 of `iv + AES-128-CBC(…)`. The key is
+  `md5(iv + md5(householdId + SALT))` with the fixed SALT from SoCo #1010 and the **short**
+  household id (`Sonos_xxx`, *not* the long form the SMAPI header wants). Strip PKCS#7, then a
+  trailing 4-byte `md5(payload)` is the integrity tail that tells a right key from a wrong one.
+  Each `SA_RINCON<type>_…` element is one service account: `type / 256` is the service id,
+  `SerialNum<i>` is the `sn_N`, `Token<i>`/`Key<i>` the credential, `Username<i>` the account
+  selector.
+- **Search / browse** (`Smapi`): SMAPI `search`, `getMetadata` and `getMediaURI` over the service's
+  own endpoint from `ListAvailableServices`, with the stored token in the `loginToken` credentials
+  header (the **long** household id goes here). Search categories come from the service's
+  presentation map. **A `User-Agent` is required** — Deezer and Amazon answer an empty 500/200
+  without one, which reads like a broken endpoint (x2rock, `sonos/http.rs`).
+- **Play**: `loadContent` with the item's `{serviceId, accountId: sn_N, objectId}` — the same path
+  Recently Played and Apple Music use. Generic queue-append is not built; play-now is.
+
+**Verified against the office household, 2026-10-06** (`StoredAccountsLiveTest`, opt-in
+`-Dx2rock.capture=<player-ip>`, read-only, prints only byte lengths and public titles). The
+Kotlin capture + decrypt reproduced x2rock's `--from-household` **byte-for-byte**: 11 records,
+Qobuz token 86/key 8, TIDAL 805/376, Deezer 50/6, and the rest. A credentialed `search` for
+"miles davis" then returned real hits — Deezer 30, Qobuz 1000, Saavn 4, Sonos Radio 2 programs —
+with titles, artists and item types parsed. Amazon Music answered its `search` HTTP 500 (x2rock
+saw the same); its catalogue is finicky. **Not yet run on a TV device**: the inbound GENA socket
+and `.local`→IP path want one run on a Shield/Streamer, as the mDNS fallback did — the capture is
+the same JVM code either way.
 
 ---
 

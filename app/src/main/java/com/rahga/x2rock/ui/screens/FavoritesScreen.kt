@@ -56,6 +56,7 @@ fun FavoritesScreen(
     onBack: () -> Unit,
     onOpenRadio: (groupId: String) -> Unit,
     onOpenAppleMusic: (groupId: String) -> Unit,
+    onOpenServices: (groupId: String) -> Unit,
     playerViewModel: PlayerViewModel,
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
@@ -97,6 +98,7 @@ fun FavoritesScreen(
                         onAppendPlaylist = viewModel::appendPlaylist,
                         onOpenRadio = { onOpenRadio(viewModel.groupId) },
                         onOpenAppleMusic = if (s.appleMusic) ({ onOpenAppleMusic(viewModel.groupId) }) else null,
+                        onOpenServices = { onOpenServices(viewModel.groupId) },
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -135,6 +137,7 @@ private fun FavoritesList(
     onOpenRadio: () -> Unit,
     /** Null for a household with no Apple Music to play a result through. */
     onOpenAppleMusic: (() -> Unit)?,
+    onOpenServices: () -> Unit,
 ) {
     val firstFocus = remember { FocusRequester() }
 
@@ -169,6 +172,10 @@ private fun FavoritesList(
                 Spacer(Modifier.width(16.dp))
                 AppButton(onClick = it) { Text("Search Apple Music") }
             }
+            // This system's other music services — Qobuz, TIDAL, Deezer and the rest — searched
+            // and browsed with its own stored login. The screen itself says when there are none.
+            Spacer(Modifier.width(16.dp))
+            AppButton(onClick = onOpenServices) { Text("Music Services") }
         }
         Spacer(Modifier.height(24.dp))
         if (!anything) return@Column

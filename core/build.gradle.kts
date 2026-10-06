@@ -23,11 +23,11 @@ kotlin {
 // The live suite reaches real speakers and is opt-in; these carry the opt-in through to the
 // test JVM, which does not inherit the Gradle daemon's system properties.
 tasks.test {
-    listOf("x2rock.live", "x2rock.live.room").forEach { key ->
+    listOf("x2rock.live", "x2rock.live.room", "x2rock.capture").forEach { key ->
         System.getProperty(key)?.let { systemProperty(key, it) }
     }
     // A live run must not be served from a previous run's results.
-    outputs.upToDateWhen { System.getProperty("x2rock.live") == null }
+    outputs.upToDateWhen { System.getProperty("x2rock.live") == null && System.getProperty("x2rock.capture") == null }
 }
 
 dependencies {
