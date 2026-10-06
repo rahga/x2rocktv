@@ -261,8 +261,11 @@ Start there before picking up new work; the items below are the standing notes i
   TXT record carries `uuid`, `location` and `mhhid`: a complete `DiscoveredPlayer` with no
   scanning (`Discovery.fromSonosTxt`, tested against the office One SL's record). Never take
   `hhid` for `mhhid`; it is the short form the Control API refuses. The port-1443 connect-scan
-  is still not built, and nothing has needed it. **Not yet run on an Android device** on a
-  network that drops SSDP — the parser and the fallback order are tested, NsdManager is not.
+  is still not built, and nothing has needed it. **Run on an Android device 2026-10-06**: a moto g
+  (Android 15) at the office, launched with SSDP switched off — the office network answers SSDP now,
+  so the fallback is otherwise never reached there — found Media Room through `NsdManager` and
+  connected. A debug build does that on demand: `adb shell am start -S -n
+  com.rahga.x2rock/.MainActivity --ez debugMdnsOnly true` (see `DebugSwitches`).
 - **Tested on two devices**, and the stricter one raised nothing. An NVIDIA Shield
   (Android 11, Ethernet) and a Google TV Streamer (Android 14, API 34, **Wi-Fi**). The
   Streamer was expected to surface newer local-network policy first and did not: the

@@ -2,7 +2,9 @@ package com.rahga.x2rock.di
 
 import android.os.SystemClock
 import android.util.Log
+import com.rahga.x2rock.DebugSwitches
 import com.rahga.x2rock.apple.ITunesSearch
+import com.rahga.x2rock.lan.Discovery
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MdnsDiscovery
 import com.rahga.x2rock.lan.MulticastGate
@@ -109,5 +111,9 @@ object AppModule {
         seeds: SeedStore,
         @InternetHttp internetClient: OkHttpClient,
         ratingsStore: RatingsStore,
-    ): SonosHousehold = SonosHousehold(scope, addressBook, multicast, mdns, client, seeds, internetClient, ratingsStore)
+    ): SonosHousehold = SonosHousehold(
+        scope, addressBook, multicast, mdns, client, seeds, internetClient, ratingsStore,
+        // Asked at each discovery, so a debug launch can switch SSDP off: see DebugSwitches.
+        ssdp = { if (DebugSwitches.mdnsOnly) emptyList() else Discovery.findPlayers() },
+    )
 }
