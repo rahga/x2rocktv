@@ -510,7 +510,15 @@ class SonosHousehold(
             // every room behind "websocket to … failed", and every retry failed the same way
             // until Sonos dropped it. A group left unsubscribed here is caught up by the next
             // groups:1 event, which is how groups formed later are subscribed anyway.
-            groups.groups.forEach { group -> runCatching { subscribeGroup(group) } }
+            //
+            // Under the catch-up's lock, and skipping what is already done: the groups:1
+            // subscription above starts a catch-up of its own with its first event, and the two
+            // used to subscribe every group twice — each namespace, every group, on every connect.
+            resubscribeLock.withLock {
+                groups.groups.forEach { group ->
+                    if (subscribedGroups[group.id] != group.coordinatorId) runCatching { subscribeGroup(group) }
+                }
+            }
             if (unsubscribedGroupsRemain()) catchUpLater()
 
             // The UPnP switch: read once, then followed. A `settingsChanged` event names the

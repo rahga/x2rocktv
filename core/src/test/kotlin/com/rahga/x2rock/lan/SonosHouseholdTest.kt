@@ -235,13 +235,31 @@ class SonosHouseholdTest {
     @Test fun `subscribes to the group-scoped namespaces on the coordinator`() = runBlocking {
         connected()
         val groupId = fake.groupId(household)
-        listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
+        // In any order: a group's namespaces are subscribed at once (see the test below).
+        val wanted = setOf("playback:1", "playbackMetadata:1", "groupVolume:1")
+        val seen = mutableSetOf<String>()
+        while (!seen.containsAll(wanted)) {
             val cmd = fake.awaitCommand {
-                it.get("namespace")?.asString == namespace && it.get("command")?.asString == "subscribe"
+                it.get("command")?.asString == "subscribe" && it.get("groupId")?.asString == groupId &&
+                    it.get("namespace")?.asString in wanted
             }
             // Group scope, addressed to the group — not a playerId.
-            assertEquals(groupId, cmd.get("groupId").asString)
             assertNull(cmd.get("playerId"))
+            seen += cmd.get("namespace").asString
+        }
+    }
+
+    /**
+     * Once each. The groups:1 subscription starts a catch-up with its first event, and it used to
+     * run alongside setup's own pass, so every group was subscribed twice on every connect — seen
+     * in the app's own command log against the home household.
+     */
+    @Test fun `each group is subscribed once at connect`() = runBlocking<Unit> {
+        connected()
+        delay(1_000)
+        val groups = household.state.value.groups.size
+        listOf("playback:1", "playbackMetadata:1", "groupVolume:1", "sleepTimer:1").forEach { namespace ->
+            assertEquals("$namespace subscribed more than once a group", groups, fake.commandsNamed("subscribe", namespace))
         }
     }
 
@@ -522,13 +540,16 @@ class SonosHouseholdTest {
             household.state.first { s -> s.groups.firstOrNull { it.name == "Kitchen" }?.playerIds?.size == 2 }
         }.groups.first { it.name == "Kitchen" }
 
-        // The new id must be subscribed, not merely listed.
-        listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
-            fake.awaitCommand(timeoutMillis = 5_000) {
-                it.get("namespace")?.asString == namespace &&
-                    it.get("command")?.asString == "subscribe" &&
-                    it.get("groupId")?.asString == merged.id
+        // The new id must be subscribed, not merely listed. In any order: a group's namespaces
+        // are subscribed at once, and awaitCommand discards what it passes over, so waiting for
+        // them one by one in a fixed order lost whichever arrived early.
+        val wanted = setOf("playback:1", "playbackMetadata:1", "groupVolume:1")
+        val seen = mutableSetOf<String>()
+        while (!seen.containsAll(wanted)) {
+            val sub = fake.awaitCommand(timeoutMillis = 5_000) {
+                it.get("command")?.asString == "subscribe" && it.get("groupId")?.asString == merged.id
             }
+            sub.get("namespace")?.asString?.let { seen += it }
         }
 
         // And it then receives state, which is the thing that was actually broken.

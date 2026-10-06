@@ -498,6 +498,15 @@ class FakePlayer(
             respond(webSocket, cmdId, namespace, "groups", success = true, body = groups)
             return
         }
+        // Answered empty, then the state asked for arrives as an event — what a real player does
+        // (x2rock: "the reply to a subscribe is empty, and the state it asked for turns up
+        // afterwards as an event"). For groups:1 that event starts the household's catch-up on
+        // every connect, which is how setup and catch-up came to subscribe every group twice.
+        if (namespace == "groups:1" && command == "subscribe") {
+            respond(webSocket, cmdId, namespace, "none", success = true, body = JsonObject())
+            emit("groups:1", "groups", groups, groupId = null)
+            return
+        }
         // A player-scoped command naming an id this household does not have is refused,
         // the way a real player refuses one: ERROR_INVALID_OBJECT_ID. Without this the
         // fake said yes to everything and any test of a refusal passed vacuously.
