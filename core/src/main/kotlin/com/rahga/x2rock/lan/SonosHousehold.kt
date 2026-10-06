@@ -934,7 +934,9 @@ class SonosHousehold(
             // restarted itself two minutes later: three times from the app, and once from this
             // code alone against the real speaker (2026-10-06). The same commands a second apart
             // played every time, and x2rock found a play two seconds after the load starts
-            // everything it tried.
+            // everything it tried. A fixed wait rather than one for the new content's event:
+            // measured, that event came ~1.1s after the load was answered, so waiting for it
+            // would save a few tenths and need a floor and a fallback besides.
             delay(minOf(PLAY_AFTER_LOAD_MILLIS, settleMillis / 4))
             while (true) {
                 try {
