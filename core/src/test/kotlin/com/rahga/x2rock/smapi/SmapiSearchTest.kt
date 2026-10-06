@@ -2,6 +2,7 @@ package com.rahga.x2rock.smapi
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -145,6 +146,35 @@ class SmapiSearchTest {
         val got = parseSearchCategories(body)
         assertEquals("only the whole one survives", 1, got.size)
         assertEquals("tracks", got[0].id)
+    }
+
+    @Test fun `an audiobook's resume point is read from its positionInformation`() {
+        // Audible's real getMetadata shape (Dune, 2026-10-06): the book is a list of chapter
+        // tracks, and positionInformation says which chapter to resume and how far in.
+        val body = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+            <getMetadataResponse><getMetadataResult><index>0</index><count>20</count><total>53</total>
+              <positionInformation>
+                <id>refchapter:B002V1OF70_119953071_com_119000_1795000</id>
+                <index>0</index><offsetMillis>689440</offsetMillis>
+              </positionInformation>
+              <mediaMetadata><id>refchapter:B002V1OF70_119953071_com_0_61000</id>
+                <itemType>track</itemType><title>Opening Credits</title></mediaMetadata>
+            </getMetadataResult></getMetadataResponse></soap:Body></soap:Envelope>"""
+        val resume = parsePositionInformation(body)!!
+        assertEquals("refchapter:B002V1OF70_119953071_com_119000_1795000", resume.id)
+        assertEquals(0, resume.index)
+        assertEquals(689440L, resume.offsetMillis)
+        // The chapters parse as ordinary playable tracks.
+        assertEquals("Opening Credits", parseItems(body).items.single().title)
+        assertFalse(parseItems(body).items.single().container)
+    }
+
+    @Test fun `no positionInformation means no resume point`() {
+        val body = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>
+            <getMetadataResponse><getMetadataResult><total>1</total>
+              <mediaMetadata><id>x</id><itemType>track</itemType><title>t</title></mediaMetadata>
+            </getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+        assertNull(parsePositionInformation(body))
     }
 
     @Test fun `the service type is read from the type list for a cdudn`() {

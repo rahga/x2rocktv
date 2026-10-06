@@ -27,6 +27,14 @@ object ServiceContent {
         !item.container || containerHoldsTracks(item.itemType)
 
     /**
+     * Whether [item] is listened to in place and so *resumed* rather than played from the start — an
+     * audiobook. The book is a container of chapters, but pressing it should pick up where the
+     * listener left off, not open a chapter list, so the UI treats it as playable. See
+     * [com.rahga.x2rock.lan.SonosHousehold.resumeAudiobook].
+     */
+    fun isResumable(item: Item): Boolean = item.itemType.equals("audiobook", ignoreCase = true)
+
+    /**
      * The cdudn a queued item must carry for [serviceType] and [selector] — `SA_RINCON<type>_X_#
      * Svc<type>-<selector>-Token`, `-0-` where the selector is absent or the literal `0` that
      * names the service rather than an account. `null` when the service has no type (not in the

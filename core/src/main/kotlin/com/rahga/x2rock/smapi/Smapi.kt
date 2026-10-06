@@ -97,6 +97,17 @@ data class Category(
 data class ItemPage(val items: List<Item>, val total: Int)
 
 /**
+ * Where to resume a thing that is listened to in place rather than played from the start — an
+ * audiobook, a long podcast. From the `positionInformation` a service puts in `getMetadata`:
+ * [id] is the *chapter* to play (not the book, which is not itself playable), and [offsetMillis]
+ * is how far into it the listener had reached. Verified against Audible, 2026-10-06.
+ */
+data class ResumePoint(val id: String, val index: Int, val offsetMillis: Long)
+
+/** A book's chapters and where to resume it, both out of one `getMetadata`. */
+data class Chapters(val chapters: ItemPage, val resume: ResumePoint?)
+
+/**
  * What `rateItem` wants back for a given direction. **Not a fixed per-direction constant** —
  * iHeartRadio hands out a different id for "rate this up" depending on whether the track is
  * currently unrated, already up, or already down (verified against a real household,
@@ -229,6 +240,21 @@ class SmapiClient(client: OkHttpClient) {
             "<id>${Xml.escape(id)}</id><index>$index</index><count>$count</count>",
         )
         atMost(parseItems(body), count)
+    }
+
+    /**
+     * A book's chapters and its resume point, from one `getMetadata`. The book id (`reftitle:…`
+     * for Audible) is a container of chapters and is **not itself playable** — resuming means
+     * playing the chapter [ResumePoint.id] names and seeking to its offset, or, with no resume
+     * point, the first chapter from the start. [count] bounds the chapters fetched; the resume
+     * point is returned whatever it is.
+     */
+    suspend fun chapters(service: Service, token: Token?, bookId: String, count: Int = 1): Chapters = withContext(Dispatchers.IO) {
+        val body = call(
+            service, token, "getMetadata",
+            "<id>${Xml.escape(bookId)}</id><index>0</index><count>$count</count>",
+        )
+        Chapters(atMost(parseItems(body), count), parsePositionInformation(body))
     }
 
     /** `getMediaURI`: turn a playable hit's id into something a player can be handed. */
@@ -447,6 +473,17 @@ fun parseSearchCategories(body: String): List<Category> {
         out += Category(id = name, mappedId = mapped)
     }
     return out
+}
+
+/** The `positionInformation` a `getMetadata` carries for a resumable thing, or `null` for none. */
+fun parsePositionInformation(body: String): ResumePoint? {
+    val node = Xml.parse(body).allNamed("positionInformation").firstOrNull() ?: return null
+    val id = node.firstChildNamed("id")?.textContent ?: return null
+    return ResumePoint(
+        id = id,
+        index = node.firstChildNamed("index")?.textContent?.trim()?.toIntOrNull() ?: 0,
+        offsetMillis = node.firstChildNamed("offsetMillis")?.textContent?.trim()?.toLongOrNull() ?: 0,
+    )
 }
 
 /** A page cut to the [count] asked for; [ItemPage.total] is left as the service reported it. */
