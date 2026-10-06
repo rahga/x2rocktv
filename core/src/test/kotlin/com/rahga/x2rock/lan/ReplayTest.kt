@@ -77,6 +77,24 @@ class ReplayTest {
         assertEquals(PlaybackStates.PLAYING, household.groupState(groupId).playbackState)
     }
 
+    /**
+     * Not straight after the load. A play ~30ms after it hung the home Dining Room — a
+     * Symfonisk pair — until it restarted itself, from the app and from this code alone; the same
+     * commands a second apart played. Here the settle window is 2s, so the wait is its quarter.
+     */
+    @Test fun `the first play waits after the load`() = runBlocking<Unit> {
+        val item = household.history().first()
+        val groupId = group()
+        val call = scope.async(Dispatchers.IO) { household.replay(groupId, item) }
+        fake.awaitCommand("loadContent", 5_000)
+        val loadedAt = System.currentTimeMillis()
+        fake.awaitCommand("play", 5_000)
+        val gap = System.currentTimeMillis() - loadedAt
+        assertTrue("play followed the load after ${gap}ms", gap >= 450)
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) { call.await() }
+    }
+
     /** A press that lands mid-load is refused that way, and is pressed again, not given up on. */
     @Test fun `a play refused while the load is under way is pressed again`() = runBlocking<Unit> {
         val item = household.history().first()

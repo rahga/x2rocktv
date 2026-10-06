@@ -901,6 +901,13 @@ class SonosHousehold(
             loadLost = true
         }
         val started = withTimeoutOrNull(minOf(settleMillis, LOAD_SETTLE_MILLIS)) {
+            // Not straight away. A play ~30ms after the load hung the home Dining Room — a
+            // Symfonisk pair, 86.10 — outright, the HTTP server on 1400 included, until it
+            // restarted itself two minutes later: three times from the app, and once from this
+            // code alone against the real speaker (2026-10-06). The same commands a second apart
+            // played every time, and x2rock found a play two seconds after the load starts
+            // everything it tried.
+            delay(minOf(PLAY_AFTER_LOAD_MILLIS, settleMillis / 4))
             while (true) {
                 try {
                     play(groupId)
@@ -1786,6 +1793,9 @@ internal const val MDNS_TIMEOUT_MILLIS = 4_000L
 
 /** How long a loaded item is pressed to play before it is called a failure. x2rock's figure. */
 internal const val LOAD_SETTLE_MILLIS = 12_000L
+
+/** How long after a `loadContent` the first `play` waits: see [SonosHousehold.replay]. */
+internal const val PLAY_AFTER_LOAD_MILLIS = 1_500L
 
 /** What a household with Authentication on is told, in place of the bare refusal. */
 const val AUTHENTICATION_REQUIRED =
