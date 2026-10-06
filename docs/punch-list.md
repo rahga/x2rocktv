@@ -192,7 +192,10 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 9. ~~**1.10**~~ *Done: Bedroom's live station advertised 518 (play, pause, play/pause);
    Kitchen's queue 806, with no previous; `volumeType=1` throughout.* On a station, `adb shell dumpsys media_session`: no SKIP_TO_NEXT or SEEK_TO in
    the actions, and still `volumeType=1`.
-10. **1.11** *Owner to do: the Shield is Ethernet-only at present.* On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
+10. ~~**1.11**~~ *Done 2026-10-05, 23:39: the Shield on Ethernet (default, netId 102) with Wi-Fi
+    joined as well (101). Wi-Fi switched off over adb on eth0 and on again, screenshots every second
+    or so throughout: the room list and the pane never blanked, and Ethernet stayed the default.
+    Afterwards Wi-Fi did not rejoin by itself with Ethernet up; that is Android's, not the app's.* On the Shield with Wi-Fi joined as well as Ethernet, turn Wi-Fi off: the rooms
     must not blank.
 11. ~~**3.4**~~ *Done in core by a live test on Kitchen — save, move and undo, clear, put back;
     the UI path not yet pressed through.* In a room whose queue you can spare: Save as playlist (a playlist named for the
