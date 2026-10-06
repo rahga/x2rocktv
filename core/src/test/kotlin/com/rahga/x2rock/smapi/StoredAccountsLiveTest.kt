@@ -141,6 +141,34 @@ class StoredAccountsLiveTest {
         ).execute().use { it.body?.string().orEmpty() }
     }
 
+    /**
+     * Which services publish `NowPlayingRatings` (thumbs), and whether they are anonymous or
+     * credentialed — to settle whether ratings are an account-only feature. Read-only (fetches
+     * presentation maps off Sonos's CDN). Opt-in on the capture IP.
+     */
+    @Test fun `which services publish ratings`() = runBlocking {
+        val ip = player!!
+        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
+            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val answer = soapListServices(ip)
+        val linked = linkedServices(parseServices(answer.first, answer.second), accounts, longId)
+        val client = SmapiClient(OkHttpClient())
+
+        var anonWithRatings = 0; var credWithRatings = 0; var anon = 0; var cred = 0
+        println("ratings by service (${linked.size} usable):")
+        for (svc in linked) {
+            val kind = if (svc.token == null) "anonymous".also { anon++ } else "credentialed".also { cred++ }
+            val matches = runCatching { client.ratings(svc.service) }.getOrDefault(emptyList())
+            if (matches.isNotEmpty()) {
+                if (svc.token == null) anonWithRatings++ else credWithRatings++
+                println("  ${svc.service.name} [$kind]: ${matches.size} rating state(s)")
+            }
+        }
+        println("ratings published by: $anonWithRatings of $anon anonymous, $credWithRatings of $cred credentialed")
+    }
+
     /** `ListAvailableServices` by bare IP (Upnp insists on a .local name; a test posts the SOAP). */
     private fun soapListServices(ip: String): Pair<String, String> {
         val reply = OkHttpClient().newCall(
