@@ -41,6 +41,8 @@ class RatingsTest {
         const val IHEART = "6"
         const val PLEX = "212"
         const val NO_RATINGS = "254"
+        // A device-link service the household holds a token for — iHeartRadio's real shape here.
+        const val IHEART_LINKED = "1517"
 
         const val IHEART_RATINGS = """<Presentation>
             <PresentationMap type="NowPlayingRatings">
@@ -124,6 +126,13 @@ class RatingsTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
+        // The household stores a token for the device-link service, read off a player — seeded here
+        // so the real decrypt runs, as a TV would capture it. 1517 * 256 = 388352 is its UDN type.
+        val envelope = com.rahga.x2rock.smapi.TestEnvelope.seal(
+            """<ThirdPartyMediaServers><MediaServer UDN="SA_RINCON388352_X" SerialNum0="15"
+               Token0="ihr-token" Key0="ihr-key" Nickname0="iHeartRadio"/></ThirdPartyMediaServers>""",
+            fake.householdId.substringBefore('.'),
+        )
         household = SonosHousehold(
             scope = scope,
             addressBook = book,
@@ -132,6 +141,7 @@ class RatingsTest {
             internetClient = OkHttpClient(),
             port = fake.port,
             upnpPort = upnp.port,
+            accountCapture = { envelope },
         )
     }
 
@@ -157,6 +167,8 @@ class RatingsTest {
             """<Policy Auth="Anonymous" PollInterval="0"/><Manifest Uri="${service.url("/manifest/plain")}"/></Service>""" +
             """<Service Id="$PLEX" Name="Plex" Uri="$smapi" SecureUri="$smapi" ContainerType="MService">""" +
             """<Policy Auth="AppLink" PollInterval="30"/><Manifest Uri="${service.url("/manifest/ratings")}"/></Service>""" +
+            """<Service Id="$IHEART_LINKED" Name="iHeartRadio" Uri="$smapi" SecureUri="$smapi" ContainerType="MService">""" +
+            """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="${service.url("/manifest/ratings")}"/></Service>""" +
             """</Services>"""
         val escaped = descriptors.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         return """<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
@@ -250,5 +262,25 @@ class RatingsTest {
         assertNull(household.ratingState(groupId))
         assertTrue("a manifest was not even fetched", service.requestCount > 0)
         assertTrue(smapiCalls.toString(), smapiCalls.isEmpty())
+    }
+
+    /**
+     * 0.1a: a device-link service (iHeartRadio) is rated with the household's **stored** token
+     * rather than refused. Before the household-token read, a non-anonymous service answered
+     * "needs an account linked" and the thumbs never appeared; now the token read off a player
+     * reaches it, and rides both the state read and the rate call.
+     */
+    @Test fun `a device-link service is rated with the household's stored token`() = runBlocking {
+        val groupId = playing(IHEART_LINKED)
+
+        state = "unselected" to "0"
+        assertEquals(
+            SonosHousehold.RatingState("iHeartRadio", Thumb.NONE),
+            household.ratingState(groupId),
+        )
+        household.rate(groupId, up = true)
+        val rated = smapiCalls.last { "<rateItem" in it }
+        assertTrue(rated, "<rating>555</rating>" in rated)
+        assertTrue("the stored token rode the rate call", "<token>ihr-token</token>" in rated && "<key>ihr-key</key>" in rated)
     }
 }
