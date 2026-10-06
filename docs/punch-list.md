@@ -174,9 +174,13 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    the pane says "Couldn't play this: found nothing it could play".
 3. **0.1** *Blocked — see 0.1a: iHeartRadio is DeviceLink here.* On an iHeartRadio Custom or Artist Radio track, the thumbs appear and a press fills
    one; on a Live station they do not appear at all.
-4. **1.2** *Run 2026-10-01, but the party had broken up before the loss was seen, so Kitchen was
-   a coordinator by then — which found the two bugs above instead. A clean member-loss run is
-   still owed.* Group two rooms, then pull the member's power: the other rooms stay as they are and
+4. ~~**1.2**~~ *Done 2026-10-05, 23:09, on the Shield: Living Room (member) pulled from a Dining
+   Room group. Only it went; the group became Dining Room alone, the selection followed the
+   speakers to it, and every other room was untouched. Sonos itself stopped Dining Room's music
+   about a minute later. It also showed "websocket failed" for some seconds, because Living Room
+   was the speaker the session ran through — now said as "Reconnecting…" and skipped on the way
+   back (`77492d9`). Earlier, 2026-10-01: the party had broken up before the loss was seen, so
+   Kitchen was a coordinator by then — which found the two bugs above instead.* Group two rooms, then pull the member's power: the other rooms stay as they are and
    only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
 5. **1.3** Put a Beam on its TV input, then group another room onto it from the room panel:
    it either lands or a banner says it did not, within about 25s.
