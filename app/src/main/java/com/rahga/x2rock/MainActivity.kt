@@ -9,6 +9,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -19,9 +20,15 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var themeStore: ThemeStore
     @Inject lateinit var pendingRoomDeepLink: PendingRoomDeepLink
+    @Inject lateinit var seeds: SeedStore
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Debug builds only, before anything connects: see DebugSwitches.
+        if (BuildConfig.DEBUG && intent.getBooleanExtra("debugMdnsOnly", false)) {
+            DebugSwitches.mdnsOnly = true
+            seeds.clear()
+        }
         handleIntent(intent)
         // There is no sign-in step any more: the speakers are on the LAN and answer
         // without an account, so the app opens straight onto the rooms.

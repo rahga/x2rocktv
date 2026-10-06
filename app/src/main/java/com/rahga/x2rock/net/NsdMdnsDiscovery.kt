@@ -3,6 +3,8 @@ package com.rahga.x2rock.net
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.util.Log
+import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.lan.Discovery
 import com.rahga.x2rock.lan.MdnsDiscovery
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -55,6 +57,8 @@ class NsdMdnsDiscovery @Inject constructor(
                     Discovery.fromSonosTxt(txt, resolved.host)?.let { players.putIfAbsent(it.id, it) }
                 }
             }
+            // What mDNS found, in a debug build: the evidence the fallback actually ran.
+            if (BuildConfig.DEBUG) Log.d("x2rock.mdns", "found ${players.size}: ${players.values.map { "${it.id} at ${it.address}" }}")
             return players.values.toList()
         } finally {
             runCatching { nsd.stopServiceDiscovery(listener) }
