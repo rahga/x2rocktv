@@ -70,8 +70,11 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 ├── apple/ITunesSearch.kt         Apple Music's catalogue through Apple's public iTunes search
 ├── apple/AppleMusic.kt           a result as the player plays it: loadContent id, queue URI/DIDL
 │
-└── smapi/                         a service's own server, for ratings
-    ├── Smapi.kt                   presentation map, getExtendedMetadata, rateItem
+└── smapi/                         a service's own server: ratings, and search/browse
+    ├── Smapi.kt                   envelope, parseServices; search/getMetadata/getMediaURI; ratings
+    ├── StoredAccounts.kt          decrypt the household's ThirdPartyMediaServersX tokens (SoCo #1010)
+    ├── AccountCapture.kt          one-shot GENA capture of that encrypted token blob off a player
+    ├── LinkedServices.kt          which services a stored token (or anonymity) actually unlocks
     ├── RatingsCatalogue.kt        a service's rating rules, fetched on a miss
     └── RatingsStore.kt            where those rules are remembered (seam)
 
@@ -116,6 +119,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── FavoritesScreen.kt     the household's favourites — click to load
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
+│       ├── ServiceBrowseScreen.kt the household's own services — pick one, search or browse, play
 │       └── NowPlayingBar.kt       a compact strip on the queue and favourites screens
 │
 └── viewmodel/
@@ -123,7 +127,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── PlayerViewModel.kt
     ├── QueueViewModel.kt
     ├── FavoritesViewModel.kt
-    └── RadioViewModel.kt
+    ├── RadioViewModel.kt
+    ├── AppleMusicViewModel.kt
+    └── ServiceBrowseViewModel.kt   search/browse the household's own services, play in the room
 ```
 
 ---
@@ -134,6 +140,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 home  ───────────────────────────────────────────────── start, always
   ├─→ queue?groupId={id}
   └─→ favorites?groupId={id}
+        ├─→ radio?groupId={id}
+        ├─→ applemusic?groupId={id}
+        └─→ services?groupId={id}      pick a service, search or browse, play in the room
 ```
 
 There is no login route. `x2rock://room/{playerId}` deep-links from the TV home-screen channel

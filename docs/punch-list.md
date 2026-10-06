@@ -484,12 +484,29 @@ app, and the Menu key on a row. All as intended.
 
 ## Tier 5 — decided out, or waiting on a decision
 
-- [-] **Music-service search, browse, linking, `match`, household-token import.** Out
-  (2026-10-01): needs a keyboard and a browser. The Kotlin SMAPI client from the ratings work is
-  the seam if this ever returns. *One exception, 2026-10-06: Apple Music, searched through Apple's
-  public iTunes API — no linking and no token, and the TV's keyboard has a microphone — and played
-  through the household's own Apple Music account (Favorites → Search Apple Music). Stage 1 of
-  three; the household-token read for iHeart ratings (0.1a) and browsing would be stage 2.*
+- [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01
+  "out — needs a keyboard and a browser" held only for *linking*; it does not here, because the
+  token is never minted, it is **read off a player**. Stage 2, built and verified on hardware
+  2026-10-06.
+  - **Stage 1** (2026-10-06): Apple Music, searched through Apple's public iTunes API — no linking,
+    no token, and the TV's keyboard has a microphone — and played through the household's own Apple
+    Music account (Favorites → Search Apple Music).
+  - **Stage 2** (2026-10-06): everything else the household has added — Qobuz, TIDAL, Deezer, Saavn,
+    Amazon, Sonos Radio — searched and browsed over SMAPI with the household's **own stored token**,
+    read off a player's initial `ZoneGroupTopology` GENA event (`ThirdPartyMediaServersX`,
+    AES/MD5 the SoCo #1010 way) and played through `loadContent` like Recently Played. Core:
+    `StoredAccounts` (decrypt), `AccountCapture` (the one-shot GENA capture), `Smapi` (search /
+    getMetadata / getMediaURI), `LinkedServices` (which services a token unlocks); household API
+    `searchableServices`/`searchService`/`browseService`/`playServiceItem`; UI `ServiceBrowseScreen`
+    (Favorites → Music Services). **Verified against the office household** (`StoredAccountsLiveTest`,
+    `-Dx2rock.capture=<ip>`): capture + decrypt reproduced x2rock's `--from-household` byte-for-byte
+    (11 records), and a credentialed search returned real hits from Deezer (30), Qobuz (1000) and
+    Saavn. The `User-Agent` header is required — Deezer and Amazon answer an empty 500/200 without
+    one. **Not on a TV device yet** — the on-device inbound GENA socket and `.local` address path
+    need one run on a Shield/Streamer; the JVM capture is the same code. Amazon Music answers its
+    `search` with HTTP 500 here (x2rock saw the same); generic queue-append (vs. play-now) is not
+    built. iHeart ratings (0.1a) can now reuse this token read instead of a device link.
+  - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;
   revisit after Tier 3. Rules if built: never remove a coordinator from its own group; set mute

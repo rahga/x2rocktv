@@ -24,13 +24,21 @@ import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.TruePlay
+import com.rahga.x2rock.model.MusicObjectId
+import com.rahga.x2rock.smapi.AccountCapture
 import com.rahga.x2rock.smapi.Auth
+import com.rahga.x2rock.smapi.Category
+import com.rahga.x2rock.smapi.Item
+import com.rahga.x2rock.smapi.ItemPage
+import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.RatingsCatalogue
 import com.rahga.x2rock.smapi.RatingsMatch
 import com.rahga.x2rock.smapi.RatingsStore
 import com.rahga.x2rock.smapi.Service
 import com.rahga.x2rock.smapi.SmapiClient
+import com.rahga.x2rock.smapi.StoredAccounts
 import com.rahga.x2rock.smapi.Thumb
+import com.rahga.x2rock.smapi.linkedServices
 import com.rahga.x2rock.smapi.parseServices
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -642,6 +650,8 @@ class SonosHousehold(
         // cancel(), not close(): this runs on the premise that the peer may be gone, and a
         // graceful close waits for a handshake a dead peer will never send.
         clearSession { runCatching { it.cancel() } }
+        // A different household has its own services and tokens; make the next search re-read.
+        searchable = null
         _state.update { it.copy(connected = false) }
     }
 
@@ -884,6 +894,65 @@ class SonosHousehold(
     /** Add an Apple Music search result to the end of [groupId]'s queue, leaving what plays alone. */
     suspend fun queueAppleMusic(groupId: String, item: AppleMusicItem, accountId: String) =
         upnp.addToQueue(coordinatorHostname(groupId), AppleMusic.queueUri(item, accountId), AppleMusic.queueMetadata(item))
+
+    // ---- Searching and browsing the household's own music services ----
+    //
+    // Not Apple Music, which has no usable SMAPI credential and is searched through iTunes
+    // instead (see [AppleMusic]). Everything else the household has added — Qobuz, TIDAL,
+    // Deezer, Amazon, Saavn — is searched and browsed over SMAPI with the household's **own**
+    // stored token, read off a player once per connection. Playing rides `loadContent` the
+    // same way Recently Played and Apple Music do; nothing here needs a browser login, which a
+    // TV remote could not complete anyway.
+
+    private val serviceLock = Mutex()
+    @Volatile private var searchable: List<LinkedService>? = null
+
+    /**
+     * The services this household can search or browse right now, each carrying the credential
+     * it uses — an anonymous service, or one the household stores a token for. Captured once per
+     * connection and cached; cleared on [teardown] so a different household re-reads.
+     *
+     * The token read is **best-effort**: it asks a player to open a connection back to this
+     * device (the one time Sonos does), and if that never arrives only the anonymous services
+     * come back — the capability degrades, it does not fail. Apple Music is deliberately absent;
+     * its catalogue is reached through [searchAppleMusic]-shaped iTunes search, not SMAPI.
+     */
+    suspend fun searchableServices(): List<LinkedService> = serviceLock.withLock {
+        searchable?.let { return@withLock it }
+        val household = _state.value.householdId ?: error("not connected")
+        val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
+        val hostname = hostnameOf(coordinator)
+        val answer = upnp.listAvailableServices(hostname)
+        val services = parseServices(answer.descriptors, answer.types)
+        val accounts = runCatching {
+            val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress ?: return@runCatching emptyList()
+            AccountCapture.captureEnvelope(ip)
+                // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
+                ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
+                ?: emptyList()
+        }.getOrDefault(emptyList())
+        linkedServices(services, accounts, household).also { searchable = it }
+    }
+
+    /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
+    suspend fun serviceCategories(linked: LinkedService): List<Category> = smapi.categories(linked.service)
+
+    /** Search [linked] for [term] under a [Category.mappedId]. */
+    suspend fun searchService(linked: LinkedService, category: String, term: String, index: Int = 0, count: Int = 30): ItemPage =
+        smapi.search(linked.service, linked.token, category, term, index, count)
+
+    /** Browse into a container of [linked] — `root` for its top level. */
+    suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage =
+        smapi.metadata(linked.service, linked.token, id, index, count)
+
+    /**
+     * Play a service [item] in [groupId], in place of the queue, through the household's own
+     * account — the same `loadContent` path as Recently Played, which carries the item's own
+     * `itemType` as the load type (`track`, `album`, `playlist`). Only for a playable item, not
+     * a container to descend into.
+     */
+    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) =
+        replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
 
     /**
      * Play [item] in [groupId] again, in place of what it is playing.

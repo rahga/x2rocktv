@@ -74,7 +74,7 @@ data class MediaInfo(val currentUri: String, val currentUriMetaData: String = ""
 }
 
 /** `ListAvailableServices`'s reply — see [Upnp.listAvailableServices]. */
-data class ServiceListAnswer(val descriptors: String)
+data class ServiceListAnswer(val descriptors: String, val types: String = "")
 
 class Upnp(
     client: OkHttpClient,
@@ -384,7 +384,11 @@ class Upnp(
      */
     suspend fun listAvailableServices(hostname: String): ServiceListAnswer = withContext(Dispatchers.IO) {
         val envelope = parse(soap(hostname, Service.MUSIC_SERVICES, "ListAvailableServices", emptyList()))
-        ServiceListAnswer(descriptors = envelope.text("AvailableServiceDescriptorList").orEmpty())
+        ServiceListAnswer(
+            descriptors = envelope.text("AvailableServiceDescriptorList").orEmpty(),
+            // `serviceId * 256 + type` numbers, the only place a service's type for a cdudn is given.
+            types = envelope.text("AvailableServiceTypeList").orEmpty(),
+        )
     }
 
     /**
