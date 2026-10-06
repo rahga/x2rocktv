@@ -169,6 +169,23 @@ class HomeViewModelTest {
         assertEquals(5, channels.synced.last().first.size)
     }
 
+    /**
+     * Bedroom on iHeartRadio had a blank tile on the Shield's home screen: the tile took the
+     * track's art, and a station sends its logo on the container with none on the track. The
+     * capture is that station. The tile now shows what the room list does.
+     */
+    @Test fun `a station's tile shows its logo, not nothing`() = runBlocking<Unit> {
+        connect()
+        val groupId = fake.groupId(household)
+        fake.pushFixture("stationMetadataStatus", groupId)
+        val tile = withTimeout(5_000) {
+            while (channels.synced.lastOrNull()?.second?.get(groupId)?.subtitle == null) delay(50)
+            channels.synced.last().second.getValue(groupId)
+        }
+        assertEquals("You're Still The One", tile.subtitle)
+        assertEquals("https://i.iheart.com/v3/re/assets.streams/67b0d43da19ce5cf02ee9dba", tile.artUrl)
+    }
+
     // ---------------------------------------------------------------- grouping
 
     /**

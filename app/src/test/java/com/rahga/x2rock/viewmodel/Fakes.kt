@@ -7,10 +7,10 @@ import kotlinx.coroutines.test.setMain
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import com.rahga.x2rock.channel.ChannelSync
+import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.Group
-import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.store.Preferences
 
 /** The main dispatcher every view model launches on, set for a test class and reset after it. */
@@ -32,10 +32,10 @@ class FakePreferences : Preferences {
 
 class RecordingChannelSync : ChannelSync {
     /** Appended from an IO collector, read from the test thread. */
-    val synced: MutableList<Pair<List<Group>, Map<String, Track?>>> =
+    val synced: MutableList<Pair<List<Group>, Map<String, RoomTile>>> =
         java.util.Collections.synchronizedList(mutableListOf())
-    override fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>) {
-        synced += groups to nowPlaying
+    override fun sync(groups: List<Group>, tiles: Map<String, RoomTile>) {
+        synced += groups to tiles
     }
 }
 

@@ -44,8 +44,8 @@ class ChannelSyncReceiver : BroadcastReceiver() {
                     val state = household.state.first { it.connected && it.groups.isNotEmpty() }
                     household.groupStates.first { pushed -> pushed.isNotEmpty() }
 
-                    val nowPlaying = state.groups.associate { it.id to household.groupState(it.id).track }
-                    channelSync.sync(state.groups, nowPlaying)
+                    val tiles = state.groups.associate { it.id to RoomTile.of(household.groupState(it.id)) }
+                    channelSync.sync(state.groups, tiles)
                 }
             } catch (_: TimeoutCancellationException) {
                 // Out of budget. The next INITIALIZE_PROGRAMS, or the app itself, will retry.

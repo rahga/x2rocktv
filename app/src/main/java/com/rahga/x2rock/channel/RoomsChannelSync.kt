@@ -4,19 +4,30 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.tvprovider.media.tv.Channel
 import androidx.tvprovider.media.tv.PreviewProgram
 import androidx.tvprovider.media.tv.TvContractCompat
+import com.rahga.x2rock.lan.GroupState
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.Group
-import com.rahga.x2rock.model.Track
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /** Publishing rooms to the TV home screen, behind an interface so callers stay testable. */
 interface ChannelSync {
-    fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>)
+    fun sync(groups: List<Group>, tiles: Map<String, RoomTile>)
+}
+
+/**
+ * What a room's tile shows beyond its name: the track under it, and the room's picture
+ * ([GroupState.artUrl]). Only these, so a volume change or a seek does not rewrite every tile.
+ */
+data class RoomTile(val subtitle: String?, val artUrl: String?) {
+    companion object {
+        fun of(state: GroupState) = RoomTile(state.track?.name, state.artUrl)
+    }
 }
 
 /**
@@ -32,18 +43,22 @@ class RoomsChannelSync @Inject constructor(
 ) : ChannelSync {
     @Volatile private var channelId = NO_ID
     private var lastGroups: List<Group> = emptyList()
-    private var lastNowPlaying: Map<String, Track?> = emptyMap()
+    private var lastTiles: Map<String, RoomTile> = emptyMap()
 
-    override fun sync(groups: List<Group>, nowPlaying: Map<String, Track?>) {
+    override fun sync(groups: List<Group>, tiles: Map<String, RoomTile>) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         synchronized(this) {
-            if (groups == lastGroups && nowPlaying == lastNowPlaying) return
+            if (groups == lastGroups && tiles == lastTiles) return
             val channelId = ensureChannel() ?: return
             // Remember only what actually reached the provider. Recording it up front meant a
             // failed write suppressed every identical retry from then on.
-            if (runCatching { updatePrograms(channelId, groups, nowPlaying) }.isSuccess) {
+            val written = runCatching { updatePrograms(channelId, groups, tiles) }
+            // Said in the log: a failure here leaves the home screen's row empty, and the launcher
+            // hides an empty row without a word, so nothing else would ever say why it went.
+            written.exceptionOrNull()?.let { Log.w(TAG, "home-screen tiles not written", it) }
+            if (written.isSuccess) {
                 lastGroups = groups
-                lastNowPlaying = nowPlaying
+                lastTiles = tiles
             }
         }
     }
@@ -83,7 +98,7 @@ class RoomsChannelSync @Inject constructor(
     }
 
     @Suppress("RestrictedApi")
-    private fun updatePrograms(channelId: Long, groups: List<Group>, nowPlaying: Map<String, Track?>) {
+    private fun updatePrograms(channelId: Long, groups: List<Group>, tiles: Map<String, RoomTile>) {
         val existing = mutableMapOf<String, Long>()
         context.contentResolver.query(
             TvContractCompat.buildPreviewProgramsUriForChannel(channelId),
@@ -107,17 +122,17 @@ class RoomsChannelSync @Inject constructor(
         }
 
         groups.forEachIndexed { index, group ->
-            val track = nowPlaying[group.id]
+            val tile = tiles[group.id]
             val builder = PreviewProgram.Builder()
                 .setChannelId(channelId)
                 .setType(TvContractCompat.PreviewPrograms.TYPE_CLIP)
                 .setTitle(group.name)
-                .setDescription(track?.name ?: "")
+                .setDescription(tile?.subtitle ?: "")
                 .setInternalProviderId(group.coordinatorId)
                 .setWeight(groups.size - index)
                 .setIntentUri(Uri.parse("x2rock://room/${Uri.encode(group.coordinatorId)}"))
 
-            PosterArt.forLauncher(track?.imageUrl, addresses)?.let { url ->
+            PosterArt.forLauncher(tile?.artUrl, addresses)?.let { url ->
                 builder.setPosterArtUri(Uri.parse(url))
                     .setPosterArtAspectRatio(TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9)
             }
@@ -141,3 +156,5 @@ class RoomsChannelSync @Inject constructor(
         private const val NO_ID = -1L
     }
 }
+
+private const val TAG = "x2rock.channel"
