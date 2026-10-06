@@ -55,6 +55,7 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 fun FavoritesScreen(
     onBack: () -> Unit,
     onOpenRadio: (groupId: String) -> Unit,
+    onOpenAppleMusic: (groupId: String) -> Unit,
     playerViewModel: PlayerViewModel,
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
@@ -95,6 +96,7 @@ fun FavoritesScreen(
                         onReplay = { item -> viewModel.replay(item, onDone = onBack) },
                         onAppendPlaylist = viewModel::appendPlaylist,
                         onOpenRadio = { onOpenRadio(viewModel.groupId) },
+                        onOpenAppleMusic = if (s.appleMusic) ({ onOpenAppleMusic(viewModel.groupId) }) else null,
                     )
                 }
                 // This screen's own failures, or the now-playing bar's, which go through the
@@ -131,6 +133,8 @@ private fun FavoritesList(
     onReplay: (HistoryItem) -> Unit,
     onAppendPlaylist: (Playlist) -> Unit,
     onOpenRadio: () -> Unit,
+    /** Null for a household with no Apple Music to play a result through. */
+    onOpenAppleMusic: (() -> Unit)?,
 ) {
     val firstFocus = remember { FocusRequester() }
 
@@ -158,6 +162,13 @@ private fun FavoritesList(
             // The radio directory: stations no favourite holds, with no account and no typing.
             // Here because this is where someone looking for something to play already is.
             AppButton(onClick = onOpenRadio) { Text("Radio") }
+            // Apple Music's catalogue, searched through Apple's public search and played through
+            // this household's own Apple Music. Only where the household has played from it, since
+            // that is where its account is learned.
+            onOpenAppleMusic?.let {
+                Spacer(Modifier.width(16.dp))
+                AppButton(onClick = it) { Text("Search Apple Music") }
+            }
         }
         Spacer(Modifier.height(24.dp))
         if (!anything) return@Column

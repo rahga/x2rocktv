@@ -93,6 +93,24 @@ class FavoritesViewModelTest {
         assertTrue(state.recent.isEmpty())
     }
 
+    /** The captured history holds an Apple Music album, so this household's account is known. */
+    @Test fun `Apple Music search is offered where the household has played from it`() = runBlocking<Unit> {
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
+        }
+        assertTrue(state.appleMusic)
+    }
+
+    /** With nothing played from it known, a result would have no account to play through. */
+    @Test fun `Apple Music search is not offered with no account to play through`() = runBlocking<Unit> {
+        fake.refuse("getHistory", "ERROR_DISALLOWED_BY_POLICY")
+        viewModel.reload()
+        val state = withTimeout(5_000) {
+            viewModel.uiState.first { (it as? FavoritesViewModel.UiState.Success)?.recentNote != null } as FavoritesViewModel.UiState.Success
+        }
+        assertTrue("offered with no account known", !state.appleMusic)
+    }
+
     @Test fun `a playlist that fails to load stays on the list and says why`() = runBlocking<Unit> {
         fake.refuse("loadPlaylist")
         var wentBack = false

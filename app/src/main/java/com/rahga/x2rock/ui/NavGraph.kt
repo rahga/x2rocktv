@@ -14,6 +14,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.rahga.x2rock.ui.screens.AppleMusicScreen
 import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
@@ -76,7 +77,19 @@ fun X2RockNavGraph() {
             FavoritesScreen(
                 onBack = { navController.popBackStack() },
                 onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
+                onOpenAppleMusic = { groupId -> navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
                 playerViewModel = playerViewModel
+            )
+        }
+
+        composable(
+            route = "applemusic?groupId={groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+        ) {
+            AppleMusicScreen(
+                onBack = { navController.popBackStack() },
+                // Back to the room, past Favorites, as a station played from Radio does.
+                onPlayed = { navController.popBackStack("home", inclusive = false) },
             )
         }
 

@@ -67,6 +67,8 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   └── PlayModes.kt               repeat flags ↔ the app's enum
 │
 ├── radio/RadioDirectory.kt        Radio Browser: stations by votes, genre or country
+├── apple/ITunesSearch.kt         Apple Music's catalogue through Apple's public iTunes search
+├── apple/AppleMusic.kt           a result as the player plays it: loadContent id, queue URI/DIDL
 │
 └── smapi/                         a service's own server, for ratings
     ├── Smapi.kt                   presentation map, getExtendedMetadata, rateItem
@@ -113,6 +115,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
 │       ├── FavoritesScreen.kt     the household's favourites — click to load
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
+│       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       └── NowPlayingBar.kt       a compact strip on the queue and favourites screens
 │
 └── viewmodel/

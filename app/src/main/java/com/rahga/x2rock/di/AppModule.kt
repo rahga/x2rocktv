@@ -2,6 +2,7 @@ package com.rahga.x2rock.di
 
 import android.os.SystemClock
 import android.util.Log
+import com.rahga.x2rock.apple.ITunesSearch
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MdnsDiscovery
 import com.rahga.x2rock.lan.MulticastGate
@@ -92,6 +93,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideRadioDirectory(@InternetHttp client: OkHttpClient): RadioDirectory = RadioDirectory(client)
+
+    @Provides
+    @Singleton
+    fun provideITunesSearch(@InternetHttp client: OkHttpClient): ITunesSearch = ITunesSearch(client)
 
     @Provides
     @Singleton

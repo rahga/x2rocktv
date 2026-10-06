@@ -3,6 +3,8 @@ package com.rahga.x2rock.lan
 import com.google.gson.Gson
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.rahga.x2rock.apple.AppleMusic
+import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.model.ContainerMetadata
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.GroupVolume
@@ -864,6 +866,24 @@ class SonosHousehold(
             item.copy(images = item.images.map { it.copy(url = reachableArt(it.url, anyCoordinator)) })
         }
     }
+
+    /**
+     * The household's Apple Music account, from what it has played: see [AppleMusic.accountIn].
+     * Recently Played may be switched off (Personalization), so its refusal is not an answer.
+     */
+    suspend fun appleMusicAccount(): String? =
+        AppleMusic.accountIn(runCatching { history() }.getOrDefault(emptyList()), _groupStates.value.values.map { it.track })
+
+    /**
+     * Play an Apple Music search result in [groupId], in place of the queue, through the
+     * household's own account — the way Recently Played is played again, which it shares.
+     */
+    suspend fun playAppleMusic(groupId: String, item: AppleMusicItem, accountId: String) =
+        replay(groupId, item.asLoadable(accountId))
+
+    /** Add an Apple Music search result to the end of [groupId]'s queue, leaving what plays alone. */
+    suspend fun queueAppleMusic(groupId: String, item: AppleMusicItem, accountId: String) =
+        upnp.addToQueue(coordinatorHostname(groupId), AppleMusic.queueUri(item, accountId), AppleMusic.queueMetadata(item))
 
     /**
      * Play [item] in [groupId] again, in place of what it is playing.

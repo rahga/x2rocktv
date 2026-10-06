@@ -139,6 +139,23 @@ class Upnp(
         )
     }
 
+    /**
+     * Add [uri] to the end of the queue, with the DIDL [metadata] that says whose it is, leaving
+     * what plays alone. A container is expanded by the player into its tracks.
+     */
+    suspend fun addToQueue(hostname: String, uri: String, metadata: String): Unit = withContext(Dispatchers.IO) {
+        soap(
+            hostname, Service.AV_TRANSPORT, "AddURIToQueue",
+            listOf(
+                "InstanceID" to "0",
+                "EnqueuedURI" to uri,
+                "EnqueuedURIMetaData" to metadata,
+                "DesiredFirstTrackNumberEnqueued" to "0",
+                "EnqueueAsNext" to "0",
+            ),
+        )
+    }
+
     /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */
     suspend fun clearQueue(hostname: String): Unit = withContext(Dispatchers.IO) {
         soap(hostname, Service.AV_TRANSPORT, "RemoveAllTracksFromQueue", listOf("InstanceID" to "0"))
