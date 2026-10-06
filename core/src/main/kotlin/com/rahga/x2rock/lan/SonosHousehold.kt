@@ -939,11 +939,13 @@ class SonosHousehold(
                 ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
                 ?: emptyList()
         }.getOrDefault(emptyList())
-        // Apple Music is reached through its own iTunes-backed screen, not here: the household's
-        // stored Apple credential has an empty key and its SMAPI refuses every call (x2rock), so a
-        // row for it would only ever dead-end. Dropped rather than shown and left to fail.
+        // Two services carry a token but still dead-end here, so they are dropped rather than shown
+        // and left to fail: Apple Music, whose stored credential has an empty key and whose SMAPI
+        // refuses every call (searched through iTunes on its own screen instead); and YouTube Music,
+        // whose search and browse both answer HTTP 403 — Google's project gate, which the household's
+        // own token does not get past either (x2rock, verified again here 2026-10-06).
         linkedServices(services, accounts, household)
-            .filterNot { it.service.id == AppleMusic.SERVICE_ID }
+            .filterNot { it.service.id == AppleMusic.SERVICE_ID || it.service.id == YOUTUBE_MUSIC_SERVICE_ID }
             .also { searchable = it }
     }
 
@@ -1914,6 +1916,9 @@ internal const val APP_ID = "com.rahga.x2rock"
 
 /** What snooze means with no duration given: the clock radio's nine minutes, as x2rock has it. */
 const val SNOOZE_MINUTES = 9
+
+/** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
+private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
 
 /** How long mDNS is given after SSDP draws nothing. The office speaker answered within a second. */
 internal const val MDNS_TIMEOUT_MILLIS = 4_000L

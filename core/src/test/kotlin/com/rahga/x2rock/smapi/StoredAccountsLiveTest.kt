@@ -33,6 +33,64 @@ class StoredAccountsLiveTest {
     }
 
     /**
+     * Every service the household unlocks, search and browse, one line each — the full matrix, so
+     * "tested against all services" is a thing the output actually shows rather than a claim. Opt-in
+     * on the capture IP; read-only (a search term and a `getMetadata` of root change nothing).
+     */
+    @Test fun `every service answers search and browse`() = runBlocking {
+        val ip = player!!
+        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
+            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000)) { "no account event" }
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val answer = soapListServices(ip)
+        val services = parseServices(answer.first, answer.second)
+        val linked = linkedServices(services, accounts, longId)
+        val client = SmapiClient(OkHttpClient())
+
+        println("service matrix (${linked.size} usable of ${services.size} in the catalogue):")
+        var searched = 0; var browsed = 0
+        for (svc in linked) {
+            val name = svc.service.name + (if (svc.nickname.isNotEmpty()) " (${svc.nickname})" else "")
+            val cats = runCatching { client.categories(svc.service) }.getOrDefault(emptyList())
+            val search = if (cats.isEmpty()) "no categories" else runCatching {
+                val cat = cats.firstOrNull { it.id.contains("track", true) } ?: cats.first()
+                val p = client.search(svc.service, svc.token, cat.mappedId, "jazz")
+                if (p.items.isNotEmpty()) searched++
+                "search '${cat.id}' -> ${p.total} total, ${p.items.size} shown"
+            }.getOrElse { "search FAILED: ${it.message?.take(60)}" }
+            val browse = runCatching {
+                val p = client.metadata(svc.service, svc.token, "root")
+                if (p.items.isNotEmpty()) browsed++
+                "browse -> ${p.items.size} items"
+            }.getOrElse { "browse FAILED: ${it.message?.take(60)}" }
+            println("  %-28s | %-42s | %s".format(name.take(28), search.take(42), browse))
+        }
+        println("searched ok: $searched, browsed ok: $browsed, of ${linked.size}")
+        assert(linked.isNotEmpty())
+    }
+
+    /** `ListAvailableServices` by bare IP (Upnp insists on a .local name; a test posts the SOAP). */
+    private fun soapListServices(ip: String): Pair<String, String> {
+        val reply = OkHttpClient().newCall(
+            okhttp3.Request.Builder()
+                .url("http://$ip:1400/MusicServices/Control")
+                .header("SOAPACTION", "\"urn:schemas-upnp-org:service:MusicServices:1#ListAvailableServices\"")
+                .post(
+                    ("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body>" +
+                        "<u:ListAvailableServices xmlns:u=\"urn:schemas-upnp-org:service:MusicServices:1\"/>" +
+                        "</s:Body></s:Envelope>")
+                        .toRequestBody("text/xml; charset=utf-8".toMediaType()),
+                ).build(),
+        ).execute().use { it.body!!.string() }
+        val re50 = com.rahga.x2rock.lan.Xml.parse(reply)
+        val nodes = re50.getElementsByTagName("*")
+        fun field(n: String) = (0 until nodes.length).mapNotNull { nodes.item(it) as? org.w3c.dom.Element }
+            .firstOrNull { it.tagName.substringAfter(':') == n }?.textContent.orEmpty()
+        return field("AvailableServiceDescriptorList") to field("AvailableServiceTypeList")
+    }
+
+    /**
      * Capture the envelope and write it to a file, for seeding a debug build (the emulator can't
      * receive the callback). Prints only its length, never its content. Opt-in on top of the IP:
      * `-Dx2rock.capture=<ip> -Dx2rock.capture.out=<path> --tests '*StoredAccountsLiveTest.captureToFile'`.

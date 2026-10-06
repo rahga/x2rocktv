@@ -276,7 +276,7 @@ class SmapiClient(client: OkHttpClient) {
     }
 
     /** One SMAPI call. A service that needs an account is refused here, not sent and rejected. */
-    private fun call(service: Service, token: Token?, action: String, params: String): String {
+    private fun call(service: Service, token: Token?, action: String, params: String, retried: Boolean = false): String {
         if (service.auth != Auth.ANONYMOUS && token == null) {
             throw SmapiException("${service.name} needs an account linked before it can be used")
         }
@@ -293,6 +293,14 @@ class SmapiClient(client: OkHttpClient) {
             }
             val root = runCatching { Xml.parse(body) }.getOrNull()
             root?.let { faultMessage(it) }?.let { fault ->
+                // The household's stored token can be stale; a `tokenRefreshRequired` fault answers
+                // the call with a working replacement in its detail rather than just refusing, so
+                // the call retries once with it. Seen on TIDAL and a second Amazon account against a
+                // household whose token had aged (2026-10-06). The refresh is not persisted here —
+                // the next connection captures whatever the household now holds.
+                refreshedToken(root, token)?.takeUnless { retried }?.let { fresh ->
+                    return call(service, fresh, action, params, retried = true)
+                }
                 throw SmapiException("${service.name} refused $action: $fault")
             }
             if (!response.isSuccessful) {
@@ -300,6 +308,18 @@ class SmapiClient(client: OkHttpClient) {
             }
             return body
         }
+    }
+
+    /**
+     * A working replacement token out of a `tokenRefreshRequired` fault's `refreshAuthTokenResult`,
+     * or `null` when the fault carries none. Only for a call that already had a token: a refresh
+     * replaces a credential, it does not mint a first one.
+     */
+    private fun refreshedToken(root: Element, token: Token?): Token? {
+        if (token == null) return null
+        val result = root.allNamed("refreshAuthTokenResult").firstOrNull() ?: return null
+        val authToken = result.firstNamed("authToken")?.textContent ?: return null
+        return token.copy(token = authToken, key = result.firstNamed("privateKey")?.textContent.orEmpty())
     }
 
     private fun envelope(action: String, params: String, token: Token?): String {

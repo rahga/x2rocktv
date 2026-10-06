@@ -505,7 +505,15 @@ app, and the Menu key on a row. All as intended.
     root) returned Deezer's own containers. Integration and VM navigation are covered by
     `ServiceSearchTest` and `ServiceBrowseViewModelTest` (both mutation-checked); queue URI/DIDL by
     `ServiceContentTest`. The `User-Agent` header is required — Deezer and Amazon answer an empty
-    500/200 without one. Also **demonstrated end to end on the office Google TV emulator** by seeding
+    500/200 without one, and a **stale household token is refreshed in place**: a
+    `tokenRefreshRequired` fault carries a working replacement, which the call retries once with
+    (recovered TIDAL and a second Amazon account, which failed until then). A **full matrix** was run
+    over all 42 usable services of the office household's 108: browse answers for 38, search for 15
+    (most "0 total" rows are radio services answering honestly for a term that names no station).
+    Apple Music and YouTube Music are dropped from the list — both carry a token but dead-end
+    (Apple's SMAPI refuses its empty-key credential; YouTube Music answers 403, Google's project
+    gate). Amazon's first account answers `search` HTTP 500, its own quirk. Also **demonstrated end to
+    end on the office Google TV emulator** by seeding
     the envelope past its NAT (the capture leg only; see `DebugSwitches.serviceEnvelope`).
     **Still untried on a real TV**: the on-device inbound GENA socket and `.local`→IP path want one
     run on a Shield/Streamer (the JVM capture is the same code), and `queueServiceItem`'s live
