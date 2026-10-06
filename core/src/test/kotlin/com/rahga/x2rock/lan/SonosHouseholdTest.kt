@@ -921,6 +921,46 @@ class SonosHouseholdTest {
         }
     }
 
+    /**
+     * The Shield's case: the speaker the session ran through is unplugged — there, Living Room's
+     * Beam, pulled from a group. That used to put the socket's failure on screen as the error
+     * and then spend the probe timeout on the very speaker that had gone, because it is the one
+     * remembered. Now it is "reconnecting", never an error, and the speaker that went is passed
+     * over: an unplugged one does not refuse a handshake, it stalls it, as here.
+     */
+    @Test fun `losing the speaker the session runs through reconnects past it, quietly`() = runBlocking<Unit> {
+        connected()
+        val other = household.state.value.groups.first { it.coordinatorId != fake.id }.coordinatorId
+        household.disconnect()
+        val loopback = java.net.InetAddress.getByName("127.0.0.1")
+        val book = PlayerAddressBook()
+        val local = SonosHousehold(
+            scope = scope, addressBook = book, multicast = MulticastGate.None,
+            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
+            ssdp = { listOf(Discovery.DiscoveredPlayer(other, loopback, fake.householdId)) },
+        )
+        try {
+            local.connect()
+            withTimeout(5_000) { local.state.first { it.connected } }
+            val seen = java.util.concurrent.CopyOnWriteArrayList<HouseholdState>()
+            val watching = scope.launch { local.state.collect { seen += it } }
+
+            fake.stallHandshakesTo(fake.id, 10_000)
+            fake.dropConnection(fake.id)
+            val lostAt = System.currentTimeMillis()
+            withTimeout(5_000) { local.state.first { !it.connected } }
+            withTimeout(15_000) { local.state.first { it.connected } }
+            val took = System.currentTimeMillis() - lostAt
+            watching.cancel()
+
+            assertEquals("an error was shown for an unplugged speaker", emptyList<String>(), seen.mapNotNull { it.error })
+            assertTrue("never said it was reconnecting", seen.any { it.reconnecting })
+            assertTrue("took ${took}ms: the speaker that went was tried first", took < PROBE_TIMEOUT_MILLIS)
+        } finally {
+            local.disconnect()
+        }
+    }
+
     @Test fun `disconnect stops everything and does not reconnect`() = runBlocking<Unit> {
         connected()
         household.disconnect()

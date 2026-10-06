@@ -96,7 +96,8 @@ class HomeViewModel @Inject constructor(
     )
 
     sealed interface UiState {
-        data object Loading : UiState
+        /** Not connected yet — or, with [reconnecting], again, after the speaker it ran through went. */
+        data class Loading(val reconnecting: Boolean = false) : UiState
         data class Success(val groups: List<Group>, val rooms: Map<String, RoomInfo>) : UiState {
             /** The TV home-screen channels only care about what is playing. */
             val nowPlaying: Map<String, Track?> get() = rooms.mapValues { it.value.track }
@@ -114,7 +115,7 @@ class HomeViewModel @Inject constructor(
             val error = state.error
             when {
                 error != null -> UiState.Error(error, state.householdChoices)
-                !state.connected -> UiState.Loading
+                !state.connected -> UiState.Loading(reconnecting = state.reconnecting)
                 else -> UiState.Success(
                     groups = state.groups,
                     rooms = state.groups.associate { group ->
@@ -135,7 +136,7 @@ class HomeViewModel @Inject constructor(
                     },
                 )
             }
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading())
 
     // What a press just asked for, per speaker, until the player confirms it. Without this
     // the level would snap back to the pushed one between the press and the event, and a
