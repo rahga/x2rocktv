@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.style.TextAlign
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.ui.components.NoticeBanner
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -433,11 +434,13 @@ private fun RoomSidebar(
             is HomeViewModel.UiState.Error -> {
                 val retryFocus = rememberAutoFocusRequester()
                 Column(
-                    modifier = Modifier.fillMaxSize(),
+                    // Margins of their own: the Authentication message runs to five lines, and
+                    // without them it ran edge to edge across the sidebar (Shield, 2026-10-05).
+                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    Text(state.message, style = MaterialTheme.typography.bodySmall)
+                    Text(state.message, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
                     if (state.choices.isEmpty()) {
                         AppButton(onClick = onRetry, modifier = Modifier.focusRequester(retryFocus)) {
