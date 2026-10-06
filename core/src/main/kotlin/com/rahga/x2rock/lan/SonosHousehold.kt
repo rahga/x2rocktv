@@ -34,6 +34,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -1481,14 +1484,19 @@ class SonosHousehold(
     private suspend fun subscribeGroup(group: Group) {
         val socket = socketForPlayer(group.coordinatorId)
         // Subscribing returns the current state as the first event, so there is no
-        // separate "get" needed to seed the flow.
-        listOf("playback:1", "playbackMetadata:1", "groupVolume:1").forEach { namespace ->
-            socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id))
+        // separate "get" needed to seed the flow. All four at once, replies matched by cmdId:
+        // one round-trip per group rather than four, and a namespace a firmware ignores costs
+        // one reply timeout rather than one per room.
+        coroutineScope {
+            // Allowed to fail on its own. It is not in Sonos's reference, so a firmware without it
+            // is plausible, and a room with no sleep timer shown is far better than a room frozen
+            // because its fourth subscription was refused.
+            val sleepTimer = async { runCatching { socket.subscribe(Frames.onGroup("sleepTimer:1", "subscribe", group.id)) } }
+            listOf("playback:1", "playbackMetadata:1", "groupVolume:1")
+                .map { namespace -> async { socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id)) } }
+                .awaitAll()
+            sleepTimer.await()
         }
-        // Allowed to fail on its own. It is not in Sonos's reference, so a firmware without it
-        // is plausible, and a room with no sleep timer shown is far better than a room frozen
-        // because its fourth subscription was refused.
-        runCatching { socket.subscribe(Frames.onGroup("sleepTimer:1", "subscribe", group.id)) }
         subscribedGroups[group.id] = group.coordinatorId
     }
 
