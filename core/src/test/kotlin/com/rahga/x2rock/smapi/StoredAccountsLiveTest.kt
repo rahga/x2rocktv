@@ -115,10 +115,11 @@ class StoredAccountsLiveTest {
             if (hit != null) break
         }
         if (hit != null) {
-            println("  raw getMetadata of '${hit.title}' (${hit.id}):")
-            println("  " + rawSmapi(svc, "getMetadata", "<id>${hit.id}</id><index>0</index><count>20</count>").take(1800))
+            println("  first leaf hit: '${hit.title}' [${hit.itemType}] id=${hit.id}")
+            val uri = runCatching { client.mediaUri(svc.service, svc.token, hit.id) }
+            println("  getMediaURI -> " + uri.fold({ it }, { "FAILED: ${it.message?.take(80)}" }))
             println("  raw getMediaMetadata:")
-            println("  " + rawSmapi(svc, "getMediaMetadata", "<id>${hit.id}</id>").take(900))
+            println("  " + rawSmapi(svc, "getMediaMetadata", "<id>${hit.id}</id>").take(700))
         }
         Unit
     }

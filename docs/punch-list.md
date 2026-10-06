@@ -530,6 +530,16 @@ app, and the Menu key on a row. All as intended.
     **load-then-seek has not run on hardware** — it makes sound, and a seek onto a freshly loaded
     service chapter wants one look on a real device. Chapter-picking (browsing a book's chapters) is
     not offered yet; resume is.
+  - **Radio stations play as streams, not queue content.** Much of the catalogue is radio (TuneIn,
+    SomaFM, the German stations, …), and a station is `itemType=stream` with no universalMusicObjectId
+    — it is resolved by `getMediaURI` to a direct stream URL (TuneIn → `opml.radiotime.com/Tune.ashx`,
+    SomaFM → a `.pls`) and played through `playbackSession`, the same path the radio directory's own
+    stations use. `playServiceItem` routes a `stream` item that way instead of down `loadContent`;
+    the routing is tested, the live play waits for a device (it makes sound). **Still open:** a
+    service radio *program* that has no `getMediaURI` (Radio Paradise's channels) needs the
+    `x-sonosapi-radio` set-transport path x2rock built, which is not ported yet; and a service whose
+    type the player's list omits (TuneIn came back `type=null`) can build no cdudn, so it cannot
+    enqueue — which is moot for streams, since they are not queue content anyway.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;
