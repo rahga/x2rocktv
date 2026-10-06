@@ -26,7 +26,6 @@ import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.smapi.AccountCapture
-import com.rahga.x2rock.smapi.Auth
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemPage
@@ -39,6 +38,7 @@ import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.smapi.SmapiClient
 import com.rahga.x2rock.smapi.StoredAccounts
 import com.rahga.x2rock.smapi.Thumb
+import com.rahga.x2rock.smapi.Token
 import com.rahga.x2rock.smapi.linkedServices
 import com.rahga.x2rock.smapi.parseServices
 import kotlinx.coroutines.CoroutineScope
@@ -1116,8 +1116,14 @@ class SonosHousehold(
     /** Where the current track stands with its service, when it can be rated at all. */
     data class RatingState(val serviceName: String, val current: Thumb)
 
-    /** Everything a rate press needs, resolved: who to ask, what to name, which ids it offers. */
-    private class Rateable(val service: Service, val objectId: String, val matches: List<RatingsMatch>, val current: RatingsMatch)
+    /** Everything a rate press needs, resolved: who to ask, with what credential, which ids it offers. */
+    private class Rateable(
+        val service: Service,
+        val token: Token?,
+        val objectId: String,
+        val matches: List<RatingsMatch>,
+        val current: RatingsMatch,
+    )
 
     /**
      * Throws with a message meant to be shown as-is — "nothing rateable is playing", "Plex
@@ -1129,22 +1135,23 @@ class SonosHousehold(
         val trackId = groupState(groupId).track?.id?.takeIf { it.isReal }
             ?: error("nothing rateable is playing in this room")
         val serviceId = trackId.serviceId ?: error("the current track names no service")
-        val hostname = coordinatorHostname(groupId)
 
-        val service = parseServices(upnp.listAvailableServices(hostname).descriptors)
-            .firstOrNull { it.id == serviceId }
-            ?: error("service $serviceId is not in this player's service list")
-        // Before anything leaves the LAN: there is no account linking on a TV, so a service
-        // that needs one cannot be rated from here whatever its presentation map says.
-        if (service.auth != Auth.ANONYMOUS) error("${service.name} needs an account linked, which this app does not do")
+        // Reach the service with the household's own credential: an anonymous service needs none,
+        // and a device-link one (iHeartRadio) is rated with the token read off a player — the same
+        // token search uses, so no account linking is needed on a TV. Pick the account the track is
+        // playing from, where a service holds more than one (the household had two iHeartRadios).
+        val candidates = searchableServices().filter { it.service.id == serviceId }
+        val linked = candidates.firstOrNull { it.accountId == trackId.accountId }
+            ?: candidates.firstOrNull()
+            ?: error("service $serviceId cannot be reached to rate here")
 
-        val matches = ratingsCatalogue.ratingsFor(service)
-        if (matches.isEmpty()) error("${service.name} publishes no ratings, so nothing here can be rated")
+        val matches = ratingsCatalogue.ratingsFor(linked.service)
+        if (matches.isEmpty()) error("${linked.service.name} publishes no ratings, so nothing here can be rated")
 
-        val properties = smapi.extendedMetadata(service, token = null, id = trackId.objectId)
+        val properties = smapi.extendedMetadata(linked.service, linked.token, id = trackId.objectId)
         val current = RatingsMatch.current(matches, properties)
-            ?: error("${service.name} did not report a rating state for the current track")
-        return Rateable(service, trackId.objectId, matches, current)
+            ?: error("${linked.service.name} did not report a rating state for the current track")
+        return Rateable(linked.service, linked.token, trackId.objectId, matches, current)
     }
 
     /**
@@ -1173,7 +1180,7 @@ class SonosHousehold(
         val chosen = RatingsMatch.find(rateable.matches, rateable.current.propname, rateable.current.value, up)
             ?: error("${rateable.service.name} offers no ${if (up) "up" else "down"} rating here")
 
-        val result = smapi.rateItem(rateable.service, token = null, id = rateable.objectId, rating = chosen.id)
+        val result = smapi.rateItem(rateable.service, rateable.token, id = rateable.objectId, rating = chosen.id)
         // The rating already landed; a skip failure here is a separate fact, so it is caught
         // rather than allowed to read as the rating itself having failed.
         val skipped = result.shouldSkip == true &&

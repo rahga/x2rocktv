@@ -467,13 +467,16 @@ SOAP call is refused at once rather than after its 403. Left alone: the fixed-vo
   dead stream, still said "Couldn't play this". It now clears when the track or source
   changes, as well as on playing.
 
-- [ ] **0.1a Ratings cannot reach iHeartRadio.** The home household lists iHeartRadio
-  (service 6) as `DeviceLink`, not anonymous, and 0.1 rates anonymous services only — so the
-  buttons never appear for the service they were built for. Checked on Kitchen's iHeart
-  podcast track: `ratingState` stops at "needs an account linked". A device link is the
-  one sign-in that suits a remote: SMAPI `getDeviceLinkCode` shows a short code on the TV, the
-  viewer enters it on a phone, and `getDeviceAuthToken` is polled for the token. That reopens
-  Tier 5's "no linking" decision for this one flow — the owner's call.
+- [x] **0.1a Ratings reach iHeartRadio now — through the household's stored token, not a device
+  link.** 0.1 rated anonymous services only (`auth != ANONYMOUS → "needs an account linked"`), so
+  the thumbs never appeared for iHeartRadio, which is `DeviceLink`. With the household-token read in
+  hand, `rateable` now resolves the credential through `searchableServices` — anonymous services
+  need none, and a device-link one uses the token read off a player, for the account the track is
+  playing from (the household has two iHeartRadios). No `getDeviceLinkCode` browser flow needed, so
+  Tier 5's "no linking" stands. **Verified on the Streamer, 2026-10-06**: on a Custom/Artist-Radio
+  iHeart track (jamielhoelscher Favorites Radio) the thumbs appeared and a thumb-up rated — "Rated
+  up on iHeartRadio". A Live iHeart station (Love Songs Radio) stays unrated, correctly: its tracks
+  carry no per-listener id. `RatingsTest` gained a device-link-with-token case, mutation-checked.
 
 ## Checked by hand, 2026-10-05
 
