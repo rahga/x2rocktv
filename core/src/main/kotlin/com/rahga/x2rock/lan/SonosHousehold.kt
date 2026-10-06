@@ -155,6 +155,14 @@ data class HouseholdState(
     /** Set when the household is unreachable. Withdraw the UI rather than showing stale state. */
     val error: String? = null,
     /**
+     * The speaker this session ran through went away, and another is being tried. Not an
+     * error, and not shown as one: unplugging that speaker — the first found, so on a TV box
+     * often its own room's — used to put "websocket … failed" on screen for the seconds a
+     * reconnect takes (Shield, Living Room pulled from a group, 2026-10-05). [error] is set
+     * only if that reconnect fails.
+     */
+    val reconnecting: Boolean = false,
+    /**
      * The speakers answered and refused: the household has Authentication switched on in the
      * Sonos app's Connection Security, and this app cannot sign in. [error] then says so,
      * naming the switch. Cleared by the next session that stands up — turning the switch off
@@ -387,7 +395,11 @@ class SonosHousehold(
      * the connect fails and discovery runs, which is both simpler and more reliable than
      * trying to decide in advance whether the memory is still good.
      */
-    private suspend fun findEntryPoint(rediscover: Boolean = false): Discovery.DiscoveredPlayer {
+    private suspend fun findEntryPoint(
+        rediscover: Boolean = false,
+        /** A speaker's hostname known to have just gone; neither remembered nor discovered is it tried. */
+        avoid: String? = null,
+    ): Discovery.DiscoveredPlayer {
         // After a network change the remembered address is not merely unverified, it is
         // probably wrong — and trying it first would burn the connect timeout before
         // discovery ever runs.
@@ -395,7 +407,10 @@ class SonosHousehold(
         if (!rediscover || seeds.keyedByNetwork) {
             val remembered = withContext(Dispatchers.IO) { seeds.load() }
             val hostname = remembered?.hostname
-            if (remembered != null && hostname != null) {
+            // The speaker that just went is usually the one remembered — the session ran
+            // through it — and an unplugged one does not refuse, it says nothing: probing it
+            // cost the whole probe timeout before discovery began.
+            if (remembered != null && hostname != null && !hostname.equals(avoid, ignoreCase = true)) {
                 addressBook.register(hostname, remembered.address)
                 // Bounded: the client has no call timeout and a zero read timeout, so a
                 // host that accepts the TCP connect and then says nothing would hang here
@@ -414,6 +429,7 @@ class SonosHousehold(
         // choice. Only a cold start pays for that: a remembered player skips this.
         val found = multicast.around { ssdp() }
             .ifEmpty { runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList()) }
+            .filterNot { avoid != null && it.hostname.equals(avoid, ignoreCase = true) }
         val households = found.filter { it.householdId != null }.groupBy { it.householdId!! }
         if (households.size > 1) {
             val choices = households.map { (household, players) ->
@@ -431,10 +447,11 @@ class SonosHousehold(
     private suspend fun establish(
         seed: Discovery.DiscoveredPlayer? = null,
         rediscover: Boolean = false,
+        avoid: String? = null,
     ) {
         var fromMemory = false
         try {
-            val entry = seed ?: findEntryPoint(rediscover).also {
+            val entry = seed ?: findEntryPoint(rediscover, avoid).also {
                 fromMemory = (!rediscover || seeds.keyedByNetwork) && it.id == seeds.load()?.id
             }
 
@@ -460,7 +477,7 @@ class SonosHousehold(
             _state.update {
                 it.copy(
                     connected = true, householdId = householdId, groups = fillPlaybackState(groups.groups),
-                    players = groups.players, error = null, householdChoices = emptyList(),
+                    players = groups.players, error = null, householdChoices = emptyList(), reconnecting = false,
                 )
             }
 
@@ -515,6 +532,7 @@ class SonosHousehold(
                 it.copy(
                     connected = false,
                     error = if (refused) AUTHENTICATION_REQUIRED else e.message ?: e.toString(),
+                    reconnecting = false,
                 )
             }
             throw e
@@ -528,7 +546,12 @@ class SonosHousehold(
      * tears everything down first and treats the fresh snapshot as truth rather than
      * merging it with what was there before an outage.
      */
-    private fun reconnect(immediate: Boolean = false, fresh: Boolean = false) {
+    private fun reconnect(
+        immediate: Boolean = false,
+        fresh: Boolean = false,
+        /** See [findEntryPoint]: the speaker whose socket just died, not tried in this run. */
+        avoid: String? = null,
+    ) {
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             teardown()
@@ -536,7 +559,7 @@ class SonosHousehold(
             var skipSeed = fresh
             while (isActive) {
                 if (backoff > 0) delay(backoff)
-                val outcome = runCatching { establish(rediscover = skipSeed) }
+                val outcome = runCatching { establish(rediscover = skipSeed, avoid = avoid) }
                 if (outcome.isSuccess) return@launch
                 // A question for the viewer, not a fault: asking SSDP again will not answer it.
                 if (outcome.exceptionOrNull() is HouseholdChoiceNeeded) return@launch
@@ -569,8 +592,11 @@ class SonosHousehold(
         if (!sockets.remove(socket.hostname, socket)) return
         if (carriesSession(socket.hostname)) {
             if (reconnectJob?.isActive == true) return
-            _state.update { it.copy(connected = false, error = cause.message ?: "connection lost") }
-            reconnect()
+            // Said as reconnecting, not as [cause]: a speaker unplugged is ordinary, and the
+            // error is for a reconnect that fails. Tried at once, past the speaker that went —
+            // other speakers are very likely there, and the backoff is for when they are not.
+            _state.update { it.copy(connected = false, reconnecting = true) }
+            reconnect(immediate = true, avoid = socket.hostname)
             return
         }
         val players = playersOn(socket.hostname)

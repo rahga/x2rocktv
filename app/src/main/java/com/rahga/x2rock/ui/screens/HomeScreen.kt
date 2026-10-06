@@ -406,7 +406,7 @@ private fun RoomSidebar(
         when (state) {
             is HomeViewModel.UiState.Loading -> {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Loading…", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (state.reconnecting) "Reconnecting…" else "Loading…", style = MaterialTheme.typography.bodyLarge)
                 }
             }
             is HomeViewModel.UiState.Error -> {
