@@ -356,10 +356,6 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel) {
                 }
                 // Without this a failed stream is just an idle room: the player says why in
                 // an event of its own, and only once.
-                if (state.upnpOff) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    UpnpOffNote()
-                }
                 state.playbackError?.let {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
@@ -833,41 +829,38 @@ private fun TvControls(
     sleepFocusRequester: FocusRequester,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.focusGroup()
-        ) {
-            // Both are soundbar settings read from `settings:1` and written over UPnP, and
-            // neither is pushed — so the label is whatever the last read said, and a press
-            // re-reads rather than assuming it landed.
-            // Never disabled, because this pane is only drawn for a room *on* its HDMI
-            // input, which means a soundbar exists — `soundbarId` is null only while the
-            // read is in flight or if it failed. A disabled tv-material Button still takes
-            // focus and draws no highlight, and this is where a right-press from the room
-            // list lands, so disabling it would park the remote on an invisible control.
-            // The unknown value is said rather than guessed instead.
-            val settingsKnown = state.soundbarId != null
-            TwoLineButton(
-                title = "Night Sound",
-                value = if (!settingsKnown) "—" else if (state.nightMode) "On" else "Off",
-                onClick = { viewModel.toggleNightMode() },
-                modifier = Modifier
-                    .focusRequester(firstFocusRequester)
-                    .exitLeftTo(exitLeftFocusRequester),
-            )
-            TwoLineButton(
-                title = "Speech Enhancement",
-                value = if (!settingsKnown) "—" else if (state.speechEnhancement) "On" else "Off",
-                onClick = { viewModel.toggleSpeechEnhancement() },
-            )
-        }
-
-        // The two toggles above stay drawn — they are where focus lands — and a press explains
-        // itself through the notice. This says it before anyone has to press.
-        if (state.upnpOff) {
-            Spacer(modifier = Modifier.height(12.dp))
-            UpnpOffNote()
+        // Written over UPnP, so with it off they are not drawn at all; the room list says why,
+        // once, and Favorites takes over as where focus enters.
+        if (!state.upnpOff) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.focusGroup()
+            ) {
+                // Both are soundbar settings read from `settings:1` and written over UPnP, and
+                // neither is pushed — so the label is whatever the last read said, and a press
+                // re-reads rather than assuming it landed.
+                // Never disabled, because this pane is only drawn for a room *on* its HDMI
+                // input, which means a soundbar exists — `soundbarId` is null only while the
+                // read is in flight or if it failed. A disabled tv-material Button still takes
+                // focus and draws no highlight, and this is where a right-press from the room
+                // list lands, so disabling it would park the remote on an invisible control.
+                // The unknown value is said rather than guessed instead.
+                val settingsKnown = state.soundbarId != null
+                TwoLineButton(
+                    title = "Night Sound",
+                    value = if (!settingsKnown) "—" else if (state.nightMode) "On" else "Off",
+                    onClick = { viewModel.toggleNightMode() },
+                    modifier = Modifier
+                        .focusRequester(firstFocusRequester)
+                        .exitLeftTo(exitLeftFocusRequester),
+                )
+                TwoLineButton(
+                    title = "Speech Enhancement",
+                    value = if (!settingsKnown) "—" else if (state.speechEnhancement) "On" else "Off",
+                    onClick = { viewModel.toggleSpeechEnhancement() },
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -880,7 +873,9 @@ private fun TvControls(
             // instead is a live thought, and nothing else here offers it.
             AppButton(
                 onClick = onOpenFavorites,
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
+                modifier = Modifier
+                    .exitLeftTo(exitLeftFocusRequester)
+                    .then(if (state.upnpOff) Modifier.focusRequester(firstFocusRequester) else Modifier),
             ) { Text("Favorites") }
             SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
@@ -1207,15 +1202,4 @@ private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
             },
         )
     }
-}
-
-/** One line for a household with UPnP switched off, naming what it costs and where to fix it. */
-@Composable
-private fun UpnpOffNote() {
-    Text(
-        "UPnP is off for this system, so the queue, the sleep timer, the TV input and Night " +
-            "Sound and Speech Enhancement can't be used. Turn it on in the Sonos app: Account > Privacy and " +
-            "Security > Connection Security.",
-        style = MaterialTheme.typography.bodySmall,
-    )
 }

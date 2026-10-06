@@ -200,7 +200,8 @@ fun HomeScreen(
                     onSettingsClick = { showSettings = true },
                     onCollapseClick = { homeViewModel.toggleSidebar() },
                     onRetry = { homeViewModel.connect() },
-                    onChooseHousehold = { homeViewModel.chooseHousehold(it) }
+                    onChooseHousehold = { homeViewModel.chooseHousehold(it) },
+                    upnpOff = homeViewModel.upnpOff.collectAsState().value,
                 )
             }
 
@@ -360,7 +361,9 @@ private fun RoomSidebar(
     onSettingsClick: () -> Unit,
     onCollapseClick: () -> Unit,
     onRetry: () -> Unit,
-    onChooseHousehold: (HouseholdChoice) -> Unit
+    onChooseHousehold: (HouseholdChoice) -> Unit,
+    /** The household's UPnP switch is off: said here once, at the foot of the list. */
+    upnpOff: Boolean = false,
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -463,11 +466,13 @@ private fun RoomSidebar(
             is HomeViewModel.UiState.Success -> {
                 LazyColumn(
                     state = listState,
-                    // Leaving the list on purpose forgets the row; losing focus because the row
-                    // itself went does not — that is the case above, and it needs to know.
-                    modifier = Modifier.onFocusChanged {
-                        if (!it.hasFocus && focusedRowId in currentIds) focusedRowId = null
-                    },
+                    // The rest of the height, so the UPnP note below sits at the foot of the list.
+                    modifier = Modifier.weight(1f)
+                        // Leaving the list on purpose forgets the row; losing focus because the
+                        // row itself went does not — that is the case above, and it needs to know.
+                        .onFocusChanged {
+                            if (!it.hasFocus && focusedRowId in currentIds) focusedRowId = null
+                        },
                 ) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId
@@ -485,6 +490,17 @@ private fun RoomSidebar(
                             onOpenPanel = { onOpenPanel(group) }
                         )
                     }
+                }
+                // Said once, here, rather than on every pane and panel: what UPnP being off costs
+                // is hidden wherever it would be, and this is the one place that says why.
+                if (upnpOff) {
+                    Text(
+                        "UPnP is off for this system, so the queue, sleep timer, TV input and sound " +
+                            "settings are hidden. Turn it on in the Sonos app: Account > Privacy and " +
+                            "Security > Connection Security.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                    )
                 }
             }
         }
