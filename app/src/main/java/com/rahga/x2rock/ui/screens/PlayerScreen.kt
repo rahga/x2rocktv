@@ -146,9 +146,17 @@ fun PlayerPane(
         if (paneHasFocus) detailFocusRequester.requestFocusSafely()
     }
 
-    // The picker traps focus, so closing it has to hand focus back explicitly.
+    // The picker traps focus, so closing it has to hand focus back explicitly — to Zzz, the
+    // button that opened it, where the remote was; the pane's first control only if Zzz has
+    // gone meanwhile. Not on the first composition, which would start the pane on the timer.
+    val sleepFocusRequester = remember { FocusRequester() }
+    var pickerOpened by remember { mutableStateOf(false) }
     LaunchedEffect(showSleepTimerPicker) {
-        if (!showSleepTimerPicker) detailFocusRequester.requestFocusSafely()
+        when {
+            showSleepTimerPicker -> pickerOpened = true
+            !pickerOpened -> detailFocusRequester.requestFocusSafely()
+            runCatching { sleepFocusRequester.requestFocus() }.isFailure -> detailFocusRequester.requestFocusSafely()
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -192,6 +200,7 @@ fun PlayerPane(
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenFavorites = onOpenFavorites,
                         onOpenSleepTimer = { showSleepTimerPicker = true },
+                        sleepFocusRequester = sleepFocusRequester,
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
@@ -203,7 +212,8 @@ fun PlayerPane(
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenQueue = onOpenQueue,
                         onOpenFavorites = onOpenFavorites,
-                        onOpenSleepTimer = { showSleepTimerPicker = true }
+                        onOpenSleepTimer = { showSleepTimerPicker = true },
+                        sleepFocusRequester = sleepFocusRequester,
                     )
                 }
             }
@@ -495,7 +505,8 @@ private fun PlaybackControls(
     exitLeftFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
-    onOpenSleepTimer: () -> Unit
+    onOpenSleepTimer: () -> Unit,
+    sleepFocusRequester: FocusRequester,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -640,7 +651,7 @@ private fun PlaybackControls(
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
-                SleepTimerButton(state, viewModel, onOpenSleepTimer)
+                SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
             }
             // A setting of the room rather than of the track, so it sits with these rather than
             // the transport; the Sonos app keeps it a level further away still, in a menu.
@@ -819,6 +830,7 @@ private fun TvControls(
     exitLeftFocusRequester: FocusRequester,
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit,
+    sleepFocusRequester: FocusRequester,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
@@ -870,7 +882,7 @@ private fun TvControls(
                 onClick = onOpenFavorites,
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
             ) { Text("Favorites") }
-            SleepTimerButton(state, viewModel, onOpenSleepTimer)
+            SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
 
         SpeakerRows(state, viewModel, exitLeftFocusRequester)
@@ -1025,10 +1037,18 @@ private fun GlyphTile(icon: ImageVector) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SleepTimerButton(state: PlayerUiState, viewModel: PlayerViewModel, onOpenSleepTimer: () -> Unit) {
+private fun SleepTimerButton(
+    state: PlayerUiState,
+    viewModel: PlayerViewModel,
+    onOpenSleepTimer: () -> Unit,
+    focusRequester: FocusRequester,
+) {
     if (state.upnpOff) return
     val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
-    AppButton(onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() }) {
+    AppButton(
+        onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
+        modifier = Modifier.focusRequester(focusRequester),
+    ) {
         Icon(
             imageVector = SleepIcon,
             contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
