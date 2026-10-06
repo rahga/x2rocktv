@@ -396,9 +396,11 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   player. That also fixed a tile opened from a cold start, which was selecting an id no list yet
   held and losing it to the default room. Posters name the speaker by address; a service's https
   art passes through; anything else is no poster. On the Shield a link by Kitchen's player id
-  opened Kitchen. **Not seen on a launcher** — Google TV's Home shows no third-party channel row:
-  whether Google TV loads a cleartext poster by IP is the open question, and if it does not, a
-  content provider serving the art is the next step.* Program posters are cleartext `.local` URLs the launcher cannot
+  opened Kitchen. ~~Not seen on a launcher~~ — *seen 2026-10-06 on the Shield's Android TV home
+  ("x2rock: Rooms", below Free live TV; the Streamer's Google TV home shows no app rows): the
+  player's own `/getaa` art, rewritten to its IP, loads, so the launcher fetches cleartext by IP
+  and no content provider is needed. A station's tile was blank until it took the container's
+  logo as the room list does (`GroupState.artUrl`).* Program posters are cleartext `.local` URLs the launcher cannot
   fetch, and `x2rock://room/<groupId>` links go stale on every regroup. Resolve posters to an IP
   or drop them; link by player id and resolve to its current group on open (HomeViewModel already
   follows speakers rather than ids).
