@@ -70,6 +70,46 @@ class StoredAccountsLiveTest {
         assert(linked.isNotEmpty())
     }
 
+    /**
+     * A focused look at one service by name, with a term that suits it — the matrix searches "jazz",
+     * which names no audiobook. Opt-in: `-Dx2rock.capture=<ip> -Dx2rock.probe=Audible -Dx2rock.term="Dune"`.
+     */
+    @Test fun `probe one service by name`() = runBlocking {
+        val ip = player!!
+        val name = System.getProperty("x2rock.probe")
+        assumeTrue("set -Dx2rock.probe=<service name> to probe one service", name != null)
+        val term = System.getProperty("x2rock.term") ?: "Dune"
+        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
+            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val answer = soapListServices(ip)
+        val linked = linkedServices(parseServices(answer.first, answer.second), accounts, longId)
+        val svc = linked.first { it.service.name.contains(name!!, ignoreCase = true) }
+        val client = SmapiClient(OkHttpClient())
+
+        println("${svc.service.name} (sid ${svc.service.id}, type ${svc.service.serviceType}):")
+        val cats = client.categories(svc.service)
+        println("  categories: ${cats.joinToString { "${it.id}->${it.mappedId}" }}")
+        for (cat in cats) {
+            val p = runCatching { client.search(svc.service, svc.token, cat.mappedId, term) }.getOrNull()
+            if (p == null) {
+                println("  search ${cat.id}: FAILED")
+                continue
+            }
+            println("  search '${cat.id}' for '$term': ${p.total} total")
+            p.items.take(3).forEach { println("      ${it.title} — ${it.summary ?: ""} [${it.itemType}]${if (it.container) " ›" else ""}") }
+        }
+        val root = client.metadata(svc.service, svc.token, "root")
+        println("  browse root: ${root.items.map { "${it.title}[${it.itemType}]" }}")
+        // One level in, to see the audiobook shape.
+        root.items.firstOrNull { it.container }?.let { c ->
+            val inside = runCatching { client.metadata(svc.service, svc.token, c.id) }.getOrNull()
+            println("  into '${c.title}': ${inside?.items?.take(4)?.map { "${it.title}[${it.itemType}]" }}")
+        }
+        Unit
+    }
+
     /** `ListAvailableServices` by bare IP (Upnp insists on a .local name; a test posts the SOAP). */
     private fun soapListServices(ip: String): Pair<String, String> {
         val reply = OkHttpClient().newCall(
