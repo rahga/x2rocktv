@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -147,6 +148,7 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
     val results by viewModel.results.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val fieldFocus = remember { FocusRequester() }
+    val resultsFocus = remember { FocusRequester() }
     LaunchedEffect(service.key()) { if (categories.isNotEmpty()) fieldFocus.requestFocusSafely() }
 
     if (categories.isNotEmpty()) {
@@ -183,16 +185,28 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
             if (r.items.isEmpty()) {
                 Text("Nothing here.", style = MaterialTheme.typography.titleMedium)
             } else {
+                // The remote cannot reach the results otherwise: the search field above traps a
+                // downward focus search, so focus is moved into the first row when results arrive
+                // (on a fresh search, or after opening a container). Verified on the Streamer — the
+                // rows were unreachable by D-pad until this. UP from the first row returns to search.
+                LaunchedEffect(r.items.first().id) {
+                    // The row may not be laid out the instant results arrive; retry a few frames.
+                    repeat(5) {
+                        if (resultsFocus.requestFocusSafely()) return@LaunchedEffect
+                        kotlinx.coroutines.delay(50)
+                    }
+                }
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(r.items, key = { it.id }) { item ->
+                    itemsIndexed(r.items, key = { _, item -> item.id }) { index, item ->
                         ItemRow(
                             item = item,
                             isStarting = starting == item.id,
                             onClick = { viewModel.select(item, onPlayed) },
                             onQueue = { viewModel.queue(item) },
+                            modifier = if (index == 0) Modifier.focusRequester(resultsFocus) else Modifier,
                         )
                     }
                 }
@@ -253,10 +267,10 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueue: () -> Unit) {
+private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueue: () -> Unit, modifier: Modifier = Modifier) {
     // A press plays a track or opens a container; a hold or Menu adds it to the queue, as the
     // Apple Music rows do. The view model turns away a hold on something a queue cannot hold.
-    AppCard(onClick = onClick, onLongClick = onQueue, modifier = Modifier.fillMaxWidth().dpadMenuKey(onQueue)) {
+    AppCard(onClick = onClick, onLongClick = onQueue, modifier = modifier.fillMaxWidth().dpadMenuKey(onQueue)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
