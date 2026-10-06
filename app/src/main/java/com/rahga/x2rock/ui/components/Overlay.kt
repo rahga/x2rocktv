@@ -11,6 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 
 /**
  * Pins D-pad focus inside a modal, without blocking movement within it.
@@ -32,10 +37,15 @@ fun Modifier.modalFocusTrap(): Modifier =
     focusProperties { exit = { FocusRequester.Cancel } }.focusGroup()
 
 /**
- * Scrim + centred, focus-trapped content. A tap on the scrim is [onDismiss], as Back is.
+ * Scrim + centred, focus-trapped content. A tap on the scrim is [onDismiss], and so is Back.
  *
  * The scrim has to take taps either way: without a handler of its own a tap passes through it
  * to whichever control is drawn behind, which the viewer cannot see is there.
+ *
+ * Back is answered here, as a key, rather than left to a `BackHandler`. A key goes to the
+ * focused control and then outwards, and the player pane answers Back itself to return focus
+ * to the room list; a sleep timer menu drawn inside the pane lost every press to it, and the
+ * focus trap then refused the move, so the remote's Back did nothing at all.
  */
 @Composable
 fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
@@ -46,7 +56,16 @@ fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
             .tapToClick(onDismiss),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.modalFocusTrap().keepTaps()) {
+        Box(
+            modifier = Modifier
+                .modalFocusTrap()
+                .keepTaps()
+                .onKeyEvent { event ->
+                    if (event.key != Key.Back) return@onKeyEvent false
+                    if (event.type == KeyEventType.KeyDown) onDismiss()
+                    true
+                },
+        ) {
             content()
         }
     }
