@@ -184,7 +184,9 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
 5. **1.3** Put a Beam on its TV input, then group another room onto it from the room panel:
    it either lands or a banner says it did not, within about 25s.
-6. **1.6** Sonos app → Account → Privacy and Security → Connection Security → Authentication
+6. ~~**1.6**~~ *Done 2026-10-05, 23:45, on the Shield: on, the running app carried on over the
+   sockets it had; relaunched, the room list named the switch and its path, with Retry focused.
+   Off again, Retry: every room came back, selection and focus on Living Room.* Sonos app → Account → Privacy and Security → Connection Security → Authentication
    on, relaunch: the room list names the switch. Off again, Retry: rooms come back.
 7. **1.7** Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
    without a relaunch. On again: they return.
