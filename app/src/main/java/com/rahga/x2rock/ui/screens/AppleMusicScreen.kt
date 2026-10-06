@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -76,6 +77,7 @@ fun AppleMusicScreen(
     val starting by viewModel.starting.collectAsState()
     val notice by viewModel.notice.collectAsState()
     val fieldFocus = remember { FocusRequester() }
+    val resultsFocus = remember { FocusRequester() }
     BackHandler { onBack() }
     LaunchedEffect(Unit) { fieldFocus.requestFocusSafely() }
 
@@ -116,16 +118,26 @@ fun AppleMusicScreen(
                         if (r.items.isEmpty()) {
                             Text("Nothing found.", style = MaterialTheme.typography.titleMedium)
                         } else {
+                            // The search field above traps a downward focus search, so the remote
+                            // cannot reach the results on its own — move focus into the first row
+                            // when results arrive. Same fix as the service-browse screen.
+                            LaunchedEffect(r.items.first().objectId) {
+                                repeat(5) {
+                                    if (resultsFocus.requestFocusSafely()) return@LaunchedEffect
+                                    kotlinx.coroutines.delay(50)
+                                }
+                            }
                             LazyColumn(
                                 contentPadding = PaddingValues(bottom = 48.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
-                                items(r.items, key = { it.objectId }) { item ->
+                                itemsIndexed(r.items, key = { _, item -> item.objectId }) { index, item ->
                                     ResultRow(
                                         item = item,
                                         isStarting = starting == item.objectId,
                                         onPlay = { viewModel.play(item, onDone = onPlayed) },
                                         onQueue = { viewModel.queue(item) },
+                                        modifier = if (index == 0) Modifier.focusRequester(resultsFocus) else Modifier,
                                     )
                                 }
                             }
@@ -197,11 +209,11 @@ private fun KindButton(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ResultRow(item: AppleMusicItem, isStarting: Boolean, onPlay: () -> Unit, onQueue: () -> Unit) {
+private fun ResultRow(item: AppleMusicItem, isStarting: Boolean, onPlay: () -> Unit, onQueue: () -> Unit, modifier: Modifier = Modifier) {
     AppCard(
         onClick = onPlay,
         onLongClick = onQueue,
-        modifier = Modifier.fillMaxWidth().dpadMenuKey(onQueue),
+        modifier = modifier.fillMaxWidth().dpadMenuKey(onQueue),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

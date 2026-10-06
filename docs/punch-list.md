@@ -482,6 +482,24 @@ right ±5, select mutes), Bass/Treble and the room panel's level by touch and by
 shuffle on going back to the start of the track, the Zzz sleep timer set and cancelled from the
 app, and the Menu key on a row. All as intended.
 
+## Checked by hand, 2026-10-06 — service search on the Streamer
+
+On the Google TV Streamer (Bedroom), release build, against the home household: the **on-device
+token capture works** — Music Services filled with the household's services (the inbound GENA leg
+that only a real device could prove). Deezer search returned real tracks with art; a track played
+in Kitchen by remote (loadContent); CBC Radio One streamed (getMediaURI → playStream); browse
+descended CBC's sections to its stations. One real bug, found and fixed the same session:
+
+- **Search/browse results were unreachable by the remote.** The search field above the list trapped
+  a downward focus search, so the D-pad bounced between the field and the category chips and never
+  entered the results — only touch (which the emulator testing used) reached them. Fixed by moving
+  focus into the first result when results arrive (`ServiceBrowseScreen`, and the same latent bug in
+  `AppleMusicScreen`); re-verified on the Streamer, play-by-remote works. Not caught earlier because
+  the office emulator was mouse-driven.
+
+Not hand-tested on device: queue-append (the earlier attempt hit the wrong screen; it stays
+unit-tested). The radio *program* path (no `getMediaURI`) and queue's live write remain as noted.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01
