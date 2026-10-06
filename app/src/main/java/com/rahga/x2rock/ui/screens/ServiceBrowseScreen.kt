@@ -54,6 +54,7 @@ import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.ui.components.NoticeBanner
+import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -186,7 +187,12 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(r.items, key = { it.id }) { item ->
-                        ItemRow(item, starting == item.id) { viewModel.select(item, onPlayed) }
+                        ItemRow(
+                            item = item,
+                            isStarting = starting == item.id,
+                            onClick = { viewModel.select(item, onPlayed) },
+                            onQueue = { viewModel.queue(item) },
+                        )
                     }
                 }
             }
@@ -246,8 +252,10 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit) {
-    AppCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueue: () -> Unit) {
+    // A press plays a track or opens a container; a hold or Menu adds it to the queue, as the
+    // Apple Music rows do. The view model turns away a hold on something a queue cannot hold.
+    AppCard(onClick = onClick, onLongClick = onQueue, modifier = Modifier.fillMaxWidth().dpadMenuKey(onQueue)) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),

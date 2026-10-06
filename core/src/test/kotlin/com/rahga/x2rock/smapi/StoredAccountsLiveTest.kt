@@ -118,5 +118,18 @@ class StoredAccountsLiveTest {
             }.onFailure { println("${svc.service.name}: ${it.message}") }
         }
         assert(any) { "at least one credentialed service should return hits for 'miles davis'" }
+
+        // Browse (getMetadata) too — the read-only path a search term cannot reach. Root of the
+        // first service that will answer; its top-level containers are what a browse UI opens on.
+        for (svc in credentialed) {
+            val root = runCatching { client.metadata(svc.service, svc.token, "root") }.getOrNull() ?: continue
+            if (root.items.isEmpty()) continue
+            println("${svc.service.name} browse root: ${root.total} items")
+            root.items.take(5).forEach {
+                println("    ${it.title} [${it.itemType}]${if (it.container) " ›" else ""}")
+            }
+            assert(root.items.isNotEmpty())
+            break
+        }
     }
 }

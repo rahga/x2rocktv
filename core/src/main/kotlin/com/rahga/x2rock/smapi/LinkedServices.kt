@@ -13,6 +13,12 @@ data class LinkedService(
     val token: Token?,
     /** `sn_<serial>` for an enqueue/loadContent against the household's account; `null` if anonymous. */
     val accountId: String?,
+    /**
+     * The account's selector out of `Username<i>` ([StoredAccount.accountKey]) — what a queued
+     * item's cdudn names to pick this account among a service's several. `""` for an anonymous
+     * service or one whose selector is the `0` that means "the service, no account".
+     */
+    val selector: String,
     /** The account nickname, to tell two accounts of one service apart in a picker; `""` if none. */
     val nickname: String,
 )
@@ -45,12 +51,13 @@ fun linkedServices(
                     service = service,
                     token = Token(account.token, account.key, householdLong),
                     accountId = "sn_${account.serial}",
+                    selector = account.accountKey,
                     nickname = account.nickname,
                 )
             }
             // An anonymous service needs no credential and is always usable.
             service.auth == Auth.ANONYMOUS ->
-                out += LinkedService(service = service, token = null, accountId = null, nickname = "")
+                out += LinkedService(service = service, token = null, accountId = null, selector = "", nickname = "")
             // Everything else needs a login the app cannot drive and has no stored token for.
         }
     }

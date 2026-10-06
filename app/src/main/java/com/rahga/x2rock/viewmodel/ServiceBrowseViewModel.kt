@@ -7,6 +7,7 @@ import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
+import com.rahga.x2rock.smapi.ServiceContent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -137,6 +138,20 @@ class ServiceBrowseViewModel @Inject constructor(
                 onSuccess = { Results.Found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't open ${title}: ${it.message ?: it}") },
             )
+        }
+    }
+
+    /** Add [item] to the end of the queue, leaving what plays alone. Only what a queue can hold. */
+    fun queue(item: Item) {
+        val service = _active.value ?: return
+        if (!ServiceContent.canEnqueue(item)) {
+            _notice.post("\"${item.title}\" isn't something a queue can hold")
+            return
+        }
+        viewModelScope.launch {
+            runCatching { household.queueServiceItem(groupId, service, item) }
+                .onSuccess { _notice.post("Added \"${item.title}\" to the queue") }
+                .onFailure { _notice.failure("add ${item.title}", it) }
         }
     }
 

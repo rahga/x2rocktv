@@ -4,11 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.security.MessageDigest
-import java.util.Base64
-import javax.crypto.Cipher
-import javax.crypto.spec.IvParameterSpec
-import javax.crypto.spec.SecretKeySpec
 
 /**
  * Tests for the household-token decrypt, ported from x2rock's `sonos/stored.rs` test module.
@@ -33,30 +28,9 @@ class StoredAccountsTest {
             <MediaServer UDN="SA_RINCON41984_X" SerialNum0="9" Token0="" Key0="" Nickname0=""/>
         </ThirdPartyMediaServers>"""
 
-        private val SALT = byteArrayOf(
-            0x1a, 0x01, 0xa7.toByte(), 0x31, 0xc9.toByte(), 0x6e, 0x9e.toByte(), 0xbd.toByte(),
-            0xe8.toByte(), 0x47, 0x51, 0x82.toByte(), 0xb2.toByte(), 0x74, 0xb7.toByte(), 0x0e,
-        )
-
-        private fun md5(vararg parts: ByteArray): ByteArray =
-            MessageDigest.getInstance("MD5").apply { parts.forEach(::update) }.digest()
-
-        /**
-         * Build a real `2:` envelope from account XML, so the decrypt path can be tested
-         * against its own inverse. Mirrors `StoredAccounts.decryptPayload` exactly: payload +
-         * 4-byte md5 tail, then PKCS#7 to the block, then `iv + AES-128-CBC` base64'd.
-         */
-        fun seal(accountXml: String, householdId: String, iv: ByteArray): String {
-            val global = md5(householdId.toByteArray(), SALT)
-            val blobKey = md5(iv, global)
-            val body = accountXml.toByteArray() + md5(accountXml.toByteArray()).copyOfRange(0, 4)
-            val pad = 16 - body.size % 16
-            val padded = body + ByteArray(pad) { pad.toByte() }
-            val cipher = Cipher.getInstance("AES/CBC/NoPadding").apply {
-                init(Cipher.ENCRYPT_MODE, SecretKeySpec(blobKey, "AES"), IvParameterSpec(iv))
-            }
-            return "2:" + Base64.getEncoder().encodeToString(iv + cipher.doFinal(padded))
-        }
+        /** Sealing lives in [TestEnvelope] now, shared with the integration tests. */
+        fun seal(accountXml: String, householdId: String, iv: ByteArray): String =
+            TestEnvelope.seal(accountXml, householdId, iv)
     }
 
     @Test fun `a sealed envelope round trips to its accounts`() {
