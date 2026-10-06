@@ -37,11 +37,20 @@ class RoomsChannelSync @Inject constructor(
     private val addresses: PlayerAddressBook,
 ) : ChannelSync {
     @Volatile private var channelId = NO_ID
+
+    /**
+     * Whether there is a home screen to publish to. A phone or tablet has no TV provider, and
+     * inserting the channel there threw "Unknown URL content://android.media.tv/channel" and
+     * took the app down the moment the rooms loaded (a moto g on Android 15, 2026-10-06).
+     */
+    private val hasTvProvider: Boolean by lazy {
+        context.packageManager.resolveContentProvider(TvContractCompat.AUTHORITY, 0) != null
+    }
     private var lastGroups: List<Group> = emptyList()
     private var lastTiles: Map<String, RoomTile> = emptyMap()
 
     override fun sync(groups: List<Group>, tiles: Map<String, RoomTile>) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !hasTvProvider) return
         synchronized(this) {
             if (groups == lastGroups && tiles == lastTiles) return
             val channelId = ensureChannel() ?: return
