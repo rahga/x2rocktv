@@ -53,6 +53,7 @@ import coil.compose.AsyncImage
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
+import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.theme.AppButton
@@ -279,9 +280,10 @@ private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueu
             }
             when {
                 isStarting -> Text("Starting…", style = MaterialTheme.typography.bodySmall)
-                // A place to open rather than a thing to play reads as such, at the row's edge.
-                item.container -> Text("›", style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // A place to open reads as such at the row's edge; an audiobook is resumed on
+                // press rather than opened, so it carries no chevron.
+                item.container && !ServiceContent.isResumable(item) ->
+                    Text("›", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

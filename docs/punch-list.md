@@ -520,6 +520,16 @@ app, and the Menu key on a row. All as intended.
     `AddURIToQueue` leg has only been unit-tested — it mutates a room, so it waits for home. Amazon
     Music answers its `search` with HTTP 500 here (x2rock saw the same). iHeart ratings (0.1a) can
     now reuse this token read instead of a device link.
+  - **Audiobooks resume in place** (Audible, added to the office household 2026-10-06). A book
+    (`reftitle:…`) is not itself playable — `getMediaMetadata` faults "unsupported Sonos entity tag"
+    — it is a list of chapter tracks, and its `getMetadata` carries a `positionInformation` (the
+    `<id>` of the chapter to resume, and `<offsetMillis>`). So pressing an audiobook resolves that
+    and plays the chapter, then seeks the offset (first chapter from the start when there is no saved
+    position); it is treated as playable, not a container to open. Parsing is verified read-only
+    against the real account (`SmapiClient.chapters`, `parsePositionInformation`, tested); the
+    **load-then-seek has not run on hardware** — it makes sound, and a seek onto a freshly loaded
+    service chapter wants one look on a real device. Chapter-picking (browsing a book's chapters) is
+    not offered yet; resume is.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;

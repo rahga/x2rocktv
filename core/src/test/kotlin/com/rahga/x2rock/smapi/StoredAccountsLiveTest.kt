@@ -107,7 +107,37 @@ class StoredAccountsLiveTest {
             val inside = runCatching { client.metadata(svc.service, svc.token, c.id) }.getOrNull()
             println("  into '${c.title}': ${inside?.items?.take(4)?.map { "${it.title}[${it.itemType}]" }}")
         }
+        // The raw getMetadata of the first search hit, to see whether a resume position, chapters or
+        // a `canResume`-shaped marker is exposed in the metadata (vs. handled by the service itself).
+        var hit: Item? = null
+        for (cat in cats) {
+            hit = runCatching { client.search(svc.service, svc.token, cat.mappedId, term).items.firstOrNull() }.getOrNull()
+            if (hit != null) break
+        }
+        if (hit != null) {
+            println("  raw getMetadata of '${hit.title}' (${hit.id}):")
+            println("  " + rawSmapi(svc, "getMetadata", "<id>${hit.id}</id><index>0</index><count>20</count>").take(1800))
+            println("  raw getMediaMetadata:")
+            println("  " + rawSmapi(svc, "getMediaMetadata", "<id>${hit.id}</id>").take(900))
+        }
         Unit
+    }
+
+    /** One raw SMAPI call, body returned verbatim — for seeing fields the parser drops. */
+    private fun rawSmapi(svc: LinkedService, action: String, params: String): String {
+        val ns = "http://www.sonos.com/Services/1.1"
+        val login = svc.token?.let {
+            "<loginToken><token>${it.token}</token><key>${it.key}</key>" +
+                (it.household?.let { h -> "<householdId>$h</householdId>" } ?: "") + "</loginToken>"
+        }.orEmpty()
+        val envelope = "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
+            "<s:Header><credentials xmlns=\"$ns\"><deviceProvider>Sonos</deviceProvider>$login</credentials></s:Header>" +
+            "<s:Body><$action xmlns=\"$ns\">$params</$action></s:Body></s:Envelope>"
+        return OkHttpClient().newCall(
+            okhttp3.Request.Builder().url(svc.service.uri)
+                .header("SOAPACTION", "\"$ns#$action\"").header("User-Agent", "x2rock-tv/1.0")
+                .post(envelope.toRequestBody("text/xml; charset=utf-8".toMediaType())).build(),
+        ).execute().use { it.body?.string().orEmpty() }
     }
 
     /** `ListAvailableServices` by bare IP (Upnp insists on a .local name; a test posts the SOAP). */

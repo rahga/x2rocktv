@@ -970,6 +970,26 @@ class SonosHousehold(
         replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
 
     /**
+     * Resume an audiobook in [groupId] where it was left off. The book itself is not playable — it
+     * is a container of chapters — so this reads its `positionInformation`, plays the chapter that
+     * names, and seeks to the offset. With no saved position (never started), it plays the first
+     * chapter from the start. The listened position is kept by the service, so it carries across
+     * the Sonos app and this one.
+     *
+     * Built from Audible's metadata (2026-10-06, verified read-only); the load-then-seek has not
+     * yet been run on hardware — it makes sound, and the timing of a seek onto a freshly loaded
+     * service chapter wants one look on a real device.
+     */
+    suspend fun resumeAudiobook(groupId: String, linked: LinkedService, book: Item) {
+        val chapters = smapi.chapters(linked.service, linked.token, book.id)
+        val chapterId = chapters.resume?.id
+            ?: chapters.chapters.items.firstOrNull { !it.container }?.id
+            ?: error("${book.title} has no chapters to play")
+        replay(groupId, HistoryItem(book.title, "track", MusicObjectId(chapterId, linked.service.id, linked.accountId)))
+        chapters.resume?.offsetMillis?.takeIf { it > 0 }?.let { seek(groupId, it) }
+    }
+
+    /**
      * Add a service [item] to the end of [groupId]'s queue, leaving what plays alone — a track, or
      * a container that holds tracks (an album, a playlist), which the player expands into its rows.
      * The URI and DIDL are built from the item's own id and the account's cdudn, so no stream is

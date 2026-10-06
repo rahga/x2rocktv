@@ -155,9 +155,14 @@ class ServiceBrowseViewModel @Inject constructor(
         }
     }
 
-    /** What a press does: open a container, or play a leaf in place of the queue. */
+    /**
+     * What a press does: resume an audiobook where it was left off, open any other container, or
+     * play a leaf in place of the queue. An audiobook is a container of chapters, but what a
+     * listener wants on pressing it is to carry on, not to pick a chapter — see
+     * [ServiceContent.isResumable].
+     */
     fun select(item: Item, onPlayed: () -> Unit) {
-        if (item.container) {
+        if (item.container && !ServiceContent.isResumable(item)) {
             browse(item.id, item.title)
             return
         }
@@ -165,7 +170,10 @@ class ServiceBrowseViewModel @Inject constructor(
         val service = _active.value ?: return
         viewModelScope.launch {
             _starting.value = item.id
-            val started = runCatching { household.playServiceItem(groupId, service, item) }
+            val started = runCatching {
+                if (ServiceContent.isResumable(item)) household.resumeAudiobook(groupId, service, item)
+                else household.playServiceItem(groupId, service, item)
+            }
             _starting.value = null
             started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${item.title}", it) }
         }
