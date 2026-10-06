@@ -3,6 +3,7 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.apple.AppleMusic
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
 import com.rahga.x2rock.model.HistoryItem
@@ -37,6 +38,8 @@ class FavoritesViewModel @Inject constructor(
             val recent: List<HistoryItem> = emptyList(),
             /** Why there is no recently played list, when the household said: history is off. */
             val recentNote: String? = null,
+            /** Whether the household has an Apple Music account a search result can play through. */
+            val appleMusic: Boolean = false,
         ) : UiState
         data class Error(val message: String) : UiState
     }
@@ -122,7 +125,11 @@ class FavoritesViewModel @Inject constructor(
                 val recentNote = (history.exceptionOrNull() as? SonosCommandException)
                     ?.takeIf { it.detail.startsWith("ERROR_DISALLOWED_BY_POLICY") }
                     ?.let { HISTORY_OFF }
-                UiState.Success(favs.items, activeId, playlists, recent, recentNote)
+                val appleMusic = AppleMusic.accountIn(
+                    history.getOrDefault(emptyList()),
+                    household.groupStates.value.values.map { it.track },
+                ) != null
+                UiState.Success(favs.items, activeId, playlists, recent, recentNote, appleMusic)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }

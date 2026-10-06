@@ -486,7 +486,10 @@ app, and the Menu key on a row. All as intended.
 
 - [-] **Music-service search, browse, linking, `match`, household-token import.** Out
   (2026-10-01): needs a keyboard and a browser. The Kotlin SMAPI client from the ratings work is
-  the seam if this ever returns.
+  the seam if this ever returns. *One exception, 2026-10-06: Apple Music, searched through Apple's
+  public iTunes API — no linking and no token, and the TV's keyboard has a microphone — and played
+  through the household's own Apple Music account (Favorites → Search Apple Music). Stage 1 of
+  three; the household-token read for iHeart ratings (0.1a) and browsing would be stage 2.*
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;
   revisit after Tier 3. Rules if built: never remove a coordinator from its own group; set mute

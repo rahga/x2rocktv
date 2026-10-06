@@ -302,6 +302,26 @@ parser accepts the feature and the live suite runs there. Found 2026-10-03 when 
 showed; the DOCTYPE guard is now a string check before the parser, and the queue listed on the
 Shield the same afternoon.
 
+**Apple Music plays from its public catalogue ids** (home, Dining Room, 2026-10-06). The iTunes
+Search API's `trackId` and `collectionId` are the numbers behind the player's `song:` and
+`album:` ids, so a search result needs nothing looked up:
+
+- *Play*: `playback:1 loadContent` with `{"serviceId":"204","accountId":"sn_28","objectId":"song:1485581309"}`
+  and `type` `track` (or `album:…` and `album`), never played in the household before. It replaces
+  the queue; it cannot append (x2rock). The account is the household's, read from Recently Played
+  or a playing track — favourites name none.
+- *Add to queue*: UPnP `AddURIToQueue`, with the forms the player writes for itself:
+  `x-sonos-http:song%3a<id>.mp4?sid=204&flags=8232&sn=28` for a song, and
+  `x-rincon-cpcontainer:1004206calbum%3a<id>?sid=204&flags=8300&sn=28` for an album, which the
+  player expands into its tracks; each with a DIDL carrying the cdudn
+  `SA_RINCON52231_X_#Svc52231-0-Token` (x2rock's form).
+
+**A `play` straight after `loadContent` can hang a speaker.** The same night: pause, load 12-39ms
+later, and play ~30ms after that hung the Dining Room Symfonisk pair (86.10) entirely — port 1400
+too — until it restarted itself two minutes later. Three times from the app, once from `:core`
+alone; the same commands a second apart played every time. `replay` now waits 1.5s after the load
+before its first press.
+
 ---
 
 ## Recorded by x2rock, and relied on here
