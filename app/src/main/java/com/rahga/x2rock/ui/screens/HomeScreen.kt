@@ -538,8 +538,17 @@ private fun RoomListItem(
         border = appCardBorder(),
         // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
         // say — so the list still says which room the controls beside it act on.
+        //
+        // Every colour named: from a transparent container tv-material derives its content colour
+        // from LocalContentColor, which nothing above the sidebar provides, so room names drew
+        // near-black — the same fault the pane and panel had.
         colors = CardDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f) else Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+            focusedContentColor = MaterialTheme.colorScheme.onSurface,
+            pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
+            pressedContentColor = MaterialTheme.colorScheme.onSurface,
         ),
         modifier = Modifier
             .fillMaxWidth()

@@ -95,6 +95,13 @@ class ServiceBrowseViewModelTest {
         (withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Found } }
             as ServiceBrowseViewModel.Results.Found).items
 
+    /** The captured history holds an Apple Music album, so this household's account is known. */
+    @Test fun `Apple Music is offered where the household has played from it`() = runBlocking<Unit> {
+        val ready = withTimeout(5_000) { viewModel.services.first { it is ServiceBrowseViewModel.Services.Ready } }
+            as ServiceBrowseViewModel.Services.Ready
+        org.junit.Assert.assertTrue(ready.appleMusic)
+    }
+
     @Test fun `opening a service exposes its search categories`() = runBlocking {
         val qobuz = ready().first { it.service.id == "31" }
         viewModel.open(qobuz)

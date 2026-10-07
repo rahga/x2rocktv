@@ -33,9 +33,14 @@ data class ArtColors(val accent: Color, val shade: Color)
 @Composable
 fun rememberArtColors(url: String?): ArtColors? {
     val context = LocalContext.current
-    var colors by remember(url) { mutableStateOf<ArtColors?>(null) }
+    // Not keyed on the URL: the last cover's colours stand until the new one's are read, so a track
+    // change eases from one tint to the next instead of dipping to plain between them.
+    var colors by remember { mutableStateOf<ArtColors?>(null) }
     LaunchedEffect(url) {
-        if (url == null) return@LaunchedEffect
+        if (url == null) {
+            colors = null
+            return@LaunchedEffect
+        }
         val request = ImageRequest.Builder(context).data(url).allowHardware(false).size(SAMPLE_PX).build()
         val bitmap = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
             ?: return@LaunchedEffect

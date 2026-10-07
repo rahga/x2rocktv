@@ -51,7 +51,7 @@ import com.rahga.x2rock.viewmodel.recentKey
 /**
  * Browse: everything there is to play in the room, in one list — this device's presets, the
  * household's Sonos favourites, its playlists, and what it played lately — with the radio directory
- * and the music services one press up. The sidebar's Browse opens it, and so does the player's.
+ * and the music services one press up. The player pane's Browse button opens it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -71,11 +71,25 @@ fun FavoritesScreen(
     val notice by viewModel.notice.collectAsState()
     BackHandler { onBack() }
 
+    // With no row to start on — loading, a failed load, nothing saved — focus starts on Back, so
+    // the remote's first press does something rather than going wherever the platform puts it.
+    val backFocus = remember { FocusRequester() }
+    val hasRows = (state as? FavoritesViewModel.UiState.Success)?.let {
+        presets.isNotEmpty() || it.items.isNotEmpty() || it.playlists.isNotEmpty() || it.recent.isNotEmpty()
+    } == true
+    LaunchedEffect(hasRows, state::class) {
+        if (hasRows) return@LaunchedEffect
+        repeat(5) {
+            if (backFocus.requestFocusSafely()) return@LaunchedEffect
+            kotlinx.coroutines.delay(50)
+        }
+    }
+
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f)) {
                 Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
-                    ScreenHeader(title = "Browse", room = room, onBack = onBack) {
+                    ScreenHeader(title = "Browse", room = room, onBack = onBack, backModifier = Modifier.focusRequester(backFocus)) {
                         // The radio directory: stations no favourite holds, with no account and no
                         // typing. And the household's own services, searched and browsed with its
                         // stored login — Apple Music among them.

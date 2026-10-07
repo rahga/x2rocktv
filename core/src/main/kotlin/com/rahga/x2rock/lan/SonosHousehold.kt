@@ -661,6 +661,7 @@ class SonosHousehold(
         clearSession { runCatching { it.cancel() } }
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
+        categoryCache.clear()
         _state.update { it.copy(connected = false) }
     }
 
@@ -917,6 +918,13 @@ class SonosHousehold(
     @Volatile private var searchable: List<LinkedService>? = null
 
     /**
+     * Each service's search categories, by service id, for as long as the connection: read from a
+     * presentation map on the service's CDN, which does not change under a session, and wanted by
+     * every search across services — a hundred services' maps refetched per Search screen otherwise.
+     */
+    private val categoryCache = java.util.concurrent.ConcurrentHashMap<String, List<Category>>()
+
+    /**
      * The services this household can search or browse right now, each carrying the credential
      * it uses — an anonymous service, or one the household stores a token for. Captured once per
      * connection and cached; cleared on [teardown] so a different household re-reads.
@@ -951,7 +959,8 @@ class SonosHousehold(
     }
 
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
-    suspend fun serviceCategories(linked: LinkedService): List<Category> = smapi.categories(linked.service)
+    suspend fun serviceCategories(linked: LinkedService): List<Category> =
+        categoryCache[linked.service.id] ?: smapi.categories(linked.service).also { categoryCache[linked.service.id] = it }
 
     /** Search [linked] for [term] under a [Category.mappedId]. */
     suspend fun searchService(linked: LinkedService, category: String, term: String, index: Int = 0, count: Int = 30): ItemPage =
