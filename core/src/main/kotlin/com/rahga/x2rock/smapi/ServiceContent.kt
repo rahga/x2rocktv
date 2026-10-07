@@ -22,6 +22,34 @@ object ServiceContent {
     /** Spotify's own ids need its native scheme; its generic-scheme rows add but never play. */
     private const val SPOTIFY_SERVICE_ID = "12"
 
+    private const val IHEARTRADIO_SERVICE_ID = "6"
+
+    /**
+     * A service's search categories as the Sonos app offers them, where that differs from what
+     * its presentation map publishes. Only iHeartRadio so far, checked against the Sonos app at
+     * the office (2026-10-07): it offers **Stations** and **Podcasts** and nothing else.
+     *
+     * iHeartRadio publishes six, and three of them mislead. Its free tier plays no song on demand,
+     * so a "track" hit is the artist's station under the song's title: "A COLD PLAY" carried
+     * `artist_radio.32433934` and played The Kid LAROI's station. Albums came back empty and
+     * Sonos offers no playlists either. Its Stations is two searches as one, both needed: the
+     * stations category finds live radio (Z100) and nothing for "coldplay", while the artists
+     * category finds the artist stations Sonos lists for "coldplay" (Coldplay, Coldplay Piano
+     * Covers, coldplayer, in that order). Live stations come first, so a station's own name is
+     * not buried under artists named after it.
+     */
+    fun asSonosShowsThem(serviceId: String, published: List<Category>): List<Category> {
+        if (serviceId != IHEARTRADIO_SERVICE_ID) return published
+        val stations = published.firstOrNull { it.id == "stations" }
+        val artists = published.firstOrNull { it.id == "artists" }
+        val merged = when {
+            stations != null -> stations.copy(thenMappedId = artists?.mappedId)
+            artists != null -> artists.copy(id = "stations")
+            else -> null
+        }
+        return listOfNotNull(merged, published.firstOrNull { it.id == "podcasts" })
+    }
+
     /**
      * Whether [item] can go in a queue at all. A container must hold tracks; a leaf must be a
      * plain track — a `stream` is played rather than queued, and a radio `program` is refused by

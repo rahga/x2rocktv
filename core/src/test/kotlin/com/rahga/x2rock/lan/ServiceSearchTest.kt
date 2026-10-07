@@ -1,5 +1,6 @@
 package com.rahga.x2rock.lan
 
+import com.rahga.x2rock.smapi.Category
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +58,14 @@ class ServiceSearchTest {
                 """<albumArtURI>https://cdn.example/cover.jpg</albumArtURI></trackMetadata>""" +
                 """</mediaMetadata></searchResult></searchResponse></s:Body></s:Envelope>"""
 
+        /** The `artist` category's answer: the track above again, then an artist station. */
+        fun artistResponse() =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
+                """<searchResponse><searchResult><index>0</index><count>2</count><total>2</total>""" +
+                """<mediaMetadata><id>tr-flac:536421002</id><itemType>track</itemType><title>SICKO MODE</title></mediaMetadata>""" +
+                """<mediaMetadata><id>artist_radio.1</id><itemType>program</itemType><title>Travis Scott</title></mediaMetadata>""" +
+                """</searchResult></searchResponse></s:Body></s:Envelope>"""
+
         fun metadataResponse() =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
                 """<getMetadataResponse><getMetadataResult><index>0</index><count>1</count><total>1</total>""" +
@@ -95,6 +104,7 @@ class ServiceSearchTest {
                             when {
                                 "<getMediaURI" in body -> mediaUriResponse()
                                 "<getMetadata" in body -> metadataResponse()
+                                "<id>artist</id>" in body -> artistResponse()
                                 else -> searchResponse()
                             }
                         )
@@ -207,9 +217,16 @@ class ServiceSearchTest {
         assertEquals("sn_14", byId.getValue(QOBUZ).accountId)
     }
 
+    @Test fun `a category that is two searches lists the second's hits after the first's, once each`() = runBlocking {
+        connected()
+        val page = household.searchService(qobuz(), Category("stations", "track", thenMappedId = "artist"), term = "x")
+        assertEquals(listOf("SICKO MODE", "Travis Scott"), page.items.map { it.title })
+        assertEquals("both categories were asked", 2, smapiCalls.count { "<search" in it })
+    }
+
     @Test fun `a search carries the stored token and parses the hits`() = runBlocking {
         connected()
-        val page = household.searchService(qobuz(), category = "track", term = "sicko")
+        val page = household.searchService(qobuz(), Category("tracks", "track"), term = "sicko")
         assertEquals(1, page.items.size)
         assertEquals("SICKO MODE", page.items[0].title)
         assertEquals("Travis Scott", page.items[0].summary)

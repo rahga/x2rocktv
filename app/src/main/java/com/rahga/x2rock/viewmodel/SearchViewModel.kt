@@ -153,7 +153,7 @@ class SearchViewModel @Inject constructor(
         val available = household.serviceCategories(linked)
         return coroutineScope {
             pickCategories(available).map { category ->
-                async { household.searchService(linked, category.mappedId, term, count = PER_CATEGORY).items }
+                async { household.searchService(linked, category, term, count = PER_CATEGORY).items }
             }.awaitAll().flatten().distinctBy { it.id }.take(PER_SERVICE).map { Hit.Service(linked, it) }
         }
     }

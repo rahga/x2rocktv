@@ -751,8 +751,12 @@ Each finding checked against the code, and the device where it could be, before 
     here as well. **A track result is an artist station, not the track**: "A COLD PLAY" (The Kid
     LAROI) carried the id `artist_radio.32433934`, played from
     `x-sonosapi-radio:artist_radio.32433934?sid=6&flags=0&sn=22`, and opened on "STAY" — the
-    artist's station, as iHeart's free tier plays no track on demand. So the row's title promises a
-    song and delivers its artist's radio. Playlists are untried.
+    artist's station, as iHeart's free tier plays no track on demand. So the row's title promised a
+    song and delivered its artist's radio. **Settled by searching iHeart as the Sonos app does**
+    (`ServiceContent.asSonosShowsThem`): Stations — its stations search, then its artists search,
+    which together give Sonos's own list for "coldplay" and put live Z100 first for "z100" — and
+    Podcasts. Tracks, albums, playlists and artists are gone, so an artist station is never offered
+    as a song or as an artist. Checked on the Streamer against both terms.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot

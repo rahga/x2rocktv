@@ -970,11 +970,24 @@ class SonosHousehold(
 
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
     suspend fun serviceCategories(linked: LinkedService): List<Category> =
-        categoryCache[linked.service.id] ?: smapi.categories(linked.service).also { categoryCache[linked.service.id] = it }
+        categoryCache[linked.service.id]
+            ?: ServiceContent.asSonosShowsThem(linked.service.id, smapi.categories(linked.service))
+                .also { categoryCache[linked.service.id] = it }
 
-    /** Search [linked] for [term] under a [Category.mappedId]. */
-    suspend fun searchService(linked: LinkedService, category: String, term: String, index: Int = 0, count: Int = 30): ItemPage =
-        smapi.search(linked.service, linked.token, category, term, index, count)
+    /**
+     * Search [linked] for [term] under [category]. A category that is two searches as one asks
+     * both at once and lists the second's hits after the first's, each item once.
+     */
+    suspend fun searchService(linked: LinkedService, category: Category, term: String, index: Int = 0, count: Int = 30): ItemPage {
+        val then = category.thenMappedId
+            ?: return smapi.search(linked.service, linked.token, category.mappedId, term, index, count)
+        val (first, second) = coroutineScope {
+            listOf(category.mappedId, then)
+                .map { async { smapi.search(linked.service, linked.token, it, term, index, count) } }
+                .awaitAll()
+        }
+        return ItemPage((first.items + second.items).distinctBy { it.id }, first.total + second.total)
+    }
 
     /** Browse into a container of [linked] — `root` for its top level. */
     suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage =
