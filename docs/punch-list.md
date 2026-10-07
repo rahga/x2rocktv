@@ -733,6 +733,13 @@ Each finding checked against the code, and the device where it could be, before 
     service whose type the player's list omits (TuneIn came back `type=null`) has no cdudn, and a
     player may refuse the source with a fault. Only a refusal falls through; a missing reply does
     not, because the source may have been taken. Tested and mutation-checked against a refusing fake.
+    **The fallback has not run on hardware, and nothing in the office household reaches it**
+    (2026-10-07): across every service, only Sonos Radio and Amazon Music return programs, both have
+    a type, and the player accepted both as a source. Amazon Music's Smooth Jazz station, the first
+    Amazon program this app played, went the radio way:
+    `x-sonosapi-radio:catalog%3astation%3akey%3aA3SP31LN235GV3?sid=201&flags=0&sn=18`, from the
+    second Amazon account (the first still answers `search` HTTP 500). TuneIn, the known type-less
+    service, answers with streams rather than programs, which never take this path.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot
