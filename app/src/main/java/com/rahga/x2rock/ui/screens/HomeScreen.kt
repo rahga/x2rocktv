@@ -17,7 +17,6 @@ import androidx.compose.ui.draw.alpha
 import com.rahga.x2rock.viewmodel.RoomActivity
 import com.rahga.x2rock.viewmodel.roomActivity
 import com.rahga.x2rock.viewmodel.hasSource
-import com.rahga.x2rock.ui.theme.appCardBorder
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -101,6 +100,7 @@ import com.rahga.x2rock.ui.components.keepTaps
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.swatchColor
@@ -518,15 +518,17 @@ private fun RoomListItem(
 ) {
     var focused by remember { mutableStateOf(false) }
     val activity = roomActivity(group.playbackState, info.hasSource)
-    Card(
+    AppCard(
         // Click was doing nothing at all, and it is the press a remote makes on a list.
         // Long-press stays as a synonym rather than the only way in.
         onClick = onOpenPanel,
         onLongClick = onOpenPanel,
-        border = appCardBorder(),
+        // A remote selects a room by moving onto it and opens it with a press; a tap does both in
+        // turn — the first selects, a tap on the selected room opens it — and a hold opens it.
+        onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
         // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
-        // say — so the list still says which room the controls beside it act on.
-        // Text takes the theme's root content colour; see X2RockTheme.
+        // say — so the list still says which room the controls beside it act on. Text takes the
+        // theme's root content colour; see X2RockTheme.
         colors = CardDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f) else Color.Transparent,
             focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
@@ -537,29 +539,16 @@ private fun RoomListItem(
             // The card's edge sits inside the 48dp title-safe margin's reach and its content on it.
             .padding(start = SIDEBAR_START - 16.dp, end = 12.dp, top = 3.dp, bottom = 3.dp)
             .focusRequester(focusRequester)
-            // Handled as a key rather than declared as a focus property: `focusProperties`
-            // on this Card does not govern the search, because the Card's own focusable
-            // sits inside the modifier chain it is given. Left to geometry the press lands
-            // on whichever control happens to line up — in practice the rightmost transport
-            // button, which is a strange place to arrive.
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
-                    detailFocusRequester.requestFocusSafely()
-                    true
-                } else false
-            }
+            // Right crosses into the player pane, at its primary control. A key rather than a
+            // focus property: `focusProperties` on this Card does not govern the search, because
+            // the Card's own focusable sits inside the modifier chain it is given, and left to
+            // geometry the press landed on the rightmost transport button.
+            .exitOnKey(Key.DirectionRight, detailFocusRequester)
             .onFocusChanged {
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
             .dpadMenuKey(onOpenPanel)
-            // A remote selects a room by moving onto it and opens it with a press; a tap does
-            // both in turn — the first selects, a tap on the selected room opens it — and a
-            // hold opens it straight away.
-            .tapToClick(
-                onClick = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
-                onLongClick = onOpenPanel,
-            )
     ) {
         Row(
             modifier = Modifier

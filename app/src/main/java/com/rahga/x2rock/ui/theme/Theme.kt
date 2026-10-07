@@ -29,6 +29,7 @@ import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.Text
 import androidx.tv.material3.Button
 import androidx.tv.material3.CardBorder
+import androidx.tv.material3.CardColors
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Typography
 import androidx.tv.material3.ButtonDefaults
@@ -224,7 +225,8 @@ fun IconAppButton(
 
 /**
  * A tv-material3 Card that answers a tap as well as the select key, as [AppButton] does: a row of
- * a list, with an optional second action on a hold. Card on its own ignores touch entirely.
+ * a list, with an optional second action on a hold. Card on its own ignores touch entirely. Every
+ * list row in the app is one, so they share one focus border and one way of taking a tap.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -232,13 +234,17 @@ fun AppCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     onLongClick: (() -> Unit)? = null,
+    /** What a tap does, where it differs from the select key — the room list's first tap selects. */
+    onTap: () -> Unit = onClick,
+    colors: CardColors = CardDefaults.colors(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.tapToClick(onClick, onLongClick),
+        modifier = modifier.tapToClick(onTap, onLongClick),
         border = appCardBorder(),
+        colors = colors,
         content = content,
     )
 }
@@ -250,7 +256,7 @@ fun AppCard(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun appCardBorder(): CardBorder = CardDefaults.border(
+private fun appCardBorder(): CardBorder = CardDefaults.border(
     focusedBorder = Border(
         border = BorderStroke(3.dp, MaterialTheme.colorScheme.primary),
         shape = CardShape,

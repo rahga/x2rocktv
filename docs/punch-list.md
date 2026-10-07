@@ -652,6 +652,16 @@ Each finding checked against the code, and the device where it could be, before 
   design, written into `ArtHttp`, and the review gives no evidence a speaker's `/getaa` redirects — a
   speaker serves its art itself. Revisit only with a captured redirect.
 
+## Outside review — Phase 4 (2026-10-07)
+
+- **#15 the room row on `AppCard` — done.** `AppCard` gained two optional parameters, `colors` (the
+  row's selected-room tint) and `onTap` (the room list's tap selects first, opens second), so the row
+  no longer wires its own border and tap. Its right-arrow handler became the shared `exitOnKey`, and
+  `appCardBorder` is private to the theme again. Checked on the Streamer with no display, by the UI
+  tree: focus starts on the row, right reaches the pane, left from the pane returns to the row,
+  select opens the room panel on "This room", Back returns to the row. The tap path cannot be pressed
+  from a remote and was not seen.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01
