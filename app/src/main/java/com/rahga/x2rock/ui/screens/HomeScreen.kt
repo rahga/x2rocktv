@@ -65,6 +65,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -104,7 +105,7 @@ import com.rahga.x2rock.viewmodel.roomRowLines
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.sortGroups
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit = {},
@@ -251,6 +252,17 @@ fun HomeScreen(
                     .weight(1f)
                     .fillMaxHeight()
                     .onFocusChanged { paneHasFocus = it.hasFocus }
+                    // Up and down never leave the pane. With Settings at the foot of the room
+                    // list, a press down from the pane's last row found it geometrically and
+                    // landed there (Streamer, 2026-10-07). Left still leaves, by the key
+                    // handlers on each row's leftmost control. Before the group, not after: a
+                    // focus target takes its properties from the modifiers above it.
+                    .focusProperties {
+                        exit = { direction ->
+                            if (direction == FocusDirection.Up || direction == FocusDirection.Down) FocusRequester.Cancel
+                            else FocusRequester.Default
+                        }
+                    }
                     .focusGroup()
                     .focusProperties { left = sidebarFocusRequester }
             ) {
@@ -266,6 +278,7 @@ fun HomeScreen(
                         queueFocusRequester = queueFocus,
                         browseFocusRequester = browseFocus,
                         searchFocusRequester = searchFocus,
+                        startFocusRequester = openerFocus(opener),
                         onOpenQueue = { opener = OPENER_QUEUE; onOpenQueue(selectedGroupId!!) },
                         onOpenFavorites = { opener = OPENER_BROWSE; onOpenFavorites(selectedGroupId!!) },
                         onOpenSearch = { opener = OPENER_SEARCH; onOpenSearch(selectedGroupId!!) },

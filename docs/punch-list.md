@@ -565,12 +565,18 @@ Radio on the shared rows, Back returning focus to the opener, applying a preset 
 and the Artwork theme. All are covered by unit tests where they have behaviour; the look wants
 one pass with the remote.
 
-**An intermittent test-teardown race, seen once in four full runs:** two `HomeViewModelTest`
-cases failed with "Dispatchers.Main is used concurrently with setting it", thrown from
-`MainDispatcherRule.finished` while a household thread was still resuming onto Main. No assertion
-failed, and three reruns of the class and two of the suite passed. Not chased: whether it predates
-this pass is not established. The likely fix is cancelling the household's scope before the rule
-resets Main.
+**An intermittent test-teardown race — fixed 2026-10-07.** "Dispatchers.Main is used concurrently
+with setting it", from `MainDispatcherRule` resetting Main while a view model whose scope is never
+cancelled was still resuming onto it; it failed `HomeViewModelTest` and `PlayerViewModelTest` cases
+whose assertions had passed, about one full run in four. Main is now set once per run and never
+reset. Three full runs green after.
+
+**Back from Queue showed focus on Browse for about a second (Streamer, 2026-10-07), fixed.** Two
+effects in the player pane meant for later events also ran on its first composition and sent focus
+to the primary control — Browse, on a room reading as empty — over the opener: the source-change
+rescue and the sleep picker's close. The pane now starts on the opener from its first frame, and
+neither effect acts on the first composition. Frames captured mid-fade show Queue focused
+throughout. Down from the pane's last row also no longer escapes to Settings.
 
 ## Tier 5 — decided out, or waiting on a decision
 
