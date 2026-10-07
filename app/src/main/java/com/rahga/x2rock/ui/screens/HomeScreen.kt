@@ -148,6 +148,14 @@ fun HomeScreen(
         playerViewModel.selectGroup(id, name)
     }
 
+    // Selection follows focus only once this screen has put focus somewhere itself. Until then a
+    // row taking focus is Android's automatic first focus, not the viewer: it lands on the first
+    // focusable thing, which since Settings moved to the foot of the list is the first room — and
+    // selecting it overrode the room named "This is my TV". Seen on the Shield, 2026-10-07: it
+    // opened on Bedroom, with focus on Living Room. Settings at the top used to absorb that focus.
+    var focusPlaced by remember { mutableStateOf(false) }
+    fun place(target: FocusRequester): Boolean = target.requestFocusSafely().also { if (it) focusPlaced = true }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -165,11 +173,11 @@ fun HomeScreen(
             opener = null
             if (target != null) {
                 repeat(10) {
-                    if (target.requestFocusSafely()) return@repeatOnLifecycle
+                    if (place(target)) return@repeatOnLifecycle
                     withFrameNanos { }
                 }
             }
-            sidebarFocusRequester.requestFocusSafely()
+            place(sidebarFocusRequester)
         }
     }
 
@@ -211,11 +219,13 @@ fun HomeScreen(
     }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
     LaunchedEffect(listReady, selectedGroupId) {
-        if (!listReady || modalVisible || paneHasFocus || listHasFocus || opener != null) return@LaunchedEffect
+        // "The list already has it" counts only once focus was placed: before that, the list holding
+        // focus is the automatic first focus on the wrong row, and is exactly what to correct.
+        if (!listReady || modalVisible || paneHasFocus || (listHasFocus && focusPlaced) || opener != null) return@LaunchedEffect
         // The row is composed, and may scroll into view, in the frames after it arrives.
         repeat(10) {
             withFrameNanos { }
-            if (sidebarFocusRequester.requestFocusSafely()) return@LaunchedEffect
+            if (place(sidebarFocusRequester)) return@LaunchedEffect
         }
     }
 
@@ -227,7 +237,7 @@ fun HomeScreen(
                 rooms = rooms,
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
-                onFocused = { homeViewModel.selectGroup(it.id) },
+                onFocused = { if (focusPlaced) homeViewModel.selectGroup(it.id) },
                 onOpenPanel = { panelGroup = it },
                 onSettingsClick = { showSettings = true },
                 onRetry = { homeViewModel.connect() },

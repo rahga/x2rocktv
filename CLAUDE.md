@@ -410,7 +410,11 @@ Two things sit outside the widget's version, in the order asked for:
   state once and never touch again.
 
 Settings sits at the **foot** of the room list, past the last room. At the top it was the first
-thing Compose found, and focus fell onto it three different ways. There is no collapse control:
+thing Compose found, and focus fell onto it three different ways. Moving it exposed what it had
+been hiding: Android's automatic first focus now lands on the first *room*, and since the list
+selects on focus, that overrode "This is my TV" (Shield, 2026-10-07). So a row selects its room
+only after `HomeScreen` has placed focus itself (`focusPlaced`); before that, focus on a row is
+the platform's, not the viewer's. There is no collapse control:
 the list is the app's spine, and hiding it bought nothing on a television. Reordering rooms
 would live in the list too, if Sonos had an order to reorder — it does not.
 
