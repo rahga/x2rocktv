@@ -500,6 +500,21 @@ descended CBC's sections to its stations. One real bug, found and fixed the same
   `AppleMusicScreen`); re-verified on the Streamer, play-by-remote works. Not caught earlier because
   the office emulator was mouse-driven.
 
+Two more found on the Streamer the same evening (0.1a ratings had just landed), both fixed and
+re-verified:
+
+- **Deezer showed thumbs it could not fulfil.** A press answered "Deezer offers no up rating here":
+  Deezer publishes a `NowPlayingRatings` map, but it is favourite/skip (`SAVE_TRACK`/`DELETE_TRACK`,
+  propname `ISFAVORITE`), not thumbs — there is no up or down to send. `ratingState` now offers the
+  thumbs only when the current state has both an up and a down rating, so Deezer shows none. iHeart
+  (genuine `THUMBS_UP`/`DOWN`) still does. `RatingsTest` gained the favourite-shape case
+  (mutation-checked). Confirmed with real data: a probe (`which services publish ratings`) found 0 of
+  32 anonymous services publish ratings, and Deezer's are favourite/skip.
+- **The progress bar's focus was invisible across a room.** Pressing up from the transport landed on
+  the seek bar, but an 8dp bar recolouring to the focus tint read as focus vanishing ("unseen
+  areas"). Focused, the bar now grows and draws a knob at the playhead, with the "◀ ▶ seek 30s" hint
+  — verified on the Streamer.
+
 Not hand-tested on device: queue-append (the earlier attempt hit the wrong screen; it stays
 unit-tested). The radio *program* path (no `getMediaURI`) and queue's live write remain as noted.
 

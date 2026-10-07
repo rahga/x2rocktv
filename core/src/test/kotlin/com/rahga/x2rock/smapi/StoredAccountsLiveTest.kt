@@ -164,6 +164,10 @@ class StoredAccountsLiveTest {
             if (matches.isNotEmpty()) {
                 if (svc.token == null) anonWithRatings++ else credWithRatings++
                 println("  ${svc.service.name} [$kind]: ${matches.size} rating state(s)")
+                matches.forEach { m ->
+                    println("      state propname=${m.propname} value=${m.value} selected=${m.selected}")
+                    m.ratings.forEach { r -> println("        rating id=${r.id} stringId=${r.stringId}") }
+                }
             }
         }
         println("ratings published by: $anonWithRatings of $anon anonymous, $credWithRatings of $cred credentialed")

@@ -39,6 +39,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -422,7 +425,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
     val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
     Column {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 // Before focusable(), not after: onFocusChanged sees focus on what follows it,
@@ -450,11 +453,25 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                     }
                 }
         ) {
+            // An 8dp bar recolouring to the focus tint was too faint to find across a room — a
+            // press up from the transport read as focus vanishing. Focused, the bar grows and a
+            // knob sits at the playhead, so where focus is and where a seek starts are unmistakable.
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(8.dp),
+                modifier = Modifier.fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
                 color = barColor
             )
+            if (isFocused) {
+                val knob = 20.dp
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = (maxWidth - knob) * progress)
+                        .size(knob)
+                        .clip(CircleShape)
+                        .background(barColor)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
         Row(

@@ -43,6 +43,8 @@ class RatingsTest {
         const val NO_RATINGS = "254"
         // A device-link service the household holds a token for — iHeartRadio's real shape here.
         const val IHEART_LINKED = "1517"
+        // A credentialed service whose ratings are favourite/skip, not thumbs — Deezer's shape.
+        const val FAVOURITE_SVC = "2"
 
         const val IHEART_RATINGS = """<Presentation>
             <PresentationMap type="NowPlayingRatings">
@@ -65,6 +67,24 @@ class RatingsTest {
         const val PLAIN_MAP = """<Presentation><PresentationMap type="Search"><Match>
             <SearchCategories><Category id="stations" mappedId="search:station"/></SearchCategories>
         </Match></PresentationMap></Presentation>"""
+
+        /**
+         * Deezer's real shape (read off the household 2026-10-06): a `NowPlayingRatings` map that is
+         * favourite/skip, not thumbs — no `UP`/`DOWN` to send. It publishes ratings, so the thumbs
+         * must be withheld by something other than "publishes none".
+         */
+        const val FAVOURITE_MAP = """<Presentation>
+            <PresentationMap type="NowPlayingRatings">
+                <Match propname="ISFAVORITE" value="0"><Ratings>
+                    <Rating Id="3" StringId="SKIP_TRACK"/>
+                    <Rating Id="1" StringId="SAVE_TRACK"/>
+                </Ratings></Match>
+                <Match propname="ISFAVORITE" value="1"><Ratings>
+                    <Rating Id="3" StringId="SKIP_TRACK"/>
+                    <Rating Id="0" StringId="DELETE_TRACK"/>
+                </Ratings></Match>
+            </PresentationMap>
+        </Presentation>"""
 
         fun rateItemResponse(shouldSkip: Boolean) =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
@@ -100,8 +120,10 @@ class RatingsTest {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                     "/manifest/ratings" -> json(url("/map/ratings"))
                     "/manifest/plain" -> json(url("/map/plain"))
+                    "/manifest/favourite" -> json(url("/map/favourite"))
                     "/map/ratings" -> MockResponse().setBody(IHEART_RATINGS)
                     "/map/plain" -> MockResponse().setBody(PLAIN_MAP)
+                    "/map/favourite" -> MockResponse().setBody(FAVOURITE_MAP)
                     "/smapi" -> {
                         val body = request.body.readUtf8().also { smapiCalls += it }
                         MockResponse().setBody(
@@ -129,8 +151,10 @@ class RatingsTest {
         // The household stores a token for the device-link service, read off a player — seeded here
         // so the real decrypt runs, as a TV would capture it. 1517 * 256 = 388352 is its UDN type.
         val envelope = com.rahga.x2rock.smapi.TestEnvelope.seal(
-            """<ThirdPartyMediaServers><MediaServer UDN="SA_RINCON388352_X" SerialNum0="15"
-               Token0="ihr-token" Key0="ihr-key" Nickname0="iHeartRadio"/></ThirdPartyMediaServers>""",
+            """<ThirdPartyMediaServers>
+               <MediaServer UDN="SA_RINCON388352_X" SerialNum0="15" Token0="ihr-token" Key0="ihr-key" Nickname0="iHeartRadio"/>
+               <MediaServer UDN="SA_RINCON512_X" SerialNum0="16" Token0="dz-token" Key0="dz-key" Nickname0="Deezer"/>
+               </ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
         household = SonosHousehold(
@@ -169,6 +193,8 @@ class RatingsTest {
             """<Policy Auth="AppLink" PollInterval="30"/><Manifest Uri="${service.url("/manifest/ratings")}"/></Service>""" +
             """<Service Id="$IHEART_LINKED" Name="iHeartRadio" Uri="$smapi" SecureUri="$smapi" ContainerType="MService">""" +
             """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="${service.url("/manifest/ratings")}"/></Service>""" +
+            """<Service Id="$FAVOURITE_SVC" Name="Deezer" Uri="$smapi" SecureUri="$smapi" ContainerType="MService">""" +
+            """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="${service.url("/manifest/favourite")}"/></Service>""" +
             """</Services>"""
         val escaped = descriptors.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         return """<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
@@ -282,5 +308,16 @@ class RatingsTest {
         val rated = smapiCalls.last { "<rateItem" in it }
         assertTrue(rated, "<rating>555</rating>" in rated)
         assertTrue("the stored token rode the rate call", "<token>ihr-token</token>" in rated && "<key>ihr-key</key>" in rated)
+    }
+
+    /**
+     * A service whose `NowPlayingRatings` is favourite/skip rather than thumbs (Deezer) shows no
+     * rating buttons: there is no up or down to send, so offering a thumb would only fail on the
+     * press with "offers no up rating here". The thumbs are withheld even though ratings exist.
+     */
+    @Test fun `a favourite-not-thumbs service offers no rating buttons`() = runBlocking {
+        val groupId = playing(FAVOURITE_SVC)
+        state = "ISFAVORITE" to "0"
+        assertNull("favourite/skip is not thumbs", household.ratingState(groupId))
     }
 }

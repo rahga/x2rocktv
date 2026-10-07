@@ -1171,6 +1171,14 @@ class SonosHousehold(
         } catch (e: Exception) {
             return null
         }
+        // Thumbs are for a genuine up/down service — iHeartRadio, Pandora. Some services publish a
+        // `NowPlayingRatings` map that is not thumbs at all: Deezer's is favourite/skip
+        // (`SAVE_TRACK`/`DELETE_TRACK`), with no up or down to send, so a thumb press would answer
+        // "offers no up rating here". Offer the thumbs only when the current state has both.
+        val m = rateable.current
+        val hasUp = RatingsMatch.find(rateable.matches, m.propname, m.value, up = true) != null
+        val hasDown = RatingsMatch.find(rateable.matches, m.propname, m.value, up = false) != null
+        if (!hasUp || !hasDown) return null
         return RatingState(rateable.service.name, rateable.current.selected)
     }
 
