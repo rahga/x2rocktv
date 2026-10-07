@@ -34,6 +34,18 @@ class SmapiSearchTest {
         assertTrue("an album stays a place to open", page.items[1].container)
     }
 
+    @Test fun `a radio program in a collection is playable, not a place to open`() {
+        // Radio Paradise's channels come as mediaCollection with itemType program; they play as
+        // the room's source, so they must not read as a container to browse into.
+        val body = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>
+            <getMetadataResponse><getMetadataResult><total>1</total>
+              <mediaCollection><id>channel:5:4:resume</id><itemType>program</itemType><title>Main Mix</title></mediaCollection>
+            </getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+        val item = parseItems(body).items.single()
+        assertEquals("program", item.itemType)
+        assertFalse("a program is played, not opened", item.container)
+    }
+
     @Test fun `a track keeps its artist and cover inside track metadata`() {
         // Deezer's real shape: the element carries only id/itemType/title, everything a picker
         // shows is one level down. Reading direct children alone found no artist and no art.

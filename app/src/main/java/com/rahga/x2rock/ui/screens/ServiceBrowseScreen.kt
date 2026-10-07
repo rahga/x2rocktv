@@ -149,7 +149,18 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
     val starting by viewModel.starting.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
-    LaunchedEffect(service.key()) { if (categories.isNotEmpty()) fieldFocus.requestFocusSafely() }
+    // Focus the search field once a searchable service's categories have loaded — keyed on the
+    // categories, not the service, because they arrive a moment after the screen opens (an async
+    // fetch); keying on the service alone fired this while categories were still empty, so the
+    // field never took focus and a press up from the chips reached Back instead. Retried for layout.
+    val hasCategories = categories.isNotEmpty()
+    LaunchedEffect(service.key(), hasCategories) {
+        if (!hasCategories) return@LaunchedEffect
+        repeat(5) {
+            if (fieldFocus.requestFocusSafely()) return@LaunchedEffect
+            kotlinx.coroutines.delay(50)
+        }
+    }
 
     if (categories.isNotEmpty()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
