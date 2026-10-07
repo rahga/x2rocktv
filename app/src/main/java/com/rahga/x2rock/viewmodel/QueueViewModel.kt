@@ -1,5 +1,9 @@
 package com.rahga.x2rock.viewmodel
 
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Mutex
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -104,17 +108,22 @@ class QueueViewModel @Inject constructor(
      * Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`), and
      * the queue has no event to tell us it changed, so it is re-read after.
      */
-    fun removeItem(trackNumber: Int) = edit("remove that track") { household.removeFromQueue(groupId, trackNumber, updateId) }
+    fun removeItem(trackNumber: Int) = edit("remove that track", trackNumber) {
+        household.removeFromQueue(groupId, trackNumber, updateId)
+    }
 
-    /** Move a track past the one shown above or below it. The queue is not pushed, so it is re-read. */
-    fun moveUp(trackNumber: Int) = neighbourSlots(entries(), trackNumber).first?.let { move(trackNumber, it) }
-    fun moveDown(trackNumber: Int) = neighbourSlots(entries(), trackNumber).second?.let { move(trackNumber, it) }
+    /**
+     * Move a track past the one shown above or below it. The neighbour is found when the edit runs,
+     * against the list as it then is, not as it was when pressed.
+     */
+    fun moveUp(trackNumber: Int) = edit("move that track", trackNumber) {
+        neighbourSlots(entries(), trackNumber).first?.let { household.moveInQueue(groupId, trackNumber, it, updateId) }
+    }
+    fun moveDown(trackNumber: Int) = edit("move that track", trackNumber) {
+        neighbourSlots(entries(), trackNumber).second?.let { household.moveInQueue(groupId, trackNumber, it, updateId) }
+    }
 
     private fun entries() = (uiState.value as? UiState.Success)?.entries.orEmpty()
-
-    private fun move(from: Int, to: Int) {
-        edit("move that track") { household.moveInQueue(groupId, from, to, updateId) }
-    }
 
     private val _clearArmed = MutableStateFlow(false)
 
@@ -138,7 +147,7 @@ class QueueViewModel @Inject constructor(
         }
         disarm?.cancel()
         _clearArmed.value = false
-        edit("clear the queue") { household.clearQueue(groupId) }
+        edit("clear the queue", trackNumber = null) { household.clearQueue(groupId) }
     }
 
     /**
@@ -156,23 +165,45 @@ class QueueViewModel @Inject constructor(
     }
 
     /** The queue's `UpdateID` as the list on screen was read; every edit quotes it. */
-    private var updateId = "0"
+    private val _updateId = MutableStateFlow("0")
+    private val updateId: String get() = _updateId.value
+
+    /** One edit at a time: see [edit]. */
+    private val edits = Mutex()
 
     /**
-     * An edit, then a re-read only where one is needed. This firmware pushes a new
-     * `queueVersion` for every edit and the watcher above re-reads on it, so re-reading here
-     * as well cost a second full Browse per press. A refusal still re-reads: the queue may
-     * have moved under the edit (1028), and the list must show what it moved to. A firmware
-     * that sends no version — x2rock's did not — keeps the re-read here.
+     * An edit, run only once the one before it has landed and the list been re-read.
+     *
+     * Two presses close together used to go out together, both quoting the same `UpdateID`; the
+     * player took the first and refused the second as stale (UPnP 1028). Now the second waits. And
+     * since the list may have changed under it, it first checks that [trackNumber] still holds the
+     * track that was pressed — slot numbers shift when a row above goes — and says so rather than
+     * editing whatever moved into the slot.
+     *
+     * The re-read is the watcher's where it can be: this firmware pushes a new `queueVersion` for
+     * every edit, and reading here as well cost a second full Browse per press. A refusal still
+     * re-reads here, and so does a firmware that sends no version — x2rock's did not.
      */
-    private fun edit(what: String, block: suspend () -> Unit) {
+    private fun edit(what: String, trackNumber: Int?, block: suspend () -> Unit) {
+        val pressed = trackNumber?.let { n -> entries().firstOrNull { it.trackNumber == n }?.item?.track }
         viewModelScope.launch {
-            runCatching { block() }
-                .onSuccess { if (household.groupStates.value[groupId]?.queueVersion == null) load(quiet = true) }
-                .onFailure {
-                    _notice.failure(what, it)
-                    load(quiet = true)
+            edits.withLock {
+                if (trackNumber != null && entries().firstOrNull { it.trackNumber == trackNumber }?.item?.track != pressed) {
+                    _notice.post("The queue changed before that could be done; choose the track again")
+                    return@withLock
                 }
+                val before = updateId
+                runCatching { block() }
+                    .onSuccess {
+                        val pushed = household.groupStates.value[groupId]?.queueVersion != null
+                        val reread = pushed && withTimeoutOrNull(EDIT_SETTLE_MILLIS) { _updateId.first { it != before } } != null
+                        if (!reread) read(quiet = true)
+                    }
+                    .onFailure {
+                        _notice.failure(what, it)
+                        read(quiet = true)
+                    }
+            }
         }
     }
 
@@ -181,28 +212,37 @@ class QueueViewModel @Inject constructor(
      * to "Loading" would throw the remote's place away on every move.
      */
     private fun load(quiet: Boolean = false) {
-        viewModelScope.launch {
-            if (!quiet || _uiState.value !is UiState.Success) _uiState.value = UiState.Loading
-            runCatching {
-                // The queue is the one thing still asked for rather than pushed; what is
-                // playing is already known from the household's subscriptions.
-                val queue = household.queue(groupId)
-                updateId = queue.updateId ?: "0"
-                // Unknown counts as in use: a failed read must not hide the marker it can't
-                // disprove, and the play path checks again for itself.
-                val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)
-                UiState.Success(
-                    queueEntries(queue.items),
-                    household.groupState(groupId).track?.name?.takeIf { inUse },
-                    inUse,
-                )
-            }
-                .onSuccess { _uiState.value = it }
-                .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
+        viewModelScope.launch { read(quiet) }
+    }
+
+    private suspend fun read(quiet: Boolean) {
+        if (!quiet || _uiState.value !is UiState.Success) _uiState.value = UiState.Loading
+        runCatching {
+            // The queue is the one thing still asked for rather than pushed; what is
+            // playing is already known from the household's subscriptions.
+            val queue = household.queue(groupId)
+            // Unknown counts as in use: a failed read must not hide the marker it can't
+            // disprove, and the play path checks again for itself.
+            val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)
+            queue.updateId to UiState.Success(
+                queueEntries(queue.items),
+                household.groupState(groupId).track?.name?.takeIf { inUse },
+                inUse,
+            )
         }
+            .onSuccess { (version, state) ->
+                _uiState.value = state
+                // The version after the list it belongs to: an edit waiting on it then checks its
+                // track against this list, not the one before. The other way round it woke a moment
+                // early and acted on the old list.
+                _updateId.value = version ?: "0"
+            }
+            .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
     }
 
     private companion object {
         const val CLEAR_CONFIRM_MILLIS = 4_000L
+        /** How long an edit waits for the pushed version's re-read before reading itself. */
+        const val EDIT_SETTLE_MILLIS = 3_000L
     }
 }

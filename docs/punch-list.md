@@ -603,6 +603,30 @@ Each finding checked against the code, and the device where it could be, before 
   no longer applies: `X2RockTheme` provides it at the root. Its other suggestions (`AppCard`, explicit
   card colours) are #15 and the patches the root fix replaced. Worth one look after a real idle wake.
 
+## Outside review — Phase 2 (2026-10-07)
+
+- **#12 media keys answered only in the player pane — fixed, and verified with no display.** They
+  cannot be left to the media session: this app plays no audio of its own, so Android never makes it
+  the media-button session (`dumpsys media_session` on the Streamer: "Media button session is null"),
+  and an unhandled key went nowhere. `MainActivity` now takes play/pause, next, previous, fast-forward
+  and rewind for the selected room on every screen; volume is untouched. On the Streamer with its
+  HDMI unplugged, play/pause on the Queue screen reached Media Room and drew its refusal
+  ("ERROR_PLAYBACK_NO_CONTENT") as a notice, read from the UI tree.
+- **#14 two quick queue edits — fixed, with a guard the review's fix lacked.** Edits now run one at a
+  time, each after the list has been re-read, quoting the new `UpdateID`. Serialising alone would
+  have been worse than the 1028 refusal it replaced: slot numbers shift when a row above goes, and a
+  queued edit quoting a fresh version would be accepted against the wrong track. So each edit first
+  checks its slot still holds the track that was pressed, and says so if not. A second ordering bug
+  surfaced in testing and is fixed: the read published the new version before the list it belonged
+  to, so a waiting edit woke early and checked the old list. Two tests, both mutation-checked.
+- **#10 queue focus on the current track — fixed** (focus retried while the scrolled-to row composes).
+- **#11 focus lost when the queue's row menu closes — fixed.** It returns to the row's slot: where a
+  removed track's successor now sits, or where a moved track went. Not seen on a device: the office
+  queue is empty and the display unplugged.
+- **#4 search focus "jumping" — not a bug as described, unchanged.** The first result is focused once,
+  when results first arrive; a section that arrives later and sorts above it takes no focus, and the
+  list keeps its anchor on the items showing. With no results, Back and the Search button remain.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01

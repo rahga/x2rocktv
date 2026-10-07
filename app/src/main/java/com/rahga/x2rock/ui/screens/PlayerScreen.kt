@@ -226,24 +226,12 @@ fun PlayerPane(
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
-            // Transparent so the art's tint shows through.
+            // Transparent so the art's tint shows through. The remote's transport keys are
+            // MainActivity's, for every screen alike, so none are handled here.
             colors = SurfaceDefaults.colors(containerColor = Color.Transparent),
             modifier = Modifier
                 .fillMaxSize()
                 .onFocusChanged { paneHasFocus = it.hasFocus }
-                .onKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    when (event.key) {
-                        Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
-                            viewModel.togglePlayPause(); true
-                        }
-                        Key.MediaNext -> { viewModel.skipToNextTrack(); true }
-                        Key.MediaPrevious -> { viewModel.skipToPreviousTrack(); true }
-                        Key.MediaFastForward -> { viewModel.seekBy(+30_000L); true }
-                        Key.MediaRewind -> { viewModel.seekBy(-30_000L); true }
-                        else -> false
-                    }
-                }
         ) {
             // Scrolls, because a grouped room's speaker rows run off the bottom: with a five-room
             // party on the Shield they were drawn below the screen and focus could not reach

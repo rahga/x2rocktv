@@ -52,6 +52,8 @@ class QueueViewModelTest {
     private val editVersions = CopyOnWriteArrayList<String>()
     /** Refuse every edit as made against a queue that has changed: UPnP 1028. */
     @Volatile private var refuseEdits = false
+    /** Serve slot 1 as a different track, as if an edit elsewhere had moved one into it. */
+    @Volatile private var slotOneReplaced = false
 
 
     @Before fun setUp() {
@@ -75,6 +77,7 @@ class QueueViewModelTest {
                             MockResponse().setBody(
                                 FakePlayer.fixtureText(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                                     .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
+                                    .let { if (slotOneReplaced) it.replaceFirst("Cómo Me Quieres", "Somebody Else") else it }
                             )
                         }
                         "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
@@ -194,6 +197,53 @@ class QueueViewModelTest {
         viewModel.moveDown(1)
         withTimeout(5_000) { while (editVersions.isEmpty()) delay(20) }
         assertEquals(listOf("58"), editVersions.toList())
+    }
+
+    /**
+     * Two presses close together: the second waits for the first to land and the list to be read
+     * again, then quotes the version after it. They used to go out together on one version, and the
+     * player refused the second as stale (1028).
+     */
+    @Test fun `a second edit waits for the first and quotes the version after it`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+
+        viewModel.moveDown(1)
+        viewModel.moveDown(3)
+        withTimeout(5_000) { while (editVersions.isEmpty()) delay(20) }
+        delay(300)
+        assertEquals("the second went out before the first had landed", 1, editVersions.size)
+
+        // The first lands: the player moves the version, and the list is read at the new one.
+        updateId = "59"
+        fake.pushPlaybackStatus(groupId, queueVersion = "9")
+        withTimeout(5_000) { while (editVersions.size < 2) delay(20) }
+        assertEquals(listOf("58", "59"), editVersions.toList())
+    }
+
+    /**
+     * A queued edit checks its slot still holds the track that was pressed: slot numbers shift when
+     * a row above goes. Sent anyway, with the fresh version it now quotes, the player would accept it
+     * and edit whatever had moved into the slot.
+     */
+    @Test fun `a queued edit whose track has moved is not sent`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+
+        viewModel.moveDown(3)
+        viewModel.moveDown(1)
+        withTimeout(5_000) { while (editVersions.isEmpty()) delay(20) }
+
+        // The first lands and the list is read again with another track in slot 1.
+        slotOneReplaced = true
+        updateId = "59"
+        fake.pushPlaybackStatus(groupId, queueVersion = "9")
+        val notice = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        delay(300)
+        assertEquals("only the first edit was sent", 1, editVersions.size)
+        assertTrue(notice!!, "changed" in notice)
     }
 
     @Test fun `clear needs a second press`() = runBlocking<Unit> {

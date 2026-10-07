@@ -42,6 +42,7 @@ import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
@@ -126,6 +127,18 @@ private fun QueueList(
     val listState = rememberLazyListState()
     var contextMenuEntry by remember { mutableStateOf<QueueEntry?>(null) }
 
+    // The menu traps focus, so closing it has to hand focus back: to the slot of the row it was
+    // opened on — where a removed track's successor now sits — or the slot a moved track went to.
+    // Rows are keyed by position, so the slot keeps focus while the queue is read again under it.
+    var returnTo by remember { mutableStateOf<Int?>(null) }
+    val returnFocus = remember { FocusRequester() }
+    LaunchedEffect(contextMenuEntry, returnTo) {
+        if (contextMenuEntry != null) return@LaunchedEffect
+        if (returnTo == null) return@LaunchedEffect
+        if (!returnFocus.requestFocusRetrying()) firstFocus.requestFocusSafely()
+        returnTo = null
+    }
+
     val currentIndex = remember(entries, currentTrackName) {
         if (currentTrackName != null) entries.indexOfFirst { it.item.track?.name == currentTrackName } else -1
     }
@@ -134,7 +147,9 @@ private fun QueueList(
     LaunchedEffect(entries.isNotEmpty()) {
         if (entries.isNotEmpty()) {
             if (currentIndex > 0) listState.scrollToItem(currentIndex)
-            firstFocus.requestFocusSafely()
+            // Retried: the row scrolled to is composed in the frames after the scroll, so a single
+            // request found nothing in a long queue and focus fell to the buttons above.
+            firstFocus.requestFocusRetrying()
         }
     }
 
@@ -178,7 +193,9 @@ private fun QueueList(
                         isCurrent = currentTrackName != null && entry.item.track?.name == currentTrackName,
                         onClick = { onPlayItem(entry.trackNumber) },
                         onLongPress = { contextMenuEntry = entry },
-                        modifier = if (index == focusTargetIndex) Modifier.focusRequester(firstFocus) else Modifier
+                        modifier = Modifier
+                            .then(if (index == focusTargetIndex) Modifier.focusRequester(firstFocus) else Modifier)
+                            .then(if (entry.trackNumber == returnTo) Modifier.focusRequester(returnFocus) else Modifier)
                     )
                 }
             }
@@ -191,10 +208,10 @@ private fun QueueList(
                 item = menuEntry.item,
                 canMoveUp = neighbours.first != null,
                 canMoveDown = neighbours.second != null,
-                onRemove = { onRemoveItem(menuEntry.trackNumber); contextMenuEntry = null },
-                onMoveUp = { onMoveUp(menuEntry.trackNumber); contextMenuEntry = null },
-                onMoveDown = { onMoveDown(menuEntry.trackNumber); contextMenuEntry = null },
-                onDismiss = { contextMenuEntry = null }
+                onRemove = { onRemoveItem(menuEntry.trackNumber); returnTo = menuEntry.trackNumber; contextMenuEntry = null },
+                onMoveUp = { onMoveUp(menuEntry.trackNumber); returnTo = neighbours.first; contextMenuEntry = null },
+                onMoveDown = { onMoveDown(menuEntry.trackNumber); returnTo = neighbours.second; contextMenuEntry = null },
+                onDismiss = { returnTo = menuEntry.trackNumber; contextMenuEntry = null }
             )
         }
     }
