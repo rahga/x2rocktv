@@ -550,6 +550,15 @@ acted on whatever room the walk up to them last selected — moved into the pane
 went black when its surface went transparent; the play button stretched across the pane when it
 was the only transport control; a running sleep timer's label wrapped to four lines.
 
+**On the Shield, 2026-10-07, a regression this pass caused and fixed:** it opened on Bedroom — the
+first room — with focus sitting on Living Room, the room named "This is my TV". Settings had
+moved from the top of the list to the foot, and at the top it had been absorbing Android's
+automatic first focus; now the first room took it, and selection-follows-focus selected it.
+Rows now select only once the screen has placed focus itself. Verified on a cold launch (opens
+on Living Room), that selection still follows the remote after, and that Back from Browse
+returns focus to Browse. The build before this pass, installed for comparison, opened on Living
+Room.
+
 **Not yet seen on the device** — the Streamer was taken for YouTube part-way: the other search
 sections and an album opened from search, the Music Services list's two sections, Queue and
 Radio on the shared rows, Back returning focus to the opener, applying a preset (it makes sound),
