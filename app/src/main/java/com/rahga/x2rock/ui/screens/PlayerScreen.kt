@@ -1,5 +1,28 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.animation.animateColorAsState
+import com.rahga.x2rock.ui.theme.rememberArtColors
+import com.rahga.x2rock.ui.theme.IconAppButton
+import androidx.compose.ui.graphics.Brush
+import androidx.tv.material3.SurfaceDefaults
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalContext
+import com.rahga.x2rock.viewmodel.roomActivity
+import com.rahga.x2rock.viewmodel.hasSource
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -60,11 +83,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -117,10 +138,23 @@ fun PlayerPane(
      * instead and focus was lost altogether, which on a remote leaves nothing to press.
      */
     sidebarFocusRequester: FocusRequester,
+    /** The Queue and Browse buttons, so Back from those screens can return to them. */
+    queueFocusRequester: FocusRequester = remember { FocusRequester() },
+    browseFocusRequester: FocusRequester = remember { FocusRequester() },
+    searchFocusRequester: FocusRequester = remember { FocusRequester() },
     onOpenQueue: () -> Unit,
-    onOpenFavorites: () -> Unit
+    onOpenFavorites: () -> Unit,
+    onOpenSearch: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
+    // The cover's own colour behind the pane, as the Sonos app tints Now Playing — eased, so a
+    // track change washes over rather than flashes. The plain surface where there is no cover.
+    val surface = MaterialTheme.colorScheme.surface
+    val tint by animateColorAsState(
+        rememberArtColors(state.albumArtUrl.takeIf { !state.onTvInput })?.shade ?: surface,
+        animationSpec = tween(600),
+        label = "artTint",
+    )
     var showSleepTimerPicker by remember { mutableStateOf(false) }
     var paneHasFocus by remember { mutableStateOf(false) }
 
@@ -163,8 +197,11 @@ fun PlayerPane(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
+            // Transparent so the art's tint shows through; the content colour is named, because one
+            // derived from a transparent container came out black on the dark pane.
+            colors = SurfaceDefaults.colors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface),
             modifier = Modifier
                 .fillMaxSize()
                 .onFocusChanged { paneHasFocus = it.hasFocus }
@@ -190,8 +227,10 @@ fun PlayerPane(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 64.dp, vertical = 48.dp),
-                verticalArrangement = Arrangement.spacedBy(32.dp)
+                    .padding(horizontal = 48.dp, vertical = 32.dp),
+                // Tight enough that the second row of buttons sits inside the screen's safe area
+                // at 1080p with a two-line title; at 32dp it touched the bottom edge.
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
@@ -205,6 +244,9 @@ fun PlayerPane(
                         onOpenFavorites = onOpenFavorites,
                         onOpenSleepTimer = { showSleepTimerPicker = true },
                         sleepFocusRequester = sleepFocusRequester,
+                        browseFocusRequester = browseFocusRequester,
+                        searchFocusRequester = searchFocusRequester,
+                        onOpenSearch = onOpenSearch,
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
@@ -218,6 +260,10 @@ fun PlayerPane(
                         onOpenFavorites = onOpenFavorites,
                         onOpenSleepTimer = { showSleepTimerPicker = true },
                         sleepFocusRequester = sleepFocusRequester,
+                        queueFocusRequester = queueFocusRequester,
+                        browseFocusRequester = browseFocusRequester,
+                        searchFocusRequester = searchFocusRequester,
+                        onOpenSearch = onOpenSearch,
                     )
                 }
             }
@@ -279,7 +325,7 @@ private fun AlarmControls(
 private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     Column {
         PaneHeader(state, viewModel, exitLeftFocusRequester)
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (state.albumArtUrl != null) {
                 AsyncImage(
@@ -287,7 +333,7 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeft
                     contentDescription = "Album art",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .size(200.dp)
+                        .size(ART_SIZE)
                         .clip(RoundedCornerShape(8.dp))
                 )
                 Spacer(modifier = Modifier.width(32.dp))
@@ -490,7 +536,12 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                     modifier = Modifier.alpha(seekAlpha),
                 )
                 if (seekAlpha == 0f && isFocused) {
-                    Text("◀ ▶  seek 30s", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val hint = MaterialTheme.colorScheme.secondary
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
+                        Text(" seek 30s", style = MaterialTheme.typography.bodySmall, color = hint)
+                    }
                 }
             }
             Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
@@ -523,6 +574,10 @@ private fun PlaybackControls(
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     sleepFocusRequester: FocusRequester,
+    queueFocusRequester: FocusRequester,
+    browseFocusRequester: FocusRequester,
+    searchFocusRequester: FocusRequester,
+    onOpenSearch: () -> Unit,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -547,13 +602,11 @@ private fun PlaybackControls(
         if (hasContent)
 
         Row(
-            // Five at most, and the thumbs. Seeking is the progress bar's, left and right on it,
-            // as it was all along: the −30s and +30s buttons that also sat here are the Sonos
-            // app's, which draws them as icons; as labelled buttons across a room they crowded
-            // this row into overflowing, and said what the bar already does. Spaced closer than
-            // the other rows: with shuffle and repeat at either end, 24dp gaps ran past the
-            // pane at 1080p and squeezed Repeat.
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            // Icons, as every television player draws a transport, and as the Sonos app does: as
+            // labelled buttons ("⏮  Prev", "Next  ⏭") they took twice the width, which is what had
+            // pushed the thumbs off the row. Spaced at 12dp so shuffle, the transport, repeat and a
+            // pair of thumbs all fit the pane at 1080p.
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
@@ -574,34 +627,39 @@ private fun PlaybackControls(
                 )
             }
             if (state.actions.canGoBack) {
-                AppButton(
+                ModeButton(
+                    icon = Icons.Filled.SkipPrevious,
+                    description = "Previous",
                     onClick = { viewModel.skipToPreviousTrack() },
                     modifier = Modifier.claimExit(transportExit),
-                ) { Text("⏮  Prev") }
+                )
             }
             AppButton(
                 onClick = { viewModel.togglePlayPause() },
-                // Wide enough that Play and Pause do not shuffle the row as it toggles,
-                // but no longer a fixed width that the seek buttons have to fit around.
+                // The widest control, so the one pressed most is the one found first; wide enough
+                // that Play and Pause do not shuffle the row as it toggles.
                 modifier = Modifier
-                    .widthIn(min = 148.dp)
+                    .widthIn(min = 104.dp)
                     .focusRequester(playPauseFocusRequester)
                     .claimExit(transportExit)
             ) {
                 // A live stream cannot be paused, only stopped: pausing one leaves the room
                 // IDLE rather than PAUSED, verified on hardware. The command is the same
-                // either way — the player does the right thing — so only the word changes,
+                // either way — the player does the right thing — so only the glyph changes,
                 // to the one that describes what will actually happen.
-                Text(
-                    when {
-                        !state.playbackState.isPlaying() -> "▶  Play"
-                        state.actions.canPause -> "⏸  Pause"
-                        else -> "⏹  Stop"
-                    }
-                )
+                val (icon, description) = when {
+                    !state.playbackState.isPlaying() -> Icons.Filled.PlayArrow to "Play"
+                    state.actions.canPause -> Icons.Filled.Pause to "Pause"
+                    else -> Icons.Filled.Stop to "Stop"
+                }
+                // Centred in the button's own minimum width, not the row's: on a stream it is the only
+                // transport control, and a filling box stretched it across the pane.
+                Box(Modifier.widthIn(min = 80.dp), contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = description, modifier = Modifier.size(36.dp))
+                }
             }
             if (state.actions.canSkip) {
-                AppButton(onClick = { viewModel.skipToNextTrack() }) { Text("Next  ⏭") }
+                ModeButton(icon = Icons.Filled.SkipNext, description = "Next", onClick = { viewModel.skipToNextTrack() })
             }
             if (state.actions.canRepeat) {
                 ModeButton(
@@ -641,7 +699,7 @@ private fun PlaybackControls(
         // made the row hundreds of pixels tall and pushed the volume below the screen, and
         // Sleep Timer was off the edge entirely. Seen on the Shield and the emulator alike.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.focusGroup()
         ) {
@@ -652,18 +710,28 @@ private fun PlaybackControls(
             if (!state.upnpOff) {
                 AppButton(
                     onClick = onOpenQueue,
-                    modifier = Modifier.claimExit(placesExit),
-                ) { Text("Queue") }
+                    modifier = Modifier.focusRequester(queueFocusRequester).claimExit(placesExit),
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Queue")
+                }
             }
             // With no transport drawn there is nothing for a right-press from the room list
             // to land on, so the entry point moves here — which is also the one control that
-            // helps, being how an empty room is given something to play.
+            // helps, being how an empty room is given something to play. The sidebar has the
+            // same destination at its top; this one is where the remote already is.
             AppButton(
                 onClick = onOpenFavorites,
-                modifier = Modifier.claimExit(placesExit).then(
+                modifier = Modifier.focusRequester(browseFocusRequester).claimExit(placesExit).then(
                     if (hasContent) Modifier else Modifier.focusRequester(playPauseFocusRequester)
                 ),
-            ) { Text("Favorites") }
+            ) {
+                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Browse")
+            }
+            SearchButton(onOpenSearch, searchFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
@@ -697,13 +765,24 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLef
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = state.groupName,
-            style = MaterialTheme.typography.titleMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        // The room, and what it is doing in the word the room list and panel use too: a paused
+        // stream and an idle room used to look the same here, and the panel called both "Idle".
+        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+            Text(
+                text = state.groupName,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            val activity = roomActivity(state.playbackState, state.hasSource)
+            Text(
+                text = "  ·  " + if (state.onTvInput && activity.isPlaying) "TV" else activity.label,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (activity.isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
         HeaderVolume(
             state,
             onStep = { viewModel.adjustVolume(it) },
@@ -758,6 +837,7 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
                 imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
                 else Icons.AutoMirrored.Filled.VolumeUp,
                 contentDescription = if (state.isMuted) "Unmute" else "Mute",
+                modifier = Modifier.size(30.dp),
             )
             if (!state.volumeFixed) VolumeWedge(state.volume, state.isMuted)
             Text(
@@ -766,9 +846,11 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
                     state.volume == null -> "\u2014"
                     else -> state.volume.toString()
                 },
-                style = MaterialTheme.typography.titleMedium,
+                // The size a level is read at across a room: the remote's own keys go to the
+                // television over CEC, so this is the one level on screen for the room itself.
+                style = MaterialTheme.typography.headlineSmall,
                 // Wide enough for "100", so the control does not change size as the level moves.
-                modifier = Modifier.widthIn(min = 40.dp),
+                modifier = Modifier.widthIn(min = 52.dp),
             )
             StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+VOLUME_STEP) }
         }
@@ -784,7 +866,7 @@ private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMu
 @Composable
 private fun VolumeWedge(volume: Int?, muted: Boolean) {
     val ink = mutedInk(muted)
-    Canvas(modifier = Modifier.size(width = 56.dp, height = 20.dp)) {
+    Canvas(modifier = Modifier.size(width = 84.dp, height = 28.dp)) {
         val wedge = Path().apply {
             moveTo(0f, size.height)
             lineTo(size.width, 0f)
@@ -812,7 +894,7 @@ private fun VolumeWedge(volume: Int?, muted: Boolean) {
 private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     Column {
         PaneHeader(state, viewModel, exitLeftFocusRequester)
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
@@ -852,6 +934,9 @@ private fun TvControls(
     onOpenFavorites: () -> Unit,
     onOpenSleepTimer: () -> Unit,
     sleepFocusRequester: FocusRequester,
+    browseFocusRequester: FocusRequester,
+    searchFocusRequester: FocusRequester,
+    onOpenSearch: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         // Written over UPnP, so with it off they are not drawn at all; the room list says why,
@@ -899,13 +984,35 @@ private fun TvControls(
             AppButton(
                 onClick = onOpenFavorites,
                 modifier = Modifier
+                    .focusRequester(browseFocusRequester)
                     .exitLeftTo(exitLeftFocusRequester)
                     .then(if (state.upnpOff) Modifier.focusRequester(firstFocusRequester) else Modifier),
-            ) { Text("Favorites") }
+            ) {
+                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Browse")
+            }
+            SearchButton(onOpenSearch, searchFocusRequester)
             SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
 
         SpeakerRows(state, viewModel, exitLeftFocusRequester)
+    }
+}
+
+/**
+ * Search every service at once, for this room. Here, beside Browse, rather than above the room
+ * list: the list selects the room focus rests on, so walking up it to a button at its top selected
+ * every room on the way, and Browse opened "in Bedroom" when the walk began on Kitchen (Streamer,
+ * 2026-10-06). From the pane, the room is the one already chosen.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SearchButton(onClick: () -> Unit, focusRequester: FocusRequester) {
+    AppButton(onClick = onClick, modifier = Modifier.focusRequester(focusRequester)) {
+        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(8.dp))
+        Text("Search")
     }
 }
 
@@ -941,7 +1048,7 @@ private fun PlayerVolumeRow(
         Text(
             text = entry.playerName,
             style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(160.dp),
+            modifier = Modifier.width(150.dp),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -956,7 +1063,7 @@ private fun PlayerVolumeRow(
                 // `focusProperties`, which does not govern the search — so focus left the
                 // pane and was lost.
                 modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) { Text("−") }
+            ) { Icon(Icons.Filled.Remove, contentDescription = "Quieter") }
         }
         Text(
             text = when {
@@ -971,7 +1078,7 @@ private fun PlayerVolumeRow(
         if (!entry.fixed) {
             AppButton(
                 onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
-            ) { Text("+") }
+            ) { Icon(Icons.Filled.Add, contentDescription = "Louder") }
         }
         AppButton(
             onClick = { viewModel.togglePlayerMute(entry.playerId) },
@@ -994,28 +1101,43 @@ private fun SleepTimerPickerOverlay(
     Overlay(onDismiss) {
         Column(
             modifier = Modifier
-                .width(280.dp)
+                .width(440.dp)
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Sleep Timer", style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            listOf(15, 30, 45, 60).forEachIndexed { index, minutes ->
-                AppButton(
-                    onClick = { onSelect(minutes) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                ) {
-                    Text("$minutes minutes")
+            Text("Sleep Timer", style = MaterialTheme.typography.titleLarge)
+            // Up to two hours, as the Sonos app offers: a film or an album outlasts sixty minutes.
+            // In pairs, so six choices fit the screen's height with Cancel still on it.
+            SLEEP_CHOICES.chunked(2).forEachIndexed { row, pair ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    pair.forEachIndexed { column, minutes ->
+                        AppButton(
+                            onClick = { onSelect(minutes) },
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(if (row == 0 && column == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                        ) {
+                            Text(sleepChoiceLabel(minutes), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                        }
+                    }
                 }
             }
             AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
+                Text("Cancel", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             }
         }
     }
+}
+
+private val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
+
+/** "15 minutes", "1 hour", "1½ hours", "2 hours". */
+internal fun sleepChoiceLabel(minutes: Int): String = when {
+    minutes < 60 -> "$minutes minutes"
+    minutes == 60 -> "1 hour"
+    minutes % 60 == 0 -> "${minutes / 60} hours"
+    else -> "${minutes / 60}\u00BD hours"
 }
 
 /** Each speaker's own level, for a group of more than one. Drawn under both panes' controls. */
@@ -1037,7 +1159,7 @@ private fun SpeakerRows(state: PlayerUiState, viewModel: PlayerViewModel, exitLe
 private fun GlyphTile(icon: ImageVector) {
     Box(
         modifier = Modifier
-            .size(200.dp)
+            .size(ART_SIZE)
             .clip(RoundedCornerShape(8.dp))
             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)),
         contentAlignment = Alignment.Center,
@@ -1065,6 +1187,7 @@ private fun SleepTimerButton(
 ) {
     if (state.upnpOff) return
     val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
+    val context = LocalContext.current
     AppButton(
         onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
         modifier = Modifier.focusRequester(focusRequester),
@@ -1076,8 +1199,16 @@ private fun SleepTimerButton(
             modifier = Modifier.size(30.dp),
         )
         if (sleepLeft != null) {
-            Spacer(modifier = Modifier.width(12.dp))
-            Text(sleepLeft.toTimeString())
+            Spacer(modifier = Modifier.width(8.dp))
+            // The clock time it ends, which is what someone going to bed is asking — in the device's
+            // own 12- or 24-hour form. One short line: "14:34 · ends 8:58 PM" wrapped to four lines
+            // in the pane's button row at 1080p (Streamer, 2026-10-06). What is left stays in the
+            // description, and the time it ends does not tick.
+            val endsAt = remember(state.sleepTimerEndsAt) {
+                android.text.format.DateFormat.getTimeFormat(context)
+                    .format(java.util.Date(System.currentTimeMillis() + sleepLeft))
+            }
+            Text(endsAt, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -1132,6 +1263,9 @@ private fun rememberSleepCountdown(endsAt: Long?): Long? {
 /** How long a seek burst's total stays up after the last press, before it fades. */
 private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
 
+/** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
+private val ART_SIZE = 168.dp
+
 /** A seek total as a viewer reads it: −30s, +1:00, −1:30. */
 internal fun Long.toSeekLabel(): String {
     val sign = if (this < 0) "−" else "+"
@@ -1154,7 +1288,7 @@ internal fun Long.toTimeString(): String {
  */
 @Composable
 private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    AppButton(onClick = onClick, modifier = modifier) {
+    IconAppButton(onClick = onClick, modifier = modifier) {
         // Larger than the default 24dp: at three metres the "on" forms' filled square was all
         // that read, not the glyph inside it.
         Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(30.dp))
@@ -1211,7 +1345,7 @@ private fun PathBuilder.bowtie(left: Float, right: Float, top: Float, bottom: Fl
 /** A thumb, filled once the track is already rated that way and outlined otherwise. */
 @Composable
 private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
-    AppButton(onClick = onClick) {
+    IconAppButton(onClick = onClick) {
         Icon(
             imageVector = when {
                 up && selected -> Icons.Filled.ThumbUp
@@ -1225,6 +1359,7 @@ private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
                 selected -> "Rated down"
                 else -> "Rate down"
             },
+            modifier = Modifier.size(30.dp),
         )
     }
 }

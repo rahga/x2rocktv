@@ -1,10 +1,10 @@
 package com.rahga.x2rock.ui
 
+import androidx.compose.runtime.getValue
 import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -20,6 +20,7 @@ import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.RadioScreen
+import com.rahga.x2rock.ui.screens.SearchScreen
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
@@ -47,6 +48,15 @@ fun X2RockNavGraph() {
         }
     }
 
+    // Every screen opened from a room names it: the selected room is the player's, and every route
+    // below is opened on it.
+    val room = playerViewModel.uiState.collectAsState().value.groupName
+    fun openService(groupId: String, serviceKey: String, containerId: String, title: String) =
+        navController.navigate(
+            "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}" +
+                "&container=${Uri.encode(containerId)}&title=${Uri.encode(title)}"
+        )
+
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             HomeScreen(
@@ -55,6 +65,9 @@ fun X2RockNavGraph() {
                 },
                 onOpenFavorites = { groupId ->
                     navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
+                },
+                onOpenSearch = { groupId ->
+                    navController.navigate("search?groupId=${Uri.encode(groupId)}")
                 },
                 homeViewModel = homeViewModel,
                 playerViewModel = playerViewModel
@@ -66,6 +79,7 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             QueueScreen(
+                room = room,
                 onBack = { navController.popBackStack() },
                 playerViewModel = playerViewModel
             )
@@ -76,19 +90,42 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             FavoritesScreen(
+                room = room,
                 onBack = { navController.popBackStack() },
                 onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
-                onOpenAppleMusic = { groupId -> navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
                 onOpenServices = { groupId -> navController.navigate("services?groupId=${Uri.encode(groupId)}") },
                 playerViewModel = playerViewModel
             )
         }
 
         composable(
-            route = "services?groupId={groupId}",
+            route = "search?groupId={groupId}",
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        ) { entry ->
+            val groupId = entry.arguments?.getString("groupId").orEmpty()
+            SearchScreen(
+                room = room,
+                onBack = { navController.popBackStack() },
+                onPlayed = { navController.popBackStack("home", inclusive = false) },
+                onOpen = { serviceKey, item -> openService(groupId, serviceKey, item.id, item.title) },
+            )
+        }
+
+        composable(
+            // Opened on the service list, or — from search — straight onto one of a service's
+            // containers, which Back then leaves for the search again.
+            route = "services?groupId={groupId}&service={service}&container={container}&title={title}",
+            arguments = listOf(
+                navArgument("groupId") { type = NavType.StringType },
+                navArgument("service") { type = NavType.StringType; defaultValue = "" },
+                navArgument("container") { type = NavType.StringType; defaultValue = "" },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            )
+        ) { entry ->
+            val groupId = entry.arguments?.getString("groupId").orEmpty()
             ServiceBrowseScreen(
+                room = room,
+                onOpenAppleMusic = { navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
                 onBack = { navController.popBackStack() },
                 // Back to the room, past Favorites, as Radio and Apple Music do.
                 onPlayed = { navController.popBackStack("home", inclusive = false) },
@@ -100,6 +137,7 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             AppleMusicScreen(
+                room = room,
                 onBack = { navController.popBackStack() },
                 // Back to the room, past Favorites, as a station played from Radio does.
                 onPlayed = { navController.popBackStack("home", inclusive = false) },
@@ -111,6 +149,7 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             RadioScreen(
+                room = room,
                 onBack = { navController.popBackStack() },
                 // Back to the room, past Favorites: the station is what it now plays.
                 onPlayed = { navController.popBackStack("home", inclusive = false) },

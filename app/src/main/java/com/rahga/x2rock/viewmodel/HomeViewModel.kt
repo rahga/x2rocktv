@@ -35,6 +35,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
+import com.rahga.x2rock.store.Preset
+import com.rahga.x2rock.store.PresetStore
+import java.util.UUID
 import javax.inject.Inject
 
 /**
@@ -61,7 +64,8 @@ class HomeViewModel @Inject constructor(
     private val themeStore: ThemeStore,
     private val roomPrefsStore: RoomPreferencesStore,
     private val channelSync: ChannelSync,
-    private val pendingRoomDeepLink: PendingRoomDeepLink
+    private val pendingRoomDeepLink: PendingRoomDeepLink,
+    private val presetStore: PresetStore,
 ) : ViewModel() {
 
     /**
@@ -186,8 +190,6 @@ class HomeViewModel @Inject constructor(
     private val _selectedGroupId = MutableStateFlow<String?>(null)
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
 
-    private val _sidebarVisible = MutableStateFlow(true)
-    val sidebarVisible: StateFlow<Boolean> = _sidebarVisible.asStateFlow()
 
     /** The speakers of the last selection, so it can be found again after a regroup. */
     @Volatile private var lastSelectedPlayers: Set<String> = emptySet()
@@ -305,7 +307,6 @@ class HomeViewModel @Inject constructor(
 
     fun selectGroup(id: String) { _selectedGroupId.value = id }
 
-    fun toggleSidebar() { _sidebarVisible.value = !_sidebarVisible.value }
 
     // Grouping changes arrive back as a groups:1 event, so none of these re-fetch.
 
@@ -573,6 +574,47 @@ class HomeViewModel @Inject constructor(
         val now = tone.trueplay ?: return
         val on = !now.enabled
         editTone("trueplay", "change TruePlay", tone.copy(trueplay = now.copy(enabled = on))) { household.setTrueplay(it, on) }
+    }
+
+    /**
+     * Keep this room as it is now — its speakers, each one's level, and the favourite it is playing
+     * if what plays is one — as a preset to bring back with one press. Named for what it holds,
+     * because naming one would mean typing on a remote: "Kitchen + Dining Room · Smooth Jazz".
+     *
+     * The favourite is found the way Browse marks one as playing, by the container's name; music
+     * that is not a favourite is not kept, and the notice says so rather than saving a preset that
+     * silently plays nothing.
+     */
+    fun savePreset(groupId: String) {
+        val group = findGroup(groupId) ?: return
+        viewModelScope.launch {
+            runCatching {
+                val players = playerNamesForGroup(group).map { it.first }
+                val levels = household.playerVolumes.value
+                val volumes = players.mapNotNull { id -> levels[id]?.takeIf { !it.fixed }?.volume?.let { id to it } }.toMap()
+                val container = household.groupState(groupId).container?.name
+                val favorite = container?.let { name ->
+                    runCatching { household.favorites().items }.getOrDefault(emptyList())
+                        .firstOrNull { it.playable && it.name == name }
+                }
+                val rooms = players.joinToString(" + ") { household.playerName(it) }
+                val preset = Preset(
+                    id = UUID.randomUUID().toString(),
+                    name = if (favorite != null) "$rooms · ${favorite.name}" else rooms,
+                    playerIds = players,
+                    volumes = volumes,
+                    favoriteId = favorite?.id,
+                    favoriteName = favorite?.name,
+                )
+                presetStore.add(preset)
+                preset
+            }.onSuccess { preset ->
+                _notice.post(
+                    if (preset.favoriteId != null) "Saved \"${preset.name}\" to Browse"
+                    else "Saved \"${preset.name}\" to Browse — rooms and levels only, since what plays isn't a favourite",
+                )
+            }.onFailure { _notice.failure("save the preset", it) }
+        }
     }
 
     /** What the app would choose with nothing else to go on. */

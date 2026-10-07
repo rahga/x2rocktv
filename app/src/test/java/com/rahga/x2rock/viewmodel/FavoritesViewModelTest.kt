@@ -14,6 +14,9 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import com.rahga.x2rock.auth.PendingRoomDeepLink
+import com.rahga.x2rock.store.Preset
+import com.rahga.x2rock.store.PresetStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -30,6 +33,8 @@ class FavoritesViewModelTest {
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
     private lateinit var viewModel: FavoritesViewModel
+    private lateinit var presets: PresetStore
+    private val roomLink = PendingRoomDeepLink()
 
     @Before fun setUp() = runBlocking {
         fake = FakePlayer().also { it.start() }
@@ -45,7 +50,8 @@ class FavoritesViewModelTest {
         )
         household.connectTo(fake, 10_000)
         val groupId = fake.groupId(household)
-        viewModel = FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)))
+        presets = PresetStore(FakePreferences())
+        viewModel = FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)), presets, roomLink)
     }
 
     @After fun tearDown() {
@@ -131,5 +137,38 @@ class FavoritesViewModelTest {
         val notice = withTimeout(5_000) { viewModel.notice.first { it != null } }
         assertEquals("Couldn't play that favourite: ERROR_COMMAND_FAILED", notice)
         assertFalse("a failed load must not leave the list", wentBack)
+    }
+
+    /**
+     * Levels before music, so nothing starts loud; then the favourite into the group the rooms now
+     * form; then to that room. One room already alone needs no regroup, so this is the order alone.
+     */
+    @Test fun `a preset sets its levels before it starts its favourite`() = runBlocking<Unit> {
+        val leader = fake.id
+        val preset = Preset("p", "Kitchen · Love Songs Radio", listOf(leader), mapOf(leader to 12), "84", "Love Songs Radio")
+        presets.add(preset)
+        fake.clearHistory()
+        var done = false
+
+        viewModel.applyPreset(preset) { done = true }
+
+        // In sequence: had the favourite gone first, waiting for the level would consume it and the
+        // wait for the favourite after would find nothing.
+        fake.awaitCommand("setVolume", 5_000)
+        fake.awaitCommand("loadFavorite", 5_000)
+        assertEquals(12, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+        assertEquals("84", fake.lastCommandBody("loadFavorite")!!.get("favoriteId").asString)
+        withTimeout(5_000) { while (!done) kotlinx.coroutines.delay(20) }
+        assertEquals("then to the room it forms", leader, roomLink.roomId.value)
+    }
+
+    /** Menu twice: the first press only arms, so one stray press never loses a preset. */
+    @Test fun `a preset is deleted on the second press, not the first`() {
+        val preset = Preset("p", "Kitchen", listOf(fake.id), emptyMap())
+        presets.add(preset)
+        viewModel.deletePreset(preset)
+        assertEquals(1, presets.presets.value.size)
+        viewModel.deletePreset(preset)
+        assertEquals(0, presets.presets.value.size)
     }
 }

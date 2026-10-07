@@ -16,12 +16,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import com.rahga.x2rock.auth.PendingRoomDeepLink
+import com.rahga.x2rock.store.Preset
+import com.rahga.x2rock.store.PresetStore
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
 class FavoritesViewModel @Inject constructor(
     private val household: SonosHousehold,
-    savedStateHandle: SavedStateHandle
+    savedStateHandle: SavedStateHandle,
+    private val presetStore: PresetStore,
+    private val roomLink: PendingRoomDeepLink,
 ) : ViewModel() {
 
     /** The room this screen plays into; the Radio screen is opened on the same one. */
@@ -56,6 +62,47 @@ class FavoritesViewModel @Inject constructor(
 
     init {
         load()
+    }
+
+    /** This device's presets, newest last: see [Preset]. */
+    val presets: StateFlow<List<Preset>> = presetStore.presets
+
+    private val _deleteArmed = MutableStateFlow<String?>(null)
+
+    /** The preset a second Menu press would delete, if the first was just made. */
+    val deleteArmed: StateFlow<String?> = _deleteArmed.asStateFlow()
+
+    /**
+     * Bring [preset] back: gather its rooms, set each one's level, then start its favourite — levels
+     * before music, so nothing starts loud. Then to the room it now forms, which may not be the one
+     * Browse was opened from.
+     */
+    fun applyPreset(preset: Preset, onDone: () -> Unit) =
+        startOne(presetKey(preset.id), "start ${preset.name}", onDone) {
+            val groupId = household.gatherRooms(preset.playerIds)
+            // One fixed line-out or a refused level must not stop the rest of the preset.
+            preset.volumes.forEach { (player, level) -> runCatching { household.setPlayerVolume(player, level) } }
+            preset.favoriteId?.let { household.loadFavorite(groupId, it) }
+            roomLink.set(preset.playerIds.first())
+        }
+
+    /**
+     * Two presses of Menu, as the queue's Clear is two: the first arms and says so, the second
+     * deletes. A preset is only this device's, so deleting one touches nothing on the speakers.
+     */
+    fun deletePreset(preset: Preset) {
+        if (_deleteArmed.value == preset.id) {
+            presetStore.remove(preset.id)
+            _deleteArmed.value = null
+            _notice.post("Deleted \"${preset.name}\"")
+            return
+        }
+        _deleteArmed.value = preset.id
+        _notice.post("Press Menu again to delete \"${preset.name}\"")
+        viewModelScope.launch {
+            delay(DELETE_ARM_MILLIS)
+            if (_deleteArmed.value == preset.id) _deleteArmed.value = null
+        }
     }
 
     fun reload() = load()
@@ -144,6 +191,11 @@ class FavoritesViewModel @Inject constructor(
 fun playlistKey(playlistId: String) = "playlist:$playlistId"
 
 /** [FavoritesViewModel.loadingFavoriteId] while a recently played item loads. */
+/** [FavoritesViewModel.loadingFavoriteId] while a preset is being brought back. */
+fun presetKey(id: String) = "preset:$id"
+
+private const val DELETE_ARM_MILLIS = 4_000L
+
 fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.objectId}"
 
 internal const val HISTORY_OFF =

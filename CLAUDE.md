@@ -302,7 +302,7 @@ Audio").
 The room list carries art, the soundbar's three lines, a TV badge and a placeholder for the
 TV input.
 
-**The art slot is always 48dp wide, occupied or not**, so every room name starts at the same
+**The art slot is always 56dp wide, occupied or not**, so every room name starts at the same
 x — rows used to shift left without art, which at three metres reads as a different list
 rather than a missing image. It holds the cover (or a station logo for radio); for a TV input
 it holds a television glyph, which is the app's invention because the player really does send
@@ -401,7 +401,7 @@ us reorder in the Sonos app, I don't think we should either."
 
 Two things sit outside the widget's version, in the order asked for:
 
-- **Party is first**, because it is the one press that answers "put this everywhere". It
+- **Party is first** — labelled "Play everywhere" — because it is the one press that answers "put this everywhere". It
   hosts from *the room the panel was opened on* — `partyMode(hostGroupId)` — since party
   mode hinges on a source, which is the whole reason it moved off the sidebar.
 - **Source, then Room settings**, both only for a room with a soundbar in it. TV Input is
@@ -409,8 +409,16 @@ Two things sit outside the widget's version, in the order asked for:
   and it sits above "This is my TV" because it is a thing to do where that is a thing to
   state once and never touch again.
 
-The sidebar's control row **stays at the top**, matching what most Android apps and Plex do.
-Reordering rooms would live here too, if Sonos had an order to reorder — it does not.
+Settings sits at the **foot** of the room list, past the last room. At the top it was the first
+thing Compose found, and focus fell onto it three different ways. There is no collapse control:
+the list is the app's spine, and hiding it bought nothing on a television. Reordering rooms
+would live in the list too, if Sonos had an order to reorder — it does not.
+
+**Nothing that acts on "the selected room" may sit above or below the room list.** The list
+selects the room focus rests on, so walking up it to reach a button selects every room on the
+way: Browse and Search were first put at the top of the list, and Browse opened "in Bedroom"
+from a walk that began on Kitchen (Streamer, 2026-10-06). They live in the player pane's button
+row instead, where the room is the one already chosen — right, then down, from any room.
 
 **Do not disable a row to say it is already true.** A disabled `tv-material3` `Button` still
 takes focus and draws no highlight, so pressing down onto the TV Input row while it was
@@ -465,6 +473,42 @@ own choice — and intent cannot be read from `selectGroup`, because the sidebar
 pressing towards it. What is decidable is whether the selection is still what
 `defaultSelection` would have picked; if so it moves, and if the viewer has gone elsewhere
 it does not.
+
+### The ten-foot pass (2026-10-06)
+
+A review against Sonos 27's app and Google's TV guidance, applied across every screen and
+checked on the Streamer. What it settled, so it is not undone by accident:
+
+- **One focus language.** A focused button is filled with the primary colour; a focused card
+  wears a 3dp border in that same colour (`appCardBorder`). tv-material3's own card focus — a
+  slight scale and a lighter grey — read as a second language and was hard to find across a room.
+- **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
+  site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
+  the text people read. Each style keeps its rank, so a call site's choice still means what it did.
+- **What a room is doing has one rule** (`RoomActivity`): Playing, Paused, Stopped, Nothing
+  playing. The list, pane and panel used to disagree — a stopped stream read "Smooth Jazz" in
+  the list and "Idle" in the panel. "Stopped" is a stream a pause left IDLE; its button already
+  says Stop.
+- **Every screen opened from a room names it** ("in Kitchen", `ScreenHeader`). With five rooms,
+  playing into the wrong one is the classic mistake, and nothing said which room a list was for.
+- **Every list row is `MediaRow`**: the 56dp art slot held whether or not there is art, the
+  focused title scrolling rather than ellipsizing. Back from a screen returns focus to the button
+  that opened it, not to the room.
+- **Search is one field across every service** (`SearchViewModel`): two categories per service,
+  signed-in services first, sections filling in as each answers, on submit only — per keystroke
+  would be thirty requests a letter. An album or artist found there opens in its service's
+  browser rather than being played blind.
+- **Presets** are this device's (`PresetStore`): players, each one's level, and a Sonos favourite,
+  saved from the room panel and played from Browse. Players, not groups, for the reason the TV
+  room stores a player. Applying one sets levels **before** it starts the music, so nothing starts
+  loud. Music that is not a favourite is not kept, and saving says so.
+- **Removing a favourite is deliberately absent.** The Control API cannot, and the sibling
+  project probed and declined UPnP `DestroyObject` on the rule that creating or destroying
+  content belongs to the Sonos app. Same rule here.
+- **A transparent `Surface` needs its content colour named.** The pane went transparent so the
+  cover's tint shows through, and its text came out black; one derived from a transparent
+  container is not the theme's. The room panel's title had the same fault from the start, being
+  drawn on a plain background rather than a Surface.
 
 ### Focus, and why it is handled as keys
 

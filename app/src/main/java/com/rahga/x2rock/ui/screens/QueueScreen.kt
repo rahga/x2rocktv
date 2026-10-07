@@ -1,13 +1,13 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,21 +18,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.ui.components.NoticeBanner
-import androidx.compose.runtime.getValue
+import com.rahga.x2rock.ui.components.MediaRow
+import com.rahga.x2rock.ui.components.RowStatus
+import com.rahga.x2rock.ui.components.ScreenHeader
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -40,15 +38,11 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.rahga.x2rock.model.QueueItem
-import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.components.Overlay
-import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
@@ -57,6 +51,7 @@ import com.rahga.x2rock.viewmodel.neighbourSlots
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun QueueScreen(
+    room: String,
     onBack: () -> Unit,
     playerViewModel: PlayerViewModel,
     viewModel: QueueViewModel = hiltViewModel()
@@ -86,6 +81,7 @@ fun QueueScreen(
                         AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
                     }
                     is QueueViewModel.UiState.Success -> QueueList(
+                        room = room,
                         entries = s.entries,
                         currentTrackName = s.currentTrackName,
                         inUse = s.inUse,
@@ -105,15 +101,7 @@ fun QueueScreen(
                     NoticeBanner(it, Modifier.align(Alignment.BottomCenter))
                 }
             }
-            val nowPlayingTrack = playerState.trackName
-            if (nowPlayingTrack != null) {
-                NowPlayingBar(
-                    trackName = nowPlayingTrack,
-                    artistName = playerState.artistName,
-                    isCurrentlyPlaying = playerState.playbackState.isPlaying(),
-                    onPlayPause = { playerViewModel.togglePlayPause() }
-                )
-            }
+            NowPlayingBar(playerState, onPlayPause = { playerViewModel.togglePlayPause() })
         }
     }
 }
@@ -121,6 +109,7 @@ fun QueueScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun QueueList(
+    room: String,
     entries: List<QueueEntry>,
     currentTrackName: String?,
     inUse: Boolean,
@@ -153,20 +142,15 @@ private fun QueueList(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(start = 48.dp, top = 40.dp, end = 48.dp)
+                .padding(start = 48.dp, top = 32.dp, end = 48.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AppButton(
-                    onClick = onBack,
-                    modifier = if (entries.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier
-                ) { Text("← Back") }
-                Spacer(Modifier.width(24.dp))
-                Text(
-                    text = if (entries.isEmpty()) "Queue is empty" else "Queue (${entries.size})",
-                    style = MaterialTheme.typography.displaySmall
-                )
+            ScreenHeader(
+                title = if (entries.isEmpty()) "Queue is empty" else "Queue (${entries.size})",
+                room = room,
+                onBack = onBack,
+                backModifier = if (entries.isEmpty()) Modifier.focusRequester(firstFocus) else Modifier,
+            ) {
                 if (entries.isNotEmpty()) {
-                    Spacer(Modifier.width(24.dp))
                     AppButton(onClick = onSave) { Text("Save as playlist") }
                     Spacer(Modifier.width(12.dp))
                     // Two presses: the label says what the second will do.
@@ -225,54 +209,18 @@ private fun QueueRow(
     onLongPress: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val item = entry.item
-    AppCard(
+    val track = entry.item.track
+    MediaRow(
+        title = track?.name ?: "Unknown track",
+        subtitle = listOfNotNull(track?.artist?.name, track?.album?.name).joinToString(" · ").ifEmpty { null },
+        artUrl = track?.imageUrl,
+        leading = "${entry.trackNumber}",
+        active = isCurrent,
         onClick = onClick,
         onLongClick = onLongPress,
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (isCurrent) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                else Modifier
-            )
-            .dpadMenuKey(onLongPress)
+        modifier = modifier,
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Text(
-                text = "${entry.trackNumber}",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.width(40.dp)
-            )
-            item.track?.imageUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                )
-                Spacer(Modifier.width(16.dp))
-            }
-            Column {
-                Text(
-                    text = item.track?.name ?: "Unknown track",
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                val sub = listOfNotNull(
-                    item.track?.artist?.name,
-                    item.track?.album?.name
-                ).joinToString(" • ")
-                if (sub.isNotEmpty()) {
-                    Text(sub, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
+        if (isCurrent) RowStatus("Now playing", highlighted = true)
     }
 }
 

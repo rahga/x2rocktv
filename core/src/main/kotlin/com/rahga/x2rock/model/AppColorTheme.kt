@@ -5,5 +5,8 @@ enum class AppColorTheme(val displayName: String) {
     OCEAN("Ocean"),
     EMBER("Ember"),
     FOREST("Forest"),
-    ORCHID("Orchid")
+    ORCHID("Orchid"),
+
+    /** The accent follows the selected room's cover art, as the Sonos app's Now Playing does. */
+    ARTWORK("Artwork"),
 }

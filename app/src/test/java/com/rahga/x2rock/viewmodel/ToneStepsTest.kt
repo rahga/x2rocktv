@@ -22,6 +22,7 @@ import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
+import com.rahga.x2rock.store.PresetStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -82,6 +83,7 @@ class ToneStepsTest {
             roomPrefsStore = RoomPreferencesStore(prefs),
             channelSync = RecordingChannelSync(),
             pendingRoomDeepLink = PendingRoomDeepLink(),
+            presetStore = PresetStore(prefs),
         )
         runBlocking {
             household.connect(fake.seed)

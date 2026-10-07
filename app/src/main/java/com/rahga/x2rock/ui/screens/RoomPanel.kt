@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -27,10 +29,8 @@ import com.rahga.x2rock.ui.components.mutedInk
 import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.Alignment
@@ -49,10 +49,20 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.PlaybackStates
-import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.viewmodel.HomeViewModel
+import com.rahga.x2rock.viewmodel.hasSource
+import com.rahga.x2rock.viewmodel.roomActivity
+import com.rahga.x2rock.viewmodel.roomRowLines
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.filled.RemoveCircleOutline
+import androidx.compose.material.icons.filled.SpeakerGroup
+import androidx.tv.material3.Icon
 import kotlin.math.roundToInt
 
 /**
@@ -120,6 +130,8 @@ fun RoomPanel(
     onStepTreble: (Int) -> Unit = {},
     onToggleLoudness: () -> Unit = {},
     onToggleTrueplay: () -> Unit = {},
+    /** Keep this room's speakers, levels and favourite as a preset in Browse. */
+    onSavePreset: () -> Unit = {},
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -141,7 +153,7 @@ fun RoomPanel(
 
     Column(
         modifier = Modifier
-            .width(420.dp)
+            .width(480.dp)
             .heightIn(max = 520.dp)
             .focusGroup()
             .onFocusChanged { panelHasFocus = it.hasFocus }
@@ -156,9 +168,12 @@ fun RoomPanel(
         Text(
             text = group.name + " · " + (
                 if (info.onTvInput) info.source ?: "TV Audio"
-                else (group.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel()
+                else roomActivity(group.playbackState, info.hasSource).label
                 ),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
+            // Named: the panel is drawn on a plain background, not a Surface, so the inherited
+            // content colour was the default black on the dark panel.
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -171,7 +186,13 @@ fun RoomPanel(
                 onClick = if (isPartying) onStopParty else onParty,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (isPartying) "Stop party" else "Party — play this in every room")
+                Icon(
+                    if (isPartying) Icons.Default.CallSplit else Icons.Default.SpeakerGroup,
+                    contentDescription = null,
+                    modifier = Modifier.size(24.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(if (isPartying) "Split every room apart" else "Play everywhere")
             }
         }
 
@@ -210,10 +231,10 @@ fun RoomPanel(
             otherGroups.forEach { other ->
                 RoomRow(
                     modifier = Modifier,
-                    name = if (other.playerIds.size > 1) "${other.name} · ${other.playerIds.size} rooms"
+                    name = if (other.playerIds.size > 1 && " + " !in other.name) "${other.name} + ${other.playerIds.size - 1}"
                     else other.name,
-                    subtitle = rooms[other.id]?.track?.name
-                        ?: (other.playbackState ?: PlaybackStates.IDLE).toPlaybackLabel(),
+                    subtitle = rooms[other.id]?.let { roomRowLines(it, other.playbackState ?: PlaybackStates.IDLE).firstOrNull() }
+                        ?: roomActivity(other.playbackState, false).label,
                     // A row here stands for a whole group, so its level is the group's.
                     volume = groupVolumes[other.id],
                     muted = rooms[other.id]?.muted == true,
@@ -229,6 +250,16 @@ fun RoomPanel(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
             )
+        }
+
+        // A scene to bring back with one press, from Browse: these speakers at these levels, and
+        // the favourite playing if what plays is one. Here because this is where a room's
+        // speakers and levels are set up; Browse is where it is played from.
+        PanelSection("Presets")
+        AppButton(onClick = onSavePreset, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Text("Save as preset")
         }
 
         // Both of these need an HDMI socket to mean anything, so a room without one ends at
@@ -372,9 +403,15 @@ private fun RoomRow(
                 }
                 VolumeBar(volume, muted, onSet)
             }
+            // What Enter does to this row, as a mark that reads across a room: the 12sp words
+            // "join" and "leave" at the row's far end were the smallest text in the panel.
             if (action != null) {
                 Spacer(Modifier.width(16.dp))
-                Text(action, style = MaterialTheme.typography.bodySmall)
+                Icon(
+                    imageVector = if (action == "join") Icons.Default.AddCircleOutline else Icons.Default.RemoveCircleOutline,
+                    contentDescription = if (action == "join") "Join" else "Leave",
+                    modifier = Modifier.size(28.dp),
+                )
             }
         }
     }
@@ -389,7 +426,7 @@ private fun VolumeLevel(volume: Int?, muted: Boolean = false) {
             muted -> "$volume muted"
             else -> volume.toString()
         },
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.titleMedium,
     )
 }
 
@@ -428,16 +465,16 @@ private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
                 .background(ink.copy(alpha = 0.25f)),
         ) {
             if (volume != null && volume > 0) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(volume / 100f)
-                        .height(4.dp)
-                        .clip(RoundedCornerShape(2.dp))
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
                         .background(ink),
                 )
             }

@@ -531,6 +531,38 @@ service, which is set before the categories load async — so a press up from th
 chip reached Back instead of the field), and that is the same timing shape as the results-focus fix.
 With all service content shapes now covered, no service gap remains.
 
+## Ten-foot UI pass, 2026-10-06
+
+Every screen reviewed against Sonos 27's app (tabs, presets, art-tinted Now Playing, one search
+across services) and Google's TV guidance, and changed; the reasons are in `CLAUDE.md`, "The
+ten-foot pass". Release build on the Streamer.
+
+**Seen working on the Streamer:** the room list (activity glyph per row, quiet rows for rooms not
+playing, the selected room's tint, Settings at the foot, all five rooms on one screen); the pane
+for a stream, a full queue and a TV input (state word in the header, larger level, icon
+transport, Queue/Browse/Search row fitting at 1080p, the cover's tint); the room panel (title
+legible, "Play everywhere", join marks, Save as preset — "rooms and levels only" for Sonos Radio);
+Browse listing that preset first with "in Bedroom"/"in Kitchen"; and Search for "khruangbin" in
+Kitchen, Deezer's section first and focus on its first result.
+
+**Found on the device and fixed in the same pass:** Browse and Search at the top of the room list
+acted on whatever room the walk up to them last selected — moved into the pane; the pane's text
+went black when its surface went transparent; the play button stretched across the pane when it
+was the only transport control; a running sleep timer's label wrapped to four lines.
+
+**Not yet seen on the device** — the Streamer was taken for YouTube part-way: the other search
+sections and an album opened from search, the Music Services list's two sections, Queue and
+Radio on the shared rows, Back returning focus to the opener, applying a preset (it makes sound),
+and the Artwork theme. All are covered by unit tests where they have behaviour; the look wants
+one pass with the remote.
+
+**An intermittent test-teardown race, seen once in four full runs:** two `HomeViewModelTest`
+cases failed with "Dispatchers.Main is used concurrently with setting it", thrown from
+`MainDispatcherRule.finished` while a household thread was still resuming onto Main. No assertion
+failed, and three reruns of the class and two of the suite passed. Not chased: whether it predates
+this pass is not established. The likely fix is cancelling the household's scope before the rule
+resets Main.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01

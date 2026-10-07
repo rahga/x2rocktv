@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,14 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,11 +34,12 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
 import com.rahga.x2rock.radio.Station
 import com.rahga.x2rock.ui.components.NoticeBanner
+import com.rahga.x2rock.ui.components.MediaRow
+import com.rahga.x2rock.ui.components.RowStatus
+import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.RadioViewModel
 
@@ -53,6 +51,7 @@ import com.rahga.x2rock.viewmodel.RadioViewModel
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun RadioScreen(
+    room: String,
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     viewModel: RadioViewModel = hiltViewModel(),
@@ -67,12 +66,8 @@ fun RadioScreen(
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 40.dp, end = 48.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AppButton(onClick = onBack) { Text("← Back") }
-                    Spacer(Modifier.width(24.dp))
-                    Text("Radio", style = MaterialTheme.typography.displaySmall)
-                }
+            Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
+                ScreenHeader(title = "Radio", room = room, onBack = onBack)
                 Spacer(Modifier.height(24.dp))
                 Row(Modifier.fillMaxSize()) {
                     LazyColumn(
@@ -133,33 +128,12 @@ fun RadioScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun StationRow(station: Station, isStarting: Boolean, onClick: () -> Unit) {
-    AppCard(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            // Always the same width, logo or not, so names line up — as the room list does.
-            Box(Modifier.size(48.dp)) {
-                station.favicon?.let { url ->
-                    AsyncImage(
-                        model = url,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                    )
-                }
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(station.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                listOfNotNull(station.format, station.countryCode).joinToString(" · ").takeIf { it.isNotEmpty() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                }
-            }
-            if (isStarting) {
-                Spacer(Modifier.width(16.dp))
-                Text("Starting…", style = MaterialTheme.typography.bodySmall)
-            }
-        }
+    MediaRow(
+        title = station.name,
+        subtitle = listOfNotNull(station.format, station.countryCode).joinToString(" · ").ifEmpty { null },
+        artUrl = station.favicon,
+        onClick = onClick,
+    ) {
+        if (isStarting) RowStatus("Starting…")
     }
 }

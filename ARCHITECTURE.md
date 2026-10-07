@@ -96,6 +96,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   ├── NsdMdnsDiscovery.kt        _sonos._tcp over NsdManager, when SSDP finds nothing
 │   └── WifiMulticastGate.kt       a MulticastLock held across SSDP
 ├── smapi/PrefsRatingsStore.kt     RatingsStore over Preferences
+├── store/PresetStore.kt           presets: rooms, levels, a favourite — this device's, as JSON
 ├── media/NowPlayingPublisher.kt   the MediaSession, behind an interface
 ├── channel/
 │   ├── RoomsChannelSync.kt        rooms as tiles on the TV home screen channel
@@ -106,21 +107,30 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   └── StoreModule.kt             binds the seams: Preferences, ChannelSync, publisher, ratings
 │
 ├── ui/
-│   ├── NavGraph.kt                three routes
-│   ├── theme/Theme.kt             5 Material 3 dark colour schemes; AppButton
+│   ├── NavGraph.kt                the routes, and the room name each screen is opened on
+│   ├── theme/
+│   │   ├── Theme.kt               dark colour schemes, the ten-foot type scale; AppButton, IconAppButton,
+│   │   │                          AppCard and the one focus border every card wears
+│   │   └── ArtColors.kt           an accent and a shade from cover art (Palette), for the pane's tint
+│   │                              and the Artwork theme
 │   ├── components/
 │   │   ├── DpadMenuKey.kt         the Menu key as a row's second action; a hold is the Card's own onLongClick
+│   │   ├── MediaRow.kt            every list's row (fixed art slot, marquee on focus) and ScreenHeader
+│   │   │                          (Back, title, "in <room>")
+│   │   ├── SearchField.kt         the one text field, shared by every search
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
 │       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
 │       ├── PlayerScreen.kt        the player pane (`PlayerPane`), in its music and TV forms
 │       ├── RoomPanel.kt           everything one room can be told to do
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
-│       ├── FavoritesScreen.kt     the household's favourites — click to load
+│       ├── FavoritesScreen.kt     Browse: presets, favourites, playlists, recently played; Radio and
+│       │                          Music Services one press up
+│       ├── SearchScreen.kt        one search across every service and Apple Music, by section
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       ├── ServiceBrowseScreen.kt the household's own services — pick one, search or browse, play
-│       └── NowPlayingBar.kt       a compact strip on the queue and favourites screens
+│       └── NowPlayingBar.kt       what the room plays, stream or track, on the queue and Browse screens
 │
 └── viewmodel/
     ├── HomeViewModel.kt
@@ -129,7 +139,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── FavoritesViewModel.kt
     ├── RadioViewModel.kt
     ├── AppleMusicViewModel.kt
-    └── ServiceBrowseViewModel.kt   search/browse the household's own services, play in the room
+    ├── ServiceBrowseViewModel.kt   search/browse the household's own services, play in the room
+    ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
+    └── RoomActivity.kt             Playing / Paused / Stopped / Nothing playing — one rule for every screen
 ```
 
 ---
@@ -139,10 +151,12 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ```
 home  ───────────────────────────────────────────────── start, always
   ├─→ queue?groupId={id}
-  └─→ favorites?groupId={id}
+  ├─→ search?groupId={id}              every service at once
+  │     └─→ services?…&service=&container=   an album or artist, opened in its service's browser
+  └─→ favorites?groupId={id}           "Browse"
         ├─→ radio?groupId={id}
-        ├─→ applemusic?groupId={id}
         └─→ services?groupId={id}      pick a service, search or browse, play in the room
+              └─→ applemusic?groupId={id}
 ```
 
 There is no login route. `x2rock://room/{playerId}` deep-links from the TV home-screen channel
@@ -153,23 +167,25 @@ exists. Posters are the speaker's art by address (`PosterArt`), since the launch
 `.local`.
 
 **HomeScreen** is a split pane:
-- Left: `RoomSidebar` — the settings button, then the rooms. Each row carries a 48dp art slot
+- Left: `RoomSidebar` — the rooms, then Settings at the foot. Each row carries a 56dp art slot
   (cover, station logo, or a TV or radio glyph), the room name, two lines of what is playing
-  (three for a soundbar on its input), and a dim TV badge on a room that has an HDMI input but
-  is not on it. Selection follows focus. Click, hold-select or the Menu key opens `RoomPanel`.
+  (three for a soundbar on its input), a glyph for what the room is doing (bars, pause, stop),
+  and a dim TV badge on a room that has an HDMI input but is not on it. A room not playing is
+  drawn quieter; the selected room keeps a tint while focus is in the pane. Selection follows
+  focus. Click, hold-select or the Menu key opens `RoomPanel`.
 - Right: `PlayerScreen` for the selected room.
 
 **PlayerScreen** — the player pane — draws one of two panes under a shared header: the room's
-name, and opposite it the group's volume (speaker, wedge, level; select mutes, left and right
-step it while focused).
+name and what it is doing, and opposite it the group's volume (speaker, wedge, level; select
+mutes, left and right step it while focused). Behind it, a tint from the cover.
 - **Music:** art, track and artist (or a stream's own text and its station), a progress bar
   where there is a duration, then two rows — transport, flanked by shuffle and repeat as icons
   the way the Sonos app draws them (each only where `availablePlaybackActions` permits it, plus
-  the rating thumbs where a press can succeed), and places (queue, favourites, sleep timer)
-  with crossfade's icon at the end — with a row per speaker when the room is grouped. A room with nothing loaded says so and offers
-  Favorites.
+  the rating thumbs where a press can succeed), all icons, and places (Queue, Browse, Search,
+  sleep timer) with crossfade's icon at the end — with a row per speaker when the room is
+  grouped. A room with nothing loaded says so and offers Browse.
 - **TV:** a television glyph with the input format, Night Sound and Speech Enhancement, and a
-  way back into music through Favorites.
+  way back into music through Browse and Search.
 
 **RoomPanel** — see "The room panel" in `CLAUDE.md` for its shape and the reasons for it.
 
