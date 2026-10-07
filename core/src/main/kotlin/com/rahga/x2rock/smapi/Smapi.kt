@@ -96,6 +96,11 @@ data class Category(
     val id: String,
     /** What the service is actually sent: `search:station`, `SONGS`, `STRK`. */
     val mappedId: String,
+    /**
+     * A second category searched alongside, its hits listed after [mappedId]'s. Only where the
+     * Sonos app shows two of a service's categories as one — see [ServiceContent.asSonosShowsThem].
+     */
+    val thenMappedId: String? = null,
 )
 
 /** A page of hits and the total the service claims it could return. */

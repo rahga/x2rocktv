@@ -155,7 +155,7 @@ class ServiceBrowseViewModel @Inject constructor(
         job?.cancel()
         job = viewModelScope.launch {
             _results.value = Results.Loading
-            _results.value = runCatching { household.searchService(service, category.mappedId, term) }.fold(
+            _results.value = runCatching { household.searchService(service, category, term) }.fold(
                 onSuccess = { found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't answer: ${it.message ?: it}") },
             ).also { searchResults = it }

@@ -96,4 +96,16 @@ class ServiceContentTest {
         assertEquals("abc_DEF-123.~", ServiceContent.encodeObjectId("abc_DEF-123.~"))
         assertEquals("cloudcast%3a2191051074", ServiceContent.encodeObjectId("cloudcast:2191051074"))
     }
+
+    @Test fun `iHeartRadio searches as Sonos shows it - stations, then podcasts`() {
+        val published = listOf("stations", "artists", "tracks", "albums", "playlists", "podcasts").map { Category(it, "m-$it") }
+        assertEquals(
+            listOf(Category("stations", "m-stations", thenMappedId = "m-artists"), Category("podcasts", "m-podcasts")),
+            ServiceContent.asSonosShowsThem("6", published),
+        )
+        // Its artist stations are listed only as stations, never as artists.
+        assertTrue(ServiceContent.asSonosShowsThem("6", published).none { it.id == "artists" })
+        // Every other service keeps what it publishes.
+        assertEquals(published, ServiceContent.asSonosShowsThem("31", published))
+    }
 }
