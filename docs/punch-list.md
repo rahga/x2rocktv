@@ -748,7 +748,11 @@ Each finding checked against the code, and the device where it could be, before 
     `x-sonosapi-radio:artist_radio.1648?sid=6&flags=0&sn=22`, with the thumbs showing. x2rock reached
     the same station through `loadContent` as a last resort; the radio path is the more direct one.
     iHeart also labels its search's *tracks* and *playlists* `program`, so those go the radio way
-    here as well; what a track does as a radio source has not been tried.
+    here as well. **A track result is an artist station, not the track**: "A COLD PLAY" (The Kid
+    LAROI) carried the id `artist_radio.32433934`, played from
+    `x-sonosapi-radio:artist_radio.32433934?sid=6&flags=0&sn=22`, and opened on "STAY" — the
+    artist's station, as iHeart's free tier plays no track on demand. So the row's title promises a
+    song and delivers its artist's radio. Playlists are untried.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot
