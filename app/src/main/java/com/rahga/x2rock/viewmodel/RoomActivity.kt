@@ -34,3 +34,25 @@ val HomeViewModel.RoomInfo.hasSource: Boolean
 /** The same question for the player pane, by what its state carries. */
 val PlayerUiState.hasSource: Boolean
     get() = onTvInput || isRadio || trackName != null || streamInfo != null || sourceName != null
+
+/**
+ * A group's name as a listener reads it: Sonos names a group by its coordinator, and "+ 2" says it
+ * is more than one room. The room list and the room panel both draw it, so they cannot disagree.
+ */
+val com.rahga.x2rock.model.Group.label: String
+    get() = if (playerIds.size > 1 && " + " !in name) "$name + ${playerIds.size - 1}" else name
+
+/**
+ * What a piece of content is, in a word, from its Sonos or service type — one table, so a track
+ * reads the same in Recently played as in Search. `null` where the type says nothing useful.
+ */
+fun kindLabel(type: String): String? = when (type) {
+    "track" -> "Track"
+    "album" -> "Album"
+    "artist" -> "Artist"
+    "playlist", "albumList", "trackList" -> "Playlist"
+    "stream", "program" -> "Radio"
+    "audiobook" -> "Audiobook"
+    "show", "podcast" -> "Podcast"
+    else -> null
+}

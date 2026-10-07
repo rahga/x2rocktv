@@ -509,10 +509,15 @@ checked on the Streamer. What it settled, so it is not undone by accident:
 - **Removing a favourite is deliberately absent.** The Control API cannot, and the sibling
   project probed and declined UPnP `DestroyObject` on the rule that creating or destroying
   content belongs to the Sonos app. Same rule here.
-- **A transparent `Surface` needs its content colour named.** The pane went transparent so the
-  cover's tint shows through, and its text came out black; one derived from a transparent
-  container is not the theme's. The room panel's title had the same fault from the start, being
-  drawn on a plain background rather than a Surface.
+- **The content colour is provided once, at the root** (`X2RockTheme`). tv-material derives a
+  transparent container's content colour from `LocalContentColor`, whose default is black, and the
+  home screen has no Surface at its root: the pane, the room panel's title and every room name drew
+  near-black on the dark theme, and were first fixed one at a time by naming the colour. Do not
+  name it again on a new transparent container; the root covers it.
+- **Back-to-opener focus has one owner, the player pane** (`startFocusRequester`), which starts on
+  the opener from its first frame. Effects meant for later events — the source-change rescue, the
+  sleep picker's close — act on changes only (`snapshotFlow … drop(1)`): run on the first
+  composition, each took focus to the primary control, which is how Back from Queue showed Browse.
 
 ### Focus, and why it is handled as keys
 

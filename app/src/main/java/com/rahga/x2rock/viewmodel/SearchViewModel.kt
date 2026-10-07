@@ -58,18 +58,19 @@ class SearchViewModel @Inject constructor(
         val subtitle: String?
         val artUrl: String?
 
+        // Computed once: each is read by the list's keys and every recomposition as sections arrive.
         data class Service(val linked: LinkedService, val item: Item) : Hit {
-            override val key get() = "${linked.service.id}:${linked.accountId}:${item.id}"
-            override val title get() = item.title
-            override val subtitle get() = listOfNotNull(kindLabel(item.itemType), item.summary).joinToString(" · ").ifEmpty { null }
-            override val artUrl get() = item.artUrl
+            override val key = "${linked.key()}:${item.id}"
+            override val title = item.title
+            override val subtitle = listOfNotNull(kindLabel(item.itemType), item.summary).joinToString(" · ").ifEmpty { null }
+            override val artUrl = item.artUrl
         }
 
         data class Apple(val item: AppleMusicItem) : Hit {
-            override val key get() = "apple:${item.objectId}"
-            override val title get() = item.title
-            override val subtitle get() = listOfNotNull(if (item.kind == AppleMusicItem.Kind.ALBUM) "Album" else "Song", item.artist).joinToString(" · ")
-            override val artUrl get() = item.artworkUrl
+            override val key = "apple:${item.objectId}"
+            override val title = item.title
+            override val subtitle = listOfNotNull(kindLabel(item.kind.loadType), item.artist).joinToString(" · ")
+            override val artUrl = item.artworkUrl
         }
     }
 
@@ -77,7 +78,7 @@ class SearchViewModel @Inject constructor(
      * One service's answers, under its name. [key] tells two accounts of one service apart: both
      * are named, say, "Spotify", and a list keyed on the name alone threw on the second section.
      */
-    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>, val key: String = name)
+    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>, val key: String)
 
     data class Results(
         val sections: List<Section> = emptyList(),
@@ -102,7 +103,6 @@ class SearchViewModel @Inject constructor(
 
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null
-    private var appleAccount: String? = null
     private val requests = Semaphore(MAX_CONCURRENT_SERVICES)
 
     fun setQuery(text: String) { _query.value = text }
@@ -111,11 +111,13 @@ class SearchViewModel @Inject constructor(
         val term = _query.value.trim().ifEmpty { return }
         job?.cancel()
         job = viewModelScope.launch {
+            // Side by side: neither needs the other, and the Apple answer is a speaker round trip.
+            val appleKnown = async { runCatching { household.appleMusicAccount() }.getOrNull() != null }
             val services = runCatching { household.searchableServices() }.getOrElse {
                 _results.value = Results(searched = true)
                 return@launch _notice.failure("read this system's services", it)
             }
-            val apple = runCatching { appleAccount() }.getOrNull() != null
+            val apple = appleKnown.await()
             _results.value = Results(pending = services.size + if (apple) 1 else 0, searched = true)
             coroutineScope {
                 services.forEach { linked ->
@@ -167,7 +169,7 @@ class SearchViewModel @Inject constructor(
      * contents are listed rather than guessed at.
      */
     fun select(hit: Hit, onPlayed: () -> Unit, onOpen: (LinkedService, Item) -> Unit) {
-        if (hit is Hit.Service && hit.item.container && !ServiceContent.isResumable(hit.item)) {
+        if (hit is Hit.Service && ServiceContent.opens(hit.item)) {
             return onOpen(hit.linked, hit.item)
         }
         if (_starting.value != null) return
@@ -175,10 +177,8 @@ class SearchViewModel @Inject constructor(
             _starting.value = hit.key
             val started = runCatching {
                 when (hit) {
-                    is Hit.Apple -> household.playAppleMusic(groupId, hit.item, appleAccount() ?: error(NO_ACCOUNT))
-                    is Hit.Service ->
-                        if (ServiceContent.isResumable(hit.item)) household.resumeAudiobook(groupId, hit.linked, hit.item)
-                        else household.playServiceItem(groupId, hit.linked, hit.item)
+                    is Hit.Apple -> household.playAppleMusic(groupId, hit.item, appleAccount())
+                    is Hit.Service -> household.startServiceItem(groupId, hit.linked, hit.item)
                 }
             }
             _starting.value = null
@@ -191,7 +191,7 @@ class SearchViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 when (hit) {
-                    is Hit.Apple -> household.queueAppleMusic(groupId, hit.item, appleAccount() ?: error(NO_ACCOUNT))
+                    is Hit.Apple -> household.queueAppleMusic(groupId, hit.item, appleAccount())
                     is Hit.Service -> {
                         require(ServiceContent.canEnqueue(hit.item)) { "it isn't something a queue can hold" }
                         household.queueServiceItem(groupId, hit.linked, hit.item)
@@ -202,8 +202,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private suspend fun appleAccount(): String? =
-        appleAccount ?: household.appleMusicAccount().also { appleAccount = it }
+    private suspend fun appleAccount(): String = household.appleMusicAccount() ?: error(NO_ACCOUNT)
 
     companion object {
         private const val SERVICE_TIMEOUT_MILLIS = 10_000L
@@ -225,17 +224,5 @@ class SearchViewModel @Inject constructor(
 
         /** Signed-in services first — the household chose those — then the rest, each by name. */
         internal val sectionOrder = compareBy<Section>({ !it.signedIn }, { it.name.lowercase() })
-
-        /** What a result is, in a word, where the service said. */
-        internal fun kindLabel(itemType: String): String? = when (itemType) {
-            "track" -> "Song"
-            "album" -> "Album"
-            "artist" -> "Artist"
-            "playlist", "albumList", "trackList" -> "Playlist"
-            "stream", "program" -> "Station"
-            "audiobook" -> "Audiobook"
-            "show", "podcast" -> "Podcast"
-            else -> null
-        }
     }
 }

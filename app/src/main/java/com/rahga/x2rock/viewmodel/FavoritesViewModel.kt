@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import com.rahga.x2rock.auth.PendingRoomDeepLink
@@ -79,8 +80,11 @@ class FavoritesViewModel @Inject constructor(
      */
     fun applyPreset(preset: Preset, onDone: () -> Unit) =
         startOne(presetKey(preset.id), "start ${preset.name}", onDone) {
-            // One fixed line-out or a refused level must not stop the rest of the preset.
-            preset.volumes.forEach { (player, level) -> runCatching { household.setPlayerVolume(player, level) } }
+            // All at once, each to its own speaker; one fixed line-out or a refused level must not
+            // stop the rest of the preset.
+            coroutineScope {
+                preset.volumes.map { (player, level) -> async { runCatching { household.setPlayerVolume(player, level) } } }.awaitAll()
+            }
             val groupId = household.gatherRooms(preset.playerIds)
             preset.favoriteId?.let { household.loadFavorite(groupId, it) }
             roomLink.set(preset.playerIds.first())
@@ -170,7 +174,7 @@ class FavoritesViewModel @Inject constructor(
                 }
                 // What is playing comes from the subscription, so only the list is fetched.
                 val containerName = household.groupState(groupId).container?.name
-                val activeId = containerName?.let { name -> favs.items.find { it.name == name }?.id }
+                val activeId = containerName?.let { playingFavorite(favs.items, it)?.id }
                 // Not de-duplicated by name: two "The Main Mix" in the office history are two
                 // different Radio Paradise streams, with different ids.
                 val recent = history.getOrDefault(emptyList()).filter { it.playable }
@@ -190,6 +194,13 @@ class FavoritesViewModel @Inject constructor(
  * playlist ids are separate number spaces — both can be "6" — so one is marked.
  */
 fun playlistKey(playlistId: String) = "playlist:$playlistId"
+
+/**
+ * The favourite a room is playing, found by its container's name — the only link the player gives
+ * from what plays back to a favourite. Browse marks it, and a preset saved from the room keeps it.
+ */
+fun playingFavorite(favorites: List<Favorite>, containerName: String): Favorite? =
+    favorites.firstOrNull { it.playable && it.name == containerName }
 
 /** [FavoritesViewModel.loadingFavoriteId] while a recently played item loads. */
 fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.objectId}"

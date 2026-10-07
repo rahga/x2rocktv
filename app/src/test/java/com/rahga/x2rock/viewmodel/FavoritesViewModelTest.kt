@@ -127,7 +127,7 @@ class FavoritesViewModelTest {
      */
     @Test fun `a preset sets its levels before it starts its favourite`() = runBlocking<Unit> {
         val leader = fake.id
-        val preset = Preset("p", "Kitchen · Love Songs Radio", listOf(leader), mapOf(leader to 12), "84", "Love Songs Radio")
+        val preset = Preset("p", "Kitchen · Love Songs Radio", listOf(leader), mapOf(leader to 12), "84")
         presets.add(preset)
         fake.clearHistory()
         var done = false

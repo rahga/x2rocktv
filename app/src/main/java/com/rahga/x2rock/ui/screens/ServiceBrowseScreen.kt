@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
@@ -48,7 +50,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.tv.material3.Icon
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.AppCard
-import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.ServiceBrowseViewModel
 
 /**
@@ -117,10 +118,7 @@ private fun ServiceList(
             val (yours, others) = services.services.partition { it.token != null }
             val firstFocus = remember { FocusRequester() }
             LaunchedEffect(Unit) {
-                repeat(5) {
-                    if (firstFocus.requestFocusSafely()) return@LaunchedEffect
-                    kotlinx.coroutines.delay(50)
-                }
+                firstFocus.requestFocusRetrying()
             }
             if (yours.isEmpty() && others.isEmpty() && !services.appleMusic) {
                 Text(
@@ -146,18 +144,11 @@ private fun ServiceList(
                 itemsIndexed(entries, key = { _, e -> e.key }) { index, entry ->
                     val modifier = if (index == first) Modifier.focusRequester(firstFocus) else Modifier
                     when (entry) {
-                        is Entry.Heading -> Text(
-                            entry.title,
-                            style = MaterialTheme.typography.titleLarge,
-                            modifier = Modifier.padding(top = if (index == 0) 0.dp else 16.dp, bottom = 4.dp),
-                        )
+                        is Entry.Heading -> SectionTitle(entry.title, first = index == 0)
                         Entry.Apple -> ServiceRow("Apple Music", "Searched through Apple", onOpenAppleMusic, modifier)
                         is Entry.Service -> ServiceRow(
                             entry.linked.service.name,
-                            // An account's nickname only where it tells two accounts of one service apart.
-                            entry.linked.nickname.takeIf { n ->
-                                n.isNotEmpty() && services.services.count { it.service.id == entry.linked.service.id } > 1
-                            },
+                            entry.linked.nicknameIfAmbiguous(services.services),
                             { onOpen(entry.linked) },
                             modifier,
                         )
@@ -208,10 +199,7 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
     val hasCategories = categories.isNotEmpty()
     LaunchedEffect(service.key(), hasCategories) {
         if (!hasCategories) return@LaunchedEffect
-        repeat(5) {
-            if (fieldFocus.requestFocusSafely()) return@LaunchedEffect
-            kotlinx.coroutines.delay(50)
-        }
+        fieldFocus.requestFocusRetrying()
     }
 
     if (categories.isNotEmpty()) {
@@ -255,10 +243,7 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
                 // rows were unreachable by D-pad until this. UP from the first row returns to search.
                 LaunchedEffect(r.items.first().id) {
                     // The row may not be laid out the instant results arrive; retry a few frames.
-                    repeat(5) {
-                        if (resultsFocus.requestFocusSafely()) return@LaunchedEffect
-                        kotlinx.coroutines.delay(50)
-                    }
+                    resultsFocus.requestFocusRetrying()
                 }
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 48.dp),
@@ -304,7 +289,7 @@ private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueu
             isStarting -> RowStatus("Starting…")
             // A place to open reads as such at the row's edge; an audiobook is resumed on
             // press rather than opened, so it carries no chevron.
-            item.container && !ServiceContent.isResumable(item) ->
+            ServiceContent.opens(item) ->
                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
         }
     }
@@ -312,4 +297,8 @@ private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueu
 
 /** The service's name, with its account nickname when one tells two accounts of it apart. */
 private fun LinkedService.title(all: List<LinkedService>): String =
-    if (nickname.isEmpty() || all.count { it.service.id == service.id } < 2) service.name else "${service.name} · $nickname"
+    listOfNotNull(service.name, nicknameIfAmbiguous(all)).joinToString(" · ")
+
+/** This account's nickname, only where another account of the same service makes it needed. */
+private fun LinkedService.nicknameIfAmbiguous(all: List<LinkedService>): String? =
+    nickname.takeIf { it.isNotEmpty() && all.count { other -> other.service.id == service.id } > 1 }

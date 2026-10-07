@@ -26,10 +26,10 @@ class SearchRulesTest {
 
     @Test fun `signed-in services come first, then the rest, each by name`() {
         val sections = listOf(
-            SearchViewModel.Section("TuneIn", signedIn = false, hits = emptyList()),
-            SearchViewModel.Section("Qobuz", signedIn = true, hits = emptyList()),
-            SearchViewModel.Section("audible", signedIn = true, hits = emptyList()),
-            SearchViewModel.Section("Calm Radio", signedIn = false, hits = emptyList()),
+            SearchViewModel.Section("TuneIn", signedIn = false, hits = emptyList(), key = "TuneIn"),
+            SearchViewModel.Section("Qobuz", signedIn = true, hits = emptyList(), key = "Qobuz"),
+            SearchViewModel.Section("audible", signedIn = true, hits = emptyList(), key = "audible"),
+            SearchViewModel.Section("Calm Radio", signedIn = false, hits = emptyList(), key = "Calm Radio"),
         )
         assertEquals(
             listOf("audible", "Qobuz", "Calm Radio", "TuneIn"),

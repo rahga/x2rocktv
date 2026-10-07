@@ -9,7 +9,7 @@ class PresetStoreTest {
     private val dinner = Preset(
         id = "a", name = "Dining Room + Kitchen · Love Songs Radio",
         playerIds = listOf("RINCON_1", "RINCON_2"), volumes = mapOf("RINCON_1" to 12, "RINCON_2" to 8),
-        favoriteId = "84", favoriteName = "Love Songs Radio",
+        favoriteId = "84",
     )
 
     @Test fun `a preset survives a restart`() {

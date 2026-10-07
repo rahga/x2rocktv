@@ -23,7 +23,6 @@ data class Preset(
     val playerIds: List<String>,
     val volumes: Map<String, Int>,
     val favoriteId: String? = null,
-    val favoriteName: String? = null,
 )
 
 /** The household's presets, on this device. Kept here rather than on the speakers: Sonos has no place for them. */

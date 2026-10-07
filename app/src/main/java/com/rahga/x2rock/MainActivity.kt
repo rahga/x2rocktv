@@ -1,5 +1,8 @@
 package com.rahga.x2rock
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import android.content.Intent
 import android.os.Bundle
@@ -14,7 +17,6 @@ import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme
 import com.rahga.x2rock.ui.theme.rememberArtColors
 import com.rahga.x2rock.viewmodel.PlayerViewModel
-import com.rahga.x2rock.model.AppColorTheme
 import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -41,10 +43,13 @@ class MainActivity : ComponentActivity() {
         // without an account, so the app opens straight onto the rooms.
         setContent {
             val theme by themeStore.theme.collectAsState()
-            // The same instance the nav graph uses: both ask the activity's store. Read only for the
-            // Artwork theme, so the other themes never sample a cover.
+            // The same instance the nav graph uses: both ask the activity's store. Only the art URL
+            // is read — the player's state changes at every position tick and volume step, and
+            // reading all of it here recomposed the whole app on each. The colours feed the pane's
+            // tint under every theme, and the accent under the Artwork one.
             val player: PlayerViewModel = hiltViewModel()
-            val artUrl = if (theme == AppColorTheme.ARTWORK) player.uiState.collectAsState().value.albumArtUrl else null
+            val artUrl by remember(player) { player.uiState.map { it.albumArtUrl }.distinctUntilChanged() }
+                .collectAsState(initial = null)
             X2RockTheme(colorTheme = theme, art = rememberArtColors(artUrl)) {
                 X2RockNavGraph()
             }

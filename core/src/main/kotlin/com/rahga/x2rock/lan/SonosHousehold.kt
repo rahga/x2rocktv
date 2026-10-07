@@ -62,6 +62,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.IOException
@@ -662,6 +663,7 @@ class SonosHousehold(
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
         categoryCache.clear()
+        appleAccount = null
         _state.update { it.copy(connected = false) }
     }
 
@@ -891,8 +893,16 @@ class SonosHousehold(
      * The household's Apple Music account, from what it has played: see [AppleMusic.accountIn].
      * Recently Played may be switched off (Personalization), so its refusal is not an answer.
      */
-    suspend fun appleMusicAccount(): String? =
-        AppleMusic.accountIn(runCatching { history() }.getOrDefault(emptyList()), _groupStates.value.values.map { it.track })
+    suspend fun appleMusicAccount(): String? = appleAccount
+        ?: AppleMusic.accountIn(runCatching { history() }.getOrDefault(emptyList()), _groupStates.value.values.map { it.track })
+            .also { appleAccount = it }
+
+    /**
+     * Kept once known, for the connection: Search, Music Services and the Apple Music screen all
+     * ask, and each asking reads the history from a speaker. An unknown answer is not kept — playing
+     * something from Apple Music in the Sonos app makes the account known, and should be enough.
+     */
+    @Volatile private var appleAccount: String? = null
 
     /**
      * Play an Apple Music search result in [groupId], in place of the queue, through the
@@ -922,7 +932,7 @@ class SonosHousehold(
      * presentation map on the service's CDN, which does not change under a session, and wanted by
      * every search across services — a hundred services' maps refetched per Search screen otherwise.
      */
-    private val categoryCache = java.util.concurrent.ConcurrentHashMap<String, List<Category>>()
+    private val categoryCache = ConcurrentHashMap<String, List<Category>>()
 
     /**
      * The services this household can search or browse right now, each carrying the credential
@@ -1028,6 +1038,15 @@ class SonosHousehold(
      * yet been run on hardware — it makes sound, and the timing of a seek onto a freshly loaded
      * service chapter wants one look on a real device.
      */
+    /**
+     * What a press on a playable service [item] does: resume an audiobook where it was left off,
+     * play anything else in place of the queue. The service browser and the search across services
+     * both press through here, so the choice lives once.
+     */
+    suspend fun startServiceItem(groupId: String, linked: LinkedService, item: Item) =
+        if (ServiceContent.isResumable(item)) resumeAudiobook(groupId, linked, item)
+        else playServiceItem(groupId, linked, item)
+
     suspend fun resumeAudiobook(groupId: String, linked: LinkedService, book: Item) {
         val chapters = smapi.chapters(linked.service, linked.token, book.id)
         val chapterId = chapters.resume?.id

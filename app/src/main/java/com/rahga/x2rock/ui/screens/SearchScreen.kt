@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -99,10 +101,7 @@ fun SearchScreen(
                     // The first answer to arrive takes focus once; later sections slotting in
                     // above it do not pull it about while the viewer is reading.
                     LaunchedEffect(results.searched) {
-                        repeat(5) {
-                            if (resultsFocus.requestFocusSafely()) return@LaunchedEffect
-                            kotlinx.coroutines.delay(50)
-                        }
+                        resultsFocus.requestFocusRetrying()
                     }
                 }
                 LazyColumn(
@@ -111,11 +110,7 @@ fun SearchScreen(
                 ) {
                     results.sections.forEachIndexed { sectionIndex, section ->
                         item(key = "section:${section.key}") {
-                            Text(
-                                section.name,
-                                style = MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.padding(top = if (sectionIndex == 0) 0.dp else 16.dp, bottom = 4.dp),
-                            )
+                            SectionTitle(section.name, first = sectionIndex == 0)
                         }
                         items(section.hits, key = { "${section.key}:${it.key}" }) { hit ->
                             HitRow(
@@ -162,7 +157,7 @@ private fun HitRow(
     onQueue: () -> Unit,
     modifier: Modifier,
 ) {
-    val opens = hit is SearchViewModel.Hit.Service && hit.item.container && !ServiceContent.isResumable(hit.item)
+    val opens = hit is SearchViewModel.Hit.Service && ServiceContent.opens(hit.item)
     MediaRow(
         title = hit.title,
         subtitle = hit.subtitle,

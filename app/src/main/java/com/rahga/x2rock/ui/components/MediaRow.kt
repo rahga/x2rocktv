@@ -125,11 +125,10 @@ fun ScreenHeader(
     title: String,
     room: String?,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier,
     backModifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         AppButton(onClick = onBack, modifier = backModifier) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
@@ -162,5 +161,16 @@ fun RowScope.RowStatus(text: String, highlighted: Boolean = false) {
         text,
         style = MaterialTheme.typography.bodyMedium,
         color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+    )
+}
+
+/** A heading over one section of a list; the first sits flush with the list's top. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun SectionTitle(title: String, first: Boolean) {
+    Text(
+        title,
+        style = MaterialTheme.typography.titleLarge,
+        modifier = Modifier.padding(top = if (first) 0.dp else 16.dp, bottom = 4.dp),
     )
 }
