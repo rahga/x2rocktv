@@ -133,5 +133,9 @@ class ArtHttpTest {
         assertTrue(ArtHttp.looksLikeAnImage("GIF89a".toByteArray() + ByteArray(6)))
         assertTrue(ArtHttp.looksLikeAnImage("RIFF".toByteArray() + ByteArray(4) + "WEBP".toByteArray()))
         assertFalse(ArtHttp.looksLikeAnImage("RIFF".toByteArray() + ByteArray(4) + "WAVE".toByteArray()))
+        assertTrue("BMP", ArtHttp.looksLikeAnImage("BM".toByteArray() + ByteArray(10)))
+        assertTrue("AVIF", ArtHttp.looksLikeAnImage(byteArrayOf(0, 0, 0, 0x20) + "ftypavif".toByteArray()))
+        assertFalse("an MP4 is an ftyp too, and not art", ArtHttp.looksLikeAnImage(byteArrayOf(0, 0, 0, 0x20) + "ftypisom".toByteArray()))
+        assertFalse("SVG is not decodable here", ArtHttp.looksLikeAnImage("<svg xmlns=\"".toByteArray()))
     }
 }

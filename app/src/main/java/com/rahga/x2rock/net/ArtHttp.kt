@@ -128,7 +128,12 @@ object ArtHttp {
             starts(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) || // PNG
             starts(0x47, 0x49, 0x46, 0x38) ||                         // GIF8
             (starts(0x52, 0x49, 0x46, 0x46) && head.size >= 12 &&     // RIFF....WEBP
-                String(head, 8, 4, Charsets.US_ASCII) == "WEBP")
+                String(head, 8, 4, Charsets.US_ASCII) == "WEBP") ||
+            starts(0x42, 0x4D) ||                                     // BM: BMP, which radio logos use
+            // ....ftypavif / ftypavis: AVIF, which Android decodes from 12 on.
+            (head.size >= 12 && String(head, 4, 8, Charsets.US_ASCII).let { it == "ftypavif" || it == "ftypavis" })
+        // Not SVG, though station logos come as it: Coil has no SVG decoder here, so letting it in
+        // would only move the failure, and one would mean parsing untrusted XML from any station.
     }
 
     /** Fails the read once more than [limit] bytes have arrived, whatever the headers said. */

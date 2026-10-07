@@ -103,7 +103,6 @@ class SearchViewModel @Inject constructor(
 
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null
-    private val requests = Semaphore(MAX_CONCURRENT_SERVICES)
 
     fun setQuery(text: String) { _query.value = text }
 
@@ -119,11 +118,15 @@ class SearchViewModel @Inject constructor(
             }
             val apple = appleKnown.await()
             _results.value = Results(pending = services.size + if (apple) 1 else 0, searched = true)
+            // At most a few services at once, per search: a household carries a hundred anonymous
+            // radio services, and each search is up to two requests to every one. Its own permits,
+            // so a search never waits on the one it replaced.
+            val requests = Semaphore(MAX_CONCURRENT_SERVICES)
             coroutineScope {
                 services.forEach { linked ->
-                    launch { arrive(linked.service.name, linked.key(), linked.token != null) { searchOne(linked, term) } }
+                    launch { arrive(requests, linked.service.name, linked.key(), linked.token != null) { searchOne(linked, term) } }
                 }
-                if (apple) launch { arrive("Apple Music", "apple", signedIn = true) { searchApple(term) } }
+                if (apple) launch { arrive(requests, "Apple Music", "apple", signedIn = true) { searchApple(term) } }
             }
         }
     }
@@ -132,9 +135,7 @@ class SearchViewModel @Inject constructor(
      * Fold one service's answer in: its section in place if it found anything, a count if it did
      * not answer. A service with no search at all answers an empty list and simply has no section.
      */
-    private suspend fun arrive(name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
-        // At most a few services at once: a household carries a hundred anonymous radio services,
-        // and each search is up to two requests to every one of them.
+    private suspend fun arrive(requests: Semaphore, name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
         val hits = requests.withPermit {
             withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
         }
@@ -160,7 +161,7 @@ class SearchViewModel @Inject constructor(
     private suspend fun searchApple(term: String): List<Hit> = coroutineScope {
         listOf(AppleMusicItem.Kind.SONG, AppleMusicItem.Kind.ALBUM)
             .map { kind -> async { itunes.search(term, kind, country, limit = PER_CATEGORY) } }
-            .awaitAll().flatten().take(PER_SERVICE).map { Hit.Apple(it) }
+            .awaitAll().flatten().distinctBy { it.objectId }.take(PER_SERVICE).map { Hit.Apple(it) }
     }
 
     /**

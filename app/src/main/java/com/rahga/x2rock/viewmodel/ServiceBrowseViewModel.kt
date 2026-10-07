@@ -156,7 +156,7 @@ class ServiceBrowseViewModel @Inject constructor(
         job = viewModelScope.launch {
             _results.value = Results.Loading
             _results.value = runCatching { household.searchService(service, category.mappedId, term) }.fold(
-                onSuccess = { Results.Found(it.items) },
+                onSuccess = { found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't answer: ${it.message ?: it}") },
             ).also { searchResults = it }
         }
@@ -170,7 +170,7 @@ class ServiceBrowseViewModel @Inject constructor(
         job = viewModelScope.launch {
             _results.value = Results.Loading
             _results.value = runCatching { household.browseService(service, id) }.fold(
-                onSuccess = { Results.Found(it.items) },
+                onSuccess = { found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't open ${title}: ${it.message ?: it}") },
             )
         }
@@ -247,12 +247,19 @@ class ServiceBrowseViewModel @Inject constructor(
         job = viewModelScope.launch {
             _results.value = Results.Loading
             _results.value = runCatching { household.browseService(service, parent.id) }.fold(
-                onSuccess = { Results.Found(it.items) },
+                onSuccess = { found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't reopen ${parent.title}") },
             )
         }
     }
 }
+
+/**
+ * A page of a service's items for the list, each id once. The list is keyed by id, and a service
+ * that names one item twice — radio directories and service browse trees both do — would otherwise
+ * throw "Key was already used" and take the app down. The first occurrence is kept.
+ */
+private fun found(items: List<Item>) = ServiceBrowseViewModel.Results.Found(items.distinctBy { it.id })
 
 /** A stable key for a linked service: the service, plus the account so two accounts of one are distinct. */
 fun LinkedService.key(): String = "${service.id}:${accountId ?: "anon"}"
