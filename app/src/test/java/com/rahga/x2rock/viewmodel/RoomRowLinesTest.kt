@@ -35,6 +35,7 @@ class RoomRowLinesTest {
     }
 
     @Test fun `a room with nothing loaded says its state`() {
-        assertEquals(listOf("Idle"), roomRowLines(HomeViewModel.RoomInfo(), PlaybackStates.IDLE))
+        // The word the pane and panel use, not the transport's "Idle".
+        assertEquals(listOf("Nothing playing"), roomRowLines(HomeViewModel.RoomInfo(), PlaybackStates.IDLE))
     }
 }

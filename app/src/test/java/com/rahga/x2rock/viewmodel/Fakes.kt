@@ -2,7 +2,6 @@ package com.rahga.x2rock.viewmodel
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
@@ -13,11 +12,30 @@ import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.store.Preferences
 
-/** The main dispatcher every view model launches on, set for a test class and reset after it. */
+/**
+ * The main dispatcher every view model launches on: set once for the whole test run, and never
+ * reset.
+ *
+ * It used to be reset after each test, and that raced. A view model's scope is never cancelled
+ * here, so its collectors go on resuming onto Main from the household's threads after a test
+ * ends, and `resetMain` threw "Dispatchers.Main is used concurrently with setting it" — seen in
+ * `HomeViewModelTest` and `PlayerViewModelTest`, about one full run in four, failing tests whose
+ * assertions had all passed. Every class wants the same Unconfined Main, so there is nothing to
+ * reset to between them.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MainDispatcherRule : TestWatcher() {
-    override fun starting(description: Description) = Dispatchers.setMain(Dispatchers.Unconfined)
-    override fun finished(description: Description) = Dispatchers.resetMain()
+    override fun starting(description: Description) = setOnce()
+
+    private companion object {
+        @Volatile private var set = false
+
+        @Synchronized fun setOnce() {
+            if (set) return
+            Dispatchers.setMain(Dispatchers.Unconfined)
+            set = true
+        }
+    }
 }
 
 /** A monotonic clock the JVM has; Android's SystemClock is not here. */

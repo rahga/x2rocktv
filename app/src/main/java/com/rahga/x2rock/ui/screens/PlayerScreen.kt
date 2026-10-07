@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.RepeatOneOn
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -145,6 +146,11 @@ fun PlayerPane(
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenSearch: () -> Unit = {},
+    /**
+     * Where focus starts instead, when this pane is composed on the way back from a screen one of
+     * its buttons opened: that button. See the note on the grab below.
+     */
+    startFocusRequester: FocusRequester? = null,
 ) {
     val state by viewModel.uiState.collectAsState()
     // The cover's own colour behind the pane, as the Sonos app tints Now Playing — eased, so a
@@ -165,7 +171,22 @@ fun PlayerPane(
     // there pulls focus out of the room list while the viewer is still arrowing through it.
     // HomeScreen owns the policy otherwise: it requests this pane on a right-press, when the
     // sidebar hides, and on resume.
-    LaunchedEffect(Unit) { detailFocusRequester.requestFocusSafely() }
+    //
+    // On the way back from Queue, Browse or Search it starts on that button instead, from the first
+    // frame. Starting on the primary control and leaving HomeScreen's resume handler to move it
+    // showed focus on the wrong button for about a second — the resume comes only after the
+    // navigation's fade — and while the room's state was still arriving the primary control was
+    // Browse, so it read as Browse, then Queue (Streamer, 2026-10-07). Retried for a few frames,
+    // since the button is composed with the controls, after this pane.
+    LaunchedEffect(Unit) {
+        startFocusRequester?.let { start ->
+            repeat(10) {
+                if (start.requestFocusSafely()) return@LaunchedEffect
+                withFrameNanos { }
+            }
+        }
+        detailFocusRequester.requestFocusSafely()
+    }
 
     // The one case that might have to re-request: a source change while this pane holds
     // focus. The focused control leaves composition with its branch, and on a remote that
@@ -180,7 +201,15 @@ fun PlayerPane(
     // may already read false and Compose's own handling may be doing the work. Settling that
     // needs a device; until then this is kept because the behaviour it describes is correct,
     // not because the guard is known to be what causes it.
+    //
+    // Only on a *change* of source, never on the first composition: there the pane may already hold
+    // focus — the button Back returned to — and this took it straight to the primary control,
+    // which on a room still reading as empty is Browse. Seen on the Streamer: Back from Queue put
+    // focus on Browse until the resume handler moved it, about a second later.
+    var lastOnTvInput by remember { mutableStateOf(state.onTvInput) }
     LaunchedEffect(state.onTvInput) {
+        if (state.onTvInput == lastOnTvInput) return@LaunchedEffect
+        lastOnTvInput = state.onTvInput
         if (paneHasFocus) detailFocusRequester.requestFocusSafely()
     }
 
@@ -192,7 +221,9 @@ fun PlayerPane(
     LaunchedEffect(showSleepTimerPicker) {
         when {
             showSleepTimerPicker -> pickerOpened = true
-            !pickerOpened -> detailFocusRequester.requestFocusSafely()
+            // The first composition: where focus starts is the grab above's to decide. Requesting
+            // the primary control here too overrode it, sending Back from Queue to Browse.
+            !pickerOpened -> Unit
             !sleepFocusRequester.requestFocusSafely() -> detailFocusRequester.requestFocusSafely()
         }
     }

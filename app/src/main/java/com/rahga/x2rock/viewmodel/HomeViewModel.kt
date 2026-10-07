@@ -651,5 +651,7 @@ fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<Stri
     )
     info.streamInfo != null -> listOfNotNull(info.streamInfo, info.source)
     info.isRadio && info.source != null -> listOf(info.source)
-    else -> listOf(playbackState.toPlaybackLabel())
+    // In the same word the pane and the panel use for it — "Idle" here read against "Nothing
+    // playing" beside it (Streamer, 2026-10-07).
+    else -> listOf(roomActivity(playbackState, info.hasSource).label)
 }
