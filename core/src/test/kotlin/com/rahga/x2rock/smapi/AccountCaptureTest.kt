@@ -1,5 +1,8 @@
 package com.rahga.x2rock.smapi
 
+import org.junit.Assert.assertTrue
+import kotlin.concurrent.thread
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -37,5 +40,31 @@ class AccountCaptureTest {
         val msg = "NOTIFY /notify HTTP/1.1\r\nContent-Length: 5\r\n\r\nHELLO"
         val read = AccountCapture.readHttpMessage(msg.byteInputStream())
         assertEquals(msg, read)
+    }
+
+    /**
+     * A player that takes the SUBSCRIBE and never connects back — a VPN, a firewall, the emulator's
+     * NAT — must cost the timeout and no more. `accept` blocks and a coroutine timeout cannot
+     * interrupt it, so this used to hang for good, holding the service lock above it.
+     */
+    @Test(timeout = 20_000) fun `a player that never calls back gives up at the timeout`() = runBlocking {
+        val player = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        val answering = thread(isDaemon = true) {
+            runCatching {
+                while (true) player.accept().use { s ->
+                    AccountCapture.readHttpMessage(s.getInputStream())
+                    s.getOutputStream().write("HTTP/1.1 200 OK\r\nSID: uuid:test\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                }
+            }
+        }
+        val started = System.currentTimeMillis()
+        // No coroutine timeout here: it could not interrupt a blocked accept either. The JUnit
+        // timeout above is what fails a hang.
+        val envelope = AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 1_000, playerPort = player.localPort)
+        val took = System.currentTimeMillis() - started
+        player.close()
+        answering.join(2_000)
+        assertNull(envelope)
+        assertTrue("took ${took}ms", took in 900..5_000)
     }
 }

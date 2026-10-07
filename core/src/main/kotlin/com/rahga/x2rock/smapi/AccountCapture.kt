@@ -2,7 +2,6 @@ package com.rahga.x2rock.smapi
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -29,6 +28,11 @@ object AccountCapture {
 
     private const val EVENT_PATH = "/ZoneGroupTopology/Event"
 
+    private const val PLAYER_PORT = 1400
+
+    /** How long one connected player may take to send its NOTIFY. */
+    private const val READ_TIMEOUT_MILLIS = 5_000
+
     /**
      * The `ThirdPartyMediaServersX` envelope from the player at [playerIp], or `null` if none
      * arrives within [timeoutMillis]. Feed it to [StoredAccounts.decryptAccounts] with the
@@ -37,20 +41,28 @@ object AccountCapture {
      * On Android the listener binds an ephemeral port and the player connects back to it; no
      * firewall sits in the app's way the way one does on a laptop, so no fixed port is needed.
      */
-    suspend fun captureEnvelope(playerIp: String, timeoutMillis: Long = 10_000): String? =
+    suspend fun captureEnvelope(playerIp: String, timeoutMillis: Long = 10_000, playerPort: Int = PLAYER_PORT): String? =
         withContext(Dispatchers.IO) {
             ServerSocket().use { server ->
                 server.bind(InetSocketAddress(0))
                 val localIp = localIpToward(playerIp)
                 val callback = "<http://$localIp:${server.localPort}/notify>"
-                val sid = subscribe(playerIp, callback) ?: return@withContext null
+                val sid = subscribe(playerIp, playerPort, callback) ?: return@withContext null
                 try {
-                    withTimeoutOrNull(timeoutMillis) {
+                    // The deadline is the sockets', not a coroutine timeout's: `accept` and `read`
+                    // block, and `withTimeoutOrNull` cannot interrupt either — so a player that never
+                    // called back held this thread, and the service lock above it, for good.
+                    val deadline = System.currentTimeMillis() + timeoutMillis
+                    run {
                         // The first NOTIFY carries the full initial state, so one accept is
                         // enough — but loop in case a keepalive or partial event lands first.
                         var found: String? = null
                         while (found == null) {
+                            val left = deadline - System.currentTimeMillis()
+                            if (left <= 0) break
+                            server.soTimeout = left.toInt()
                             val socket = runCatching { server.accept() }.getOrNull() ?: break
+                            socket.soTimeout = READ_TIMEOUT_MILLIS
                             socket.use {
                                 val request = runCatching { readHttpMessage(it) }.getOrNull().orEmpty()
                                 // A GENA NOTIFY wants a 200 or the player retries, then drops the sub.
@@ -65,13 +77,13 @@ object AccountCapture {
                         found
                     }
                 } finally {
-                    runCatching { unsubscribe(playerIp, sid) }
+                    runCatching { unsubscribe(playerIp, playerPort, sid) }
                 }
             }
         }
 
     /** SUBSCRIBE to ZoneGroupTopology, returning the subscription id to cancel with. */
-    private fun subscribe(playerIp: String, callback: String): String? {
+    private fun subscribe(playerIp: String, playerPort: Int, callback: String): String? {
         val request = "SUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
             "HOST: $playerIp:1400\r\n" +
             "CALLBACK: $callback\r\n" +
@@ -80,21 +92,23 @@ object AccountCapture {
             "Content-Length: 0\r\n" +
             "Connection: close\r\n\r\n"
         Socket().use { stream ->
-            stream.connect(InetSocketAddress(playerIp, 1400), 5_000)
+            stream.connect(InetSocketAddress(playerIp, playerPort), 5_000)
+            stream.soTimeout = READ_TIMEOUT_MILLIS
             stream.getOutputStream().write(request.toByteArray())
             return header(readHttpMessage(stream), "SID")
         }
     }
 
     /** Best-effort UNSUBSCRIBE. A lost one costs nothing: the subscription expires in a minute. */
-    private fun unsubscribe(playerIp: String, sid: String) {
+    private fun unsubscribe(playerIp: String, playerPort: Int, sid: String) {
         val request = "UNSUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
             "HOST: $playerIp:1400\r\n" +
             "SID: $sid\r\n" +
             "Connection: close\r\n\r\n"
         runCatching {
             Socket().use { stream ->
-                stream.connect(InetSocketAddress(playerIp, 1400), 2_000)
+                stream.connect(InetSocketAddress(playerIp, playerPort), 2_000)
+                stream.soTimeout = 2_000
                 stream.getOutputStream().write(request.toByteArray())
                 readHttpMessage(stream)
             }
