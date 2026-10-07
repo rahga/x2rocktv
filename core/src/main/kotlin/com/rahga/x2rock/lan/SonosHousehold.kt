@@ -967,16 +967,44 @@ class SonosHousehold(
      * a container to descend into.
      */
     suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) {
-        // A radio station is not queue content: it has no universalMusicObjectId to load, and the
-        // service resolves it to a stream URL instead, which plays through `playbackSession` the way
-        // the radio directory's stations do (x2rock: TuneIn and SomaFM hand back a direct stream).
-        // Everything else — a track, an album — rides `loadContent`.
-        if (item.itemType.equals("stream", ignoreCase = true)) {
-            val url = smapi.mediaUri(linked.service, linked.token, item.id)
-            playStream(groupId, url, item.title)
-            return
+        when {
+            // A radio station is not queue content: it has no universalMusicObjectId to load, and
+            // the service resolves it to a stream URL instead, which plays through `playbackSession`
+            // the way the radio directory's stations do (x2rock: TuneIn and SomaFM hand back one).
+            ServiceContent.isStream(item) -> {
+                val url = smapi.mediaUri(linked.service, linked.token, item.id)
+                playStream(groupId, url, item.title)
+            }
+            // A radio program — a channel or show — is played by becoming the room's source, the way
+            // the Sonos app plays one: it is refused by the queue and a service may offer no
+            // `getMediaURI` for it (Radio Paradise's channels). Verified on Radio Paradise by x2rock.
+            ServiceContent.isRadioProgram(item) -> playServiceProgram(groupId, linked, item)
+            // Everything else — a track, an album — rides `loadContent`.
+            else -> replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
         }
-        replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
+    }
+
+    /**
+     * Play a radio [item] (a `program`) in [groupId] as the room's own source — `SetAVTransportURI`
+     * to an `x-sonosapi-radio` URI with an `audioBroadcast` DIDL, then start it. This is the only
+     * way a program plays: the queue refuses it and it has no `getMediaURI`.
+     */
+    private suspend fun playServiceProgram(groupId: String, linked: LinkedService, item: Item) {
+        val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
+            ?: error("${linked.service.name} has no account to play ${item.title} through")
+        val hostname = coordinatorHostname(groupId)
+        val startsBefore = _groupStates.value[groupId]?.playStarts ?: 0
+        upnp.setTransportUri(
+            hostname,
+            ServiceContent.radioUri(item, linked.service.id, linked.accountId?.removePrefix("sn_")),
+            ServiceContent.radioDidl(item, cdudn),
+        )
+        play(groupId)
+        // Best-effort confirmation it took, as a stream's start is confirmed; a program can take a
+        // moment to buffer, so a slow start is not treated as a failure.
+        withTimeoutOrNull(STREAM_START_MILLIS) {
+            _groupStates.first { (it[groupId]?.playStarts ?: 0) > startsBefore && it[groupId]?.playbackState?.isPlaying() == true }
+        }
     }
 
     /**

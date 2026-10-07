@@ -414,8 +414,11 @@ fun parseItems(body: String): ItemPage {
             val id = child("id") ?: return@mapNotNull null
             val itemType = child("itemType").orEmpty()
             // The element decides container-ness — except a collection whose declared type is
-            // itself a playable leaf (Plex answers a tracks search that way, and the id plays).
-            val container = tag == "mediaCollection" && itemType != "track" && itemType != "stream"
+            // itself a playable leaf: a track (Plex answers a tracks search that way, and the id
+            // plays), a stream, or a radio `program` (a channel played as the room's source, not a
+            // place to open — Radio Paradise's channels come as collections).
+            val container = tag == "mediaCollection" &&
+                itemType != "track" && itemType != "stream" && itemType != "program"
             Item(
                 id = id,
                 title = child("title").orEmpty(),

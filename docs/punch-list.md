@@ -517,8 +517,19 @@ re-verified:
 
 **Queue-append verified on the Streamer** (2026-10-06): the Menu key on a focused Deezer result
 appended it — "Added \"Chocolate Hills\" to the queue", and Kitchen's `Q:0` grew from one track to
-`[Texas Sun, Chocolate Hills]`. The remaining gap is the radio *program* path (a station with no
-`getMediaURI`, Radio Paradise's channels), still unported.
+`[Texas Sun, Chocolate Hills]`.
+
+**The radio *program* path is ported and verified on the Streamer** (2026-10-06): a `program` — a
+channel or show with no `getMediaURI` and no queue seat — plays by becoming the room's source,
+`SetAVTransportURI` to an `x-sonosapi-radio:…?flags=0` URI with an `audioBroadcast` DIDL, the way
+the Sonos app plays one (`ServiceContent.radioUri`/`radioDidl`, `SonosHousehold.playServiceProgram`;
+`parseItems` now treats a `program` as a playable leaf, and `canEnqueue` excludes streams and
+programs). Pressing *Smooth Jazz* on Sonos Radio played *Chuck Mangione* in Kitchen. Tested with a
+mutation-checked integration case. Two focus bugs surfaced and fixed while testing it, both on the
+service-search screen: the search field never auto-focused on open (its effect was keyed on the
+service, which is set before the categories load async — so a press up from the leftmost category
+chip reached Back instead of the field), and that is the same timing shape as the results-focus fix.
+With all service content shapes now covered, no service gap remains.
 
 ## Tier 5 — decided out, or waiting on a decision
 

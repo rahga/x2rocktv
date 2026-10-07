@@ -77,7 +77,7 @@ class ServiceSearchTest {
     private lateinit var household: SonosHousehold
 
     private val smapiCalls = CopyOnWriteArrayList<String>()
-    private val enqueued = CopyOnWriteArrayList<String>()
+    private val avTransport = CopyOnWriteArrayList<String>()
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
@@ -106,14 +106,16 @@ class ServiceSearchTest {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                     "/MusicServices/Control" -> MockResponse().setBody(listAvailableServices())
                     "/MediaRenderer/AVTransport/Control" -> {
-                        enqueued += request.body.readUtf8()
-                        MockResponse().setBody(
-                            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
-                                """<u:AddURIToQueueResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
+                        val body = request.body.readUtf8().also { avTransport += it }
+                        val resp = if ("SetAVTransportURI" in body) {
+                            """<u:SetAVTransportURIResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"/>"""
+                        } else {
+                            """<u:AddURIToQueueResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
                                 """<FirstTrackNumberEnqueued>1</FirstTrackNumberEnqueued>""" +
                                 """<NumTracksAdded>1</NumTracksAdded><NewQueueLength>1</NewQueueLength>""" +
-                                """</u:AddURIToQueueResponse></s:Body></s:Envelope>"""
-                        )
+                                """</u:AddURIToQueueResponse>"""
+                        }
+                        MockResponse().setBody("""<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>$resp</s:Body></s:Envelope>""")
                     }
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -219,7 +221,7 @@ class ServiceSearchTest {
             id = "album:9", title = "ASTROWORLD", itemType = "album", summary = null, artUrl = null, container = true,
         )
         household.queueServiceItem(groupId, qobuz(), album)
-        val body = enqueued.first { "AddURIToQueue" in it }
+        val body = avTransport.first { "AddURIToQueue" in it }
         // The URI expands the container; the DIDL's cdudn names Qobuz's account by its selector.
         assertTrue(body, "x-rincon-cpcontainer:1004206calbum%3a9?sid=31&amp;flags=8300&amp;sn=14" in body)
         assertTrue(body, "SA_RINCON7943_X_#Svc7943-6c0ffea0-Token" in body)
@@ -244,6 +246,25 @@ class ServiceSearchTest {
         assertEquals("http://stream.example/jazz.pls", fake.lastCommandBody("loadStreamUrl")!!.get("streamUrl").asString)
     }
 
+    @Test fun `a radio program plays as the room source, not loadContent or a stream`() = runBlocking {
+        val groupId = connected()
+        // A program (a channel) uses the credentialed service here only for its service type → cdudn.
+        val program = com.rahga.x2rock.smapi.Item(
+            id = "channel:5:4:resume", title = "Main Mix", itemType = "program", summary = null, artUrl = null, container = false,
+        )
+        val started = async(Dispatchers.Default) { household.playServiceItem(groupId, qobuz(), program) }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "play" }
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        started.await()
+        val set = avTransport.first { "SetAVTransportURI" in it }
+        // x-sonosapi-radio with flags=0, the colon escaped; an audioBroadcast DIDL; no queue, no stream.
+        assertTrue(set, "x-sonosapi-radio:channel%3a5%3a4%3aresume?sid=31" in set)
+        assertTrue("an audioBroadcast, not a track", "object.item.audioItem.audioBroadcast" in set)
+        assertEquals(0, fake.commandsNamed("loadContent"))
+        assertTrue("a program is not resolved by getMediaURI", smapiCalls.none { "<getMediaURI" in it })
+        assertTrue("a program is not enqueued", avTransport.none { "AddURIToQueue" in it })
+    }
+
     @Test fun `queuing an artist is refused before anything is sent`() = runBlocking {
         val groupId = connected()
         val artist = com.rahga.x2rock.smapi.Item(
@@ -251,6 +272,6 @@ class ServiceSearchTest {
         )
         val failed = runCatching { household.queueServiceItem(groupId, qobuz(), artist) }.isFailure
         assertTrue("an artist holds no tracks to enqueue", failed)
-        assertTrue("nothing was sent to the player", enqueued.none { "AddURIToQueue" in it })
+        assertTrue("nothing was sent to the player", avTransport.none { "AddURIToQueue" in it })
     }
 }

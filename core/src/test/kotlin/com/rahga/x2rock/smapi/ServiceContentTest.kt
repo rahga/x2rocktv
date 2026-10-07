@@ -57,6 +57,9 @@ class ServiceContentTest {
         assertTrue(didl.contains("object.container.album.musicAlbum"))
     }
 
+    private fun leaf(id: String, type: String) =
+        Item(id = id, title = "x", itemType = type, summary = null, artUrl = null, container = false)
+
     @Test fun `what a queue can and cannot hold`() {
         assertTrue(ServiceContent.canEnqueue(track("x")))
         assertTrue(ServiceContent.canEnqueue(container("album:1", "album")))
@@ -64,6 +67,28 @@ class ServiceContentTest {
         // An artist holds other containers, not tracks — a queue refuses it (UPnP 804).
         assertFalse(ServiceContent.canEnqueue(container("artist:1", "artist")))
         assertFalse(ServiceContent.canEnqueue(container("genre:1", "genre")))
+        // A stream is played, not queued; a radio program is refused by AddURIToQueue (800).
+        assertFalse(ServiceContent.canEnqueue(leaf("s1", "stream")))
+        assertFalse(ServiceContent.canEnqueue(leaf("channel:5", "program")))
+    }
+
+    @Test fun `a radio program plays as the room's source`() {
+        val program = leaf("channel:5:4:resume", "program")
+        assertTrue(ServiceContent.isRadioProgram(program))
+        // Read off Radio Paradise as the Sonos app started it: x-sonosapi-radio, flags=0, colon escaped.
+        assertEquals(
+            "x-sonosapi-radio:channel%3a5%3a4%3aresume?sid=308&flags=0&sn=20",
+            ServiceContent.radioUri(program, serviceId = "308", serial = "20"),
+        )
+        val didl = ServiceContent.radioDidl(program, "SA_RINCON78855_X_#Svc78855-0-Token")
+        assertTrue(didl, """<item id="000c0000channel%3a5%3a4%3aresume" parentID="-1"""" in didl)
+        assertTrue("a broadcast, not a track", "object.item.audioItem.audioBroadcast" in didl)
+        assertTrue(didl.contains(">SA_RINCON78855_X_#Svc78855-0-Token</desc>"))
+    }
+
+    @Test fun `a program with no account serial sends no sn`() {
+        val uri = ServiceContent.radioUri(leaf("c:1", "program"), serviceId = "308", serial = null)
+        assertEquals("x-sonosapi-radio:c%3a1?sid=308&flags=0", uri)
     }
 
     @Test fun `only a colon and other reserved bytes are escaped`() {

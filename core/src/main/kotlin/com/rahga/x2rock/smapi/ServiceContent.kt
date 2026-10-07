@@ -22,9 +22,41 @@ object ServiceContent {
     /** Spotify's own ids need its native scheme; its generic-scheme rows add but never play. */
     private const val SPOTIFY_SERVICE_ID = "12"
 
-    /** Whether [item] can go in a queue at all — a track, or a container that holds tracks. */
+    /**
+     * Whether [item] can go in a queue at all. A container must hold tracks; a leaf must be a
+     * plain track — a `stream` is played rather than queued, and a radio `program` is refused by
+     * `AddURIToQueue` with UPnP 800 (it plays as the room's source instead, see [radioUri]).
+     */
     fun canEnqueue(item: Item): Boolean =
-        !item.container || containerHoldsTracks(item.itemType)
+        if (item.container) containerHoldsTracks(item.itemType)
+        else !isStream(item) && !isRadioProgram(item)
+
+    /** A live stream (a radio station): played from a resolved `getMediaURI`, not queued. */
+    fun isStream(item: Item): Boolean = item.itemType.equals("stream", ignoreCase = true)
+
+    /**
+     * A radio *program* — a channel or show (Radio Paradise's channels, Sonos Radio's programs).
+     * It is not queue material and a service may offer no `getMediaURI` for it, so it plays by
+     * becoming the room's source ([radioUri]/[radioDidl]), the way the Sonos app plays one.
+     */
+    fun isRadioProgram(item: Item): Boolean = item.itemType.equals("program", ignoreCase = true)
+
+    /**
+     * The `x-sonosapi-radio` URI a program plays as the room's source — `flags=0`, read off Radio
+     * Paradise as the Sonos app started it (x2rock). Paired with [radioDidl].
+     */
+    fun radioUri(item: Item, serviceId: String, serial: String?): String {
+        val sn = serial?.takeIf { it.isNotEmpty() }?.let { "&sn=$it" }.orEmpty()
+        return "x-sonosapi-radio:${encodeObjectId(item.id)}?sid=$serviceId&flags=0$sn"
+    }
+
+    /** The DIDL for [radioUri]: an `audioBroadcast` under the `000c0000` item prefix, not a track. */
+    fun radioDidl(item: Item, cdudn: String): String = didl(
+        itemId = "000c0000${encodeObjectId(item.id)}", parent = "-1",
+        inner = "<dc:title>${Xml.escape(item.title)}</dc:title>" +
+            "<upnp:class>object.item.audioItem.audioBroadcast</upnp:class>",
+        cdudn = cdudn,
+    )
 
     /**
      * Whether [item] is listened to in place and so *resumed* rather than played from the start — an
