@@ -515,8 +515,10 @@ re-verified:
   areas"). Focused, the bar now grows and draws a knob at the playhead, with the "◀ ▶ seek 30s" hint
   — verified on the Streamer.
 
-Not hand-tested on device: queue-append (the earlier attempt hit the wrong screen; it stays
-unit-tested). The radio *program* path (no `getMediaURI`) and queue's live write remain as noted.
+**Queue-append verified on the Streamer** (2026-10-06): the Menu key on a focused Deezer result
+appended it — "Added \"Chocolate Hills\" to the queue", and Kitchen's `Q:0` grew from one track to
+`[Texas Sun, Chocolate Hills]`. The remaining gap is the radio *program* path (a station with no
+`getMediaURI`, Radio Paradise's channels), still unported.
 
 ## Tier 5 — decided out, or waiting on a decision
 
