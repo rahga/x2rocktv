@@ -79,6 +79,9 @@ class ServiceSearchTest {
     private val smapiCalls = CopyOnWriteArrayList<String>()
     private val avTransport = CopyOnWriteArrayList<String>()
 
+    /** Whether the player refuses `SetAVTransportURI` with a UPnP fault, as one refusing a source would. */
+    @Volatile private var refuseSource = false
+
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         service = MockWebServer().apply {
@@ -107,15 +110,24 @@ class ServiceSearchTest {
                     "/MusicServices/Control" -> MockResponse().setBody(listAvailableServices())
                     "/MediaRenderer/AVTransport/Control" -> {
                         val body = request.body.readUtf8().also { avTransport += it }
-                        val resp = if ("SetAVTransportURI" in body) {
-                            """<u:SetAVTransportURIResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"/>"""
+                        if ("SetAVTransportURI" in body && refuseSource) {
+                            MockResponse().setResponseCode(500).setBody(
+                                """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>""" +
+                                    """<faultcode>s:Client</faultcode><faultstring>UPnPError</faultstring><detail>""" +
+                                    """<UPnPError xmlns="urn:schemas-upnp-org:control-1-0"><errorCode>714</errorCode></UPnPError>""" +
+                                    """</detail></s:Fault></s:Body></s:Envelope>"""
+                            )
                         } else {
-                            """<u:AddURIToQueueResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
-                                """<FirstTrackNumberEnqueued>1</FirstTrackNumberEnqueued>""" +
-                                """<NumTracksAdded>1</NumTracksAdded><NewQueueLength>1</NewQueueLength>""" +
-                                """</u:AddURIToQueueResponse>"""
+                            val resp = if ("SetAVTransportURI" in body) {
+                                """<u:SetAVTransportURIResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"/>"""
+                            } else {
+                                """<u:AddURIToQueueResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
+                                    """<FirstTrackNumberEnqueued>1</FirstTrackNumberEnqueued>""" +
+                                    """<NumTracksAdded>1</NumTracksAdded><NewQueueLength>1</NewQueueLength>""" +
+                                    """</u:AddURIToQueueResponse>"""
+                            }
+                            MockResponse().setBody("""<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>$resp</s:Body></s:Envelope>""")
                         }
-                        MockResponse().setBody("""<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>$resp</s:Body></s:Envelope>""")
                     }
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -263,6 +275,24 @@ class ServiceSearchTest {
         assertEquals(0, fake.commandsNamed("loadContent"))
         assertTrue("a program is not resolved by getMediaURI", smapiCalls.none { "<getMediaURI" in it })
         assertTrue("a program is not enqueued", avTransport.none { "AddURIToQueue" in it })
+    }
+
+    @Test fun `a program the player refuses as a source is streamed instead`() = runBlocking {
+        val groupId = connected()
+        refuseSource = true
+        val program = com.rahga.x2rock.smapi.Item(
+            id = "channel:5:4:resume", title = "Main Mix", itemType = "program", summary = null, artUrl = null, container = false,
+        )
+        val started = async(Dispatchers.Default) { household.playServiceItem(groupId, qobuz(), program) }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        started.await()
+        // The source was asked for and refused; the stream came from getMediaURI, and no play was
+        // pressed on the refused source.
+        assertTrue("the radio source was tried first", avTransport.any { "SetAVTransportURI" in it })
+        assertTrue(smapiCalls.any { "<getMediaURI" in it })
+        assertEquals("http://stream.example/jazz.pls", fake.lastCommandBody("loadStreamUrl")!!.get("streamUrl").asString)
+        assertEquals(0, fake.commandsNamed("play"))
     }
 
     @Test fun `queuing an artist is refused before anything is sent`() = runBlocking {

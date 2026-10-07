@@ -703,8 +703,9 @@ Each finding checked against the code, and the device where it could be, before 
     gate). Amazon's first account answers `search` HTTP 500, its own quirk. Also **demonstrated end to
     end on the office Google TV emulator** by seeding
     the envelope past its NAT (the capture leg only; see `DebugSwitches.serviceEnvelope`).
-    **Still untried on a real TV**: the on-device inbound GENA socket and `.local`→IP path want one
-    run on a Shield/Streamer (the JVM capture is the same code), and `queueServiceItem`'s live
+    **The on-device capture works**: on the Streamer at the office (2026-10-07, release build, cold
+    start, nothing cached), Music Services listed the household's accounts, so the inbound GENA socket
+    and `.local`→IP path ran on a real TV. `queueServiceItem`'s live
     `AddURIToQueue` leg has only been unit-tested — it mutates a room, so it waits for home. Amazon
     Music answers its `search` with HTTP 500 here (x2rock saw the same). iHeart ratings (0.1a) can
     now reuse this token read instead of a device link.
@@ -723,11 +724,15 @@ Each finding checked against the code, and the device where it could be, before 
     — it is resolved by `getMediaURI` to a direct stream URL (TuneIn → `opml.radiotime.com/Tune.ashx`,
     SomaFM → a `.pls`) and played through `playbackSession`, the same path the radio directory's own
     stations use. `playServiceItem` routes a `stream` item that way instead of down `loadContent`;
-    the routing is tested, the live play waits for a device (it makes sound). **Still open:** a
-    service radio *program* that has no `getMediaURI` (Radio Paradise's channels) needs the
-    `x-sonosapi-radio` set-transport path x2rock built, which is not ported yet; and a service whose
-    type the player's list omits (TuneIn came back `type=null`) can build no cdudn, so it cannot
-    enqueue — which is moot for streams, since they are not queue content anyway.
+    the routing is tested, the live play waits for a device (it makes sound). A service radio
+    *program* that has no `getMediaURI` (Radio Paradise's channels) plays through the
+    `x-sonosapi-radio` set-transport path x2rock built (`playServiceProgram`, ported 2026-10-06).
+    **Verified on the Streamer 2026-10-07**: Radio Paradise → 128k → The Main Mix played in Media
+    Room, with the room's `CurrentURI` reading `x-sonosapi-radio:channel%3a0%3a2%3aresume?sid=308&flags=0&sn=20`.
+    As in x2rock, a program that cannot go that way **streams instead** through `getMediaURI`: a
+    service whose type the player's list omits (TuneIn came back `type=null`) has no cdudn, and a
+    player may refuse the source with a fault. Only a refusal falls through; a missing reply does
+    not, because the source may have been taken. Tested and mutation-checked against a refusing fake.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot

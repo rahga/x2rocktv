@@ -1006,19 +1006,34 @@ class SonosHousehold(
 
     /**
      * Play a radio [item] (a `program`) in [groupId] as the room's own source — `SetAVTransportURI`
-     * to an `x-sonosapi-radio` URI with an `audioBroadcast` DIDL, then start it. This is the only
-     * way a program plays: the queue refuses it and it has no `getMediaURI`.
+     * to an `x-sonosapi-radio` URI with an `audioBroadcast` DIDL, then start it. The queue refuses
+     * a program, and a service may have no `getMediaURI` for one (Radio Paradise's channels), so
+     * this is how the Sonos app plays it and the way tried first.
+     *
+     * When that cannot work it streams instead, as x2rock does: a service missing from the player's
+     * type list has no cdudn to name its account by (TuneIn came back `type=null`), and a player
+     * can refuse the source outright. Either way `getMediaURI` is the one path left; a service
+     * without one then fails with its own answer. Only a refusal falls through — a player that did
+     * not answer may yet have taken the source, and streaming over it would play the wrong thing.
      */
     private suspend fun playServiceProgram(groupId: String, linked: LinkedService, item: Item) {
         val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
-            ?: error("${linked.service.name} has no account to play ${item.title} through")
         val hostname = coordinatorHostname(groupId)
         val startsBefore = _groupStates.value[groupId]?.playStarts ?: 0
-        upnp.setTransportUri(
-            hostname,
-            ServiceContent.radioUri(item, linked.service.id, linked.accountId?.removePrefix("sn_")),
-            ServiceContent.radioDidl(item, cdudn),
-        )
+        val set = cdudn != null && try {
+            upnp.setTransportUri(
+                hostname,
+                ServiceContent.radioUri(item, linked.service.id, linked.accountId?.removePrefix("sn_")),
+                ServiceContent.radioDidl(item, cdudn),
+            )
+            true
+        } catch (_: UpnpRefusedException) {
+            false
+        }
+        if (!set) {
+            playStream(groupId, smapi.mediaUri(linked.service, linked.token, item.id), item.title)
+            return
+        }
         play(groupId)
         // Best-effort confirmation it took, as a stream's start is confirmed; a program can take a
         // moment to buffer, so a slow start is not treated as a failure.
@@ -1026,6 +1041,15 @@ class SonosHousehold(
             _groupStates.first { (it[groupId]?.playStarts ?: 0) > startsBefore && it[groupId]?.playbackState?.isPlaying() == true }
         }
     }
+
+    /**
+     * What a press on a playable service [item] does: resume an audiobook where it was left off,
+     * play anything else in place of the queue. The service browser and the search across services
+     * both press through here, so the choice lives once.
+     */
+    suspend fun startServiceItem(groupId: String, linked: LinkedService, item: Item) =
+        if (ServiceContent.isResumable(item)) resumeAudiobook(groupId, linked, item)
+        else playServiceItem(groupId, linked, item)
 
     /**
      * Resume an audiobook in [groupId] where it was left off. The book itself is not playable — it
@@ -1038,15 +1062,6 @@ class SonosHousehold(
      * yet been run on hardware — it makes sound, and the timing of a seek onto a freshly loaded
      * service chapter wants one look on a real device.
      */
-    /**
-     * What a press on a playable service [item] does: resume an audiobook where it was left off,
-     * play anything else in place of the queue. The service browser and the search across services
-     * both press through here, so the choice lives once.
-     */
-    suspend fun startServiceItem(groupId: String, linked: LinkedService, item: Item) =
-        if (ServiceContent.isResumable(item)) resumeAudiobook(groupId, linked, item)
-        else playServiceItem(groupId, linked, item)
-
     suspend fun resumeAudiobook(groupId: String, linked: LinkedService, book: Item) {
         val chapters = smapi.chapters(linked.service, linked.token, book.id)
         val chapterId = chapters.resume?.id
