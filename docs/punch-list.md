@@ -730,9 +730,12 @@ Each finding checked against the code, and the device where it could be, before 
     enqueue — which is moot for streams, since they are not queue content anyway.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
-- [ ] **Scenes** (saved groupings, levels, soundtrack). Plausible as "Party" presets in RoomPanel;
-  revisit after Tier 3. Rules if built: never remove a coordinator from its own group; set mute
-  after levels, because setting a level unmutes.
+- [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot
+  pass (`PresetStore`, CLAUDE.md "The ten-foot pass"):* players, each one's level and a Sonos
+  favourite, saved from the room panel and started from Browse. Levels are set before the music
+  starts, so nothing starts loud; the rooms are gathered with `gatherRooms`, which never removes a
+  coordinator from its own group. A preset stores no mute state, so the mute-after-levels rule has
+  nothing to order: starting a preset unmutes its speakers, which is what starting music means.
 - [-] **Chime / notify** (`audioClip:1 loadAudioClip`). No TV use case.
 - [-] **LED, button lock, rename, IR repeater, battery, firmware check.** The Sonos app's job.
 - [-] **A foreground service.** Still no; `connectedDevice` if ever (CLAUDE.md).
