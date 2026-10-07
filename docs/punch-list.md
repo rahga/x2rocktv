@@ -740,6 +740,15 @@ Each finding checked against the code, and the device where it could be, before 
     `x-sonosapi-radio:catalog%3astation%3akey%3aA3SP31LN235GV3?sid=201&flags=0&sn=18`, from the
     second Amazon account (the first still answers `search` HTTP 500). TuneIn, the known type-less
     service, answers with streams rather than programs, which never take this path.
+    **iHeartRadio's custom stations are programs too, and play this way** (office, 2026-10-07,
+    iHeart added to the household that afternoon). An artist search answers `artist_radio.1648`
+    with `itemType` `program`; iHeart's `getMediaURI` refuses that id ("Expected artist_radio_track |
+    live_stations. | parser | podcast_show"), so streaming was never an option for it. Pressed on the
+    Streamer, Coldplay's station played in Media Room from
+    `x-sonosapi-radio:artist_radio.1648?sid=6&flags=0&sn=22`, with the thumbs showing. x2rock reached
+    the same station through `loadContent` as a last resort; the radio path is the more direct one.
+    iHeart also labels its search's *tracks* and *playlists* `program`, so those go the radio way
+    here as well; what a track does as a radio source has not been tried.
   - **Out:** account *linking* and `match` — those do need a browser.
 - [-] **Alarm management** (create, edit, recurrence, timezone). The Sonos app's job; only 3.7.
 - [x] **Scenes** (saved groupings, levels, soundtrack). *Done 2026-10-06 as presets, in the ten-foot
