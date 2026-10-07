@@ -92,6 +92,12 @@ for release — so judge nothing about speed from one. The release build is shru
 reads this project's classes by field name, so `app/proguard-rules.pro` keeps them all, and the
 first release ever run crashed on launch until it did.
 
+**Google TV keeps an app's icon until its `versionCode` moves.** The logo replaced a blue
+placeholder (2026-10-07), and the Streamer's "Your apps" row went on showing the blue circle after
+a reinstall, a launcher restart and a disable/enable; bumping `versionCode` from 1 to 2 changed it
+at once. Bump it with any icon change. The icon is the brushed "X2" cut from the wordmark, the
+banner the full wordmark; both are generated from `~/x2rock.png` and meant to be refined later.
+
 An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
 **There are no credentials to supply** — no client id, no secret, nothing in
 `local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
