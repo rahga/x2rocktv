@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import com.rahga.x2rock.viewmodel.roomActivity
+import com.rahga.x2rock.viewmodel.RoomActivity
 import com.rahga.x2rock.viewmodel.hasSource
 import android.os.SystemClock
 import androidx.activity.compose.BackHandler
@@ -786,20 +787,28 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLef
         // The room, and what it is doing in the word the room list and panel use too: a paused
         // stream and an idle room used to look the same here, and the panel called both "Idle".
         Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
+            // The room's name is measured first and kept whole; the state word gives way when space is
+            // short. The other way round, "Media Room · Nothing playing" read "Media… · Nothing
+            // playing" (Streamer, 2026-10-07).
             Text(
                 text = state.groupName,
                 style = MaterialTheme.typography.titleLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false),
             )
             val activity = roomActivity(state.playbackState, state.hasSource)
-            Text(
-                text = "  ·  " + if (state.onTvInput && activity.isPlaying) "TV" else activity.label,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (activity.isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
+            // Not for an empty room: the pane's body already says "No Content", and the room list
+            // "Nothing playing" — a third telling of one fact.
+            if (activity != RoomActivity.EMPTY) {
+                Text(
+                    text = "  ·  " + if (state.onTvInput && activity.isPlaying) "TV" else activity.label,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (activity.isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
         }
         HeaderVolume(
             state,
