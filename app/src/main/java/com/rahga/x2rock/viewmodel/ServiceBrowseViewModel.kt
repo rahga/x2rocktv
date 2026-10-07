@@ -13,6 +13,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -96,16 +97,20 @@ class ServiceBrowseViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            // Side by side: the Apple answer is a speaker round trip neither the list nor an entry
+            // container needs to wait for.
+            val apple = async { runCatching { household.appleMusicAccount() != null }.getOrDefault(false) }
             val services = runCatching { household.searchableServices() }
-            val apple = runCatching { household.appleMusicAccount() != null }.getOrDefault(false)
+            entry?.let { (key, container, title) ->
+                services.getOrNull()?.firstOrNull { it.key() == key }?.let { service ->
+                    _active.value = service
+                    browse(container, title)
+                }
+            }
             _services.value = services.fold(
-                onSuccess = { Services.Ready(it, apple) },
+                onSuccess = { Services.Ready(it, apple.await()) },
                 onFailure = { Services.Failed("Couldn't read this system's services: ${it.message ?: it}") },
             )
-            val (key, container, title) = entry ?: return@launch
-            val service = services.getOrNull()?.firstOrNull { it.key() == key } ?: return@launch
-            _active.value = service
-            browse(container, title)
         }
     }
 
@@ -183,7 +188,7 @@ class ServiceBrowseViewModel @Inject constructor(
      * [ServiceContent.isResumable].
      */
     fun select(item: Item, onPlayed: () -> Unit) {
-        if (item.container && !ServiceContent.isResumable(item)) {
+        if (ServiceContent.opens(item)) {
             browse(item.id, item.title)
             return
         }
@@ -191,10 +196,7 @@ class ServiceBrowseViewModel @Inject constructor(
         val service = _active.value ?: return
         viewModelScope.launch {
             _starting.value = item.id
-            val started = runCatching {
-                if (ServiceContent.isResumable(item)) household.resumeAudiobook(groupId, service, item)
-                else household.playServiceItem(groupId, service, item)
-            }
+            val started = runCatching { household.startServiceItem(groupId, service, item) }
             _starting.value = null
             started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${item.title}", it) }
         }

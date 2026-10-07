@@ -1,9 +1,15 @@
 package com.rahga.x2rock.ui.screens
 
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
+import com.rahga.x2rock.ui.components.exitOnKey
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.IconLabelButton
+import com.rahga.x2rock.ui.theme.LocalArtColors
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateColorAsState
-import com.rahga.x2rock.ui.theme.rememberArtColors
 import com.rahga.x2rock.ui.theme.IconAppButton
 import androidx.compose.ui.graphics.Brush
 import androidx.tv.material3.SurfaceDefaults
@@ -34,7 +40,6 @@ import androidx.compose.material.icons.filled.RepeatOneOn
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
@@ -139,25 +144,25 @@ fun PlayerPane(
      * instead and focus was lost altogether, which on a remote leaves nothing to press.
      */
     sidebarFocusRequester: FocusRequester,
-    /** The Queue and Browse buttons, so Back from those screens can return to them. */
-    queueFocusRequester: FocusRequester = remember { FocusRequester() },
-    browseFocusRequester: FocusRequester = remember { FocusRequester() },
-    searchFocusRequester: FocusRequester = remember { FocusRequester() },
+    /** The Queue, Browse and Search buttons, so Back from those screens can return to them. */
+    queueFocusRequester: FocusRequester,
+    browseFocusRequester: FocusRequester,
+    searchFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
-    onOpenSearch: () -> Unit = {},
+    onOpenSearch: () -> Unit,
     /**
      * Where focus starts instead, when this pane is composed on the way back from a screen one of
      * its buttons opened: that button. See the note on the grab below.
      */
-    startFocusRequester: FocusRequester? = null,
+    startFocusRequester: FocusRequester?,
 ) {
     val state by viewModel.uiState.collectAsState()
     // The cover's own colour behind the pane, as the Sonos app tints Now Playing — eased, so a
     // track change washes over rather than flashes. The plain surface where there is no cover.
     val surface = MaterialTheme.colorScheme.surface
     val tint by animateColorAsState(
-        rememberArtColors(state.albumArtUrl.takeIf { !state.onTvInput })?.shade ?: surface,
+        LocalArtColors.current?.shade?.takeIf { !state.onTvInput } ?: surface,
         animationSpec = tween(600),
         label = "artTint",
     )
@@ -179,12 +184,7 @@ fun PlayerPane(
     // Browse, so it read as Browse, then Queue (Streamer, 2026-10-07). Retried for a few frames,
     // since the button is composed with the controls, after this pane.
     LaunchedEffect(Unit) {
-        startFocusRequester?.let { start ->
-            repeat(10) {
-                if (start.requestFocusSafely()) return@LaunchedEffect
-                withFrameNanos { }
-            }
-        }
+        if (startFocusRequester?.requestFocusRetrying() == true) return@LaunchedEffect
         detailFocusRequester.requestFocusSafely()
     }
 
@@ -206,33 +206,27 @@ fun PlayerPane(
     // focus — the button Back returned to — and this took it straight to the primary control,
     // which on a room still reading as empty is Browse. Seen on the Streamer: Back from Queue put
     // focus on Browse until the resume handler moved it, about a second later.
-    var lastOnTvInput by remember { mutableStateOf(state.onTvInput) }
-    LaunchedEffect(state.onTvInput) {
-        if (state.onTvInput == lastOnTvInput) return@LaunchedEffect
-        lastOnTvInput = state.onTvInput
-        if (paneHasFocus) detailFocusRequester.requestFocusSafely()
+    LaunchedEffect(Unit) {
+        snapshotFlow { state.onTvInput }.drop(1).collect {
+            if (paneHasFocus) detailFocusRequester.requestFocusSafely()
+        }
     }
 
     // The picker traps focus, so closing it has to hand focus back explicitly — to Zzz, the
     // button that opened it, where the remote was; the pane's first control only if Zzz has
-    // gone meanwhile. Not on the first composition, which would start the pane on the timer.
+    // gone meanwhile. Only on a close, never the first composition: where focus starts is the grab
+    // above's to decide, and requesting here too overrode it, sending Back from Queue to Browse.
     val sleepFocusRequester = remember { FocusRequester() }
-    var pickerOpened by remember { mutableStateOf(false) }
-    LaunchedEffect(showSleepTimerPicker) {
-        when {
-            showSleepTimerPicker -> pickerOpened = true
-            // The first composition: where focus starts is the grab above's to decide. Requesting
-            // the primary control here too overrode it, sending Back from Queue to Browse.
-            !pickerOpened -> Unit
-            !sleepFocusRequester.requestFocusSafely() -> detailFocusRequester.requestFocusSafely()
+    LaunchedEffect(Unit) {
+        snapshotFlow { showSleepTimerPicker }.drop(1).filter { !it }.collect {
+            if (!sleepFocusRequester.requestFocusSafely()) detailFocusRequester.requestFocusSafely()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
-            // Transparent so the art's tint shows through; the content colour is named, because one
-            // derived from a transparent container came out black on the dark pane.
-            colors = SurfaceDefaults.colors(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface),
+            // Transparent so the art's tint shows through.
+            colors = SurfaceDefaults.colors(containerColor = Color.Transparent),
             modifier = Modifier
                 .fillMaxSize()
                 .onFocusChanged { paneHasFocus = it.hasFocus }
@@ -581,18 +575,24 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
 }
 
 /**
+ * What the play/pause control shows: Play when not playing; Pause, or Stop for a live stream that
+ * cannot pause — pausing one leaves the room IDLE (verified on hardware), so Stop is what happens.
+ * The pane's button and the now-playing bar share it so the rule cannot drift.
+ */
+internal fun PlayerUiState.playPauseGlyph(): Pair<ImageVector, String> = when {
+    !playbackState.isPlaying() -> Icons.Filled.PlayArrow to "Play"
+    actions.canPause -> Icons.Filled.Pause to "Pause"
+    else -> Icons.Filled.Stop to "Stop"
+}
+
+/**
  * A left-press here leaves the player pane for the room list.
  *
  * Put on the leftmost control of each row. Declaring `left` on the pane instead does not
  * work: a focus search starting inside it escapes rather than being redirected, and focus
  * is lost altogether — which on a remote leaves nothing to press but Back.
  */
-private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = onKeyEvent { event ->
-    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
-        target.requestFocusSafely()
-        true
-    } else false
-}
+private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = exitOnKey(Key.DirectionLeft, target)
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -678,11 +678,7 @@ private fun PlaybackControls(
                 // IDLE rather than PAUSED, verified on hardware. The command is the same
                 // either way — the player does the right thing — so only the glyph changes,
                 // to the one that describes what will actually happen.
-                val (icon, description) = when {
-                    !state.playbackState.isPlaying() -> Icons.Filled.PlayArrow to "Play"
-                    state.actions.canPause -> Icons.Filled.Pause to "Pause"
-                    else -> Icons.Filled.Stop to "Stop"
-                }
+                val (icon, description) = state.playPauseGlyph()
                 // Centred in the button's own minimum width, not the row's: on a stream it is the only
                 // transport control, and a filling box stretched it across the pane.
                 Box(Modifier.widthIn(min = 80.dp), contentAlignment = Alignment.Center) {
@@ -739,29 +735,21 @@ private fun PlaybackControls(
             // is loaded rather than an action on the current item. Only UPnP being off takes
             // it away, since the queue lives nowhere else; the pane says so below.
             if (!state.upnpOff) {
-                AppButton(
-                    onClick = onOpenQueue,
-                    modifier = Modifier.focusRequester(queueFocusRequester).claimExit(placesExit),
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(24.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Queue")
-                }
+                IconLabelButton(
+                    Icons.AutoMirrored.Filled.QueueMusic, "Queue", onOpenQueue,
+                    Modifier.focusRequester(queueFocusRequester).claimExit(placesExit),
+                )
             }
             // With no transport drawn there is nothing for a right-press from the room list
             // to land on, so the entry point moves here — which is also the one control that
             // helps, being how an empty room is given something to play.
-            AppButton(
-                onClick = onOpenFavorites,
-                modifier = Modifier.focusRequester(browseFocusRequester).claimExit(placesExit).then(
+            IconLabelButton(
+                Icons.AutoMirrored.Filled.LibraryBooks, "Browse", onOpenFavorites,
+                Modifier.focusRequester(browseFocusRequester).claimExit(placesExit).then(
                     if (hasContent) Modifier else Modifier.focusRequester(playPauseFocusRequester)
                 ),
-            ) {
-                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Browse")
-            }
-            SearchButton(onOpenSearch, searchFocusRequester)
+            )
+            IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
@@ -1011,18 +999,14 @@ private fun TvControls(
             // The way out of the television and back into music. Sonos's own TV screen has no
             // such row, but a room on its HDMI input is exactly where wanting to put music on
             // instead is a live thought, and nothing else here offers it.
-            AppButton(
-                onClick = onOpenFavorites,
-                modifier = Modifier
+            IconLabelButton(
+                Icons.AutoMirrored.Filled.LibraryBooks, "Browse", onOpenFavorites,
+                Modifier
                     .focusRequester(browseFocusRequester)
                     .exitLeftTo(exitLeftFocusRequester)
                     .then(if (state.upnpOff) Modifier.focusRequester(firstFocusRequester) else Modifier),
-            ) {
-                Icon(Icons.AutoMirrored.Filled.LibraryBooks, contentDescription = null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Browse")
-            }
-            SearchButton(onOpenSearch, searchFocusRequester)
+            )
+            IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
 
@@ -1030,21 +1014,12 @@ private fun TvControls(
     }
 }
 
-/**
- * Search every service at once, for this room. Here, beside Browse, rather than above the room
- * list: the list selects the room focus rests on, so walking up it to a button at its top selected
- * every room on the way, and Browse opened "in Bedroom" when the walk began on Kitchen (Streamer,
- * 2026-10-06). From the pane, the room is the one already chosen.
+/*
+ * Search sits beside Browse in the pane's row rather than above the room list: the list selects the
+ * room focus rests on, so walking up it to a button at its top selected every room on the way, and
+ * Browse opened "in Bedroom" when the walk began on Kitchen (Streamer, 2026-10-06). From the pane,
+ * the room is the one already chosen.
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SearchButton(onClick: () -> Unit, focusRequester: FocusRequester) {
-    AppButton(onClick = onClick, modifier = Modifier.focusRequester(focusRequester)) {
-        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(8.dp))
-        Text("Search")
-    }
-}
 
 /** A setting and the value it currently holds, the way the Sonos app draws these two. */
 @OptIn(ExperimentalTvMaterial3Api::class)

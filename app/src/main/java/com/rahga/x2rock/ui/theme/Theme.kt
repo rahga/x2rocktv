@@ -17,6 +17,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Border
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
+import androidx.tv.material3.Text
 import androidx.tv.material3.Button
 import androidx.tv.material3.CardBorder
 import androidx.tv.material3.CardDefaults
@@ -38,10 +48,11 @@ fun X2RockTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val default = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        dynamicDarkColorScheme(context).toTvColorScheme()
-    } else {
-        darkColorScheme()
+    // Built once: the dynamic scheme is dozens of resource lookups, and this runs again whenever
+    // the cover colours do.
+    val default = remember(context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) dynamicDarkColorScheme(context).toTvColorScheme()
+        else darkColorScheme()
     }
     val colorScheme = when (colorTheme) {
         AppColorTheme.DEFAULT -> default
@@ -96,8 +107,22 @@ fun X2RockTheme(
             onSurfaceVariant = Color(0xFFF2DAFF),
         )
     }
-    MaterialTheme(colorScheme = colorScheme, typography = TenFootTypography, content = content)
+    MaterialTheme(colorScheme = colorScheme, typography = TenFootTypography) {
+        // The content colour, provided once at the root. tv-material derives a transparent
+        // container's content colour from LocalContentColor, whose default is black, and the home
+        // screen has no Surface at its root to set it — so the pane, the room panel and the room
+        // rows each drew black text on the dark theme until named one by one. The cover colours
+        // go down from here too, read once for the theme and the pane's tint alike.
+        CompositionLocalProvider(
+            LocalContentColor provides colorScheme.onSurface,
+            LocalArtColors provides art,
+            content = content,
+        )
+    }
 }
+
+/** The selected room's cover colours, or `null`; see [rememberArtColors]. */
+val LocalArtColors = staticCompositionLocalOf<ArtColors?> { null }
 
 /**
  * tv-material3's scale, one notch larger at the small end. Its defaults put most secondary text —
@@ -247,6 +272,32 @@ fun FocusRequester.requestFocusSafely(): Boolean =
         // FocusRequester is not initialized: the node isn't attached yet.
         false
     }
+
+/**
+ * [requestFocusSafely], retried a frame at a time while the target is not yet attached — which on
+ * TV is routine for anything inside a list that has just received its items. True once it took.
+ */
+suspend fun FocusRequester.requestFocusRetrying(attempts: Int = 10): Boolean {
+    repeat(attempts) {
+        if (requestFocusSafely()) return true
+        withFrameNanos { }
+    }
+    return false
+}
+
+/**
+ * A button that names a place to go: an icon, then its label. Every such button in the app is
+ * this one, so they are all the same size and spacing.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun IconLabelButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AppButton(onClick = onClick, modifier = modifier) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label)
+    }
+}
 
 @Composable
 fun rememberAutoFocusRequester(): FocusRequester {

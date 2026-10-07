@@ -9,10 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,7 +19,6 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.ArtSlot
 import com.rahga.x2rock.ui.theme.IconAppButton
 import com.rahga.x2rock.viewmodel.PlayerUiState
@@ -61,11 +56,7 @@ internal fun NowPlayingBar(state: PlayerUiState, onPlayPause: () -> Unit) {
             }
             Spacer(Modifier.width(16.dp))
             IconAppButton(onClick = onPlayPause) {
-                val (icon, description) = when {
-                    !state.playbackState.isPlaying() -> Icons.Filled.PlayArrow to "Play"
-                    state.actions.canPause -> Icons.Filled.Pause to "Pause"
-                    else -> Icons.Filled.Stop to "Stop"
-                }
+                val (icon, description) = state.playPauseGlyph()
                 Icon(icon, contentDescription = description, modifier = Modifier.size(30.dp))
             }
         }

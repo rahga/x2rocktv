@@ -1,5 +1,9 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.viewmodel.label
+import com.rahga.x2rock.ui.components.exitOnKey
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.IconLabelButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -110,7 +114,7 @@ import com.rahga.x2rock.viewmodel.sortGroups
 fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit = {},
     onOpenFavorites: (groupId: String) -> Unit = {},
-    onOpenSearch: (groupId: String) -> Unit = {},
+    onOpenSearch: (groupId: String) -> Unit,
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -130,12 +134,12 @@ fun HomeScreen(
     val queueFocus = remember { FocusRequester() }
     val browseFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
-    var opener by rememberSaveable { mutableStateOf<String?>(null) }
-    fun openerFocus(name: String?): FocusRequester? = when (name) {
-        OPENER_QUEUE -> queueFocus
-        OPENER_BROWSE -> browseFocus
-        OPENER_SEARCH -> searchFocus
-        else -> null
+    var opener by rememberSaveable { mutableStateOf<Opener?>(null) }
+    fun openerFocus(opener: Opener?): FocusRequester? = when (opener) {
+        Opener.QUEUE -> queueFocus
+        Opener.BROWSE -> browseFocus
+        Opener.SEARCH -> searchFocus
+        null -> null
     }
 
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -168,17 +172,14 @@ fun HomeScreen(
             withFrameNanos { }
             withFrameNanos { }
             // Back from another screen returns to the control that opened it — Queue, Browse,
-            // Search — rather than to the room: that is where the remote was, and where a second
-            // visit starts. Retried for a few frames, since the pane is composed after the list.
-            val target = openerFocus(opener)
-            opener = null
-            if (target != null) {
-                repeat(10) {
-                    if (place(target)) return@repeatOnLifecycle
-                    withFrameNanos { }
-                }
+            // Search — rather than to the room. The pane puts it there itself, from its first frame
+            // (`startFocusRequester`); here it only counts as placed, and the opener is spent.
+            if (opener != null) {
+                opener = null
+                focusPlaced = true
+            } else {
+                place(sidebarFocusRequester)
             }
-            place(sidebarFocusRequester)
         }
     }
 
@@ -194,7 +195,7 @@ fun HomeScreen(
     // on a node that just left the composition and the remote goes dead until a direction press.
     val modalVisible = showSettings || panelGroup != null
     LaunchedEffect(modalVisible) {
-        if (!modalVisible) sidebarFocusRequester.requestFocusSafely()
+        if (!modalVisible) place(sidebarFocusRequester)
     }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
@@ -224,10 +225,7 @@ fun HomeScreen(
         // focus is the automatic first focus on the wrong row, and is exactly what to correct.
         if (!listReady || modalVisible || paneHasFocus || (listHasFocus && focusPlaced) || opener != null) return@LaunchedEffect
         // The row is composed, and may scroll into view, in the frames after it arrives.
-        repeat(10) {
-            withFrameNanos { }
-            if (place(sidebarFocusRequester)) return@LaunchedEffect
-        }
+        if (sidebarFocusRequester.requestFocusRetrying()) focusPlaced = true
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -279,9 +277,9 @@ fun HomeScreen(
                         browseFocusRequester = browseFocus,
                         searchFocusRequester = searchFocus,
                         startFocusRequester = openerFocus(opener),
-                        onOpenQueue = { opener = OPENER_QUEUE; onOpenQueue(selectedGroupId!!) },
-                        onOpenFavorites = { opener = OPENER_BROWSE; onOpenFavorites(selectedGroupId!!) },
-                        onOpenSearch = { opener = OPENER_SEARCH; onOpenSearch(selectedGroupId!!) },
+                        onOpenQueue = { opener = Opener.QUEUE; onOpenQueue(selectedGroupId!!) },
+                        onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
+                        onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
                     )
                 }
             }
@@ -497,24 +495,14 @@ private fun RoomSidebar(
         // Settings at the foot, past the last room, where nothing lands on it by accident: at the
         // top it was the first thing Compose found, and focus fell onto it three different ways.
         Row(modifier = Modifier.padding(start = SIDEBAR_START, bottom = 12.dp, top = 2.dp)) {
-            AppButton(onClick = onSettingsClick, modifier = Modifier.exitRightTo(detailFocusRequester)) {
-                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(8.dp))
-                Text("Settings", style = MaterialTheme.typography.labelLarge)
-            }
+            IconLabelButton(
+                Icons.Default.Settings, "Settings", onSettingsClick,
+                Modifier.exitOnKey(Key.DirectionRight, detailFocusRequester),
+            )
         }
     }
 }
 
-/**
- * Right from the sidebar's own controls crosses into the player, as right from a room does.
- * A key rather than a focus property, for the reason [RoomListItem] gives.
- */
-private fun Modifier.exitRightTo(target: FocusRequester): Modifier = onKeyEvent { event ->
-    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
-        target.requestFocusSafely()
-    } else false
-}
 
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -538,17 +526,11 @@ private fun RoomListItem(
         border = appCardBorder(),
         // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
         // say — so the list still says which room the controls beside it act on.
-        //
-        // Every colour named: from a transparent container tv-material derives its content colour
-        // from LocalContentColor, which nothing above the sidebar provides, so room names drew
-        // near-black — the same fault the pane and panel had.
+        // Text takes the theme's root content colour; see X2RockTheme.
         colors = CardDefaults.colors(
             containerColor = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f) else Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.onSurface,
             focusedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-            focusedContentColor = MaterialTheme.colorScheme.onSurface,
             pressedContainerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.14f),
-            pressedContentColor = MaterialTheme.colorScheme.onSurface,
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -639,10 +621,8 @@ private fun RoomListItem(
             // Not playing is drawn quieter, as the Sonos app draws it: the eye goes to the rooms
             // that are doing something. Dimmed, not hidden — what is loaded is still worth saying.
             Column(modifier = Modifier.weight(1f).alpha(if (activity.isPlaying) 1f else IDLE_ALPHA)) {
-                val roomCount = group.playerIds.size
                 Text(
-                    // Sonos names a group by its coordinator; the count says it is more than one room.
-                    text = group.name + if (roomCount > 1 && " + " !in group.name) " + ${roomCount - 1}" else "",
+                    text = group.label,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -832,6 +812,5 @@ private fun ThemeSelector(
     }
 }
 
-private const val OPENER_QUEUE = "queue"
-private const val OPENER_BROWSE = "browse"
-private const val OPENER_SEARCH = "search"
+/** The pane's buttons that open another screen, so Back can return focus to the one that did. */
+private enum class Opener { QUEUE, BROWSE, SEARCH }

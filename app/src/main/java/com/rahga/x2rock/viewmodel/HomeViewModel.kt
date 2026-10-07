@@ -594,8 +594,7 @@ class HomeViewModel @Inject constructor(
                 val volumes = players.mapNotNull { id -> levels[id]?.takeIf { !it.fixed }?.volume?.let { id to it } }.toMap()
                 val container = household.groupState(groupId).container?.name
                 val favorite = container?.let { name ->
-                    runCatching { household.favorites().items }.getOrDefault(emptyList())
-                        .firstOrNull { it.playable && it.name == name }
+                    playingFavorite(runCatching { household.favorites().items }.getOrDefault(emptyList()), name)
                 }
                 val rooms = players.joinToString(" + ") { household.playerName(it) }
                 val preset = Preset(
@@ -604,7 +603,6 @@ class HomeViewModel @Inject constructor(
                     playerIds = players,
                     volumes = volumes,
                     favoriteId = favorite?.id,
-                    favoriteName = favorite?.name,
                 )
                 presetStore.add(preset)
                 preset

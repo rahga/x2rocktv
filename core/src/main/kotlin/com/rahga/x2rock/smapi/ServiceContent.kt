@@ -67,6 +67,12 @@ object ServiceContent {
     fun isResumable(item: Item): Boolean = item.itemType.equals("audiobook", ignoreCase = true)
 
     /**
+     * Whether a press opens [item] — lists what it holds — rather than starting it: a container,
+     * except an audiobook, which is resumed. Rows draw a chevron for exactly these.
+     */
+    fun opens(item: Item): Boolean = item.container && !isResumable(item)
+
+    /**
      * The cdudn a queued item must carry for [serviceType] and [selector] — `SA_RINCON<type>_X_#
      * Svc<type>-<selector>-Token`, `-0-` where the selector is absent or the literal `0` that
      * names the service rather than an account. `null` when the service has no type (not in the

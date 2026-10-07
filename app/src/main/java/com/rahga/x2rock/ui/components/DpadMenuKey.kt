@@ -1,6 +1,8 @@
 package com.rahga.x2rock.ui.components
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import com.rahga.x2rock.ui.theme.requestFocusSafely
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -19,6 +21,18 @@ import androidx.compose.ui.input.key.type
 fun Modifier.dpadMenuKey(onMenu: () -> Unit): Modifier = onKeyEvent { event ->
     if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
         onMenu()
+        true
+    } else false
+}
+
+/**
+ * A press of [key] moves focus to [target] and is consumed — how the room list and the player pane
+ * cross into each other, since a focus property on the controls' containers does not govern the
+ * search (see CLAUDE.md, "Focus, and why it is handled as keys").
+ */
+fun Modifier.exitOnKey(key: Key, target: FocusRequester): Modifier = onKeyEvent { event ->
+    if (event.type == KeyEventType.KeyDown && event.key == key) {
+        target.requestFocusSafely()
         true
     } else false
 }

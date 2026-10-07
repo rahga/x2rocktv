@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
@@ -103,10 +104,7 @@ fun AppleMusicScreen(
                             // cannot reach the results on its own — move focus into the first row
                             // when results arrive. Same fix as the service-browse screen.
                             LaunchedEffect(r.items.first().objectId) {
-                                repeat(5) {
-                                    if (resultsFocus.requestFocusSafely()) return@LaunchedEffect
-                                    kotlinx.coroutines.delay(50)
-                                }
+                                resultsFocus.requestFocusRetrying()
                             }
                             LazyColumn(
                                 contentPadding = PaddingValues(bottom = 48.dp),

@@ -50,11 +50,13 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.ui.theme.AppButton
+import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.hasSource
 import com.rahga.x2rock.viewmodel.roomActivity
 import com.rahga.x2rock.viewmodel.roomRowLines
+import com.rahga.x2rock.viewmodel.label
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
@@ -171,9 +173,6 @@ fun RoomPanel(
                 else roomActivity(group.playbackState, info.hasSource).label
                 ),
             style = MaterialTheme.typography.titleMedium,
-            // Named: the panel is drawn on a plain background, not a Surface, so the inherited
-            // content colour was the default black on the dark panel.
-            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -182,18 +181,12 @@ fun RoomPanel(
         // unless the house is already in one group.
         if (otherGroups.isNotEmpty() || isPartying) {
             PanelSection("Everywhere")
-            AppButton(
-                onClick = if (isPartying) onStopParty else onParty,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    if (isPartying) Icons.Default.CallSplit else Icons.Default.SpeakerGroup,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-                Text(if (isPartying) "Split every room apart" else "Play everywhere")
-            }
+            IconLabelButton(
+                if (isPartying) Icons.Default.CallSplit else Icons.Default.SpeakerGroup,
+                if (isPartying) "Split every room apart" else "Play everywhere",
+                if (isPartying) onStopParty else onParty,
+                Modifier.fillMaxWidth(),
+            )
         }
 
         // This room, and whatever is grouped with it. Drawn even when it is alone, because
@@ -231,8 +224,7 @@ fun RoomPanel(
             otherGroups.forEach { other ->
                 RoomRow(
                     modifier = Modifier,
-                    name = if (other.playerIds.size > 1 && " + " !in other.name) "${other.name} + ${other.playerIds.size - 1}"
-                    else other.name,
+                    name = other.label,
                     subtitle = rooms[other.id]?.let { roomRowLines(it, other.playbackState ?: PlaybackStates.IDLE).firstOrNull() }
                         ?: roomActivity(other.playbackState, false).label,
                     // A row here stands for a whole group, so its level is the group's.
@@ -256,11 +248,7 @@ fun RoomPanel(
         // the favourite playing if what plays is one. Here because this is where a room's
         // speakers and levels are set up; Browse is where it is played from.
         PanelSection("Presets")
-        AppButton(onClick = onSavePreset, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.BookmarkAdd, contentDescription = null, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-            Text("Save as preset")
-        }
+        IconLabelButton(Icons.Default.BookmarkAdd, "Save as preset", onSavePreset, Modifier.fillMaxWidth())
 
         // Both of these need an HDMI socket to mean anything, so a room without one ends at
         // the lists above. The source comes first: it is a thing to *do*, and the setting

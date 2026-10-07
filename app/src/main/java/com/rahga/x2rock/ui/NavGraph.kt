@@ -1,5 +1,8 @@
 package com.rahga.x2rock.ui
 
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import android.net.Uri
 import androidx.compose.runtime.Composable
@@ -50,7 +53,9 @@ fun X2RockNavGraph() {
 
     // Every screen opened from a room names it: the selected room is the player's, and every route
     // below is opened on it.
-    val room = playerViewModel.uiState.collectAsState().value.groupName
+    // The room name alone, so a position tick or a volume step does not recompose the graph.
+    val room by remember(playerViewModel) { playerViewModel.uiState.map { it.groupName }.distinctUntilChanged() }
+        .collectAsState(initial = "")
     fun openService(groupId: String, serviceKey: String, containerId: String, title: String) =
         navController.navigate(
             "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}" +

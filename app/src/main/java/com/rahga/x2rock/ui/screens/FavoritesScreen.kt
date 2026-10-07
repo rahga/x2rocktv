@@ -26,11 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
-import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
@@ -41,7 +39,12 @@ import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.requestFocusSafely
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.IconLabelButton
+import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.viewmodel.kindLabel
+import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.model.Playlist
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.playlistKey
@@ -71,18 +74,13 @@ fun FavoritesScreen(
     val notice by viewModel.notice.collectAsState()
     BackHandler { onBack() }
 
-    // With no row to start on — loading, a failed load, nothing saved — focus starts on Back, so
-    // the remote's first press does something rather than going wherever the platform puts it.
+    // Focus starts on the first row of the first section there is, so a press of the remote does
+    // something at once; with no row — loading, a failed load, nothing saved — on Back.
     val backFocus = remember { FocusRequester() }
-    val hasRows = (state as? FavoritesViewModel.UiState.Success)?.let {
-        presets.isNotEmpty() || it.items.isNotEmpty() || it.playlists.isNotEmpty() || it.recent.isNotEmpty()
-    } == true
-    LaunchedEffect(hasRows, state::class) {
-        if (hasRows) return@LaunchedEffect
-        repeat(5) {
-            if (backFocus.requestFocusSafely()) return@LaunchedEffect
-            kotlinx.coroutines.delay(50)
-        }
+    val rowFocus = remember { FocusRequester() }
+    val firstSection = (state as? FavoritesViewModel.UiState.Success)?.let { firstSection(presets, it) }
+    LaunchedEffect(firstSection, state::class) {
+        (if (firstSection != null) rowFocus else backFocus).requestFocusRetrying()
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -93,9 +91,9 @@ fun FavoritesScreen(
                         // The radio directory: stations no favourite holds, with no account and no
                         // typing. And the household's own services, searched and browsed with its
                         // stored login — Apple Music among them.
-                        PlaceButton(Icons.Default.Radio, "Radio") { onOpenRadio(viewModel.groupId) }
+                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) })
                         Spacer(Modifier.width(16.dp))
-                        PlaceButton(Icons.Default.LibraryMusic, "Music Services") { onOpenServices(viewModel.groupId) }
+                        IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) })
                     }
                     Spacer(Modifier.height(20.dp))
                     when (val s = state) {
@@ -109,6 +107,8 @@ fun FavoritesScreen(
                             AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
                         }
                         is FavoritesViewModel.UiState.Success -> BrowseList(
+                            firstSection = firstSection,
+                            rowFocus = rowFocus,
                             presets = presets,
                             deleteArmed = deleteArmed,
                             state = s,
@@ -133,43 +133,24 @@ fun FavoritesScreen(
     }
 }
 
-/** A place this screen leads to: an icon and its name. */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PlaceButton(icon: ImageVector, label: String, onClick: () -> Unit) {
-    AppButton(onClick = onClick) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label)
-    }
-}
-
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun BrowseList(
+    /** Which section's first row takes focus, or `null` when there is nothing listed. */
+    firstSection: String?,
+    rowFocus: FocusRequester,
     presets: List<Preset>,
     deleteArmed: String?,
     state: FavoritesViewModel.UiState.Success,
     loadingId: String?,
     onPreset: (Preset) -> Unit,
     onDeletePreset: (Preset) -> Unit,
-    onPlay: (com.rahga.x2rock.model.Favorite) -> Unit,
-    onPlayPlaylist: (com.rahga.x2rock.model.Playlist) -> Unit,
-    onAppendPlaylist: (com.rahga.x2rock.model.Playlist) -> Unit,
+    onPlay: (Favorite) -> Unit,
+    onPlayPlaylist: (Playlist) -> Unit,
+    onAppendPlaylist: (Playlist) -> Unit,
     onReplay: (HistoryItem) -> Unit,
 ) {
-    val firstFocus = remember { FocusRequester() }
-    val anything = presets.isNotEmpty() || state.items.isNotEmpty() || state.playlists.isNotEmpty() ||
-        state.recent.isNotEmpty()
-    // The first row of whatever is listed, so a press of the remote does something at once.
-    LaunchedEffect(anything) {
-        if (!anything) return@LaunchedEffect
-        repeat(5) {
-            if (firstFocus.requestFocusSafely()) return@LaunchedEffect
-            kotlinx.coroutines.delay(50)
-        }
-    }
-    if (!anything) {
+    if (firstSection == null) {
         Text(
             "Nothing saved yet. Favourites added in the Sonos app appear here, and a room's panel can " +
                 "save it as a preset. Radio and Music Services are above.",
@@ -177,19 +158,15 @@ private fun BrowseList(
         )
         return
     }
-    // Only the first row of the first non-empty section takes the initial focus. Decided here,
-    // not while the list is built: the builder can run again on its own.
-    val firstSection = when {
-        presets.isNotEmpty() -> "presets"
-        state.items.isNotEmpty() -> "favorites"
-        state.playlists.isNotEmpty() -> "playlists"
-        else -> "recent"
-    }
-    fun claim(section: String): Modifier = if (section == firstSection) Modifier.focusRequester(firstFocus) else Modifier
+    // The first row of the first section takes the initial focus. Decided above, not while the
+    // list is built: the builder can run again on its own.
+    fun claim(section: String): Modifier = if (section == firstSection) Modifier.focusRequester(rowFocus) else Modifier
+    fun LazyListScope.section(title: String, key: String) =
+        item(key = "section:$title") { SectionTitle(title, first = key == firstSection) }
 
     LazyColumn(contentPadding = PaddingValues(bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (presets.isNotEmpty()) {
-            section("Presets", first = true)
+            section("Presets", "presets")
             val presetFocus = claim("presets")
             itemsIndexed(presets, key = { _, p -> "preset:${p.id}" }) { index, preset ->
                 MediaRow(
@@ -209,7 +186,7 @@ private fun BrowseList(
             }
         }
         if (state.items.isNotEmpty()) {
-            section("Favorites", first = presets.isEmpty())
+            section("Favorites", "favorites")
             val favFocus = claim("favorites")
             itemsIndexed(state.items, key = { _, f -> "fav:${f.id}" }) { index, fav ->
                 MediaRow(
@@ -230,7 +207,7 @@ private fun BrowseList(
         // The household's saved queues. A separate namespace from favourites, and a separate
         // list in the Sonos app, so they are a section of their own here.
         if (state.playlists.isNotEmpty()) {
-            section("Playlists")
+            section("Playlists", "playlists")
             val listFocus = claim("playlists")
             itemsIndexed(state.playlists, key = { _, p -> "playlist:${p.id}" }) { index, playlist ->
                 MediaRow(
@@ -248,7 +225,7 @@ private fun BrowseList(
         }
         // The Sonos app's "Recently played": named by service ids rather than favourites, so it
         // can name something gone; a refusal says so when pressed.
-        if (state.recent.isNotEmpty() || state.recentNote != null) section("Recently played")
+        if (state.recent.isNotEmpty() || state.recentNote != null) section("Recently played", "recent")
         state.recentNote?.let { note -> item { Text(note, style = MaterialTheme.typography.bodyMedium) } }
         if (state.recent.isNotEmpty()) {
             val recentFocus = claim("recent")
@@ -267,18 +244,13 @@ private fun BrowseList(
     }
 }
 
-private fun LazyListScope.section(title: String, first: Boolean = false) {
-    item(key = "section:$title") { SectionTitle(title, first) }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SectionTitle(title: String, first: Boolean) {
-    Text(
-        title,
-        style = MaterialTheme.typography.titleLarge,
-        modifier = Modifier.padding(top = if (first) 0.dp else 16.dp, bottom = 4.dp),
-    )
+/** The first section with rows — where focus starts — or `null` when Browse lists nothing. */
+private fun firstSection(presets: List<Preset>, state: FavoritesViewModel.UiState.Success): String? = when {
+    presets.isNotEmpty() -> "presets"
+    state.items.isNotEmpty() -> "favorites"
+    state.playlists.isNotEmpty() -> "playlists"
+    state.recent.isNotEmpty() -> "recent"
+    else -> null
 }
 
 /** What a preset brings back, in a line: how many rooms, and at what levels. */
@@ -292,13 +264,4 @@ private fun presetSummary(preset: Preset): String {
     }
     val music = if (preset.favoriteId == null) "keeps what plays" else null
     return listOfNotNull(rooms, level, music).joinToString(" · ")
-}
-
-/** What a recently played item is, in the Sonos app's words. A program is a radio show. */
-private fun kindLabel(type: String): String? = when (type) {
-    "album" -> "Album"
-    "playlist" -> "Playlist"
-    "program", "stream" -> "Radio"
-    "track" -> "Track"
-    else -> null
 }
