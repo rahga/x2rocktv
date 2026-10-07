@@ -3,7 +3,6 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.rahga.x2rock.apple.AppleMusic
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
 import com.rahga.x2rock.model.HistoryItem
@@ -20,6 +19,7 @@ import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import javax.inject.Inject
 
 @HiltViewModel
@@ -44,8 +44,6 @@ class FavoritesViewModel @Inject constructor(
             val recent: List<HistoryItem> = emptyList(),
             /** Why there is no recently played list, when the household said: history is off. */
             val recentNote: String? = null,
-            /** Whether the household has an Apple Music account a search result can play through. */
-            val appleMusic: Boolean = false,
         ) : UiState
         data class Error(val message: String) : UiState
     }
@@ -73,15 +71,17 @@ class FavoritesViewModel @Inject constructor(
     val deleteArmed: StateFlow<String?> = _deleteArmed.asStateFlow()
 
     /**
-     * Bring [preset] back: gather its rooms, set each one's level, then start its favourite — levels
-     * before music, so nothing starts loud. Then to the room it now forms, which may not be the one
-     * Browse was opened from.
+     * Bring [preset] back: set each speaker's level, gather the rooms, then start its favourite.
+     * Levels come **first**, before the regroup, so nothing starts loud: a speaker's level is its
+     * own and survives a join, and a room joining a group plays the group's music at once — at
+     * whatever level it was left on, had that not already been set. Then to the room it now forms,
+     * which may not be the one Browse was opened from.
      */
     fun applyPreset(preset: Preset, onDone: () -> Unit) =
         startOne(presetKey(preset.id), "start ${preset.name}", onDone) {
-            val groupId = household.gatherRooms(preset.playerIds)
             // One fixed line-out or a refused level must not stop the rest of the preset.
             preset.volumes.forEach { (player, level) -> runCatching { household.setPlayerVolume(player, level) } }
+            val groupId = household.gatherRooms(preset.playerIds)
             preset.favoriteId?.let { household.loadFavorite(groupId, it) }
             roomLink.set(preset.playerIds.first())
         }
@@ -94,16 +94,21 @@ class FavoritesViewModel @Inject constructor(
         if (_deleteArmed.value == preset.id) {
             presetStore.remove(preset.id)
             _deleteArmed.value = null
+            disarm?.cancel()
             _notice.post("Deleted \"${preset.name}\"")
             return
         }
         _deleteArmed.value = preset.id
         _notice.post("Press Menu again to delete \"${preset.name}\"")
-        viewModelScope.launch {
+        // One disarm at a time: an older press's timer would otherwise disarm a newer arming early.
+        disarm?.cancel()
+        disarm = viewModelScope.launch {
             delay(DELETE_ARM_MILLIS)
-            if (_deleteArmed.value == preset.id) _deleteArmed.value = null
+            _deleteArmed.value = null
         }
     }
+
+    private var disarm: Job? = null
 
     fun reload() = load()
 
@@ -172,11 +177,7 @@ class FavoritesViewModel @Inject constructor(
                 val recentNote = (history.exceptionOrNull() as? SonosCommandException)
                     ?.takeIf { it.detail.startsWith("ERROR_DISALLOWED_BY_POLICY") }
                     ?.let { HISTORY_OFF }
-                val appleMusic = AppleMusic.accountIn(
-                    history.getOrDefault(emptyList()),
-                    household.groupStates.value.values.map { it.track },
-                ) != null
-                UiState.Success(favs.items, activeId, playlists, recent, recentNote, appleMusic)
+                UiState.Success(favs.items, activeId, playlists, recent, recentNote)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }
@@ -191,12 +192,12 @@ class FavoritesViewModel @Inject constructor(
 fun playlistKey(playlistId: String) = "playlist:$playlistId"
 
 /** [FavoritesViewModel.loadingFavoriteId] while a recently played item loads. */
+fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.objectId}"
+
 /** [FavoritesViewModel.loadingFavoriteId] while a preset is being brought back. */
 fun presetKey(id: String) = "preset:$id"
 
 private const val DELETE_ARM_MILLIS = 4_000L
-
-fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.objectId}"
 
 internal const val HISTORY_OFF =
     "Recently played is off: Personalization is turned off for this system in the Sonos app."

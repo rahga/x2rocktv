@@ -110,14 +110,14 @@ fun SearchScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     results.sections.forEachIndexed { sectionIndex, section ->
-                        item(key = "section:${section.name}") {
+                        item(key = "section:${section.key}") {
                             Text(
                                 section.name,
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.padding(top = if (sectionIndex == 0) 0.dp else 16.dp, bottom = 4.dp),
                             )
                         }
-                        items(section.hits, key = { "${section.name}:${it.key}" }) { hit ->
+                        items(section.hits, key = { "${section.key}:${it.key}" }) { hit ->
                             HitRow(
                                 hit = hit,
                                 isStarting = starting == hit.key,

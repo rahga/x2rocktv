@@ -99,24 +99,6 @@ class FavoritesViewModelTest {
         assertTrue(state.recent.isEmpty())
     }
 
-    /** The captured history holds an Apple Music album, so this household's account is known. */
-    @Test fun `Apple Music search is offered where the household has played from it`() = runBlocking<Unit> {
-        val state = withTimeout(5_000) {
-            viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success
-        }
-        assertTrue(state.appleMusic)
-    }
-
-    /** With nothing played from it known, a result would have no account to play through. */
-    @Test fun `Apple Music search is not offered with no account to play through`() = runBlocking<Unit> {
-        fake.refuse("getHistory", "ERROR_DISALLOWED_BY_POLICY")
-        viewModel.reload()
-        val state = withTimeout(5_000) {
-            viewModel.uiState.first { (it as? FavoritesViewModel.UiState.Success)?.recentNote != null } as FavoritesViewModel.UiState.Success
-        }
-        assertTrue("offered with no account known", !state.appleMusic)
-    }
-
     @Test fun `a playlist that fails to load stays on the list and says why`() = runBlocking<Unit> {
         fake.refuse("loadPlaylist")
         var wentBack = false
@@ -170,5 +152,26 @@ class FavoritesViewModelTest {
         assertEquals(1, presets.presets.value.size)
         viewModel.deletePreset(preset)
         assertEquals(0, presets.presets.value.size)
+    }
+
+    /**
+     * A joining room plays the group's music the moment it joins, at whatever level it was left on —
+     * so a preset sets every level before it regroups. Waiting in sequence proves the order: had the
+     * regroup gone first, waiting for both levels would have consumed it.
+     */
+    @Test fun `a preset sets levels before it regroups`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        val guest = groups.first { it.name == "Guest TV" }.coordinatorId
+        val preset = Preset("p2", "Kitchen + Guest TV", listOf(kitchen, guest), mapOf(kitchen to 12, guest to 8))
+        fake.clearHistory()
+
+        viewModel.applyPreset(preset) {}
+
+        fake.awaitCommand("setVolume", 5_000)
+        fake.awaitCommand("setVolume", 5_000)
+        val regroup = fake.awaitCommand("modifyGroupMembers", 5_000)
+        assertEquals(groups.first { it.name == "Kitchen" }.id, regroup.get("groupId").asString)
+        fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
     }
 }

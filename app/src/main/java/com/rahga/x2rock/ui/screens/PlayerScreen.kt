@@ -750,8 +750,7 @@ private fun PlaybackControls(
             }
             // With no transport drawn there is nothing for a right-press from the room list
             // to land on, so the entry point moves here — which is also the one control that
-            // helps, being how an empty room is given something to play. The sidebar has the
-            // same destination at its top; this one is where the remote already is.
+            // helps, being how an empty room is given something to play.
             AppButton(
                 onClick = onOpenFavorites,
                 modifier = Modifier.focusRequester(browseFocusRequester).claimExit(placesExit).then(

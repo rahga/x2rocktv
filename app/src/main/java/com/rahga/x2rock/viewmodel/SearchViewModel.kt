@@ -21,6 +21,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.Locale
 import javax.inject.Inject
 
@@ -69,8 +73,11 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** One service's answers, under its name. */
-    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>)
+    /**
+     * One service's answers, under its name. [key] tells two accounts of one service apart: both
+     * are named, say, "Spotify", and a list keyed on the name alone threw on the second section.
+     */
+    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>, val key: String = name)
 
     data class Results(
         val sections: List<Section> = emptyList(),
@@ -96,7 +103,7 @@ class SearchViewModel @Inject constructor(
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null
     private var appleAccount: String? = null
-    private val categories = mutableMapOf<String, List<Category>>()
+    private val requests = Semaphore(MAX_CONCURRENT_SERVICES)
 
     fun setQuery(text: String) { _query.value = text }
 
@@ -111,8 +118,10 @@ class SearchViewModel @Inject constructor(
             val apple = runCatching { appleAccount() }.getOrNull() != null
             _results.value = Results(pending = services.size + if (apple) 1 else 0, searched = true)
             coroutineScope {
-                services.forEach { linked -> launch { arrive(linked.service.name, linked.token != null) { searchOne(linked, term) } } }
-                if (apple) launch { arrive("Apple Music", signedIn = true) { searchApple(term) } }
+                services.forEach { linked ->
+                    launch { arrive(linked.service.name, linked.key(), linked.token != null) { searchOne(linked, term) } }
+                }
+                if (apple) launch { arrive("Apple Music", "apple", signedIn = true) { searchApple(term) } }
             }
         }
     }
@@ -121,18 +130,24 @@ class SearchViewModel @Inject constructor(
      * Fold one service's answer in: its section in place if it found anything, a count if it did
      * not answer. A service with no search at all answers an empty list and simply has no section.
      */
-    private suspend fun arrive(name: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
-        val hits = withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
+    private suspend fun arrive(name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
+        // At most a few services at once: a household carries a hundred anonymous radio services,
+        // and each search is up to two requests to every one of them.
+        val hits = requests.withPermit {
+            withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
+        }
+        // `runCatching` also swallows the cancellation of a search replaced by a newer one; without
+        // this its late answers were counted against the new search's pending and silent totals.
+        currentCoroutineContext().ensureActive()
         _results.update { r ->
             val sections = if (hits.isNullOrEmpty()) r.sections
-            else (r.sections + Section(name, signedIn, hits)).sortedWith(sectionOrder)
+            else (r.sections + Section(name, signedIn, hits, key)).sortedWith(sectionOrder)
             r.copy(sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0)
         }
     }
 
     private suspend fun searchOne(linked: LinkedService, term: String): List<Hit> {
-        val key = "${linked.service.id}:${linked.accountId}"
-        val available = categories[key] ?: household.serviceCategories(linked).also { categories[key] = it }
+        val available = household.serviceCategories(linked)
         return coroutineScope {
             pickCategories(available).map { category ->
                 async { household.searchService(linked, category.mappedId, term, count = PER_CATEGORY).items }
@@ -194,6 +209,7 @@ class SearchViewModel @Inject constructor(
         private const val SERVICE_TIMEOUT_MILLIS = 10_000L
         private const val PER_CATEGORY = 6
         private const val PER_SERVICE = 8
+        private const val MAX_CONCURRENT_SERVICES = 8
 
         /** The order categories are worth asking for, most wanted first. */
         private val PREFERRED = listOf("tracks", "albums", "artists", "playlists", "stations", "podcasts", "audiobooks")
