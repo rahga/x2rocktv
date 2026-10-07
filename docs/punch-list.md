@@ -664,6 +664,14 @@ Each finding checked against the code, and the device where it could be, before 
 
 ## Tier 5 — decided out, or waiting on a decision
 
+- **A poster cache for the launcher's room tiles — decided out (2026-10-07).** x2rock's widget needed
+  `x2rock art` because Qt's `Image` fetched any URL uncapped; in this app Coil, behind `ArtHttp`'s
+  rules and its bounded caches, already is that fetcher. The one path outside it is the room tiles,
+  whose posters the launcher fetches itself: a service's CDN URL as is, and a speaker's `/getaa` by IP
+  over cleartext, which breaks when DHCP moves the speaker. Serving them from the app's own cache
+  through a content provider would close that, but room tiles show only on the Shield and a few
+  other launchers now, so it is not worth the provider. Neither Android nor Play policy asks for it.
+
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01
   "out — needs a keyboard and a browser" held only for *linking*; it does not here, because the
   token is never minted, it is **read off a player**. Stage 2, built and verified on hardware
