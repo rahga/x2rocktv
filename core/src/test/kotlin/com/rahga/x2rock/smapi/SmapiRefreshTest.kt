@@ -59,6 +59,25 @@ class SmapiRefreshTest {
         assertTrue("the replacement token was used", "<token>fresh-token</token>" in retry && "<key>fresh-key</key>" in retry)
     }
 
+    /**
+     * The replacement is kept: callers go on passing the token the household stored, and every
+     * later call used to send that stale one again, fault, and retry. Now only the first does.
+     */
+    @Test fun `a refreshed token is used for the calls after it`() = runBlocking {
+        val stale = Token("stale-token", "stale-key", "hh")
+        server.enqueue(MockResponse().setBody(refreshFault()))
+        server.enqueue(MockResponse().setBody(searchResult()))
+        server.enqueue(MockResponse().setBody(searchResult()))
+
+        client.search(service, stale, category = "tracks", term = "jazz")
+        client.search(service, stale, category = "albums", term = "jazz")
+
+        assertEquals("fault, retry, then straight to the answer", 3, server.requestCount)
+        server.takeRequest(); server.takeRequest()
+        val next = server.takeRequest().body.readUtf8()
+        assertTrue("the second search sent the fresh token", "<token>fresh-token</token>" in next)
+    }
+
     @Test fun `a fault with no refresh token is not retried`() = runBlocking {
         server.enqueue(
             MockResponse().setBody(

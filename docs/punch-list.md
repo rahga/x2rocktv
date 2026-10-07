@@ -578,6 +578,31 @@ rescue and the sleep picker's close. The pane now starts on the opener from its 
 neither effect acts on the first composition. Frames captured mid-fade show Queue focused
 throughout. Down from the pane's last row also no longer escapes to Settings.
 
+## Outside review, `docs/findings-review.md` — Phase 1 (2026-10-07)
+
+Each finding checked against the code, and the device where it could be, before anything changed.
+
+- **#9 AccountCapture could hang for good — fixed, and worse than reported.** `accept` and the
+  reads block, and `withTimeoutOrNull` cannot interrupt either, so the timeout never fired: a
+  player that never called back held the thread *and* `searchableServices`' lock, hanging Search and
+  Music Services with it. The deadline now lives on the sockets (`soTimeout` on the listener and on
+  every read, SUBSCRIBE and UNSUBSCRIBE included). Tested against a fake player that never calls
+  back; the test is mutation-checked and has a JUnit timeout, since a regression hangs, not fails.
+- **#3 a refreshed SMAPI token was used once and dropped — fixed.** `SmapiClient` keeps the
+  replacement for the session, keyed by the stale token callers keep passing; only the first call
+  after a token ages pays for the fault and retry. Tested and mutation-checked.
+- **#8 Back from an album opened from a service's search — fixed, but not as described.** The
+  review's quoted `back()` is not this code: Back did not leave the service, it set the results to
+  Idle, leaving the query above an empty list. The last search's results are now kept and restored.
+  The existing Back test asserts it; mutation-checked.
+- **#2 idle room text at 62% alpha — fixed.** Quieted by colour instead: the name at full strength,
+  the lines in `onSurfaceVariant`. Checked on the Streamer.
+- **#1 room row blank on wake from the screensaver — not reproduced, not changed.** The screensaver
+  cannot be started from the shell without root; covering the app with Home for 20s and returning
+  drew the row normally. The cause the review gives, the card's content colour defaulting to black,
+  no longer applies: `X2RockTheme` provides it at the root. Its other suggestions (`AppCard`, explicit
+  card colours) are #15 and the patches the root fix replaced. Worth one look after a real idle wake.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01

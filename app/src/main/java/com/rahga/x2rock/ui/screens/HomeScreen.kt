@@ -619,8 +619,11 @@ private fun RoomListItem(
             Spacer(Modifier.width(14.dp))
 
             // Not playing is drawn quieter, as the Sonos app draws it: the eye goes to the rooms
-            // that are doing something. Dimmed, not hidden — what is loaded is still worth saying.
-            Column(modifier = Modifier.weight(1f).alpha(if (activity.isPlaying) 1f else IDLE_ALPHA)) {
+            // that are doing something. Quieter by colour, not by fading: the room's name stays at
+            // full strength, and the lines under it take the theme's secondary text colour. A 62%
+            // fade over the whole column measured about 3:1 against the sidebar on the Streamer,
+            // under the 4.5:1 body text needs at three metres.
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = group.label,
                     style = MaterialTheme.typography.titleMedium,
@@ -632,6 +635,7 @@ private fun RoomListItem(
                     Text(
                         text = line,
                         style = MaterialTheme.typography.bodySmall,
+                        color = if (activity.isPlaying) Color.Unspecified else MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         // The focused row's first line scrolls when it does not fit, so a long
                         // title can be read without widening the list.
@@ -700,7 +704,7 @@ private fun ActivityGlyph(activity: RoomActivity) {
     Icon(icon, contentDescription = activity.label, modifier = Modifier.size(22.dp), tint = tint)
 }
 
-/** How quiet a room that is not playing is drawn. */
+/** How quiet a room that is not playing draws its art; its text is quieted by colour instead. */
 private const val IDLE_ALPHA = 0.62f
 
 /** Room list width. 960dp is the whole of a 1080p screen; the player pane takes the rest. */

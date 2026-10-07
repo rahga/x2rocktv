@@ -125,9 +125,11 @@ class ServiceBrowseViewModelTest {
         withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.firstOrNull()?.container == false } }
         assertEquals("SICKO MODE", found().first().title)
 
-        // Back out of the container — still inside the service.
+        // Back out of the container — still inside the service, and back on the search's hits
+        // rather than an empty list under the query.
         assertTrue(viewModel.back())
         assertTrue(viewModel.active.value != null)
+        assertEquals("ASTROWORLD", (viewModel.results.value as ServiceBrowseViewModel.Results.Found).items.first().title)
         // Back again — out to the service list.
         assertTrue(viewModel.back())
         assertEquals(null, viewModel.active.value)

@@ -301,8 +301,17 @@ class SmapiClient(client: OkHttpClient) {
         }
     }
 
+    /**
+     * Replacement tokens a service has handed back, keyed by the stale token they replace, for as
+     * long as this client. Callers keep passing the token the household stored — a `LinkedService`
+     * is a value, read once per connection — and the call swaps in the replacement, so only the
+     * first request after a token ages pays for the refresh fault and its retry.
+     */
+    private val refreshed = java.util.concurrent.ConcurrentHashMap<String, Token>()
+
     /** One SMAPI call. A service that needs an account is refused here, not sent and rejected. */
-    private fun call(service: Service, token: Token?, action: String, params: String, retried: Boolean = false): String {
+    private fun call(service: Service, stored: Token?, action: String, params: String, retried: Boolean = false): String {
+        val token = stored?.let { refreshed[it.token] ?: it }
         if (service.auth != Auth.ANONYMOUS && token == null) {
             throw SmapiException("${service.name} needs an account linked before it can be used")
         }
@@ -322,10 +331,12 @@ class SmapiClient(client: OkHttpClient) {
                 // The household's stored token can be stale; a `tokenRefreshRequired` fault answers
                 // the call with a working replacement in its detail rather than just refusing, so
                 // the call retries once with it. Seen on TIDAL and a second Amazon account against a
-                // household whose token had aged (2026-10-06). The refresh is not persisted here —
-                // the next connection captures whatever the household now holds.
+                // household whose token had aged (2026-10-06). The replacement is kept for the rest of
+                // the session, against the token the caller stored; it is not written back to the
+                // household, and the next connection reads whatever the household then holds.
                 refreshedToken(root, token)?.takeUnless { retried }?.let { fresh ->
-                    return call(service, fresh, action, params, retried = true)
+                    if (stored != null) refreshed[stored.token] = fresh
+                    return call(service, stored, action, params, retried = true)
                 }
                 throw SmapiException("${service.name} refused $action: $fault")
             }

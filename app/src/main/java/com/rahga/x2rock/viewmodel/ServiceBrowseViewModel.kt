@@ -93,6 +93,13 @@ class ServiceBrowseViewModel @Inject constructor(
     val notice: StateFlow<String?> = _notice.text
 
     private val crumbs = ArrayDeque<Crumb>()
+
+    /**
+     * The last search's results, so Back out of an album or artist opened from them returns to
+     * them. Back used to set the results to Idle there, leaving the query in the field above an
+     * empty list, with every hit gone.
+     */
+    private var searchResults: Results? = null
     private var job: Job? = null
 
     init {
@@ -120,6 +127,7 @@ class ServiceBrowseViewModel @Inject constructor(
         _query.value = ""
         _results.value = Results.Idle
         crumbs.clear()
+        searchResults = null
         job?.cancel()
         job = viewModelScope.launch {
             val cats = runCatching { household.serviceCategories(service) }.getOrDefault(emptyList())
@@ -143,13 +151,14 @@ class ServiceBrowseViewModel @Inject constructor(
         val category = _category.value ?: return
         val term = _query.value.trim().ifEmpty { return }
         crumbs.clear()
+        searchResults = null
         job?.cancel()
         job = viewModelScope.launch {
             _results.value = Results.Loading
             _results.value = runCatching { household.searchService(service, category.mappedId, term) }.fold(
                 onSuccess = { Results.Found(it.items) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't answer: ${it.message ?: it}") },
-            )
+            ).also { searchResults = it }
         }
     }
 
@@ -217,10 +226,10 @@ class ServiceBrowseViewModel @Inject constructor(
             if (parent != null && service != null) {
                 browseWithoutPush(service, parent)
             } else {
-                // Back at the service's own top: a search service shows its (empty) results,
-                // a browse-only one re-reads its root.
+                // Back at the service's own top: a search service shows the results the search
+                // left, a browse-only one re-reads its root.
                 if (_categories.value.isEmpty()) browse("root", _active.value?.service?.name.orEmpty())
-                else _results.value = Results.Idle
+                else _results.value = searchResults ?: Results.Idle
             }
             return true
         }
