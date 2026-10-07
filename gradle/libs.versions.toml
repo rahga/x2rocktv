@@ -17,6 +17,7 @@ hiltNavigationCompose = "1.2.0"
 navigationCompose = "2.8.0-beta02"
 securityCrypto = "1.1.0-alpha06"
 coil = "2.7.0"
+palette = "1.0.0"
 junit = "4.13.2"
 tvprovider = "1.0.0"
 javaxInject = "1"
@@ -40,6 +41,9 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 
 # Compose TV
 androidx-tv-material = { group = "androidx.tv", name = "tv-material", version.ref = "composeTv" }
+
+# Palette (a colour from cover art, for the player's tint and the Artwork theme)
+androidx-palette = { group = "androidx.palette", name = "palette-ktx", version.ref = "palette" }
 
 # Leanback
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }

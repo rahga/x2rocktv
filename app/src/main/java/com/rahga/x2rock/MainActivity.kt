@@ -1,17 +1,21 @@
 package com.rahga.x2rock
 
+import androidx.compose.runtime.getValue
 import android.content.Intent
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import com.rahga.x2rock.auth.PendingRoomDeepLink
 import com.rahga.x2rock.auth.ThemeStore
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme
+import com.rahga.x2rock.ui.theme.rememberArtColors
+import com.rahga.x2rock.viewmodel.PlayerViewModel
+import com.rahga.x2rock.model.AppColorTheme
+import androidx.hilt.navigation.compose.hiltViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -37,7 +41,11 @@ class MainActivity : ComponentActivity() {
         // without an account, so the app opens straight onto the rooms.
         setContent {
             val theme by themeStore.theme.collectAsState()
-            X2RockTheme(colorTheme = theme) {
+            // The same instance the nav graph uses: both ask the activity's store. Read only for the
+            // Artwork theme, so the other themes never sample a cover.
+            val player: PlayerViewModel = hiltViewModel()
+            val artUrl = if (theme == AppColorTheme.ARTWORK) player.uiState.collectAsState().value.albumArtUrl else null
+            X2RockTheme(colorTheme = theme, art = rememberArtColors(artUrl)) {
                 X2RockNavGraph()
             }
         }

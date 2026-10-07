@@ -1,11 +1,23 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.basicMarquee
+import androidx.compose.ui.draw.alpha
+import com.rahga.x2rock.viewmodel.RoomActivity
+import com.rahga.x2rock.viewmodel.roomActivity
+import com.rahga.x2rock.viewmodel.hasSource
+import com.rahga.x2rock.ui.theme.appCardBorder
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -43,10 +55,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -68,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.Card
+import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -78,9 +89,7 @@ import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.PlaybackStates
-import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.keepTaps
@@ -100,19 +109,33 @@ import com.rahga.x2rock.viewmodel.sortGroups
 fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit = {},
     onOpenFavorites: (groupId: String) -> Unit = {},
+    onOpenSearch: (groupId: String) -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
     val state by homeViewModel.uiState.collectAsState()
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
-    val sidebarVisible by homeViewModel.sidebarVisible.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
+
+    // The controls that open another screen, so Back can return to the one that did. This screen
+    // leaves the composition while another is shown, so which one it was is kept saveable; the
+    // requesters are fresh on return, and found again by name.
+    val queueFocus = remember { FocusRequester() }
+    val browseFocus = remember { FocusRequester() }
+    val searchFocus = remember { FocusRequester() }
+    var opener by rememberSaveable { mutableStateOf<String?>(null) }
+    fun openerFocus(name: String?): FocusRequester? = when (name) {
+        OPENER_QUEUE -> queueFocus
+        OPENER_BROWSE -> browseFocus
+        OPENER_SEARCH -> searchFocus
+        else -> null
+    }
 
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val rooms = (state as? HomeViewModel.UiState.Success)?.rooms ?: emptyMap()
@@ -125,10 +148,6 @@ fun HomeScreen(
         playerViewModel.selectGroup(id, name)
     }
 
-    LaunchedEffect(sidebarVisible) {
-        if (!sidebarVisible) detailFocusRequester.requestFocusSafely()
-    }
-
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -139,8 +158,18 @@ fun HomeScreen(
             // Shield: a link to Bedroom left Kitchen selected.
             withFrameNanos { }
             withFrameNanos { }
-            if (homeViewModel.sidebarVisible.value) sidebarFocusRequester.requestFocusSafely()
-            else detailFocusRequester.requestFocusSafely()
+            // Back from another screen returns to the control that opened it — Queue, Browse,
+            // Search — rather than to the room: that is where the remote was, and where a second
+            // visit starts. Retried for a few frames, since the pane is composed after the list.
+            val target = openerFocus(opener)
+            opener = null
+            if (target != null) {
+                repeat(10) {
+                    if (target.requestFocusSafely()) return@repeatOnLifecycle
+                    withFrameNanos { }
+                }
+            }
+            sidebarFocusRequester.requestFocusSafely()
         }
     }
 
@@ -156,10 +185,7 @@ fun HomeScreen(
     // on a node that just left the composition and the remote goes dead until a direction press.
     val modalVisible = showSettings || panelGroup != null
     LaunchedEffect(modalVisible) {
-        if (!modalVisible) {
-            if (sidebarVisible) sidebarFocusRequester.requestFocusSafely()
-            else detailFocusRequester.requestFocusSafely()
-        }
+        if (!modalVisible) sidebarFocusRequester.requestFocusSafely()
     }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
@@ -181,43 +207,34 @@ fun HomeScreen(
     // included, so the sleep timer menu could not be closed with it. Handlers registered later
     // win, so a menu's own still does; this one is off while a panel outside the pane is open.
     BackHandler(enabled = paneHasFocus && !modalVisible) {
-        if (!sidebarVisible) homeViewModel.toggleSidebar()
         sidebarFocusRequester.requestFocusSafely()
     }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
     LaunchedEffect(listReady, selectedGroupId) {
-        if (!listReady || modalVisible || paneHasFocus || listHasFocus) return@LaunchedEffect
-        val target = if (sidebarVisible) sidebarFocusRequester else detailFocusRequester
+        if (!listReady || modalVisible || paneHasFocus || listHasFocus || opener != null) return@LaunchedEffect
         // The row is composed, and may scroll into view, in the frames after it arrives.
         repeat(10) {
             withFrameNanos { }
-            if (target.requestFocusSafely()) return@LaunchedEffect
+            if (sidebarFocusRequester.requestFocusSafely()) return@LaunchedEffect
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxSize()) {
-            AnimatedVisibility(
-                visible = sidebarVisible,
-                enter = expandHorizontally(),
-                exit = shrinkHorizontally()
-            ) {
-                RoomSidebar(
-                    state = state,
-                    selectedGroupId = selectedGroupId,
-                    rooms = rooms,
-                    sidebarFocusRequester = sidebarFocusRequester,
-                    detailFocusRequester = detailFocusRequester,
-                    onFocused = { homeViewModel.selectGroup(it.id) },
-                    onOpenPanel = { panelGroup = it },
-                    onSettingsClick = { showSettings = true },
-                    onCollapseClick = { homeViewModel.toggleSidebar() },
-                    onRetry = { homeViewModel.connect() },
-                    onChooseHousehold = { homeViewModel.chooseHousehold(it) },
-                    upnpOff = homeViewModel.upnpOff.collectAsState().value,
-                    onListFocusChanged = { listHasFocus = it },
-                )
-            }
+            RoomSidebar(
+                state = state,
+                selectedGroupId = selectedGroupId,
+                rooms = rooms,
+                sidebarFocusRequester = sidebarFocusRequester,
+                detailFocusRequester = detailFocusRequester,
+                onFocused = { homeViewModel.selectGroup(it.id) },
+                onOpenPanel = { panelGroup = it },
+                onSettingsClick = { showSettings = true },
+                onRetry = { homeViewModel.connect() },
+                onChooseHousehold = { homeViewModel.chooseHousehold(it) },
+                upnpOff = homeViewModel.upnpOff.collectAsState().value,
+                onListFocusChanged = { listHasFocus = it },
+            )
 
             Box(
                 modifier = Modifier
@@ -236,24 +253,13 @@ fun HomeScreen(
                         viewModel = playerViewModel,
                         detailFocusRequester = detailFocusRequester,
                         sidebarFocusRequester = sidebarFocusRequester,
-                        onOpenQueue = { onOpenQueue(selectedGroupId!!) },
-                        onOpenFavorites = { onOpenFavorites(selectedGroupId!!) }
+                        queueFocusRequester = queueFocus,
+                        browseFocusRequester = browseFocus,
+                        searchFocusRequester = searchFocus,
+                        onOpenQueue = { opener = OPENER_QUEUE; onOpenQueue(selectedGroupId!!) },
+                        onOpenFavorites = { opener = OPENER_BROWSE; onOpenFavorites(selectedGroupId!!) },
+                        onOpenSearch = { opener = OPENER_SEARCH; onOpenSearch(selectedGroupId!!) },
                     )
-                }
-
-                if (!sidebarVisible) {
-                    Surface(
-                        onClick = { homeViewModel.toggleSidebar() },
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(16.dp)
-                            .size(40.dp)
-                            .tapToClick(onClick = { homeViewModel.toggleSidebar() })
-                    ) {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            Text("▶", style = MaterialTheme.typography.bodyLarge)
-                        }
-                    }
                 }
             }
         }
@@ -345,6 +351,7 @@ fun HomeScreen(
                     onStepTreble = homeViewModel::stepTreble,
                     onToggleLoudness = homeViewModel::toggleLoudness,
                     onToggleTrueplay = homeViewModel::toggleTrueplay,
+                    onSavePreset = { homeViewModel.savePreset(liveGroup.id) },
                 )
             }
         }
@@ -367,7 +374,6 @@ private fun RoomSidebar(
     onFocused: (Group) -> Unit,
     onOpenPanel: (Group) -> Unit,
     onSettingsClick: () -> Unit,
-    onCollapseClick: () -> Unit,
     onRetry: () -> Unit,
     onChooseHousehold: (HouseholdChoice) -> Unit,
     /** The household's UPnP switch is off: said here once, at the foot of the list. */
@@ -380,7 +386,6 @@ private fun RoomSidebar(
     val sorted = remember(groups) {
         sortGroups(groups)
     }
-    val iconRowFocusRequester = remember { FocusRequester() }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 
@@ -390,38 +395,15 @@ private fun RoomSidebar(
 
     Column(
         modifier = Modifier
-            .width(320.dp)
+            .width(SIDEBAR_WIDTH)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .focusProperties { right = iconRowFocusRequester }
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("x2rock", style = MaterialTheme.typography.titleMedium)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier
-                    .focusRequester(iconRowFocusRequester)
-                    .focusGroup()
-                    .focusProperties { right = detailFocusRequester }
-            ) {
-                SidebarIconButton(onClick = onSettingsClick) {
-                    Icon(Icons.Default.Settings, contentDescription = "Settings", modifier = Modifier.size(18.dp))
-                }
-                SidebarIconButton(onClick = onCollapseClick) {
-                    Text("◀", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
+        Spacer(Modifier.height(20.dp))
 
         when (state) {
             is HomeViewModel.UiState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Text(if (state.reconnecting) "Reconnecting…" else "Loading…", style = MaterialTheme.typography.bodyLarge)
                 }
             }
@@ -430,7 +412,7 @@ private fun RoomSidebar(
                 Column(
                     // Margins of their own: the Authentication message runs to five lines, and
                     // without them it ran edge to edge across the sidebar (Shield, 2026-10-05).
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(start = SIDEBAR_START, end = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -457,8 +439,9 @@ private fun RoomSidebar(
             is HomeViewModel.UiState.Success -> {
                 LazyColumn(
                     state = listState,
-                    // The rest of the height, so the UPnP note below sits at the foot of the list.
+                    // The rest of the height, so the footer sits at the foot of the list.
                     modifier = Modifier.weight(1f).onFocusChanged { onListFocusChanged(it.hasFocus) },
+                    contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     items(sorted, key = { it.id }) { group ->
                         val isSelected = group.id == selectedGroupId
@@ -482,15 +465,35 @@ private fun RoomSidebar(
                             "settings are hidden. Turn it on in the Sonos app: Account > Privacy and " +
                             "Security > Connection Security.",
                         style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(start = SIDEBAR_START, end = 24.dp, top = 8.dp, bottom = 8.dp),
                     )
                 }
+            }
+        }
+
+        // Settings at the foot, past the last room, where nothing lands on it by accident: at the
+        // top it was the first thing Compose found, and focus fell onto it three different ways.
+        Row(modifier = Modifier.padding(start = SIDEBAR_START, bottom = 12.dp, top = 2.dp)) {
+            AppButton(onClick = onSettingsClick, modifier = Modifier.exitRightTo(detailFocusRequester)) {
+                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Settings", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+/**
+ * Right from the sidebar's own controls crosses into the player, as right from a room does.
+ * A key rather than a focus property, for the reason [RoomListItem] gives.
+ */
+private fun Modifier.exitRightTo(target: FocusRequester): Modifier = onKeyEvent { event ->
+    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) {
+        target.requestFocusSafely()
+    } else false
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun RoomListItem(
     group: Group,
@@ -502,14 +505,23 @@ private fun RoomListItem(
     onFocused: () -> Unit,
     onOpenPanel: () -> Unit
 ) {
+    var focused by remember { mutableStateOf(false) }
+    val activity = roomActivity(group.playbackState, info.hasSource)
     Card(
         // Click was doing nothing at all, and it is the press a remote makes on a list.
         // Long-press stays as a synonym rather than the only way in.
         onClick = onOpenPanel,
         onLongClick = onOpenPanel,
+        border = appCardBorder(),
+        // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
+        // say — so the list still says which room the controls beside it act on.
+        colors = CardDefaults.colors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f) else Color.Transparent,
+        ),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
+            // The card's edge sits inside the 48dp title-safe margin's reach and its content on it.
+            .padding(start = SIDEBAR_START - 16.dp, end = 12.dp, top = 3.dp, bottom = 3.dp)
             .focusRequester(focusRequester)
             // Handled as a key rather than declared as a focus property: `focusProperties`
             // on this Card does not govern the search, because the Card's own focusable
@@ -522,7 +534,10 @@ private fun RoomListItem(
                     true
                 } else false
             }
-            .onFocusChanged { if (it.isFocused) onFocused() }
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            }
             .dpadMenuKey(onOpenPanel)
             // A remote selects a room by moving onto it and opens it with a press; a tap does
             // both in turn — the first selects, a tap on the selected room opens it — and a
@@ -535,7 +550,7 @@ private fun RoomListItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -544,7 +559,7 @@ private fun RoomListItem(
             // which at three metres reads as a different list rather than a missing image.
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(56.dp)
                     .clip(RoundedCornerShape(4.dp))
                     // Tinted only when something sits on it. An idle room leaves the slot
                     // transparent: it still holds the column, without putting an empty grey
@@ -562,7 +577,8 @@ private fun RoomListItem(
                         model = info.artUrl,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize(),
+                        // Dimmed with the row when nothing plays, so the playing rooms stand out.
+                        modifier = Modifier.fillMaxSize().alpha(if (activity.isPlaying) 1f else IDLE_ALPHA),
                     )
                     // A TV input has no art of its own — the player really does send
                     // `images: []` for `TV Audio` — so this glyph is the app's invention.
@@ -570,7 +586,7 @@ private fun RoomListItem(
                     info.onTvInput -> Icon(
                         imageVector = Icons.Default.Tv,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(28.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     // A station with no logo of its own — the same invention as the TV glyph
@@ -578,7 +594,7 @@ private fun RoomListItem(
                     info.isRadio -> Icon(
                         imageVector = Icons.Default.Radio,
                         contentDescription = null,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(28.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
                     // And nothing at all for an idle room: an empty tile holds the column
@@ -586,69 +602,103 @@ private fun RoomListItem(
                     else -> Unit
                 }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            // Not playing is drawn quieter, as the Sonos app draws it: the eye goes to the rooms
+            // that are doing something. Dimmed, not hidden — what is loaded is still worth saying.
+            Column(modifier = Modifier.weight(1f).alpha(if (activity.isPlaying) 1f else IDLE_ALPHA)) {
                 val roomCount = group.playerIds.size
                 Text(
-                    text = group.name + if (roomCount > 1) " · $roomCount rooms" else "",
-                    style = MaterialTheme.typography.titleSmall,
+                    // Sonos names a group by its coordinator; the count says it is more than one room.
+                    text = group.name + if (roomCount > 1 && " + " !in group.name) " + ${roomCount - 1}" else "",
+                    style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 val lines = roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
-                lines.forEach { line ->
+                lines.forEachIndexed { index, line ->
                     Text(
                         text = line,
                         style = MaterialTheme.typography.bodySmall,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        // The focused row's first line scrolls when it does not fit, so a long
+                        // title can be read without widening the list.
+                        overflow = if (focused && index == 0) TextOverflow.Clip else TextOverflow.Ellipsis,
+                        modifier = if (focused && index == 0) Modifier.basicMarquee(iterations = Int.MAX_VALUE) else Modifier,
                     )
                 }
             }
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                // Which rooms even have a television attached — modelled and plumbed this
-                // far for a long time with nothing drawing it. Shown only while the room is
-                // *not* on that input: once it is, the art tile carries the same glyph and
-                // the third line says "TV Audio", so a badge here would be the third telling
-                // of one fact. Dim, because it is a capability rather than a state.
-                if (info.hasTvInput && !info.onTvInput) {
-                    Icon(
-                        imageVector = Icons.Default.Tv,
-                        contentDescription = "Has a TV input",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-                    )
-                }
-                // A bonded speaker gone from the network: the room plays on without it and
-                // nothing else would say so. In the error colour, being a fault to see to.
-                if (info.offlineSpeakers > 0) {
-                    Icon(
-                        imageVector = Icons.Default.Warning,
-                        contentDescription = if (info.offlineSpeakers == 1) "A speaker in this room is offline"
-                            else "${info.offlineSpeakers} speakers in this room are offline",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-                // Muted is a state, not a capability, so it is not dimmed like the TV badge.
-                if (info.muted) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.VolumeOff,
-                        contentDescription = "Muted",
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                if ((group.playbackState ?: PlaybackStates.IDLE).isPlaying()) {
-                    Text("▶", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                // What the room is doing, on every row, in one glyph: bars for playing, a pause
+                // mark for paused, a stop mark for a stream that can only stop. Nothing for an
+                // empty room. This used to be a 12sp "▶" on playing rows alone, so paused looked
+                // exactly like idle.
+                ActivityGlyph(activity)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Which rooms even have a television attached. Shown only while the room is
+                    // *not* on that input: once it is, the art tile carries the same glyph and
+                    // the line says "TV Audio", so a badge here would be the third telling of
+                    // one fact. Dim, because it is a capability rather than a state.
+                    if (info.hasTvInput && !info.onTvInput) {
+                        Icon(
+                            imageVector = Icons.Default.Tv,
+                            contentDescription = "Has a TV input",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                        )
+                    }
+                    // A bonded speaker gone from the network: the room plays on without it and
+                    // nothing else would say so. In the error colour, being a fault to see to.
+                    if (info.offlineSpeakers > 0) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = if (info.offlineSpeakers == 1) "A speaker in this room is offline"
+                                else "${info.offlineSpeakers} speakers in this room are offline",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    // Muted is a state, not a capability, so it is not dimmed like the TV badge.
+                    if (info.muted) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.VolumeOff,
+                            contentDescription = "Muted",
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
                 }
             }
         }
     }
 }
+
+/** A room's [RoomActivity] as one glyph; an empty room draws none. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ActivityGlyph(activity: RoomActivity) {
+    val (icon, tint) = when (activity) {
+        RoomActivity.PLAYING -> Icons.Default.GraphicEq to MaterialTheme.colorScheme.primary
+        RoomActivity.PAUSED -> Icons.Default.Pause to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        RoomActivity.STOPPED -> Icons.Default.Stop to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+        RoomActivity.EMPTY -> return
+    }
+    Icon(icon, contentDescription = activity.label, modifier = Modifier.size(22.dp), tint = tint)
+}
+
+/** How quiet a room that is not playing is drawn. */
+private const val IDLE_ALPHA = 0.62f
+
+/** Room list width. 960dp is the whole of a 1080p screen; the player pane takes the rest. */
+private val SIDEBAR_WIDTH = 340.dp
+
+/**
+ * Where the sidebar's content starts: Google's 48dp title-safe margin, so a set that still
+ * overscans does not clip the rooms' art.
+ */
+private val SIDEBAR_START = 48.dp
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -750,12 +800,6 @@ private fun ThemeSelector(
     }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SidebarIconButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Surface(onClick = onClick, modifier = Modifier.size(36.dp).tapToClick(onClick)) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            content()
-        }
-    }
-}
+private const val OPENER_QUEUE = "queue"
+private const val OPENER_BROWSE = "browse"
+private const val OPENER_SEARCH = "search"

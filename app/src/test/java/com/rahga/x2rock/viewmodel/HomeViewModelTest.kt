@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import com.rahga.x2rock.store.PresetStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -71,6 +72,7 @@ class HomeViewModelTest {
             roomPrefsStore = roomPrefs,
             channelSync = channels,
             pendingRoomDeepLink = deepLink,
+            presetStore = PresetStore(prefs),
         )
     }
 
@@ -568,5 +570,46 @@ class HomeViewModelTest {
             viewModel.uiState.first { it is HomeViewModel.UiState.Error }
         }
         assertTrue(state is HomeViewModel.UiState.Error)
+    }
+
+    // ---------------------------------------------------------------- presets
+
+    /**
+     * The room's speakers and levels, and the favourite it plays — matched by the container's name,
+     * as Browse marks a favourite as playing. Love Songs Radio is both a captured favourite and the
+     * captured station event's container, so this match is between two real payloads.
+     */
+    @Test fun `a preset keeps the room, its levels and the favourite it plays`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        fake.pushFixture("stationMetadataStatus", kitchen.id)
+        fake.pushPlayerVolume(kitchen.coordinatorId, 17)
+        withTimeout(5_000) {
+            household.groupStates.first { it[kitchen.id]?.container?.name == "Love Songs Radio" }
+            household.playerVolumes.first { it[kitchen.coordinatorId]?.volume == 17 }
+        }
+
+        viewModel.savePreset(kitchen.id)
+
+        val saved = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        val preset = PresetStore(prefs).presets.value.single()
+        assertEquals("Saved \"Kitchen · Love Songs Radio\" to Browse", saved)
+        assertEquals(listOf(kitchen.coordinatorId), preset.playerIds)
+        assertEquals(mapOf(kitchen.coordinatorId to 17), preset.volumes)
+        assertEquals("84", preset.favoriteId)
+    }
+
+    /** Music that is not a favourite is not kept, and the notice says so. */
+    @Test fun `a preset of a room playing no favourite keeps rooms and levels only`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        fake.pushFixture("metadataStatus", kitchen.id)
+        withTimeout(5_000) { household.groupStates.first { it[kitchen.id]?.container?.name == "Certified Bangers - 90s" } }
+
+        viewModel.savePreset(kitchen.id)
+
+        val saved = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        assertTrue(saved, saved!!.contains("rooms and levels only"))
+        assertNull(PresetStore(prefs).presets.value.single().favoriteId)
     }
 }

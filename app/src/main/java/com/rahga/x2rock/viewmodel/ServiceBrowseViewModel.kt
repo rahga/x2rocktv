@@ -35,9 +35,24 @@ class ServiceBrowseViewModel @Inject constructor(
 
     private val groupId: String = checkNotNull(savedStateHandle["groupId"])
 
+    /**
+     * Opened from search on one container — an album, an artist — rather than on the service list:
+     * the service's [LinkedService.key] and the container's id and title. Back then climbs out of
+     * that container and closes, returning to the search, rather than wandering the service.
+     */
+    private val entry: Triple<String, String, String>? = run {
+        val service = savedStateHandle.get<String>("service")?.takeIf { it.isNotEmpty() } ?: return@run null
+        val container = savedStateHandle.get<String>("container")?.takeIf { it.isNotEmpty() } ?: return@run null
+        Triple(service, container, savedStateHandle.get<String>("title").orEmpty())
+    }
+
     sealed interface Services {
         data object Loading : Services
-        data class Ready(val services: List<LinkedService>) : Services
+        data class Ready(
+            val services: List<LinkedService>,
+            /** Whether Apple Music is offered too: it is searched through Apple, not SMAPI, on its own screen. */
+            val appleMusic: Boolean = false,
+        ) : Services
         data class Failed(val message: String) : Services
     }
 
@@ -81,10 +96,16 @@ class ServiceBrowseViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            _services.value = runCatching { household.searchableServices() }.fold(
-                onSuccess = { Services.Ready(it) },
+            val services = runCatching { household.searchableServices() }
+            val apple = runCatching { household.appleMusicAccount() != null }.getOrDefault(false)
+            _services.value = services.fold(
+                onSuccess = { Services.Ready(it, apple) },
                 onFailure = { Services.Failed("Couldn't read this system's services: ${it.message ?: it}") },
             )
+            val (key, container, title) = entry ?: return@launch
+            val service = services.getOrNull()?.firstOrNull { it.key() == key } ?: return@launch
+            _active.value = service
+            browse(container, title)
         }
     }
 
@@ -184,6 +205,8 @@ class ServiceBrowseViewModel @Inject constructor(
      * list, and only past that does the screen close. Returns true when it handled Back.
      */
     fun back(): Boolean {
+        // Entered on a container from search: its own top is where Back leaves, back to the search.
+        if (entry != null && crumbs.size <= 1) return false
         if (crumbs.isNotEmpty()) {
             crumbs.removeLast()
             val parent = crumbs.lastOrNull()
@@ -219,3 +242,6 @@ class ServiceBrowseViewModel @Inject constructor(
         }
     }
 }
+
+/** A stable key for a linked service: the service, plus the account so two accounts of one are distinct. */
+fun LinkedService.key(): String = "${service.id}:${accountId ?: "anon"}"

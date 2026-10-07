@@ -61,6 +61,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import java.io.IOException
@@ -1482,6 +1483,46 @@ class SonosHousehold(
             throw IOException("${group.name} did not answer, and the change has not appeared", e)
         }
     }
+
+    /**
+     * Put exactly [playerIds] in one group led by the first of them, and answer that group's id
+     * once the topology shows it — which is a new id whenever anything moved, because a regroup
+     * mints one. A preset's first step; what plays and how loud are for the caller.
+     *
+     * Two moves at most, each a `modifyGroupMembers` answered by the pushed topology:
+     *  - if the leader is a *member* of someone else's group, it leaves that group first, since
+     *    only a coordinator can gather a group around itself;
+     *  - then the leader's group takes in the missing players and lets go of the extra ones.
+     *
+     * A player not in the household now fails the whole thing with its id, rather than
+     * gathering the rest and calling that the preset.
+     */
+    suspend fun gatherRooms(playerIds: List<String>): String {
+        require(playerIds.isNotEmpty()) { "no rooms to gather" }
+        val wanted = playerIds.toSet()
+        val leader = playerIds.first()
+        val known = _state.value.groups.flatMap { it.playerIds }.toSet()
+        playerIds.firstOrNull { it !in known }?.let { error("${playerName(it)} isn't on the network") }
+
+        fun gathered(groups: List<Group>) = groups.firstOrNull { it.coordinatorId == leader && it.playerIds.toSet() == wanted }
+        gathered(_state.value.groups)?.let { return it.id }
+
+        val holding = _state.value.groups.first { leader in it.playerIds }
+        if (holding.coordinatorId != leader) {
+            modifyGroupMembers(holding.id, add = emptyList(), remove = listOf(leader))
+            awaitGroups("${playerName(leader)} to leave ${holding.name}") { groups -> groups.any { it.coordinatorId == leader } }
+        }
+        val own = _state.value.groups.first { it.coordinatorId == leader }
+        val add = playerIds.filter { it !in own.playerIds }
+        val remove = own.playerIds.filter { it !in wanted }
+        if (add.isNotEmpty() || remove.isNotEmpty()) modifyGroupMembers(own.id, add = add, remove = remove)
+        return awaitGroups("the rooms to come together") { gathered(it) != null }.let { gathered(it)!!.id }
+    }
+
+    /** The topology once [done] holds of it, within [settleMillis]; [what] names the wait in its failure. */
+    private suspend fun awaitGroups(what: String, done: (List<Group>) -> Boolean): List<Group> =
+        withTimeoutOrNull(settleMillis) { _state.map { it.groups }.first(done) }
+            ?: throw IOException("Timed out waiting for $what")
 
     /**
      * The household's UPnP switch, as the seed applies it: `effectiveSettings:1

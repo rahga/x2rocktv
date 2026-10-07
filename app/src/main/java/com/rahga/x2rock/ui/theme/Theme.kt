@@ -11,7 +11,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.tv.material3.Border
 import androidx.tv.material3.Button
+import androidx.tv.material3.CardBorder
+import androidx.tv.material3.CardDefaults
+import androidx.tv.material3.Typography
 import androidx.tv.material3.ButtonDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -22,16 +31,22 @@ import com.rahga.x2rock.ui.components.tapToClick
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun X2RockTheme(colorTheme: AppColorTheme = AppColorTheme.DEFAULT, content: @Composable () -> Unit) {
+fun X2RockTheme(
+    colorTheme: AppColorTheme = AppColorTheme.DEFAULT,
+    /** The selected room's cover colours, which [AppColorTheme.ARTWORK] takes its accent from. */
+    art: ArtColors? = null,
+    content: @Composable () -> Unit,
+) {
     val context = LocalContext.current
+    val default = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        dynamicDarkColorScheme(context).toTvColorScheme()
+    } else {
+        darkColorScheme()
+    }
     val colorScheme = when (colorTheme) {
-        AppColorTheme.DEFAULT -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                dynamicDarkColorScheme(context).toTvColorScheme()
-            } else {
-                darkColorScheme()
-            }
-        }
+        AppColorTheme.DEFAULT -> default
+        // Until a cover has been read, and for a room with none, the default stands in.
+        AppColorTheme.ARTWORK -> art?.let { default.copy(primary = it.accent, onPrimary = onAccent(it.accent)) } ?: default
         AppColorTheme.OCEAN -> darkColorScheme(
             primary = Color(0xFF4FC3F7),
             onPrimary = Color(0xFF003048),
@@ -81,7 +96,27 @@ fun X2RockTheme(colorTheme: AppColorTheme = AppColorTheme.DEFAULT, content: @Com
             onSurfaceVariant = Color(0xFFF2DAFF),
         )
     }
-    MaterialTheme(colorScheme = colorScheme, content = content)
+    MaterialTheme(colorScheme = colorScheme, typography = TenFootTypography, content = content)
+}
+
+/**
+ * tv-material3's scale, one notch larger at the small end. Its defaults put most secondary text —
+ * artist, station, a level, a section label — at 12sp, Google's absolute floor for television, and
+ * at three metres that was the text people actually read. The floor here is 14sp, and each style
+ * keeps its rank against the others, so a call site's choice still says what it means.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+private val TenFootTypography: Typography = Typography().let { t ->
+    t.copy(
+        titleMedium = t.titleMedium.copy(fontSize = 18.sp, lineHeight = 24.sp),
+        titleSmall = t.titleSmall.copy(fontSize = 16.sp, lineHeight = 22.sp),
+        bodyLarge = t.bodyLarge.copy(fontSize = 18.sp, lineHeight = 24.sp),
+        bodyMedium = t.bodyMedium.copy(fontSize = 16.sp, lineHeight = 22.sp),
+        bodySmall = t.bodySmall.copy(fontSize = 14.sp, lineHeight = 20.sp),
+        labelLarge = t.labelLarge.copy(fontSize = 16.sp, lineHeight = 22.sp),
+        labelMedium = t.labelMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
+        labelSmall = t.labelSmall.copy(fontSize = 13.sp, lineHeight = 18.sp),
+    )
 }
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -138,6 +173,31 @@ fun AppButton(
 }
 
 /**
+ * [AppButton] holding only an icon: tighter padding, so a row of them — the transport — fits the
+ * pane at 1080p without its gaps being squeezed.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun IconAppButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.tapToClick(onClick),
+        contentPadding = PaddingValues(12.dp),
+        colors = ButtonDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            pressedContainerColor = MaterialTheme.colorScheme.primary,
+            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+        content = content
+    )
+}
+
+/**
  * A tv-material3 Card that answers a tap as well as the select key, as [AppButton] does: a row of
  * a list, with an optional second action on a hold. Card on its own ignores touch entirely.
  */
@@ -153,9 +213,27 @@ fun AppCard(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier.tapToClick(onClick, onLongClick),
+        border = appCardBorder(),
         content = content,
     )
 }
+
+/**
+ * A focused card wears the same colour a focused button is filled with. tv-material3's own focus
+ * for a card is a slight scale and a marginally lighter grey, which beside a button's bright fill
+ * read as two focus languages — and across a room, a list's focused row was hard to find at all.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun appCardBorder(): CardBorder = CardDefaults.border(
+    focusedBorder = Border(
+        border = BorderStroke(3.dp, MaterialTheme.colorScheme.primary),
+        shape = CardShape,
+    ),
+)
+
+/** tv-material3's own card corner, named so a border or an outline drawn on a card can match it. */
+val CardShape = RoundedCornerShape(8.dp)
 
 /**
  * Focus is requested from effects that can run a frame before the target node attaches — on TV
@@ -183,4 +261,5 @@ fun AppColorTheme.swatchColor(): Color = when (this) {
     AppColorTheme.EMBER -> Color(0xFFFF7043)
     AppColorTheme.FOREST -> Color(0xFF66BB6A)
     AppColorTheme.ORCHID -> Color(0xFFCE93D8)
+    AppColorTheme.ARTWORK -> Color(0xFFE6A15A)
 }

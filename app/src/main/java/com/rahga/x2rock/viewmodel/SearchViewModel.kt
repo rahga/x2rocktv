@@ -1,0 +1,225 @@
+package com.rahga.x2rock.viewmodel
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.apple.AppleMusicItem
+import com.rahga.x2rock.apple.ITunesSearch
+import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.smapi.Category
+import com.rahga.x2rock.smapi.Item
+import com.rahga.x2rock.smapi.LinkedService
+import com.rahga.x2rock.smapi.ServiceContent
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Locale
+import javax.inject.Inject
+
+/**
+ * One search across every music service the household has — what Sonos's own app does, and what
+ * typing on a television keyboard once per service made unbearable.
+ *
+ * Each service that publishes search categories is asked for its tracks and its albums (or the
+ * nearest two categories it has), and Apple Music through Apple's public search; answers fill in
+ * section by section as they come, so a slow service holds up only its own section. Services the
+ * household signed in to come first, then the anonymous ones; a service that fails or stays silent
+ * is left out and counted rather than holding the list.
+ *
+ * A press plays a track or a station, resumes an audiobook, and opens anything else — an album, an
+ * artist — in that service's own browser, where its tracks can be played and Menu adds it whole.
+ * Searched on submit, never per keystroke: that would be thirty requests a letter.
+ */
+@HiltViewModel
+class SearchViewModel @Inject constructor(
+    private val household: SonosHousehold,
+    private val itunes: ITunesSearch,
+    savedStateHandle: SavedStateHandle,
+) : ViewModel() {
+
+    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+
+    /** One result, whichever search it came from. */
+    sealed interface Hit {
+        val key: String
+        val title: String
+        val subtitle: String?
+        val artUrl: String?
+
+        data class Service(val linked: LinkedService, val item: Item) : Hit {
+            override val key get() = "${linked.service.id}:${linked.accountId}:${item.id}"
+            override val title get() = item.title
+            override val subtitle get() = listOfNotNull(kindLabel(item.itemType), item.summary).joinToString(" · ").ifEmpty { null }
+            override val artUrl get() = item.artUrl
+        }
+
+        data class Apple(val item: AppleMusicItem) : Hit {
+            override val key get() = "apple:${item.objectId}"
+            override val title get() = item.title
+            override val subtitle get() = listOfNotNull(if (item.kind == AppleMusicItem.Kind.ALBUM) "Album" else "Song", item.artist).joinToString(" · ")
+            override val artUrl get() = item.artworkUrl
+        }
+    }
+
+    /** One service's answers, under its name. */
+    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>)
+
+    data class Results(
+        val sections: List<Section> = emptyList(),
+        /** Searches still out. */
+        val pending: Int = 0,
+        /** Services that failed or did not answer in time. */
+        val silent: Int = 0,
+        val searched: Boolean = false,
+    )
+
+    private val _query = MutableStateFlow("")
+    val query: StateFlow<String> = _query.asStateFlow()
+
+    private val _results = MutableStateFlow(Results())
+    val results: StateFlow<Results> = _results.asStateFlow()
+
+    private val _starting = MutableStateFlow<String?>(null)
+    val starting: StateFlow<String?> = _starting.asStateFlow()
+
+    private val _notice = TransientNotice(viewModelScope)
+    val notice: StateFlow<String?> = _notice.text
+
+    private val country = Locale.getDefault().country.ifEmpty { "US" }
+    private var job: Job? = null
+    private var appleAccount: String? = null
+    private val categories = mutableMapOf<String, List<Category>>()
+
+    fun setQuery(text: String) { _query.value = text }
+
+    fun search() {
+        val term = _query.value.trim().ifEmpty { return }
+        job?.cancel()
+        job = viewModelScope.launch {
+            val services = runCatching { household.searchableServices() }.getOrElse {
+                _results.value = Results(searched = true)
+                return@launch _notice.failure("read this system's services", it)
+            }
+            val apple = runCatching { appleAccount() }.getOrNull() != null
+            _results.value = Results(pending = services.size + if (apple) 1 else 0, searched = true)
+            coroutineScope {
+                services.forEach { linked -> launch { arrive(linked.service.name, linked.token != null) { searchOne(linked, term) } } }
+                if (apple) launch { arrive("Apple Music", signedIn = true) { searchApple(term) } }
+            }
+        }
+    }
+
+    /**
+     * Fold one service's answer in: its section in place if it found anything, a count if it did
+     * not answer. A service with no search at all answers an empty list and simply has no section.
+     */
+    private suspend fun arrive(name: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
+        val hits = withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
+        _results.update { r ->
+            val sections = if (hits.isNullOrEmpty()) r.sections
+            else (r.sections + Section(name, signedIn, hits)).sortedWith(sectionOrder)
+            r.copy(sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0)
+        }
+    }
+
+    private suspend fun searchOne(linked: LinkedService, term: String): List<Hit> {
+        val key = "${linked.service.id}:${linked.accountId}"
+        val available = categories[key] ?: household.serviceCategories(linked).also { categories[key] = it }
+        return coroutineScope {
+            pickCategories(available).map { category ->
+                async { household.searchService(linked, category.mappedId, term, count = PER_CATEGORY).items }
+            }.awaitAll().flatten().distinctBy { it.id }.take(PER_SERVICE).map { Hit.Service(linked, it) }
+        }
+    }
+
+    private suspend fun searchApple(term: String): List<Hit> = coroutineScope {
+        listOf(AppleMusicItem.Kind.SONG, AppleMusicItem.Kind.ALBUM)
+            .map { kind -> async { itunes.search(term, kind, country, limit = PER_CATEGORY) } }
+            .awaitAll().flatten().take(PER_SERVICE).map { Hit.Apple(it) }
+    }
+
+    /**
+     * What a press does. Plays a track, a station or a program, resumes an audiobook; anything else
+     * — an album, an artist, a show — opens through [onOpen] in that service's browser, where its
+     * contents are listed rather than guessed at.
+     */
+    fun select(hit: Hit, onPlayed: () -> Unit, onOpen: (LinkedService, Item) -> Unit) {
+        if (hit is Hit.Service && hit.item.container && !ServiceContent.isResumable(hit.item)) {
+            return onOpen(hit.linked, hit.item)
+        }
+        if (_starting.value != null) return
+        viewModelScope.launch {
+            _starting.value = hit.key
+            val started = runCatching {
+                when (hit) {
+                    is Hit.Apple -> household.playAppleMusic(groupId, hit.item, appleAccount() ?: error(NO_ACCOUNT))
+                    is Hit.Service ->
+                        if (ServiceContent.isResumable(hit.item)) household.resumeAudiobook(groupId, hit.linked, hit.item)
+                        else household.playServiceItem(groupId, hit.linked, hit.item)
+                }
+            }
+            _starting.value = null
+            started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${hit.title}", it) }
+        }
+    }
+
+    /** Menu: add to the end of the queue, leaving what plays alone — a track, or an album whole. */
+    fun queue(hit: Hit) {
+        viewModelScope.launch {
+            runCatching {
+                when (hit) {
+                    is Hit.Apple -> household.queueAppleMusic(groupId, hit.item, appleAccount() ?: error(NO_ACCOUNT))
+                    is Hit.Service -> {
+                        require(ServiceContent.canEnqueue(hit.item)) { "it isn't something a queue can hold" }
+                        household.queueServiceItem(groupId, hit.linked, hit.item)
+                    }
+                }
+            }.onSuccess { _notice.post("Added \"${hit.title}\" to the queue") }
+                .onFailure { _notice.failure("add ${hit.title}", it) }
+        }
+    }
+
+    private suspend fun appleAccount(): String? =
+        appleAccount ?: household.appleMusicAccount().also { appleAccount = it }
+
+    companion object {
+        private const val SERVICE_TIMEOUT_MILLIS = 10_000L
+        private const val PER_CATEGORY = 6
+        private const val PER_SERVICE = 8
+
+        /** The order categories are worth asking for, most wanted first. */
+        private val PREFERRED = listOf("tracks", "albums", "artists", "playlists", "stations", "podcasts", "audiobooks")
+
+        /**
+         * Two categories per service: its two most wanted, or whatever it has first. Two, because
+         * every one more is another request to every service on every search.
+         */
+        internal fun pickCategories(available: List<Category>): List<Category> {
+            val preferred = PREFERRED.mapNotNull { id -> available.firstOrNull { it.id == id } }
+            return (preferred.ifEmpty { available }).take(2)
+        }
+
+        /** Signed-in services first — the household chose those — then the rest, each by name. */
+        internal val sectionOrder = compareBy<Section>({ !it.signedIn }, { it.name.lowercase() })
+
+        /** What a result is, in a word, where the service said. */
+        internal fun kindLabel(itemType: String): String? = when (itemType) {
+            "track" -> "Song"
+            "album" -> "Album"
+            "artist" -> "Artist"
+            "playlist", "albumList", "trackList" -> "Playlist"
+            "stream", "program" -> "Station"
+            "audiobook" -> "Audiobook"
+            "show", "podcast" -> "Podcast"
+            else -> null
+        }
+    }
+}
