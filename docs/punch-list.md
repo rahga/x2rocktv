@@ -627,6 +627,31 @@ Each finding checked against the code, and the device where it could be, before 
   when results first arrive; a section that arrives later and sorts above it takes no focus, and the
   list keeps its anchor on the items showing. With no results, Back and the Search button remain.
 
+## Outside review — Phase 3 (2026-10-07)
+
+- **#7 search load — the real gap was cancellation, now fixed.** Search already ran on submit only,
+  so a debounce had nothing to do, and categories were cached for the session in the earlier review
+  fixes. But SMAPI calls used `execute()`: a superseded search's requests ran to their ends, each on a
+  thread, and held the view model's request permits, so a new search queued behind the old one's
+  stragglers. Calls are now cancellable (`Call.await()`), and each search has its own permits. Tested
+  against a service that takes the request and never answers: the client hangs up within 2s of the
+  cancel. Mutation-checked. (A MockWebServer version proved flaky — its sleeping handler thread made
+  shutdown and timing unreliable — and was replaced with a bare socket.)
+- **#16 duplicate list keys — fixed wider than reported.** Not only a service's browse results:
+  Apple Music results, radio stations (directories list one stream under several entries) and
+  Search's Apple hits were keyed on outside ids with no de-duplication, any repeat throwing "Key was
+  already used". Each is now de-duplicated where it arrives, first occurrence kept. The radio case is
+  tested by serving the captured first station twice, and mutation-checked.
+- **#13 launcher art kept after music stops — fixed, not verifiable from the shell.** An update keeps
+  every column it is not given; no art is now an explicit null. The TV provider shows the shell none
+  of the app's rows, so this was not seen on a device.
+- **#5 art formats — BMP and AVIF accepted; SVG deliberately not.** Coil has no SVG decoder here, so
+  admitting SVG would only move the failure, and adding one means parsing untrusted XML from any
+  station. AVIF decodes on Android 12 and later (the Streamer; not the Shield).
+- **#6 player-to-internet art redirects — not changed.** Each client keeping to its own side is the
+  design, written into `ArtHttp`, and the review gives no evidence a speaker's `/getaa` redirects — a
+  speaker serves its art itself. Revisit only with a captured redirect.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - [x] **Music-service search and browse, via the household's own stored tokens.** The 2026-10-01

@@ -41,11 +41,15 @@ class RadioViewModelTest {
     private val capture = FakePlayer::class.java.getResourceAsStream("/fixtures/radiobrowser.stations.jazz.json")!!
         .readBytes().decodeToString()
 
+    /** What the directory serves: the capture, unless a test rearranges it. */
+    @Volatile private var served: String = ""
+
     @Before fun setUp() {
+        served = capture
         fake = FakePlayer().also { it.start() }
         directoryServer = MockWebServer().apply {
             dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
-                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest) = MockResponse().setBody(capture)
+                override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest) = MockResponse().setBody(served)
             }
             start()
         }
@@ -105,5 +109,26 @@ class RadioViewModelTest {
         val said = withTimeout(15_000) { viewModel.notice.first { it != null } }
         assertEquals(silentNotice(station), said)
         assertFalse(done)
+    }
+
+    /**
+     * Directories list one stream under several entries, and the list is keyed by the stream's URL:
+     * a repeat threw "Key was already used". The capture's first station is served twice — the real
+     * entry, rearranged rather than invented — and listed once.
+     */
+    @Test fun `a stream listed twice is shown once`() = runBlocking<Unit> {
+        val stations = com.google.gson.JsonParser.parseString(capture).asJsonArray
+        val doubled = com.google.gson.JsonArray().apply { add(stations[0]); stations.forEach { add(it) } }
+        served = doubled.toString()
+        val viewModel = RadioViewModel(
+            household,
+            RadioDirectory(OkHttpClient(), base = directoryServer.url("/").toString().trimEnd('/')),
+            SavedStateHandle(mapOf("groupId" to kitchen.id)),
+        )
+        val loaded = kotlinx.coroutines.withTimeout(5_000) {
+            viewModel.stations.first { it is RadioViewModel.Stations.Loaded }
+        } as RadioViewModel.Stations.Loaded
+        assertEquals(stations.size(), loaded.stations.size)
+        assertEquals(loaded.stations.size, loaded.stations.map { it.url }.toSet().size)
     }
 }

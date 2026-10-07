@@ -1,5 +1,10 @@
 package com.rahga.x2rock.smapi
 
+import kotlin.coroutines.resumeWithException
+import okhttp3.Response
+import okhttp3.Callback
+import okhttp3.Call
+import kotlinx.coroutines.suspendCancellableCoroutine
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -285,7 +290,7 @@ class SmapiClient(client: OkHttpClient) {
         }
 
     /** The presentation map body, or `null` when the service publishes no manifest for one. */
-    private fun presentationMap(service: Service): String? {
+    private suspend fun presentationMap(service: Service): String? {
         val manifestUri = service.manifestUri ?: return null
         val manifestBody = get(manifestUri) ?: return null
         val mapUri = runCatching { JsonParser.parseString(manifestBody) }.getOrNull()
@@ -294,8 +299,8 @@ class SmapiClient(client: OkHttpClient) {
         return get(mapUri)
     }
 
-    private fun get(url: String): String? {
-        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).execute().use { response ->
+    private suspend fun get(url: String): String? {
+        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).await().use { response ->
             if (!response.isSuccessful) return null
             return response.body?.string()
         }
@@ -310,7 +315,7 @@ class SmapiClient(client: OkHttpClient) {
     private val refreshed = java.util.concurrent.ConcurrentHashMap<String, Token>()
 
     /** One SMAPI call. A service that needs an account is refused here, not sent and rejected. */
-    private fun call(service: Service, stored: Token?, action: String, params: String, retried: Boolean = false): String {
+    private suspend fun call(service: Service, stored: Token?, action: String, params: String, retried: Boolean = false): String {
         val token = stored?.let { refreshed[it.token] ?: it }
         if (service.auth != Auth.ANONYMOUS && token == null) {
             throw SmapiException("${service.name} needs an account linked before it can be used")
@@ -321,7 +326,7 @@ class SmapiClient(client: OkHttpClient) {
             .header("User-Agent", USER_AGENT)
             .post(envelope(action, params, token).toRequestBody("text/xml; charset=utf-8".toMediaType()))
             .build()
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).await().use { response ->
             val body = response.body?.string().orEmpty()
             if (body.isBlank()) {
                 throw SmapiException("${service.name} answered HTTP ${response.code} with an empty body")
@@ -571,3 +576,18 @@ private fun Element.firstChildNamed(tag: String): Element? =
     (0 until childNodes.length)
         .mapNotNull { childNodes.item(it) as? Element }
         .firstOrNull { it.tagName.substringAfter(':') == tag }
+
+/**
+ * The call, answered — and cancelled with the coroutine that waits for it. `execute()` blocks and a
+ * cancelled search could not stop it: every request a search had out ran to its end, holding a
+ * thread each, after the viewer had already searched for something else.
+ */
+private suspend fun Call.await(): Response = suspendCancellableCoroutine { waiting ->
+    waiting.invokeOnCancellation { cancel() }
+    enqueue(object : Callback {
+        override fun onResponse(call: Call, response: Response) = waiting.resume(response) { response.close() }
+        override fun onFailure(call: Call, e: IOException) {
+            if (!waiting.isCancelled) waiting.resumeWithException(e)
+        }
+    })
+}

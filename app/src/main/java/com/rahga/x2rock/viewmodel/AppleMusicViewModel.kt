@@ -73,7 +73,8 @@ class AppleMusicViewModel @Inject constructor(
         searchJob = viewModelScope.launch {
             _results.value = Results.Searching
             _results.value = runCatching { itunes.search(term, _kind.value, country) }.fold(
-                onSuccess = { Results.Found(it) },
+                // Each item once: the list is keyed by it, and a repeat would crash it.
+                onSuccess = { Results.Found(it.distinctBy { item -> item.objectId }) },
                 onFailure = { Results.Failed("Couldn't reach Apple's search: ${it.message ?: it}") },
             )
         }

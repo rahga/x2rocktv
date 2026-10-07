@@ -136,17 +136,19 @@ class RoomsChannelSync @Inject constructor(
                 .setWeight(groups.size - index)
                 .setIntentUri(Uri.parse("x2rock://room/${Uri.encode(group.coordinatorId)}"))
 
-            PosterArt.forLauncher(tile?.artUrl, addresses)?.let { url ->
+            val poster = PosterArt.forLauncher(tile?.artUrl, addresses)
+            poster?.let { url ->
                 builder.setPosterArtUri(Uri.parse(url))
                     .setPosterArtAspectRatio(TvContractCompat.PreviewPrograms.ASPECT_RATIO_16_9)
             }
 
             val existingId = existing[group.coordinatorId]
             if (existingId != null) {
-                context.contentResolver.update(
-                    TvContractCompat.buildPreviewProgramUri(existingId),
-                    builder.build().toContentValues(), null, null
-                )
+                val values = builder.build().toContentValues()
+                // An update keeps every column it is not given, so a room whose music stopped kept
+                // the last cover on the launcher for good. No art is said as an explicit null.
+                if (poster == null) values.putNull(TvContractCompat.PreviewPrograms.COLUMN_POSTER_ART_URI)
+                context.contentResolver.update(TvContractCompat.buildPreviewProgramUri(existingId), values, null, null)
             } else {
                 context.contentResolver.insert(
                     TvContractCompat.PreviewPrograms.CONTENT_URI,

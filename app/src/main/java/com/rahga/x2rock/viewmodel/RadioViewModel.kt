@@ -66,7 +66,9 @@ class RadioViewModel @Inject constructor(
             _stations.value = Stations.Loading
             _stations.value = runCatching { directory.stations(category.tag, category.countryCode) }
                 .fold(
-                    onSuccess = { Stations.Loaded(it) },
+                    // Each stream once: directories list one stream under several entries, and the list is
+                    // keyed by its URL, so a repeat would crash it. The first entry is kept.
+                    onSuccess = { Stations.Loaded(it.distinctBy { station -> station.url }) },
                     onFailure = { Stations.Failed("Couldn't reach the radio directory: ${it.message ?: it}") },
                 )
         }
