@@ -218,7 +218,11 @@ class ServiceBrowseViewModel @Inject constructor(
     fun back(): Boolean {
         // Entered on a container from search: its own top is where Back leaves, back to the search.
         if (entry != null && crumbs.size <= 1) return false
-        if (crumbs.isNotEmpty()) {
+        // A browse-only service opens on its root, and that root is its top: Back from there
+        // leaves the service. Re-reading the root here pushed it onto the trail again, so Back
+        // never left — every anonymous radio service was a trap (Piraten.FM, Streamer, 2026-10-07).
+        val atBrowseTop = _categories.value.isEmpty() && crumbs.size <= 1
+        if (crumbs.isNotEmpty() && !atBrowseTop) {
             crumbs.removeLast()
             val parent = crumbs.lastOrNull()
             job?.cancel()
@@ -226,14 +230,14 @@ class ServiceBrowseViewModel @Inject constructor(
             if (parent != null && service != null) {
                 browseWithoutPush(service, parent)
             } else {
-                // Back at the service's own top: a search service shows the results the search
-                // left, a browse-only one re-reads its root.
-                if (_categories.value.isEmpty()) browse("root", _active.value?.service?.name.orEmpty())
-                else _results.value = searchResults ?: Results.Idle
+                // Back at a search service's own top: the results the search left.
+                _results.value = searchResults ?: Results.Idle
             }
             return true
         }
         if (_active.value != null) {
+            job?.cancel()
+            crumbs.clear()
             _active.value = null
             _results.value = Results.Idle
             _categories.value = emptyList()
