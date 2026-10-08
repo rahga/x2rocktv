@@ -1,5 +1,7 @@
 package com.rahga.x2rock.media
 
+import com.rahga.x2rock.channel.PosterArt
+import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.PlaybackActions
 import android.content.Context
 import android.media.MediaMetadata
@@ -29,7 +31,8 @@ interface NowPlayingPublisher {
     }
 
     fun attach(controls: Controls)
-    fun publish(title: String?, artist: String?, album: String?, durationMillis: Long)
+    /** [artUrl] is the room's art as the app has it; the publisher makes it one the system can fetch. */
+    fun publish(title: String?, artist: String?, album: String?, durationMillis: Long, artUrl: String?)
     /**
      * @param idle nothing is loaded at all. **Not** "has no title": a soundbar playing TV
      *   audio reports no track metadata while very much playing, and calling that idle
@@ -91,6 +94,7 @@ interface NowPlayingPublisher {
 @Singleton
 class MediaSessionPublisher @Inject constructor(
     @ApplicationContext context: Context,
+    private val addresses: PlayerAddressBook,
 ) : NowPlayingPublisher {
 
     private val session = MediaSession(context, "x2rock").apply {
@@ -120,13 +124,23 @@ class MediaSessionPublisher @Inject constructor(
         })
     }
 
-    override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long) {
+    override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long, artUrl: String?) {
         session.setMetadata(
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title ?: "")
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist ?: "")
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, album ?: "")
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMillis)
+                // The cover, for the home screen's media card and Assistant's, which drew a blank
+                // without one (outside review, 2026-10-08). The system fetches it itself, so it is
+                // made fetchable the way the room tiles' posters are: a speaker's own art by its
+                // address rather than its .local name, a service's https as it is, else nothing.
+                .apply {
+                    PosterArt.forLauncher(artUrl, addresses)?.let {
+                        putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, it)
+                        putString(MediaMetadata.METADATA_KEY_ART_URI, it)
+                    }
+                }
                 .build()
         )
     }
