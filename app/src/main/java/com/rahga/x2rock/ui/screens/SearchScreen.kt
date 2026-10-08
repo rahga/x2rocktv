@@ -1,5 +1,14 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import coil.compose.AsyncImage
+import com.rahga.x2rock.ui.serviceLogo
 import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
@@ -93,17 +102,17 @@ fun SearchScreen(
     var openedFrom by rememberSaveable { mutableStateOf<String?>(null) }
     val openedFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
+    // Coming back to results already there: bring the opener's service into view, and its grid
+    // (below) brings the cell itself, which a grid only composes once scrolled to.
+    var restoring by remember { mutableStateOf(openedFrom != null && results.sections.isNotEmpty()) }
     LaunchedEffect(Unit) {
         // Not on a return from an opened album, where the results are already there to go back to.
         if (results.sections.isEmpty()) {
             fieldFocus.requestFocusSafely()
             return@LaunchedEffect
         }
-        val index = rowKeys(results).indexOf(openedFrom)
-        if (index >= 0) {
-            listState.scrollToItem(index)
-            openedFocus.requestFocusRetrying()
-        }
+        val section = results.sections.indexOfFirst { cellKeys(it).contains(openedFrom) }
+        if (section >= 0) listState.scrollToItem(section) else restoring = false
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -139,38 +148,63 @@ fun SearchScreen(
                     contentPadding = PaddingValues(bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    results.sections.forEachIndexed { sectionIndex, section ->
-                        item(key = "section:${section.key}") {
-                            SectionTitle(section.name, first = sectionIndex == 0)
+                    // One block per service, as the Sonos app lays its search out: its name, then
+                    // its hits three to a column, sideways, "More from" it in the last cell — wider
+                    // than the screen, so the next column showing at the edge says there is more.
+                    itemsIndexed(results.sections, key = { _, section -> "section:${section.key}" }) { sectionIndex, section ->
+                        val cells = cellKeys(section)
+                        val gridState = rememberLazyGridState()
+                        LaunchedEffect(restoring) {
+                            val index = cells.indexOf(openedFrom)
+                            if (!restoring || index < 0) return@LaunchedEffect
+                            gridState.scrollToItem(index)
+                            openedFocus.requestFocusRetrying()
+                            restoring = false
                         }
-                        items(section.hits, key = { "${section.key}:${it.key}" }) { hit ->
-                            HitRow(
-                                hit = hit,
-                                isStarting = starting == hit.key,
-                                onClick = {
-                                    viewModel.select(hit, onPlayed) { linked, item ->
-                                        openedFrom = "${section.key}:${hit.key}"
-                                        onOpen(linked.key(), item)
-                                    }
-                                },
-                                onMenu = { menuFrom = hit.key; viewModel.openMenu(hit) },
-                                modifier = Modifier
-                                    .then(if (hit.key == firstKey) Modifier.focusRequester(resultsFocus) else Modifier)
-                                    .then(if (hit.key == menuFrom) Modifier.focusRequester(menuReturn) else Modifier)
-                                    .then(if ("${section.key}:${hit.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier),
-                            )
-                        }
-                        // Two categories and eight hits a service is what keeps one search across
-                        // every service affordable; the rest is that service's own search away.
-                        if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
-                            MediaRow(
-                                title = "More from ${section.name}",
-                                subtitle = "Every kind of result, and every page",
-                                artUrl = null,
-                                onClick = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) },
-                                modifier = if ("more:${section.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier,
+                        Column {
+                            ServiceHeading(section.name, first = sectionIndex == 0)
+                            val rows = cells.size.coerceAtMost(GRID_ROWS)
+                            LazyHorizontalGrid(
+                                rows = GridCells.Fixed(rows),
+                                state = gridState,
+                                modifier = Modifier.height(CELL_HEIGHT * rows + CELL_GAP * (rows - 1) + 8.dp),
+                                // A little room at the sides for the focused cell's outline, which the edge cut off.
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(CELL_GAP),
                             ) {
-                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
+                                items(section.hits, key = { "${section.key}:${it.key}" }) { hit ->
+                                    val key = "${section.key}:${hit.key}"
+                                    HitRow(
+                                        hit = hit,
+                                        isStarting = starting == hit.key,
+                                        onClick = {
+                                            viewModel.select(hit, onPlayed) { linked, item ->
+                                                openedFrom = key
+                                                onOpen(linked.key(), item)
+                                            }
+                                        },
+                                        onMenu = { menuFrom = hit.key; viewModel.openMenu(hit) },
+                                        modifier = Modifier.width(CELL_WIDTH)
+                                            .then(if (hit.key == firstKey) Modifier.focusRequester(resultsFocus) else Modifier)
+                                            .then(if (hit.key == menuFrom) Modifier.focusRequester(menuReturn) else Modifier)
+                                            .then(if (key == openedFrom) Modifier.focusRequester(openedFocus) else Modifier),
+                                    )
+                                }
+                                // Two categories and eight hits a service is what keeps one search
+                                // across every service affordable; the rest is its own search away.
+                                if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
+                                    MediaRow(
+                                        title = "More from ${section.name}",
+                                        subtitle = "Every kind, every page",
+                                        artUrl = serviceLogo(section.name),
+                                        onClick = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) },
+                                        modifier = Modifier.width(CELL_WIDTH)
+                                            .then(if ("more:${section.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier),
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -193,11 +227,41 @@ fun SearchScreen(
     }
 }
 
-/** Every row's key in list order — headings, hits and "More" rows — as the list keys them. */
-private fun rowKeys(results: SearchViewModel.Results): List<String> = results.sections.flatMap { section ->
-    listOf("section:${section.key}") + section.hits.map { "${section.key}:${it.key}" } +
-        listOfNotNull("more:${section.key}".takeIf { section.key != APPLE_SECTION })
+/** A service block's cells in order — its hits, then "More" — as its grid keys them. */
+private fun cellKeys(section: SearchViewModel.Section): List<String> =
+    section.hits.map { "${section.key}:${it.key}" } + listOfNotNull("more:${section.key}".takeIf { section.key != APPLE_SECTION })
+
+/** A service's name over its block, with its logo beside it as the Sonos app has. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun ServiceHeading(name: String, first: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(top = if (first) 0.dp else 16.dp, bottom = 8.dp),
+    ) {
+        serviceLogo(name)?.let { logo ->
+            AsyncImage(
+                model = logo, contentDescription = null,
+                modifier = Modifier.size(32.dp).clip(RoundedCornerShape(6.dp)),
+            )
+            Spacer(Modifier.width(12.dp))
+        }
+        Text(name, style = MaterialTheme.typography.titleLarge)
+    }
 }
+
+/** Three cells to a column, as the Sonos app's search has them. */
+private const val GRID_ROWS = 3
+
+/** A cell is a list row: the 56dp art slot and its padding. */
+private val CELL_HEIGHT = 76.dp
+private val CELL_GAP = 8.dp
+
+/**
+ * About two and a half cells across the 864dp a television leaves this list: the third column
+ * showing cut off at the edge is what says the block goes on sideways.
+ */
+private val CELL_WIDTH = 340.dp
 
 /** The section key Apple Music's hits are listed under; it has no SMAPI search to send "More" to. */
 private const val APPLE_SECTION = "apple"

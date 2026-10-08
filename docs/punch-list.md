@@ -731,9 +731,11 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   favourite-shaped — a heart that toggles `SAVE_TRACK`/`DELETE_TRACK`, read back after each press,
   and a ban that sends `SKIP_TRACK` and skips. Thumbs stay thumbs. The heart was pressed both ways
   on FE!N against the real account.*
-- [x] **Search.** *Done: each service's section ends in "More from <service>", which opens that
-  service's own search for the same term with every category and every page; Back returns to the
-  row. Hits have the item menu.*
+- [x] **Search.** *Done: laid out as the Sonos app's — each service a block under its logo and
+  name, its hits three to a column running sideways, "More from <service>" in the ninth cell, the
+  block wider than the screen so the next column shows cut off at the edge. "More from" opens that
+  service's own search for the term with every category and page; Back returns to the cell. Hits
+  have the item menu.*
 - [x] **The pane drops the station once a track is known.** *Done: "BENEE • Hit List".*
 - **Review #1 again**: after a real screensaver on the emulator, the room row drew normally.
 
