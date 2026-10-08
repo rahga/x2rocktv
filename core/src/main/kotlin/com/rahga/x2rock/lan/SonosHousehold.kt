@@ -333,7 +333,13 @@ class SonosHousehold(
     private val ratingsCatalogue = RatingsCatalogue(smapi, ratingsStore)
 
     private val sockets = java.util.concurrent.ConcurrentHashMap<String, SonosSocket>()
-    private val socketJobs = java.util.Collections.synchronizedList(mutableListOf<Job>())
+    /**
+     * Each open socket's two watchers, by socket, so one lost on its own can have its own stopped.
+     * They collect `SharedFlow`s, which never complete: a lost member's watchers used to stay
+     * suspended for the rest of the session, holding its dead socket, a pair more for every
+     * time a speaker dropped and came back (outside review, 2026-10-08).
+     */
+    private val socketJobs = mutableMapOf<SonosSocket, List<Job>>()
     private val lock = Mutex()
     private var reconnectJob: Job? = null
 
@@ -650,6 +656,9 @@ class SonosHousehold(
         val players = playersOn(socket.hostname)
         _playerVolumes.update { it - players.toSet() }
         subscribedPlayers.removeAll(players.toSet())
+        // Its watchers too, this one among them: the next command to the speaker opens a fresh
+        // socket with fresh watchers, and these would otherwise wait on the dead one forever.
+        takeJobs(socket).forEach { it.cancel() }
     }
 
     /** Whether [hostname] is the seed or any group's coordinator, by the topology as it is now. */
@@ -1751,22 +1760,34 @@ class SonosHousehold(
      * do. Taking a copy first means the cancelling happens outside the lock, too.
      */
     private fun takeJobs(): List<Job> = synchronized(socketJobs) {
-        socketJobs.toList().also { socketJobs.clear() }
+        socketJobs.values.flatten().also { socketJobs.clear() }
     }
+
+    /** [socket]'s watchers, taken out of the map; cancelled by the caller, outside the lock. */
+    private fun takeJobs(socket: SonosSocket): List<Job> = synchronized(socketJobs) {
+        socketJobs.remove(socket).orEmpty()
+    }
+
+    /** The watchers still running, for a test to see that a lost socket's were stopped. */
+    internal fun liveWatchers(): Int = synchronized(socketJobs) { socketJobs.values.flatten().count { it.isActive } }
+
+    /** How many sockets are open, each of which should have its two watchers and no more. */
+    internal fun openSockets(): Int = sockets.size
 
     /** Routes one socket's events into the state flows, and its death into a reconnect. */
     private fun watch(socket: SonosSocket) {
         // UNDISPATCHED so the collector is attached before this returns. `events` has no
         // replay and drops when nobody is listening, so a dispatched launch could lose the
         // race against a subscribe reply and its snapshot.
-        socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        val events = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             // One malformed frame from one speaker must not take the process down: an
             // uncaught throw here reaches the thread's default handler, not the scope.
             socket.events.collect { event -> runCatching { apply(event, from = socket.hostname) } }
         }
-        socketJobs += scope.launch(start = CoroutineStart.UNDISPATCHED) {
+        val failures = scope.launch(start = CoroutineStart.UNDISPATCHED) {
             socket.failures.collect { cause -> handleLoss(socket, cause) }
         }
+        synchronized(socketJobs) { socketJobs[socket] = listOf(events, failures) }
     }
 
     /**

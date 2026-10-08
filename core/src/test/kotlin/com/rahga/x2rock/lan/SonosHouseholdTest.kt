@@ -663,6 +663,9 @@ class SonosHouseholdTest {
         // than failing on the dead one.
         household.setPlayerVolume(member, 10)
         assertTrue("no new socket was opened to the member", fake.isConnected(member))
+        // And the dead socket's watchers stopped: two to every open socket, no more. They collect
+        // flows that never complete, so they used to wait on the dead socket for good.
+        assertEquals("watchers of the lost socket are still running", 2 * household.openSockets(), household.liveWatchers())
     }
 
     /** The other half: a coordinator's socket carries its group's subscriptions, so it rebuilds. */
