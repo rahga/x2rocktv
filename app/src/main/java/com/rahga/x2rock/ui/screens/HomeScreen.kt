@@ -547,7 +547,9 @@ private fun RoomListItem(
         modifier = Modifier
             .fillMaxWidth()
             // The card's edge sits inside the 48dp title-safe margin's reach and its content on it.
-            .padding(start = SIDEBAR_START - 16.dp, end = 12.dp, top = 3.dp, bottom = 3.dp)
+            // Room at the right and between rows for the focused card, which grows by a tenth:
+            // with 12dp it reached the pane's edge, and its outline sat on the border (2026-10-08).
+            .padding(start = SIDEBAR_START - 16.dp, end = 28.dp, top = 6.dp, bottom = 6.dp)
             .focusRequester(focusRequester)
             // Right crosses into the player pane, at its primary control. A key rather than a
             // focus property: `focusProperties` on this Card does not govern the search, because
