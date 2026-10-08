@@ -15,7 +15,7 @@ Wi-Fi). Rooms, transport, volume, grouping and party mode, the queue, favourites
 soundbar's TV input with Night Sound and Speech Enhancement, and track ratings all work.
 What is still to do is in [`docs/punch-list.md`](docs/punch-list.md).
 
-Discovery is SSDP only, so a network that blocks multicast will find no speakers yet.
+Speakers are found by SSDP, with mDNS as the fallback on networks that drop SSDP.
 
 ## Building
 
@@ -37,3 +37,13 @@ Open in Android Studio and run `:app`, or:
 ```
 
 See `ARCHITECTURE.md` for the layout and `CLAUDE.md` for the conventions.
+
+## License
+
+x2rock is free software under the [GNU General Public License, version 3](LICENSE) only
+(`GPL-3.0-only`): use it, change it and share it, and anything you distribute that is built on
+it is released under the same terms, with its source.
+
+**Commercial licences are available on request** for closed-source or branded builds, such as an
+integrator's own edition for its clients. Ask through GitHub:
+[github.com/rahga](https://github.com/rahga).
