@@ -16,8 +16,12 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      # :app needs a platform to compile against; :core does not.
+      # :app needs a platform to compile against; :core does not. The action's default package
+      # list includes `tools`, which the runner's current SDK manager no longer has: every run
+      # from 2026-10-06 failed here, before any test ran. Gradle fetches the platform it needs.
       - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools'
 
       - uses: gradle/actions/setup-gradle@v4
 
