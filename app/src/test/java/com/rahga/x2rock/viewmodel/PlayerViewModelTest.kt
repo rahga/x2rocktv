@@ -249,6 +249,20 @@ class PlayerViewModelTest {
         assertEquals(0, fake.commandsNamed("togglePlayPause"))
     }
 
+    /** A hold on the volume sets an exact level, and steps still waiting are not sent after it. */
+    @Test fun `an exact level is set, and waiting steps are dropped`() = runBlocking<Unit> {
+        fake.pushGroupVolume(groupId, 12)
+        withTimeout(5_000) { viewModel.uiState.first { it.volume == 12 } }
+        fake.clearHistory()
+        viewModel.adjustVolume(+5)
+        viewModel.setVolume(37)
+        val sent = fake.awaitCommand(3_000) { it.get("command")?.asString == "setVolume" && it.get("namespace")?.asString == "groupVolume:1" }
+        assertEquals(groupId, sent.get("groupId").asString)
+        assertEquals(37, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+        kotlinx.coroutines.delay(400)
+        assertEquals("a step pressed before the exact level was still sent", 0, fake.commandsNamed("setRelativeVolume"))
+    }
+
     // ---------------------------------------------------------------- publishing
 
     @Test fun `metadata reaches the system when a track arrives`() = runBlocking<Unit> {

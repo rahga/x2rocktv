@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.components
 
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.border
@@ -40,6 +41,8 @@ fun SearchField(
     onValueChange: (String) -> Unit,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A number rather than words: the keyboard comes up as digits, and its key says Done. */
+    numeric: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -55,8 +58,9 @@ fun SearchField(
         singleLine = true,
         textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface),
         cursorBrush = SolidColor(colors.primary),
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { search() }),
+        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+        else KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { search() }, onDone = { search() }),
         // A real keyboard's Enter, too — the emulator's, a tablet's. Only the on-screen keyboard
         // sends the search action; a key is a key.
         modifier = modifier
