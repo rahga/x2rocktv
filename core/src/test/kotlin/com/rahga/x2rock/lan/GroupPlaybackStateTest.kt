@@ -8,7 +8,7 @@ import org.junit.Test
 /**
  * Regression test for a crash seen on device: a `groups:1` event omits `playbackState`,
  * Gson wrote null into a field Kotlin declared non-null, and the first recomposition after
- * a group formed died in `toPlaybackLabel`.
+ * a group formed died labelling its state (`toPlaybackLabel`, since replaced by `roomActivity`).
  */
 class GroupPlaybackStateTest {
 

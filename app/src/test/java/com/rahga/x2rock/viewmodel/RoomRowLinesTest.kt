@@ -38,4 +38,10 @@ class RoomRowLinesTest {
         // The word the pane and panel use, not the transport's "Idle".
         assertEquals(listOf("Nothing playing"), roomRowLines(HomeViewModel.RoomInfo(), PlaybackStates.IDLE))
     }
+
+    @Test fun `a TV input with no format yet says the room's word, never Idle`() {
+        val tv = HomeViewModel.RoomInfo(onTvInput = true, source = "TV Audio")
+        assertEquals(listOf("Stopped", "TV Audio"), roomRowLines(tv, PlaybackStates.IDLE))
+        assertEquals(listOf("Playing", "TV Audio"), roomRowLines(tv, PlaybackStates.PLAYING))
+    }
 }
