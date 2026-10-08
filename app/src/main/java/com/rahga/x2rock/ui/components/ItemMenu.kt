@@ -3,6 +3,7 @@ package com.rahga.x2rock.ui.components
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -82,8 +83,11 @@ fun ItemMenu(
             Spacer(Modifier.padding(top = 16.dp))
             // A television is 540dp tall; the heading and padding take the rest, and a long menu
             // scrolls under focus rather than running off the top.
+            // Room at the sides for a focused button: tv-material grows it by a tenth, which took a
+            // full-width one out to the dialog's own edges, looking bigger than the box it was in.
             LazyColumn(
                 modifier = Modifier.heightIn(max = 340.dp),
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemsIndexed(rows) { index, row ->

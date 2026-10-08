@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.apple.ITunesSearch
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.store.PrimaryAccounts
+import com.rahga.x2rock.store.searchedAccounts
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
@@ -49,6 +51,7 @@ class SearchViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val itunes: ITunesSearch,
     savedStateHandle: SavedStateHandle,
+    private val primaryAccounts: PrimaryAccounts,
 ) : ViewModel() {
 
     private val groupId: String = checkNotNull(savedStateHandle["groupId"])
@@ -114,7 +117,8 @@ class SearchViewModel @Inject constructor(
         job = viewModelScope.launch {
             // Side by side: neither needs the other, and the Apple answer is a speaker round trip.
             val appleKnown = async { runCatching { household.appleMusicAccount() }.getOrNull() != null }
-            val services = runCatching { household.searchableServices() }.getOrElse {
+            // A service's primary account alone, where this device has one: see searchedAccounts.
+            val services = runCatching { searchedAccounts(household.searchableServices(), primaryAccounts.primaries.value) }.getOrElse {
                 _results.value = Results(searched = true)
                 return@launch _notice.failure("read this system's services", it)
             }

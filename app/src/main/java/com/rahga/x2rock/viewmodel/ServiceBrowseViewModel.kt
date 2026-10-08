@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemPage
@@ -40,6 +41,7 @@ import javax.inject.Inject
 class ServiceBrowseViewModel @Inject constructor(
     private val household: SonosHousehold,
     savedStateHandle: SavedStateHandle,
+    private val primaryAccounts: PrimaryAccounts,
 ) : ViewModel() {
 
     private val groupId: String = checkNotNull(savedStateHandle["groupId"])
@@ -319,6 +321,26 @@ class ServiceBrowseViewModel @Inject constructor(
             val total = if (next.items.isEmpty()) shown.items.size else shown.total
             publish(level, found(shown.items + next.items, total))
         }
+    }
+
+    /** Each service's primary account on this device; see [PrimaryAccounts]. */
+    val primaries: StateFlow<Map<String, String>> = primaryAccounts.primaries
+
+    /** The service row whose hold menu is open — "Make primary" — or `null`. */
+    private val _serviceMenu = MutableStateFlow<LinkedService?>(null)
+    val serviceMenu: StateFlow<LinkedService?> = _serviceMenu.asStateFlow()
+
+    /** A hold on a service row: its menu, where it has another account to be primary over. */
+    fun openServiceMenu(linked: LinkedService) {
+        val all = (_services.value as? Services.Ready)?.services.orEmpty()
+        if (all.count { it.service.id == linked.service.id } > 1) _serviceMenu.value = linked
+    }
+
+    fun closeServiceMenu() { _serviceMenu.value = null }
+
+    fun makePrimary(linked: LinkedService) {
+        primaryAccounts.makePrimary(linked)
+        _notice.post("${linked.nickname.ifEmpty { linked.service.name }} is now ${linked.service.name}'s primary account here")
     }
 
     /** The menu a hold or Menu on a row opens. */

@@ -705,7 +705,12 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   fetched at 112px PNG from media.sonos.com; names are matched loosely, which covers 99 of the
   office's 108, and the rest keep an empty slot. **Amazon Music listed twice is right**: the two
   accounts are the owner's and a family-plan member's, set up as a test. The Sonos app shows one.
-- [ ] **A service's preferred account.** Most services allow more than one account, and the Sonos
+- [x] **A service's preferred account.** *Done 2026-10-08: a hold or Menu on a service row with
+  more than one account offers "Make primary", kept on this device per service by the account's
+  selector (`PrimaryAccounts`). The primary is listed first and marked, and the search across every
+  service asks only it — two accounts of one catalogue had meant two sections and twice the
+  requests; for a purchase-based service like Audible it is the account whose library plays.* Most
+  services allow more than one account, and the Sonos
   app lets one be "Primary"; this lists every stored account of a service as its own row (Amazon
   Music twice, here), and plays, searches and queues through whichever row was picked.
 
@@ -720,9 +725,8 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   Control API `musicServiceAccounts:1` exists but answers `ERROR_UNSUPPORTED_COMMAND` to
   `getAccounts`, `listAccounts` and `getMusicServiceAccounts`.
 
-  So the honest equivalent here is this device's own choice, stored like presets: a "Make primary"
-  in a service's menu, the primary leading the list and the others a level down — or, without one,
-  the account last played from. Nothing on the speakers to read or write.
+  So the equivalent here is this device's own choice, stored like presets. Every account stays
+  listed: two of a purchase-based service own different libraries.
 - [x] **Deezer's heart and ban.** *Done: the pane draws them where a service's ratings are
   favourite-shaped — a heart that toggles `SAVE_TRACK`/`DELETE_TRACK`, read back after each press,
   and a ban that sends `SKIP_TRACK` and skips. Thumbs stay thumbs. The heart was pressed both ways

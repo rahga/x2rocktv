@@ -44,6 +44,12 @@ import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
+import com.rahga.x2rock.ui.components.ItemMenu
+import com.rahga.x2rock.ui.components.MenuAction
+import com.rahga.x2rock.ui.components.MenuSection
+import com.rahga.x2rock.ui.components.dpadMenuKey
+import com.rahga.x2rock.store.isPrimary
+import com.rahga.x2rock.store.withPrimariesFirst
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.ArtSlot
@@ -84,6 +90,8 @@ fun ServiceBrowseScreen(
     val active by viewModel.active.collectAsState()
     val notice by viewModel.notice.collectAsState()
 
+    val primaries by viewModel.primaries.collectAsState()
+    val serviceMenu by viewModel.serviceMenu.collectAsState()
     BackHandler { if (!viewModel.back()) onBack() }
     // The row a service was opened from, so Back lands on it rather than on the first row. Saved,
     // because Apple Music is a screen of its own and this one is rebuilt on the way back.
@@ -104,13 +112,31 @@ fun ServiceBrowseScreen(
                 if (service == null) {
                     ServiceList(
                         services,
+                        primaries = primaries,
                         returnTo = opened,
                         onOpen = { opened = Entry.Service(it).key; viewModel.open(it) },
+                        onMenu = { opened = Entry.Service(it).key; viewModel.openServiceMenu(it) },
+                        menuOpen = serviceMenu != null,
                         onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic() },
                     )
                 } else {
                     ServiceContent(viewModel, service, room, onPlayed)
                 }
+            }
+            // Over the whole screen, not inside the column: there the list takes every pixel of
+            // height, and a menu drawn below it had none — invisible, yet holding focus.
+            serviceMenu?.let { linked ->
+                val primary = isPrimary(linked, primaries)
+                ItemMenu(
+                    title = linked.service.name,
+                    subtitle = linked.nickname.ifEmpty { null },
+                    artUrl = serviceLogo(linked.service.name),
+                    sections = listOf(MenuSection(null, if (primary) emptyList() else listOf(
+                        MenuAction("Make primary", "Listed first, and the one Search asks") { viewModel.makePrimary(linked) },
+                    ))),
+                    onDismiss = viewModel::closeServiceMenu,
+                    note = if (primary) "This is ${linked.service.name}'s primary account here." else null,
+                )
             }
             notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
@@ -120,17 +146,23 @@ fun ServiceBrowseScreen(
 /**
  * The household's services in two lists: the ones it **added** — its own Deezer, TIDAL, Audible,
  * Apple Music, and any radio service it chose — and then the anonymous radio services every Sonos
- * system carries,
- * which run to a hundred and bury the few that matter if listed together by name. Focus starts on
- * the first row, so Select opens a service rather than pressing Back — or, coming back out of a
- * service, on [returnTo], the row that opened it.
+ * system carries, which run to a hundred and bury the few that matter if listed together by name.
+ * Focus starts on the first row, so Select opens a service rather than pressing Back — or, coming
+ * back out of a service, on [returnTo], the row that opened it.
+ *
+ * A service with more than one account lists each, its [primaries] entry first and marked; a hold
+ * or Menu on one offers to make it primary.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ServiceList(
     services: ServiceBrowseViewModel.Services,
+    primaries: Map<String, String>,
     returnTo: String?,
     onOpen: (LinkedService) -> Unit,
+    onMenu: (LinkedService) -> Unit,
+    /** Whether a row's menu is over the list; focus goes back to that row when it closes. */
+    menuOpen: Boolean,
     onOpenAppleMusic: () -> Unit,
 ) {
     when (services) {
@@ -139,7 +171,7 @@ private fun ServiceList(
         is ServiceBrowseViewModel.Services.Failed ->
             Text(services.message, style = MaterialTheme.typography.bodyMedium)
         is ServiceBrowseViewModel.Services.Ready -> {
-            val (yours, others) = services.services.partition { it.added }
+            val (yours, others) = withPrimariesFirst(services.services, primaries).partition { it.added }
             if (yours.isEmpty() && others.isEmpty() && !services.appleMusic) {
                 Text(
                     "No searchable services. Add a music service in the Sonos app, and this system's " +
@@ -160,7 +192,8 @@ private fun ServiceList(
             val target = entries.indexOfFirst { it.key == returnTo }.takeIf { it >= 0 } ?: first
             val targetFocus = remember { FocusRequester() }
             val listState = rememberLazyListState()
-            LaunchedEffect(Unit) {
+            LaunchedEffect(menuOpen) {
+                if (menuOpen) return@LaunchedEffect
                 // A row far down "More radio" is not composed until scrolled to, and an uncomposed
                 // row cannot take focus.
                 if (target != first) listState.scrollToItem(target)
@@ -178,9 +211,11 @@ private fun ServiceList(
                         Entry.Apple -> ServiceRow("Apple Music", "Searched through Apple", onOpenAppleMusic, modifier)
                         is Entry.Service -> ServiceRow(
                             entry.linked.service.name,
-                            entry.linked.nicknameIfAmbiguous(services.services),
+                            entry.linked.nicknameIfAmbiguous(services.services)
+                                ?.let { if (isPrimary(entry.linked, primaries)) "$it · Primary" else it },
                             { onOpen(entry.linked) },
                             modifier,
+                            onMenu = { onMenu(entry.linked) },
                         )
                     }
                 }
@@ -198,8 +233,12 @@ private sealed interface Entry {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modifier: Modifier) {
-    AppCard(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modifier: Modifier, onMenu: (() -> Unit)? = null) {
+    AppCard(
+        onClick = onClick,
+        onLongClick = onMenu,
+        modifier = modifier.fillMaxWidth().then(if (onMenu != null) Modifier.dpadMenuKey(onMenu) else Modifier),
+    ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Sonos's own logo for it, in the slot every list row keeps; see serviceLogo.
             ArtSlot(serviceLogo(name))
