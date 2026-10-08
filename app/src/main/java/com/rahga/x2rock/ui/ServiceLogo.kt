@@ -12,12 +12,16 @@ package com.rahga.x2rock.ui
  */
 fun serviceLogo(name: String): String? {
     val wanted = letters(name)
-    val title = SERVICE_LOGOS.keys.firstOrNull { letters(it) == wanted }
-        ?: SERVICE_LOGOS.keys.filter { letters(it).length >= MIN_PREFIX && wanted.startsWith(letters(it)) }.maxByOrNull { it.length }
+    val url = BY_LETTERS[wanted]
+        ?: BY_LETTERS.entries.filter { (listed, _) -> listed.length >= MIN_PREFIX && wanted.startsWith(listed) }
+            .maxByOrNull { (listed, _) -> listed.length }?.value
         ?: return null
     // 112px is the slot at 2x. `fm=png` because a few are SVG, which nothing here decodes.
-    return SERVICE_LOGOS.getValue(title) + "?w=112&fm=png"
+    return "$url?w=112&fm=png"
 }
+
+/** [SERVICE_LOGOS] by the letters of each name, worked out once rather than on every row drawn. */
+private val BY_LETTERS: Map<String, String> = SERVICE_LOGOS.mapKeys { (name, _) -> letters(name) }
 
 private fun letters(s: String) = s.lowercase().filter { it.isLetterOrDigit() }
 
