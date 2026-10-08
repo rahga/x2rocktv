@@ -137,6 +137,21 @@ class ServiceBrowseViewModelTest {
         assertFalse(viewModel.back())
     }
 
+    /**
+     * A browse-only service opens on its root, and that root is its top: Back from it leaves the
+     * service. It used to re-read the root, which pushed it onto the trail again, so Back never
+     * left — every anonymous radio service was a trap (Piraten.FM, on the Streamer, 2026-10-07).
+     */
+    @Test fun `Back from a browse-only service's root leaves the service`() = runBlocking {
+        val radio = ready().first { it.service.id == "894" }
+        viewModel.open(radio)
+        found()
+        assertTrue(viewModel.categories.value.isEmpty())
+        assertTrue(viewModel.back())
+        assertEquals("Back left the service", null, viewModel.active.value)
+        assertFalse(viewModel.back())
+    }
+
     @Test fun `queuing a container that holds no tracks is turned away`() = runBlocking {
         val qobuz = ready().first { it.service.id == "31" }
         viewModel.open(qobuz)
@@ -149,7 +164,10 @@ class ServiceBrowseViewModelTest {
     private fun services(): String {
         val smapi = service.url("/smapi"); val manifest = service.url("/manifest")
         val descriptors = """<Services SchemaVersion="1"><Service Id="31" Name="Qobuz" Uri="$smapi" SecureUri="$smapi">""" +
-            """<Policy Auth="AppLink"/><Manifest Uri="$manifest"/></Service></Services>"""
+            """<Policy Auth="AppLink"/><Manifest Uri="$manifest"/></Service>""" +
+            // An anonymous radio service with no presentation map: nothing to search, browse only.
+            """<Service Id="894" Name="Pirate Radio" Uri="$smapi" SecureUri="$smapi"><Policy Auth="Anonymous"/></Service>""" +
+            """</Services>"""
         val escaped = descriptors.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         return """<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
             """<u:ListAvailableServicesResponse xmlns:u="urn:schemas-upnp-org:service:MusicServices:1">""" +
