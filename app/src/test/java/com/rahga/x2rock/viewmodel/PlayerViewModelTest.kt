@@ -201,6 +201,29 @@ class PlayerViewModelTest {
         assertEquals(0, fake.commandsNamed("skipToPreviousTrack"))
     }
 
+    /**
+     * A second press before the speaker has pushed where the first one landed aims from the first
+     * one's target, not from the position it pushed before it. The target used to be dropped as
+     * soon as the command was sent, and the push that moves the position comes later, so a press
+     * in between went back to the old position (outside review, 2026-10-08).
+     */
+    @Test fun `a second seek before the new position is pushed aims from the first`() = runBlocking<Unit> {
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PAUSED")
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == "PLAYBACK_STATE_PAUSED" && it.actions.canSeek } }
+        val start = viewModel.uiState.value.positionMillis
+        fake.clearHistory()
+
+        viewModel.seekBy(10_000)
+        fake.awaitCommand("seek", 3_000)
+        // Sent, and nothing pushed since: the speaker has not said where it is now.
+        kotlinx.coroutines.delay(100)
+        fake.clearHistory()
+        viewModel.seekBy(10_000)
+
+        fake.awaitCommand("seek", 3_000)
+        assertEquals(start + 20_000, fake.lastCommandBody("seek")!!.get("positionMillis").asLong)
+    }
+
     // ---------------------------------------------------------------- publishing
 
     @Test fun `metadata reaches the system when a track arrives`() = runBlocking<Unit> {

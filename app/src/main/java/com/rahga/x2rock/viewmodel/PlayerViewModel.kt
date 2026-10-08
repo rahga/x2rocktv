@@ -161,6 +161,13 @@ class PlayerViewModel @Inject constructor(
     // moves one step instead of five. Cleared once the command has gone.
     private var pendingVolumeDelta = 0
     private var pendingSeekMillis: Long? = null
+
+    /**
+     * When [pendingSeekMillis] was sent, or `null` while it waits out the debounce. The target
+     * holds until the speaker pushes a position after this — the command's reply comes first and
+     * the push that moves the position later, and a press in between used to aim from the old one.
+     */
+    private var pendingSentAt: Long? = null
     private val pendingPlayerDeltas = mutableMapOf<String, Int>()
 
     private var lastMetadataKey = ""
@@ -455,10 +462,17 @@ class PlayerViewModel @Inject constructor(
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
         val state = uiState.value
-        val base = pendingSeekMillis ?: run {
-            val elapsed = if (state.playbackState.isPlaying())
-                System.currentTimeMillis() - state.positionUpdatedAt else 0L
-            state.positionMillis + elapsed
+        val now = System.currentTimeMillis()
+        val playing = state.playbackState.isPlaying()
+        val pending = pendingSeekMillis
+        val sentAt = pendingSentAt
+        val base = when {
+            pending != null && sentAt == null -> pending
+            // Sent, and the speaker has not said where it is since: still the best answer, moved
+            // on by however long it has been playing from there.
+            pending != null && sentAt != null && state.positionUpdatedAt < sentAt ->
+                pending + if (playing) now - sentAt else 0L
+            else -> state.positionMillis + if (playing) now - state.positionUpdatedAt else 0L
         }
         seekTo(base + deltaMillis)
     }
@@ -474,15 +488,18 @@ class PlayerViewModel @Inject constructor(
         val target = positionMillis
             .coerceIn(0, state.durationMillis.takeIf { it > 0 } ?: Long.MAX_VALUE)
         pendingSeekMillis = target
+        pendingSentAt = null
         seekDebounceJob?.cancel()
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.seek(groupId, target) }.onFailure { notice.failure("seek", it) }
+            val sent = runCatching { household.seek(groupId, target) }.onFailure { notice.failure("seek", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a newer
-            // press throws in here, and this is not a suspension point, so clearing
-            // unconditionally would delete the target that press just wrote — and the press
-            // after it would aim from the stale pushed position, losing a step.
-            if (pendingSeekMillis == target) pendingSeekMillis = null
+            // press throws in here, and this is not a suspension point, so touching it
+            // unconditionally would overwrite the target that press just wrote. Sent, it waits
+            // for the speaker's next position; refused, there is nothing to wait for.
+            if (pendingSeekMillis == target) {
+                if (sent.isSuccess) pendingSentAt = System.currentTimeMillis() else pendingSeekMillis = null
+            }
         }
     }
 
