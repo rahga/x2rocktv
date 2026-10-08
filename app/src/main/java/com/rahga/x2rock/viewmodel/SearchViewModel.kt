@@ -124,7 +124,7 @@ class SearchViewModel @Inject constructor(
             val requests = Semaphore(MAX_CONCURRENT_SERVICES)
             coroutineScope {
                 services.forEach { linked ->
-                    launch { arrive(requests, linked.service.name, linked.key(), linked.token != null) { searchOne(linked, term) } }
+                    launch { arrive(requests, linked.service.name, linked.key(), linked.added) { searchOne(linked, term) } }
                 }
                 if (apple) launch { arrive(requests, "Apple Music", "apple", signedIn = true) { searchApple(term) } }
             }

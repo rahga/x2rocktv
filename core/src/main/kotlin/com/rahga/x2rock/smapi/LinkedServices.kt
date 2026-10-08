@@ -21,6 +21,12 @@ data class LinkedService(
     val selector: String,
     /** The account nickname, to tell two accounts of one service apart in a picker; `""` if none. */
     val nickname: String,
+    /**
+     * Whether the household has added this service — it keeps a record of it, token or not. The
+     * Sonos app lists an anonymous radio service the household added (80er-Radio harmony) among
+     * its connected services; "has a token" alone left it in the hundred it carries for everyone.
+     */
+    val added: Boolean = token != null,
 )
 
 /**
@@ -41,6 +47,7 @@ fun linkedServices(
     householdLong: String?,
 ): List<LinkedService> {
     val byService = accounts.filter { it.hasToken }.groupBy { it.serviceId }
+    val recorded = accounts.map { it.serviceId }.toSet()
     val out = mutableListOf<LinkedService>()
     for (service in services) {
         val serviceId = service.id.toLongOrNull()
@@ -57,7 +64,10 @@ fun linkedServices(
             }
             // An anonymous service needs no credential and is always usable.
             service.auth == Auth.ANONYMOUS ->
-                out += LinkedService(service = service, token = null, accountId = null, selector = "", nickname = "")
+                out += LinkedService(
+                    service = service, token = null, accountId = null, selector = "", nickname = "",
+                    added = serviceId in recorded,
+                )
             // Everything else needs a login the app cannot drive and has no stored token for.
         }
     }
