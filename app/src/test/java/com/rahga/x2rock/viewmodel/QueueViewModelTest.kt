@@ -268,4 +268,70 @@ class QueueViewModelTest {
         val notice = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
         assertTrue(notice, notice.startsWith("Saved as \""))
     }
+
+    @Test fun `an older queue read finishing last does not roll the list back`() = runBlocking<Unit> {
+        val oldAtMedia = java.util.concurrent.CountDownLatch(1)
+        val releaseOld = java.util.concurrent.CountDownLatch(1)
+        val mediaCalls = java.util.concurrent.atomic.AtomicInteger()
+        val oldTitle = "Cómo Me Quieres"
+        val newTitle = "A later queue snapshot"
+        upnp.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse = when (soapAction(request)) {
+                "Browse" -> {
+                    val body = request.body.readUtf8()
+                    val fixture = if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
+                    MockResponse().setBody(FakePlayer.fixtureText(fixture)
+                        .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
+                        .let { if (slotOneReplaced) it.replaceFirst(oldTitle, newTitle) else it })
+                }
+                "GetMediaInfo" -> {
+                    if (mediaCalls.incrementAndGet() == 1) {
+                        oldAtMedia.countDown()
+                        check(releaseOld.await(5, java.util.concurrent.TimeUnit.SECONDS))
+                    }
+                    MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
+                }
+                else -> MockResponse().setBody(EMPTY_SOAP)
+            }
+        }
+        try {
+            viewModel.reload()
+            assertTrue(oldAtMedia.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            slotOneReplaced = true
+            updateId = "59"
+            viewModel.reload()
+            withTimeout(5_000) { viewModel.uiState.first {
+                (it as? QueueViewModel.UiState.Success)?.entries?.firstOrNull()?.item?.track?.name == newTitle
+            } }
+            releaseOld.countDown()
+            kotlinx.coroutines.withTimeoutOrNull(1_000) { viewModel.uiState.first {
+                (it as? QueueViewModel.UiState.Success)?.entries?.firstOrNull()?.item?.track?.name == oldTitle
+            } }
+            val current = viewModel.uiState.value as QueueViewModel.UiState.Success
+            assertEquals("the request started earlier published last and rolled back the queue", newTitle,
+                current.entries.first().item.track!!.name)
+        } finally {
+            releaseOld.countDown()
+        }
+    }
+
+    @Test fun `queue pages at different versions are not joined into one list`() = runBlocking<Unit> {
+        val pages = java.util.concurrent.atomic.AtomicInteger()
+        upnp.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (soapAction(request) != "Browse") return MockResponse().setBody(EMPTY_SOAP)
+                pages.incrementAndGet()
+                val first = "<StartingIndex>0<" in request.body.readUtf8()
+                val fixture = if (first) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
+                val version = if (first) "58" else "59"
+                return MockResponse().setBody(FakePlayer.fixtureText(fixture)
+                    .replace("<UpdateID>58</UpdateID>", "<UpdateID>$version</UpdateID>"))
+            }
+        }
+        val answer = runCatching { household.queue(groupId) }
+        assertTrue("test did not reach the second page", pages.get() >= 2)
+        assertTrue("mixed pages were accepted under the first page's UpdateID: ${answer.getOrNull()?.updateId}",
+            answer.isFailure)
+    }
+
 }
