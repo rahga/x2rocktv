@@ -116,6 +116,17 @@ data class PlayerUiState(
     val notice: String? = null,
 )
 
+/**
+ * The line under a track's title: its artist and album, and on a station the station too — "The
+ * Weeknd • Hit List", as the Sonos app puts it. The station used to vanish the moment a track was
+ * known, so nothing on the pane said which station was playing (seen against the Sonos app,
+ * 2026-10-08). Not repeated where the station's name is the album's or the track's own.
+ */
+fun PlayerUiState.trackLine(): String {
+    val station = sourceName?.takeIf { isRadio && it.isNotBlank() && it != albumName && it != trackName }
+    return listOfNotNull(artistName, albumName, station).joinToString(" • ")
+}
+
 /** What one read of `settings:1` yielded, with the speaker it came from. */
 data class HomeTheaterUi(
     val soundbarId: String,

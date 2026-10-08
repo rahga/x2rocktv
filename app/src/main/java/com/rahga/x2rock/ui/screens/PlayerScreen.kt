@@ -5,6 +5,8 @@ import androidx.compose.material.icons.filled.SpeakerGroup
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
+import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.viewmodel.trackLine
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
@@ -377,7 +379,7 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeft
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
-                        val subtitle = listOfNotNull(state.artistName, state.albumName).joinToString(" • ")
+                        val subtitle = state.trackLine()
                         if (subtitle.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(subtitle, style = MaterialTheme.typography.bodyLarge)
