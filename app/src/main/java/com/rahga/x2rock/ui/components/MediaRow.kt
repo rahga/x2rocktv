@@ -1,5 +1,10 @@
 package com.rahga.x2rock.ui.components
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -128,7 +133,16 @@ fun ScreenHeader(
     backModifier: Modifier = Modifier,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // Sideways off either end of the header goes nowhere. Right from Browse's last button used to
+    // find the now-playing bar's Play/Pause, the nearest thing that way, one press from pausing the
+    // room (2026-10-08). Up and down leave as before. Properties before the group: see Overlay.
+    @OptIn(ExperimentalComposeUiApi::class)
+    val sidewaysStays = Modifier
+        .focusProperties {
+            exit = { if (it == FocusDirection.Left || it == FocusDirection.Right) FocusRequester.Cancel else FocusRequester.Default }
+        }
+        .focusGroup()
+    Row(sidewaysStays, verticalAlignment = Alignment.CenterVertically) {
         AppButton(onClick = onBack, modifier = backModifier) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(8.dp))
