@@ -363,9 +363,20 @@ them, but none in this house does that has been checked, and the Shield's showin
 
 ### The room panel
 
-Click (DPAD centre) on a room opens `RoomPanel`: everything that room can be told to do, on
-one surface. It replaced a context menu that opened two further dialogs — `RoomContextMenu`
-led to `GroupPickerDialog` and `SeparateRoomDialog` — so three surfaces became one.
+`RoomPanel` is everything a room can be told to do, on one surface. It replaced a context menu
+that opened two further dialogs — `RoomContextMenu` led to `GroupPickerDialog` and
+`SeparateRoomDialog` — so three surfaces became one.
+
+**Select on a room enters the player pane; it does not open the panel** (2026-10-07). On a TV,
+Select on a list item means "go into this", and a dialog in front of the player was the opposite
+of what that press asked for. The panel opens from the pane's **Group** button, which a viewer can
+see, and from a long press or Menu on the room, which stay for those who know them. Closing it
+returns focus to whichever opened it. Group is in the pane's row rather than above or below the
+room list, for the reason in "Nothing that acts on the selected room" below.
+
+**Crossfade lives in the panel's Sound section**, not the pane: Group needed its place in the row,
+and it is a room setting, which the Sonos app also keeps a level away. The row scrolls
+horizontally anyway, since a running sleep timer's label can still push it past the pane.
 
 The shape follows the sibling project's Quickshell group selector (`BarWidget.qml`, the
 `groupingPanel`), which is worth reading before changing this:

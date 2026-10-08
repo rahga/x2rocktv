@@ -513,8 +513,6 @@ class PlayerViewModel @Inject constructor(
         )
     }
 
-    fun toggleCrossfade() = updatePlayMode { it.copy(crossfade = !it.crossfade) }
-
     private fun updatePlayMode(transform: (PlayModeState) -> PlayModeState) {
         val groupId = _groupId.value ?: return
         val current = PlayModeState(

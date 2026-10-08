@@ -15,6 +15,7 @@ import com.rahga.x2rock.lan.Upnp
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -99,6 +100,11 @@ class HomeViewModel @Inject constructor(
         val isRadio: Boolean = false,
         /** An alarm is ringing here: see `GroupState.ringingAlarm`. */
         val alarmRinging: Boolean = false,
+        /**
+         * Crossfade, on or off; `null` where it means nothing — nothing loaded, or a source that
+         * cannot crossfade (a live stream). A room setting, so it lives in the room panel.
+         */
+        val crossfade: Boolean? = null,
     )
 
     sealed interface UiState {
@@ -138,6 +144,9 @@ class HomeViewModel @Inject constructor(
                             hasTvInput = state.hasTvInput(group),
                             source = pushed?.container?.name,
                             alarmRinging = pushed?.ringingAlarm != null,
+                            crossfade = pushed
+                                ?.takeIf { it.actions.canCrossfade && it.playbackState.hasLoadedContent() }
+                                ?.playMode?.crossfade,
                         )
                     },
                 )
@@ -464,6 +473,15 @@ class HomeViewModel @Inject constructor(
      * then moves the group's level to their average, which is already the level each was set
      * to, so the group stays where it was. Fixed line-outs are left alone.
      */
+    /** Turn crossfade over in [groupId], keeping its shuffle and repeat as they are. */
+    fun toggleCrossfade(groupId: String) {
+        val mode = household.groupState(groupId).playMode
+        viewModelScope.launch {
+            runCatching { household.setPlayMode(groupId, mode.copy(crossfade = !mode.crossfade)) }
+                .onFailure { _notice.failure("change Crossfade", it) }
+        }
+    }
+
     fun normalizeGroup(groupId: String) {
         val group = findGroup(groupId) ?: return
         val level = household.groupState(groupId).volume?.volume ?: return

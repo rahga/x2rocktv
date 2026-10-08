@@ -132,6 +132,7 @@ fun RoomPanel(
     onStepTreble: (Int) -> Unit = {},
     onToggleLoudness: () -> Unit = {},
     onToggleTrueplay: () -> Unit = {},
+    onToggleCrossfade: () -> Unit = {},
     /** Keep this room's speakers, levels and favourite as a preset in Browse. */
     onSavePreset: () -> Unit = {},
 ) {
@@ -256,9 +257,12 @@ fun RoomPanel(
         // Tone, for every room: it is the speaker's, not the soundbar's. Written over UPnP, so
         // not offered with UPnP off; and not until it has been read, since a row that guessed
         // a level would step from the wrong one.
-        if (tone != null && !upnpOff) {
-            PanelSection("Sound")
-            ToneRow("Bass", tone.bass, onStepBass)
+        // Crossfade is the group's, over the Control API, so it needs neither the tone nor UPnP;
+        // it moved here from the pane's button row, which needed the room for Group.
+        val toneShown = tone != null && !upnpOff
+        if (toneShown || info.crossfade != null) PanelSection("Sound")
+        if (toneShown) {
+            ToneRow("Bass", tone!!.bass, onStepBass)
             ToneRow("Treble", tone.treble, onStepTreble)
             AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
                 Text(if (tone.loudness) "Loudness   On" else "Loudness   Off")
@@ -268,6 +272,11 @@ fun RoomPanel(
                 AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
                     Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
                 }
+            }
+        }
+        info.crossfade?.let { on ->
+            AppButton(onClick = onToggleCrossfade, modifier = Modifier.fillMaxWidth()) {
+                Text(if (on) "Crossfade   On" else "Crossfade   Off")
             }
         }
 
