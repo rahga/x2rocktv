@@ -963,18 +963,28 @@ class SonosHousehold(
      */
     suspend fun searchableServices(): List<LinkedService> = serviceLock.withLock {
         searchable?.let { return@withLock it }
+        // The session this list is for: a reconnect while it loads clears the cache, and this
+        // load must not fill it again with the old session's answer.
+        val session = generation
         val household = _state.value.householdId ?: error("not connected")
         val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
         val hostname = hostnameOf(coordinator)
         val answer = upnp.listAvailableServices(hostname)
         val services = parseServices(answer.descriptors, answer.types)
-        val accounts = runCatching {
-            val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress ?: return@runCatching emptyList()
-            accountCapture(ip)
+        val accounts = try {
+            val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
+            ip?.let { accountCapture(it) }
                 // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
                 ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
                 ?: emptyList()
-        }.getOrDefault(emptyList())
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // A caller that left is not a capture that failed: it says nothing about which
+            // accounts the household has. Degrading here cached anonymous services for the whole
+            // session, as a first search replaced by another did (outside review, 2026-10-08).
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
         // Two services carry a token but still dead-end here, so they are dropped rather than shown
         // and left to fail: Apple Music, whose stored credential has an empty key and whose SMAPI
         // refuses every call (searched through iTunes on its own screen instead); and YouTube Music,
@@ -982,7 +992,7 @@ class SonosHousehold(
         // own token does not get past either (x2rock, verified again here 2026-10-06).
         linkedServices(services, accounts, household)
             .filterNot { it.service.id == AppleMusic.SERVICE_ID || it.service.id == YOUTUBE_MUSIC_SERVICE_ID }
-            .also { searchable = it }
+            .also { if (generation == session) searchable = it }
     }
 
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
