@@ -29,8 +29,7 @@ data class QueueEntry(val trackNumber: Int, val item: QueueItem)
 
 /** Numbers every item by its slot in the full queue, then hides the tombstones. */
 fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
-    items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
-        .filter { !it.item.deleted }
+    items.mapIndexedNotNull { index, item -> QueueEntry(trackNumber = index + 1, item = item).takeIf { !item.deleted } }
 
 /**
  * The slots of the entries shown either side of [trackNumber]; null where there is none. Not

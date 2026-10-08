@@ -53,12 +53,9 @@ fun isPrimary(linked: LinkedService, primaries: Map<String, String>): Boolean =
  * [services] with each service's primary account first among its own and the order otherwise as
  * it was — Sonos's, alphabetical by service.
  */
-fun withPrimariesFirst(services: List<LinkedService>, primaries: Map<String, String>): List<LinkedService> {
-    val firstIndex = services.withIndex().groupBy({ it.value.service.id }, { it.index }).mapValues { it.value.min() }
-    return services.withIndex().sortedWith(
-        compareBy({ firstIndex.getValue(it.value.service.id) }, { !isPrimary(it.value, primaries) }, { it.index })
-    ).map { it.value }
-}
+fun withPrimariesFirst(services: List<LinkedService>, primaries: Map<String, String>): List<LinkedService> =
+    // groupBy keeps the services in the order they came, and the sort is stable within one.
+    services.groupBy { it.service.id }.values.flatMap { accounts -> accounts.sortedByDescending { isPrimary(it, primaries) } }
 
 /**
  * The accounts a search across every service asks: a service's primary alone where one is set
@@ -67,8 +64,6 @@ fun withPrimariesFirst(services: List<LinkedService>, primaries: Map<String, Str
  * one the primary's results are the ones it can play.
  */
 fun searchedAccounts(services: List<LinkedService>, primaries: Map<String, String>): List<LinkedService> =
-    services.filter { linked ->
-        val primary = primaries[linked.service.id] ?: return@filter true
-        val stillStored = services.any { it.service.id == linked.service.id && it.accountKey() == primary }
-        !stillStored || linked.accountKey() == primary
+    services.groupBy { it.service.id }.values.flatMap { accounts ->
+        accounts.firstOrNull { isPrimary(it, primaries) }?.let { listOf(it) } ?: accounts
     }
