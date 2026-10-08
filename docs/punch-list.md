@@ -802,6 +802,36 @@ anything changed.
   lists, and the suggested form does not compile against a nullable track; the progress knob's
   offset read at layout (3.13), as the bar recomposes every second for its time text anyway.
 
+## Outside review, `.local-review/astra-findings.md` (2026-10-08)
+
+Seven findings, each brought with a test that failed against `d9372a6`; all eight of those tests were
+run here first and failed as described, then passed with the fix. Each fix was also broken again on
+purpose to see its test fail. The tests are kept, renamed to this project's style.
+
+- **#1 a seed lost while a reconnect sets up — fixed.** Its loss is not acted on while the reconnect
+  runs and the setup's tail is best-effort, so the reconnect finished `connected` with no `groups:1`
+  subscription. The attempt now checks its seed is still the live socket and otherwise tears down and
+  fails, and the reconnect tries again (`ReconnectSeedLossTest`).
+- **#2 pending presses outliving the room — fixed.** +5 in one room and +1 in the next inside the
+  debounce arrived as +6; a pending seek became the next room's baseline. On a room change the room
+  left is sent what it is owed and the pending state cleared. The review's volume test had to be
+  re-cut: it read the first command after the change, which with the steps sent is the old room's.
+- **#3 a cancelled account capture cached for the session — fixed.** Cancellation is rethrown rather
+  than taken for "no accounts", and a load from an older session cannot fill the new one's cache.
+- **#4 a body read past cancellation — fixed.** `Call.awaitReply()` reads the body on OkHttp's thread
+  inside the wait, so a cancel closes the call mid-body too (`CallBodyCancelTest`); all five callers
+  use it.
+- **#5 queue reads — fixed.** Only the latest read started may publish, so an older one finishing
+  last no longer rolls the list back; a multi-page read holds one `UpdateID` throughout or starts
+  again, three times at most, then says the queue kept changing.
+- **#6 screens holding a stale group id — fixed.** `RoomTarget` remembers the room by its
+  coordinator and finds its group when there is something to send; Browse, Search, Music Services,
+  Radio, Apple Music, the item menu and Queue use it, and Queue reloads when its room changes group.
+  A room that has left says so by name.
+- **#7 Play and Pause both toggled — fixed.** Explicit Play and Pause (the remote's keys, the media
+  session's callbacks) do what they say and nothing when it is already so; a stream that cannot pause
+  is stopped as the toggle does. A held Play/Pause no longer toggles on every repeat.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - **A poster cache for the launcher's room tiles — decided out (2026-10-07).** x2rock's widget needed
