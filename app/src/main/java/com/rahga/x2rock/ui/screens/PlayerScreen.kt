@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.material.icons.filled.SpeakerGroup
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
@@ -148,9 +150,13 @@ fun PlayerPane(
     queueFocusRequester: FocusRequester,
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
+    /** The Group button, so closing the room panel it opened can return to it. */
+    groupFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenSearch: () -> Unit,
+    /** Open the room panel: grouping, then the room's settings. */
+    onOpenGroup: () -> Unit,
     /**
      * Where focus starts instead, when this pane is composed on the way back from a screen one of
      * its buttons opened: that button. See the note on the grab below.
@@ -260,6 +266,8 @@ fun PlayerPane(
                         browseFocusRequester = browseFocusRequester,
                         searchFocusRequester = searchFocusRequester,
                         onOpenSearch = onOpenSearch,
+                        groupFocusRequester = groupFocusRequester,
+                        onOpenGroup = onOpenGroup,
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
@@ -277,6 +285,8 @@ fun PlayerPane(
                         browseFocusRequester = browseFocusRequester,
                         searchFocusRequester = searchFocusRequester,
                         onOpenSearch = onOpenSearch,
+                        groupFocusRequester = groupFocusRequester,
+                        onOpenGroup = onOpenGroup,
                     )
                 }
             }
@@ -599,6 +609,8 @@ private fun PlaybackControls(
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
     onOpenSearch: () -> Unit,
+    groupFocusRequester: FocusRequester,
+    onOpenGroup: () -> Unit,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -709,16 +721,18 @@ private fun PlaybackControls(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Where to go from here, and crossfade. These used to share a row with shuffle and repeat
-        // as labelled buttons, and at
-        // 1080p on a TV — 960dp across, a third of it the room list — six buttons do not fit:
-        // Favorites was squeezed to a sliver with its label wrapped a letter to a line, which
-        // made the row hundreds of pixels tall and pushed the volume below the screen, and
+        // Where to go from here. These used to share a row with shuffle and repeat as labelled
+        // buttons, and at 1080p on a TV — 960dp across, a third of it the room list — six buttons
+        // do not fit: Favorites was squeezed to a sliver with its label wrapped a letter to a line,
+        // which made the row hundreds of pixels tall and pushed the volume below the screen, and
         // Sleep Timer was off the edge entirely. Seen on the Shield and the emulator alike.
+        // With Group added it is one button wider than the pane again (Sleep was cut off on the
+        // Streamer), so the row scrolls, as rows on a TV do: focus moving right brings the next
+        // button into view, and the sliver at the edge says there is one.
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.focusGroup()
+            modifier = Modifier.focusGroup().horizontalScroll(rememberScrollState())
         ) {
             val placesExit = booleanArrayOf(false)
             // Queue keeps its place whatever the source permits: it is a way to look at what
@@ -740,19 +754,11 @@ private fun PlaybackControls(
                 ),
             )
             IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
+            GroupButton(onOpenGroup, groupFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
                 SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
-            }
-            // A setting of the room rather than of the track, so it sits with these rather than
-            // the transport; the Sonos app keeps it a level further away still, in a menu.
-            if (hasContent && state.actions.canCrossfade) {
-                ModeButton(
-                    icon = if (state.crossfade) CrossfadeOnIcon else CrossfadeIcon,
-                    description = if (state.crossfade) "Crossfade, on" else "Crossfade, off",
-                    onClick = { viewModel.toggleCrossfade() },
-                )
             }
         }
 
@@ -953,6 +959,8 @@ private fun TvControls(
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
     onOpenSearch: () -> Unit,
+    groupFocusRequester: FocusRequester,
+    onOpenGroup: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         // Written over UPnP, so with it off they are not drawn at all; the room list says why,
@@ -1005,6 +1013,7 @@ private fun TvControls(
                     .then(if (state.upnpOff) Modifier.focusRequester(firstFocusRequester) else Modifier),
             )
             IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
+            GroupButton(onOpenGroup, groupFocusRequester)
             SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
 
@@ -1286,6 +1295,16 @@ internal fun Long.toTimeString(): String {
 }
 
 /**
+ * The room panel, from the pane: who is playing together, and the room's settings below. Select
+ * on a room enters this pane, as every list on a TV does, so the panel needed a way in a viewer
+ * can see; a long press on the room still opens it too.
+ */
+@Composable
+private fun GroupButton(onClick: () -> Unit, focusRequester: FocusRequester) =
+    IconLabelButton(Icons.Filled.SpeakerGroup, "Group", onClick, Modifier.focusRequester(focusRequester))
+
+
+/**
  * A play mode as an icon. Its state is in the glyph's shape — Material's "on" forms sit in a
  * filled square — rather than in colour alone, which a focused button's own colour would hide.
  */
@@ -1296,53 +1315,6 @@ private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Un
         // that read, not the glyph inside it.
         Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(30.dp))
     }
-}
-
-/**
- * Crossfade, which Material has no icon for: a fade-out and a fade-in crossing, the bowtie
- * audio editors draw — outlined when off. On, it is cut out of a filled square, as Material's
- * ShuffleOn and RepeatOn are, so the three modes say "on" the same way.
- */
-private val CrossfadeIcon: ImageVector = crossfadeIcon(on = false)
-private val CrossfadeOnIcon: ImageVector = crossfadeIcon(on = true)
-
-private fun crossfadeIcon(on: Boolean): ImageVector =
-    ImageVector.Builder(
-        name = if (on) "CrossfadeOn" else "Crossfade",
-        defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
-    ).apply {
-        if (on) {
-            path(fill = SolidColor(Color.Black), pathFillType = PathFillType.EvenOdd) {
-                moveTo(5f, 3f)
-                lineTo(19f, 3f)
-                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 21f, 5f)
-                lineTo(21f, 19f)
-                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 19f, 21f)
-                lineTo(5f, 21f)
-                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 3f, 19f)
-                lineTo(3f, 5f)
-                arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = true, 5f, 3f)
-                close()
-                bowtie(left = 6.5f, right = 17.5f, top = 8f, bottom = 16f)
-            }
-        } else {
-            path(stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineJoin = StrokeJoin.Round) {
-                bowtie(left = 4f, right = 20f, top = 7f, bottom = 17f)
-            }
-        }
-    }.build()
-
-/** Two triangles meeting at the centre: one tall on the left, the other tall on the right. */
-private fun PathBuilder.bowtie(left: Float, right: Float, top: Float, bottom: Float) {
-    val midX = (left + right) / 2
-    val midY = (top + bottom) / 2
-    moveTo(left, top)
-    lineTo(midX, midY)
-    lineTo(right, top)
-    lineTo(right, bottom)
-    lineTo(midX, midY)
-    lineTo(left, bottom)
-    close()
 }
 
 /** A thumb, filled once the track is already rated that way and outlined otherwise. */

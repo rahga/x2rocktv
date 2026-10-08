@@ -134,6 +134,10 @@ fun HomeScreen(
     val queueFocus = remember { FocusRequester() }
     val browseFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
+    // The pane's Group button, and whether the open panel came from it: closing the panel goes
+    // back to whatever opened it, the button or the room.
+    val groupFocus = remember { FocusRequester() }
+    var panelFromPane by remember { mutableStateOf(false) }
     var opener by rememberSaveable { mutableStateOf<Opener?>(null) }
     fun openerFocus(opener: Opener?): FocusRequester? = when (opener) {
         Opener.QUEUE -> queueFocus
@@ -195,7 +199,7 @@ fun HomeScreen(
     // on a node that just left the composition and the remote goes dead until a direction press.
     val modalVisible = showSettings || panelGroup != null
     LaunchedEffect(modalVisible) {
-        if (!modalVisible) place(sidebarFocusRequester)
+        if (!modalVisible) place(if (panelFromPane) groupFocus else sidebarFocusRequester)
     }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
@@ -237,7 +241,7 @@ fun HomeScreen(
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
                 onFocused = { if (focusPlaced) homeViewModel.selectGroup(it.id) },
-                onOpenPanel = { panelGroup = it },
+                onOpenPanel = { panelFromPane = false; panelGroup = it },
                 onSettingsClick = { showSettings = true },
                 onRetry = { homeViewModel.connect() },
                 onChooseHousehold = { homeViewModel.chooseHousehold(it) },
@@ -276,10 +280,14 @@ fun HomeScreen(
                         queueFocusRequester = queueFocus,
                         browseFocusRequester = browseFocus,
                         searchFocusRequester = searchFocus,
+                        groupFocusRequester = groupFocus,
                         startFocusRequester = openerFocus(opener),
                         onOpenQueue = { opener = Opener.QUEUE; onOpenQueue(selectedGroupId!!) },
                         onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
                         onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
+                        onOpenGroup = {
+                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelGroup = it }
+                        },
                     )
                 }
             }
@@ -372,6 +380,7 @@ fun HomeScreen(
                     onStepTreble = homeViewModel::stepTreble,
                     onToggleLoudness = homeViewModel::toggleLoudness,
                     onToggleTrueplay = homeViewModel::toggleTrueplay,
+                    onToggleCrossfade = { homeViewModel.toggleCrossfade(liveGroup.id) },
                     onSavePreset = { homeViewModel.savePreset(liveGroup.id) },
                 )
             }
@@ -519,9 +528,10 @@ private fun RoomListItem(
     var focused by remember { mutableStateOf(false) }
     val activity = roomActivity(group.playbackState, info.hasSource)
     AppCard(
-        // Click was doing nothing at all, and it is the press a remote makes on a list.
-        // Long-press stays as a synonym rather than the only way in.
-        onClick = onOpenPanel,
+        // Select goes into the room, to its player, as Select does on every TV list; opening the
+        // panel on it put a dialog in front of the one thing a viewer pressed to get to. The panel
+        // keeps a long press and Menu, and has a button of its own in the pane, Group.
+        onClick = { detailFocusRequester.requestFocusSafely() },
         onLongClick = onOpenPanel,
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
         // turn — the first selects, a tap on the selected room opens it — and a hold opens it.
