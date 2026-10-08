@@ -23,6 +23,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
+import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -62,6 +68,8 @@ fun SearchScreen(
     onPlayed: () -> Unit,
     /** Open a service's container in its own browser: the service's key, and the container. */
     onOpen: (serviceKey: String, item: Item) -> Unit,
+    /** Open one service's own search for [query]: every category, every page. */
+    onSearchService: (serviceKey: String, query: String) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsState()
@@ -70,10 +78,32 @@ fun SearchScreen(
     val notice by viewModel.notice.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
+    val menuTarget by viewModel.menu.open.collectAsState()
+    val fromQueue by viewModel.menu.fromQueue.collectAsState()
+    val details by viewModel.menu.details.collectAsState()
+    // The row a menu was opened from, so focus goes back to it when the menu closes.
+    var menuFrom by remember { mutableStateOf<String?>(null) }
+    val menuReturn = remember { FocusRequester() }
+    LaunchedEffect(menuTarget) {
+        if (menuTarget == null && menuFrom != null) menuReturn.requestFocusRetrying()
+    }
     BackHandler { onBack() }
+    // The row that opened another screen — an album, a service's own search — so Back lands on it.
+    // Saved, because this screen is rebuilt on the way back.
+    var openedFrom by rememberSaveable { mutableStateOf<String?>(null) }
+    val openedFocus = remember { FocusRequester() }
+    val listState = rememberLazyListState()
     LaunchedEffect(Unit) {
         // Not on a return from an opened album, where the results are already there to go back to.
-        if (results.sections.isEmpty()) fieldFocus.requestFocusSafely()
+        if (results.sections.isEmpty()) {
+            fieldFocus.requestFocusSafely()
+            return@LaunchedEffect
+        }
+        val index = rowKeys(results).indexOf(openedFrom)
+        if (index >= 0) {
+            listState.scrollToItem(index)
+            openedFocus.requestFocusRetrying()
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -101,10 +131,11 @@ fun SearchScreen(
                     // The first answer to arrive takes focus once; later sections slotting in
                     // above it do not pull it about while the viewer is reading.
                     LaunchedEffect(results.searched) {
-                        resultsFocus.requestFocusRetrying()
+                        if (openedFrom == null) resultsFocus.requestFocusRetrying()
                     }
                 }
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -117,19 +148,59 @@ fun SearchScreen(
                                 hit = hit,
                                 isStarting = starting == hit.key,
                                 onClick = {
-                                    viewModel.select(hit, onPlayed) { linked, item -> onOpen(linked.key(), item) }
+                                    viewModel.select(hit, onPlayed) { linked, item ->
+                                        openedFrom = "${section.key}:${hit.key}"
+                                        onOpen(linked.key(), item)
+                                    }
                                 },
-                                onQueue = { viewModel.queue(hit) },
-                                modifier = if (hit.key == firstKey) Modifier.focusRequester(resultsFocus) else Modifier,
+                                onMenu = { menuFrom = hit.key; viewModel.openMenu(hit) },
+                                modifier = Modifier
+                                    .then(if (hit.key == firstKey) Modifier.focusRequester(resultsFocus) else Modifier)
+                                    .then(if (hit.key == menuFrom) Modifier.focusRequester(menuReturn) else Modifier)
+                                    .then(if ("${section.key}:${hit.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier),
                             )
+                        }
+                        // Two categories and eight hits a service is what keeps one search across
+                        // every service affordable; the rest is that service's own search away.
+                        if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
+                            MediaRow(
+                                title = "More from ${section.name}",
+                                subtitle = "Every kind of result, and every page",
+                                artUrl = null,
+                                onClick = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) },
+                                modifier = if ("more:${section.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier,
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
+                            }
                         }
                     }
                 }
+            }
+            menuTarget?.let { target ->
+                val service = target as? ServiceItemMenu.Target.Service
+                ServiceItemMenuOverlay(
+                    menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
+                    here = null,
+                    onOpen = service?.let { { onOpen(it.linked.key(), it.item) } },
+                    onOpenRelated = { id, title, _ ->
+                        service?.let { onOpen(it.linked.key(), Item(id, title, "container", null, null, container = true)) }
+                    },
+                    onPlayed = onPlayed,
+                )
             }
             notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }
 }
+
+/** Every row's key in list order — headings, hits and "More" rows — as the list keys them. */
+private fun rowKeys(results: SearchViewModel.Results): List<String> = results.sections.flatMap { section ->
+    listOf("section:${section.key}") + section.hits.map { "${section.key}:${it.key}" } +
+        listOfNotNull("more:${section.key}".takeIf { section.key != APPLE_SECTION })
+}
+
+/** The section key Apple Music's hits are listed under; it has no SMAPI search to send "More" to. */
+private const val APPLE_SECTION = "apple"
 
 /** How the search stands: what is still out, what found nothing, and who did not answer. */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -154,7 +225,7 @@ private fun HitRow(
     hit: SearchViewModel.Hit,
     isStarting: Boolean,
     onClick: () -> Unit,
-    onQueue: () -> Unit,
+    onMenu: () -> Unit,
     modifier: Modifier,
 ) {
     val opens = hit is SearchViewModel.Hit.Service && ServiceContent.opens(hit.item)
@@ -163,8 +234,8 @@ private fun HitRow(
         subtitle = hit.subtitle,
         artUrl = hit.artUrl,
         onClick = onClick,
-        // Menu or a hold: add to the queue, an album whole.
-        onLongClick = onQueue,
+        // Menu or a hold: the item's menu — play next, the queue, the service's own actions.
+        onLongClick = onMenu,
         modifier = modifier,
     ) {
         when {

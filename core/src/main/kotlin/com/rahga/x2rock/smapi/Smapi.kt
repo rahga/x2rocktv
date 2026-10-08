@@ -106,6 +106,56 @@ data class Category(
 /** A page of hits and the total the service claims it could return. */
 data class ItemPage(val items: List<Item>, val total: Int)
 
+/** One shelf of a service's page: its [title], and the [items] it carries inline. */
+data class Shelf(val title: String, val items: List<Item>)
+
+/**
+ * The shelves of a browse endpoint's top — its `views`, each with its items inline. A shelf with
+ * nothing playable inline is left out: "Browse Radio" lists only further containers, which this
+ * endpoint answers only for its top, so it would be a row that opens on nothing.
+ */
+fun parseShelves(json: String): List<Shelf> {
+    val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull() ?: return emptyList()
+    val views = root.getAsJsonArray("views") ?: return emptyList()
+    return views.mapNotNull { v ->
+        val view = v.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+        val title = view.getAsJsonObject("content")?.getAsJsonObject("container")?.get("name")?.asString ?: return@mapNotNull null
+        val items = view.getAsJsonArray("items")?.mapNotNull { i ->
+            val item = i.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
+            if (item.getAsJsonObject("browsePolicies")?.get("canPlay")?.asBoolean != true) return@mapNotNull null
+            val c = item.getAsJsonObject("content")?.getAsJsonObject("container") ?: return@mapNotNull null
+            val id = item.getAsJsonObject("id")?.get("objectId")?.asString ?: return@mapNotNull null
+            Item(
+                id = id,
+                title = c.get("name")?.asString.orEmpty(),
+                // `trackList.program`: a station, played as the room's source like any SMAPI program.
+                itemType = c.get("type")?.asString?.substringAfterLast('.') ?: "program",
+                summary = c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString,
+                artUrl = c.get("imageUrl")?.asString,
+                container = false,
+            )
+        }.orEmpty()
+        Shelf(title, items).takeIf { items.isNotEmpty() }
+    }
+}
+
+/**
+ * What a service says about one item beyond the item itself, from `getExtendedMetadata` — the
+ * source of the Sonos app's per-item actions (seen 2026-10-08, its "⋯" beside each read):
+ * Browse Artist and Album Info are the item's own [artistId]/[albumId]; Start Radio is its
+ * `relatedPlay` [radio]; "Add to favourites" is [canFavorite], with [favorite] the current state
+ * where the service reports one (Deezer's `ISFAVORITE`; Qobuz reports none).
+ */
+data class ItemDetails(
+    val artistId: String? = null,
+    val artist: String? = null,
+    val albumId: String? = null,
+    val album: String? = null,
+    val radio: Item? = null,
+    val canFavorite: Boolean = false,
+    val favorite: Boolean? = null,
+)
+
 /**
  * Where to resume a thing that is listened to in place rather than played from the start — an
  * audiobook, a long podcast. From the `positionInformation` a service puts in `getMetadata`:
@@ -220,6 +270,22 @@ class SmapiClient(client: OkHttpClient) {
             parseDynamicProperties(call(service, token, "getExtendedMetadata", "<id>${Xml.escape(id)}</id>"))
         }
 
+    /** `getExtendedMetadata`'s whole answer for [id], for what it says beyond the item itself. */
+    suspend fun extendedMetadataBody(service: Service, token: Token?, id: String): String =
+        withContext(Dispatchers.IO) { call(service, token, "getExtendedMetadata", "<id>${Xml.escape(id)}</id>") }
+
+    /** [id]'s related artist, album, radio and favourite state — see [ItemDetails]. */
+    suspend fun itemDetails(service: Service, token: Token?, id: String): ItemDetails =
+        parseItemDetails(extendedMetadataBody(service, token, id))
+
+    /**
+     * Add [id] to, or take it out of, the account's own favourites in the service — SMAPI's
+     * `createItem`/`deleteItem` with a `favorite`, which is what `canAddToFavorites` offers.
+     */
+    suspend fun setFavorite(service: Service, token: Token?, id: String, favorite: Boolean): Unit = withContext(Dispatchers.IO) {
+        call(service, token, if (favorite) "createItem" else "deleteItem", "<favorite>${Xml.escape(id)}</favorite>")
+    }
+
     /**
      * `search`: the hits for [term] under [category] (a [Category.mappedId]), and the total the
      * service claims. The page is cut to [count] — `count` is a request, not a promise: Amazon
@@ -293,6 +359,26 @@ class SmapiClient(client: OkHttpClient) {
                 )
             )
         }
+
+    /**
+     * The shelves a service's own browse endpoint lists at its top — what the Sonos app draws as a
+     * service's page, rather than SMAPI's `root`. Empty when its manifest declares no `browse`
+     * endpoint, or the endpoint does not answer without an account.
+     *
+     * Sonos Radio is why: its SMAPI root is empty, yet its manifest names
+     * `https://sali.sonos.superhi.fi/browse/v1`, which answers anonymously with twenty-eight shelves
+     * (Trending Now, Sonos Presents, the moods and genres) whose stations carry the very ids its SMAPI
+     * search returns — `sonos:2997` is Hit List in both (2026-10-08). Deezer, Amazon Music and Apple
+     * Music declare one too, but answer 400/500 without one.
+     */
+    suspend fun shelves(service: Service): List<Shelf> = withContext(Dispatchers.IO) {
+        val manifest = service.manifestUri?.let { get(it) } ?: return@withContext emptyList()
+        val endpoint = runCatching { JsonParser.parseString(manifest).asJsonObject.getAsJsonArray("endpoints") }.getOrNull()
+            ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
+            ?.firstOrNull { it.get("type")?.asString == "browse" }
+            ?.get("uri")?.asString ?: return@withContext emptyList()
+        get(endpoint)?.let(::parseShelves) ?: emptyList()
+    }
 
     /** The presentation map body, or `null` when the service publishes no manifest for one. */
     private suspend fun presentationMap(service: Service): String? {
@@ -532,6 +618,37 @@ fun parseRatingsMap(body: String): List<RatingsMatch> {
             }
             RatingsMatch(propname, value, ratings)
         }
+}
+
+/**
+ * A `getExtendedMetadata` response's [ItemDetails]. The ids live in `trackMetadata` for a track
+ * (Deezer, Qobuz, Saavn alike, 2026-10-08) and directly on a collection, so both are read.
+ */
+fun parseItemDetails(body: String): ItemDetails {
+    val root = Xml.parse(body)
+    val item = root.firstNamed("mediaMetadata") ?: root.firstNamed("mediaCollection") ?: return ItemDetails()
+    fun field(name: String) = (item.firstChildNamed(name) ?: item.firstChildNamed("trackMetadata")?.firstChildNamed(name))
+        ?.textContent?.trim()?.ifEmpty { null }
+    val radio = root.firstNamed("relatedPlay")?.let { play ->
+        val id = play.firstChildNamed("id")?.textContent ?: return@let null
+        Item(
+            id = id,
+            title = play.firstChildNamed("title")?.textContent.orEmpty(),
+            itemType = play.firstChildNamed("itemType")?.textContent ?: "program",
+            summary = null, artUrl = null, container = false,
+        )
+    }
+    val favorite = parseDynamicProperties(body).firstOrNull { it.first.equals("ISFAVORITE", ignoreCase = true) }
+        ?.second?.let { it == "1" || it.equals("true", ignoreCase = true) }
+    return ItemDetails(
+        artistId = field("artistId"),
+        artist = field("artist"),
+        albumId = field("albumId"),
+        album = field("album"),
+        radio = radio,
+        canFavorite = field("canAddToFavorites")?.toBooleanStrictOrNull() == true,
+        favorite = favorite,
+    )
 }
 
 /** The `dynamic/property` `(name, value)` pairs out of a `getExtendedMetadata` response. */

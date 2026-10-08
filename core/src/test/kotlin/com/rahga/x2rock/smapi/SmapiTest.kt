@@ -194,4 +194,50 @@ class SmapiTest {
         </getExtendedMetadataResponse>"""
         assertTrue(parseDynamicProperties(body).isEmpty())
     }
+
+    private fun captured(name: String) = com.rahga.x2rock.lan.FakePlayer.fixtureText(name)
+
+    /** Captured off Deezer, 2026-10-08: ids in `trackMetadata`, a "Mix" `relatedPlay`, `ISFAVORITE` set. */
+    @Test fun `a Deezer track's details name its artist, album, radio and favourite state`() {
+        val d = parseItemDetails(captured("getExtendedMetadata.deezer.track.xml"))
+        assertEquals("artist-4495513", d.artistId)
+        assertEquals("Travis Scott", d.artist)
+        assertEquals("album-469682765", d.albumId)
+        assertEquals("UTOPIA", d.album)
+        assertEquals("radio-track-2386586085", d.radio?.id)
+        assertEquals("program", d.radio?.itemType)
+        assertEquals(false, d.radio?.container)
+        assertTrue(d.canFavorite)
+        assertEquals(true, d.favorite)
+    }
+
+    /** Qobuz says a track can be a favourite but not whether it is one, and offers no radio. */
+    @Test fun `a Qobuz track's details carry no favourite state and no radio`() {
+        val d = parseItemDetails(captured("getExtendedMetadata.qobuz.track.xml"))
+        assertEquals("artist:42031", d.artistId)
+        assertEquals("album:5414939963827", d.albumId)
+        assertEquals(null, d.radio)
+        assertTrue(d.canFavorite)
+        assertEquals(null, d.favorite)
+    }
+
+    @Test fun `a Saavn track's details offer its radio but no favourite`() {
+        val d = parseItemDetails(captured("getExtendedMetadata.saavn.track.xml"))
+        assertEquals("ARTIST:16756017", d.artistId)
+        assertEquals("Piya Bedardi Radio", d.radio?.title)
+        assertEquals(false, d.canFavorite)
+    }
+
+    /** Sonos Radio's own page, captured from its browse endpoint 2026-10-08: shelves of stations. */
+    @Test fun `a browse endpoint's page is its shelves, each with its stations`() {
+        val shelves = parseShelves(captured("sonosradio.browse.json"))
+        assertEquals("Trending Now", shelves.first().title)
+        val hitList = shelves.first().items.first { it.title == "Hit List" }
+        // The id Sonos Radio's SMAPI search returns for the same station, so it plays the same way.
+        assertEquals("sonos:2997", hitList.id)
+        assertEquals("program", hitList.itemType)
+        assertEquals(false, hitList.container)
+        assertTrue(shelves.none { it.title == "Browse Radio" })
+        assertEquals(27, shelves.size)
+    }
 }

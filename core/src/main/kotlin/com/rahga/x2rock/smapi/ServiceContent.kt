@@ -112,6 +112,21 @@ object ServiceContent {
         return "SA_RINCON${t}_X_#Svc${t}-${key}-Token"
     }
 
+    /**
+     * The service's own id inside a Sonos object id — what its SMAPI browse takes. A favourite names
+     * a container the way a queued one is written, `1004206c` and the id percent-encoded: Saavn's
+     * album favourite is `1004206cALBUM:79488223`, its playlist `1006706cplaylist:109815423`, and
+     * Saavn answers either whole with "Item not found" but lists both once it is taken off (live,
+     * 2026-10-08). An id without that prefix is the service's already and comes back as it is.
+     */
+    fun serviceId(objectId: String): String {
+        val bare = SONOS_PREFIX.find(objectId)?.let { objectId.substring(it.range.last + 1) } ?: return objectId
+        return runCatching { java.net.URLDecoder.decode(bare, "UTF-8") }.getOrDefault(bare)
+    }
+
+    /** `1004206c`, `1006706c`, `0004206c`, `1004004c`: a flag digit, `0`, five hex, then `c`. */
+    private val SONOS_PREFIX = Regex("^[01]0[0-9a-f]{5}c(?=.)")
+
     /** The URI `AddURIToQueue` takes for [item]: a container is expanded, a track is fetched. */
     fun enqueueUri(item: Item, serviceId: String, serial: String?): String {
         val sn = serial?.takeIf { it.isNotEmpty() }?.let { "&sn=$it" }.orEmpty()

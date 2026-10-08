@@ -56,10 +56,10 @@ fun X2RockNavGraph() {
     // The room name alone, so a position tick or a volume step does not recompose the graph.
     val room by remember(playerViewModel) { playerViewModel.uiState.map { it.groupName }.distinctUntilChanged() }
         .collectAsState(initial = "")
-    fun openService(groupId: String, serviceKey: String, containerId: String, title: String) =
+    fun openService(groupId: String, serviceKey: String, containerId: String, title: String, favorite: String = "") =
         navController.navigate(
             "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}" +
-                "&container=${Uri.encode(containerId)}&title=${Uri.encode(title)}"
+                "&container=${Uri.encode(containerId)}&title=${Uri.encode(title)}&favorite=${Uri.encode(favorite)}"
         )
 
     NavHost(navController = navController, startDestination = "home") {
@@ -99,6 +99,9 @@ fun X2RockNavGraph() {
                 onBack = { navController.popBackStack() },
                 onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
                 onOpenServices = { groupId -> navController.navigate("services?groupId=${Uri.encode(groupId)}") },
+                onOpenFavorite = { groupId, serviceKey, containerId, favorite ->
+                    openService(groupId, serviceKey, containerId, favorite.name, favorite.id)
+                },
                 playerViewModel = playerViewModel
             )
         }
@@ -113,18 +116,26 @@ fun X2RockNavGraph() {
                 onBack = { navController.popBackStack() },
                 onPlayed = { navController.popBackStack("home", inclusive = false) },
                 onOpen = { serviceKey, item -> openService(groupId, serviceKey, item.id, item.title) },
+                onSearchService = { serviceKey, query ->
+                    navController.navigate(
+                        "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}&query=${Uri.encode(query)}"
+                    )
+                },
             )
         }
 
         composable(
             // Opened on the service list, or — from search — straight onto one of a service's
-            // containers, which Back then leaves for the search again.
-            route = "services?groupId={groupId}&service={service}&container={container}&title={title}",
+            // containers or onto its own search for the same term, which Back then leaves for the
+            // search again.
+            route = "services?groupId={groupId}&service={service}&container={container}&title={title}&query={query}&favorite={favorite}",
             arguments = listOf(
                 navArgument("groupId") { type = NavType.StringType },
                 navArgument("service") { type = NavType.StringType; defaultValue = "" },
                 navArgument("container") { type = NavType.StringType; defaultValue = "" },
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
+                navArgument("query") { type = NavType.StringType; defaultValue = "" },
+                navArgument("favorite") { type = NavType.StringType; defaultValue = "" },
             )
         ) { entry ->
             val groupId = entry.arguments?.getString("groupId").orEmpty()

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.tv.material3.Icon
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -42,6 +44,9 @@ import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.viewmodel.favoriteGroups
+import com.rahga.x2rock.viewmodel.favoriteLine
+import com.rahga.x2rock.viewmodel.favoritePage
 import com.rahga.x2rock.viewmodel.kindLabel
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
@@ -63,6 +68,8 @@ fun FavoritesScreen(
     onBack: () -> Unit,
     onOpenRadio: (groupId: String) -> Unit,
     onOpenServices: (groupId: String) -> Unit,
+    /** Open an album or playlist favourite on its service's page: the service, its id, the favourite. */
+    onOpenFavorite: (groupId: String, serviceKey: String, containerId: String, favorite: Favorite) -> Unit,
     playerViewModel: PlayerViewModel,
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
@@ -72,6 +79,7 @@ fun FavoritesScreen(
     val loadingId by viewModel.loadingFavoriteId.collectAsState()
     val playerState by playerViewModel.uiState.collectAsState()
     val notice by viewModel.notice.collectAsState()
+    val browsable by viewModel.browsable.collectAsState()
     BackHandler { onBack() }
 
     // Focus starts on the first row of the first section there is, so a press of the remote does
@@ -115,7 +123,12 @@ fun FavoritesScreen(
                             loadingId = loadingId,
                             onPreset = { viewModel.applyPreset(it, onDone = onBack) },
                             onDeletePreset = viewModel::deletePreset,
-                            onPlay = { fav -> viewModel.loadFavorite(fav.id, onDone = onBack) },
+                            onPlay = { fav ->
+                                val page = favoritePage(fav, browsable)
+                                if (page != null) onOpenFavorite(viewModel.groupId, page.first, page.second, fav)
+                                else viewModel.loadFavorite(fav.id, onDone = onBack)
+                            },
+                            opens = { favoritePage(it, browsable) != null },
                             onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
                             onAppendPlaylist = viewModel::appendPlaylist,
                             onReplay = { item -> viewModel.replay(item, onDone = onBack) },
@@ -146,6 +159,8 @@ private fun BrowseList(
     onPreset: (Preset) -> Unit,
     onDeletePreset: (Preset) -> Unit,
     onPlay: (Favorite) -> Unit,
+    /** Whether a favourite opens on a page of its own rather than playing at once. */
+    opens: (Favorite) -> Boolean,
     onPlayPlaylist: (Playlist) -> Unit,
     onAppendPlaylist: (Playlist) -> Unit,
     onReplay: (HistoryItem) -> Unit,
@@ -186,20 +201,24 @@ private fun BrowseList(
             }
         }
         if (state.items.isNotEmpty()) {
-            section("Favorites", "favorites")
             val favFocus = claim("favorites")
-            itemsIndexed(state.items, key = { _, f -> "fav:${f.id}" }) { index, fav ->
-                MediaRow(
-                    title = fav.name,
-                    subtitle = fav.description,
-                    artUrl = fav.imageUrl,
-                    active = state.activeId == fav.id,
-                    onClick = { onPlay(fav) },
-                    modifier = if (index == 0) favFocus else Modifier,
-                ) {
-                    when {
-                        loadingId == fav.id -> RowStatus("Starting…")
-                        state.activeId == fav.id -> RowStatus("Now playing", highlighted = true)
+            favoriteGroups(state.items).forEachIndexed { groupIndex, (title, favorites) ->
+                item(key = "section:$title") { SectionTitle(title, first = groupIndex == 0 && firstSection == "favorites") }
+                itemsIndexed(favorites, key = { _, f -> "fav:${f.id}" }) { index, fav ->
+                    MediaRow(
+                        title = fav.name,
+                        subtitle = favoriteLine(fav),
+                        artUrl = fav.imageUrl,
+                        active = state.activeId == fav.id,
+                        onClick = { onPlay(fav) },
+                        modifier = if (groupIndex == 0 && index == 0) favFocus else Modifier,
+                    ) {
+                        when {
+                            loadingId == fav.id -> RowStatus("Starting…")
+                            state.activeId == fav.id -> RowStatus("Now playing", highlighted = true)
+                            // An album or playlist opens on its tracks, with Play and Shuffle at the head.
+                            opens(fav) -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
+                        }
                     }
                 }
             }

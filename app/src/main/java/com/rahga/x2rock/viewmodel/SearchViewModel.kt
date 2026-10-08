@@ -39,7 +39,9 @@ import javax.inject.Inject
  * is left out and counted rather than holding the list.
  *
  * A press plays a track or a station, resumes an audiobook, and opens anything else — an album, an
- * artist — in that service's own browser, where its tracks can be played and Menu adds it whole.
+ * artist — in that service's own browser, where its tracks can be played. A hold or Menu opens the
+ * item's menu ([ServiceItemMenu]), and each service's section ends in "More from" it, which opens
+ * that service's own search for the same term with every category and every page.
  * Searched on submit, never per keystroke: that would be thirty requests a letter.
  */
 @HiltViewModel
@@ -187,21 +189,20 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    /** Menu: add to the end of the queue, leaving what plays alone — a track, or an album whole. */
-    fun queue(hit: Hit) {
-        viewModelScope.launch {
-            runCatching {
-                when (hit) {
-                    is Hit.Apple -> household.queueAppleMusic(groupId, hit.item, appleAccount())
-                    is Hit.Service -> {
-                        require(ServiceContent.canEnqueue(hit.item)) { "it isn't something a queue can hold" }
-                        household.queueServiceItem(groupId, hit.linked, hit.item)
-                    }
-                }
-            }.onSuccess { _notice.post("Added \"${hit.title}\" to the queue") }
-                .onFailure { _notice.failure("add ${hit.title}", it) }
+    /** The menu a hold or Menu on a hit opens: play now or next, queue, and the service's own. */
+    val menu = ServiceItemMenu(household, groupId, viewModelScope, _notice, _starting) { target ->
+        when (target) {
+            is ServiceItemMenu.Target.Service -> Hit.Service(target.linked, target.item).key
+            is ServiceItemMenu.Target.Apple -> Hit.Apple(target.item).key
         }
     }
+
+    fun openMenu(hit: Hit) = menu.show(
+        when (hit) {
+            is Hit.Service -> ServiceItemMenu.Target.Service(hit.linked, hit.item)
+            is Hit.Apple -> ServiceItemMenu.Target.Apple(hit.item)
+        }
+    )
 
     private suspend fun appleAccount(): String = household.appleMusicAccount() ?: error(NO_ACCOUNT)
 

@@ -43,6 +43,8 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.ServiceContent
+import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
+import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.ArtSlot
 import com.rahga.x2rock.ui.serviceLogo
@@ -53,6 +55,11 @@ import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.viewmodel.key
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
+import com.rahga.x2rock.ui.theme.IconLabelButton
+import com.rahga.x2rock.viewmodel.WHOLE
 import androidx.tv.material3.Icon
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.AppCard
@@ -60,9 +67,9 @@ import com.rahga.x2rock.viewmodel.ServiceBrowseViewModel
 
 /**
  * The household's own music services, searched and browsed with its stored tokens and played in
- * the room through its own account. Two steps: pick a service, then search it (if it publishes
- * search categories) or browse it. A press on a track plays it in place of the queue; a press on
- * a container opens it; Back climbs out one container at a time, then back to the service list.
+ * the room through its own account. Pick a service and it opens on its own library, with its search
+ * a button above it. A press on a track plays it in place of the queue; a press on a container
+ * opens it; Back climbs out one level at a time, then back to the service list.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -102,7 +109,7 @@ fun ServiceBrowseScreen(
                         onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic() },
                     )
                 } else {
-                    ServiceContent(viewModel, service, onPlayed)
+                    ServiceContent(viewModel, service, room, onPlayed)
                 }
             }
             notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
@@ -210,25 +217,26 @@ private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modif
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedService, onPlayed: () -> Unit) {
+private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedService, room: String, onPlayed: () -> Unit) {
     val categories by viewModel.categories.collectAsState()
     val category by viewModel.category.collectAsState()
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
+    val searching by viewModel.searching.collectAsState()
+    val place by viewModel.place.collectAsState()
+    val playsWhole by viewModel.playsWhole.collectAsState()
     val starting by viewModel.starting.collectAsState()
+    val returnTo by viewModel.returnTo.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
-    // Focus the search field once a searchable service's categories have loaded — keyed on the
-    // categories, not the service, because they arrive a moment after the screen opens (an async
-    // fetch); keying on the service alone fired this while categories were still empty, so the
-    // field never took focus and a press up from the chips reached Back instead. Retried for layout.
-    val hasCategories = categories.isNotEmpty()
-    LaunchedEffect(service.key(), hasCategories) {
-        if (!hasCategories) return@LaunchedEffect
-        fieldFocus.requestFocusRetrying()
+    // The field takes focus, and with it the keyboard, only on stepping into the search — never on
+    // opening the service, which used to cover half the screen with a keyboard before anything was
+    // asked for. Retried, because the field is composed in the same frame the flag turns.
+    LaunchedEffect(service.key(), searching) {
+        if (searching) fieldFocus.requestFocusRetrying()
     }
 
-    if (categories.isNotEmpty()) {
+    if (searching) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             SearchField(
                 value = query,
@@ -247,12 +255,56 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
             }
         }
         Spacer(Modifier.height(24.dp))
+    } else {
+        // Above the library, one press up from its first row: searching is there when wanted, and
+        // the library is what a remote meets first.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (categories.isNotEmpty()) {
+                AppButton(onClick = viewModel::openSearch) {
+                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(24.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Search ${service.service.name}")
+                }
+                Spacer(Modifier.width(24.dp))
+            }
+            // An album or playlist is played whole from its head, as the Sonos app's page does.
+            if (playsWhole) {
+                IconLabelButton(Icons.Default.PlayArrow, "Play", { viewModel.playWhole(shuffle = false, onPlayed) })
+                Spacer(Modifier.width(16.dp))
+                IconLabelButton(Icons.Default.Shuffle, "Shuffle", { viewModel.playWhole(shuffle = true, onPlayed) })
+                Spacer(Modifier.width(24.dp))
+            }
+            place?.let { Text(it, style = MaterialTheme.typography.titleMedium, maxLines = 1) }
+            if (starting == WHOLE) RowStatus("Starting…")
+        }
+        if (categories.isNotEmpty() || place != null || playsWhole) Spacer(Modifier.height(16.dp))
+    }
+
+    val menuTarget by viewModel.menu.open.collectAsState()
+    val menuItem = (menuTarget as? ServiceItemMenu.Target.Service)?.item
+    // The row a menu was opened from, so focus goes back to it when the menu closes. Without this
+    // it fell to Back, and the next presses walked the list and played whatever they landed on.
+    var menuFrom by remember { mutableStateOf<String?>(null) }
+    val menuReturn = remember { FocusRequester() }
+    LaunchedEffect(menuItem) {
+        if (menuItem != null) menuFrom = menuItem?.id
+        else if (menuFrom != null) menuReturn.requestFocusRetrying()
+    }
+    val fromQueue by viewModel.menu.fromQueue.collectAsState()
+    val details by viewModel.menu.details.collectAsState()
+    val here by viewModel.here.collectAsState()
+    (menuTarget as? ServiceItemMenu.Target.Service)?.let { target ->
+        ServiceItemMenuOverlay(
+            menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
+            here = here, onOpen = { viewModel.select(target.item, onPlayed) }, onOpenRelated = viewModel::openRelated,
+            onPlayed = onPlayed,
+        )
     }
 
     when (val r = results) {
         ServiceBrowseViewModel.Results.Idle -> Text(
-            if (categories.isEmpty()) "Opening ${service.service.name}…"
-            else "Search ${service.service.name}. What you pick plays through this system's own account.",
+            if (searching) "Search ${service.service.name}. What you pick plays through this system's own account."
+            else "Opening ${service.service.name}…",
             style = MaterialTheme.typography.bodyMedium,
         )
         ServiceBrowseViewModel.Results.Loading ->
@@ -267,22 +319,47 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
                 // downward focus search, so focus is moved into the first row when results arrive
                 // (on a fresh search, or after opening a container). Verified on the Streamer — the
                 // rows were unreachable by D-pad until this. UP from the first row returns to search.
-                LaunchedEffect(r.items.first().id) {
+                // Keyed on the first row, so a further page arriving below leaves focus where it is.
+                // Back onto a level lands on the row that was opened from it, not the first.
+                val target = r.items.indexOfFirst { it.id == returnTo }.coerceAtLeast(0)
+                val listState = rememberLazyListState()
+                LaunchedEffect(r.items.first().id, target) {
+                    // A row far down is not composed until scrolled to, and cannot take focus before.
+                    // To the first row too: one list serves every level, and keeps the last's scroll.
+                    listState.scrollToItem(target)
                     // The row may not be laid out the instant results arrive; retry a few frames.
                     resultsFocus.requestFocusRetrying()
                 }
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(bottom = 48.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     itemsIndexed(r.items, key = { _, item -> item.id }) { index, item ->
+                        // Ten rows from the end is about a screen's worth: the next page is asked for
+                        // while there is still something to read, not once the list has run out.
+                        if (r.hasMore && index >= r.items.size - 10) {
+                            LaunchedEffect(r.items.size) { viewModel.loadMore() }
+                        }
                         ItemRow(
                             item = item,
                             isStarting = starting == item.id,
                             onClick = { viewModel.select(item, onPlayed) },
-                            onQueue = { viewModel.queue(item) },
-                            modifier = if (index == 0) Modifier.focusRequester(resultsFocus) else Modifier,
+                            onMenu = { viewModel.openMenu(item) },
+                            modifier = Modifier
+                                .then(if (index == target) Modifier.focusRequester(resultsFocus) else Modifier)
+                                .then(if (item.id == menuFrom) Modifier.focusRequester(menuReturn) else Modifier),
                         )
+                    }
+                    if (r.hasMore) {
+                        item(key = "more") {
+                            Text(
+                                "Loading more of ${r.total}…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -300,15 +377,15 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onQueue: () -> Unit, modifier: Modifier = Modifier) {
-    // A press plays a track or opens a container; a hold or Menu adds it to the queue, as the
-    // Apple Music rows do. The view model turns away a hold on something a queue cannot hold.
+private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onMenu: () -> Unit, modifier: Modifier = Modifier) {
+    // A press plays a track or opens a container; a hold or Menu opens everything else that can
+    // be done with it — play next, add to the queue, the service's own actions.
     MediaRow(
         title = item.title,
         subtitle = item.summary,
         artUrl = item.artUrl,
         onClick = onClick,
-        onLongClick = onQueue,
+        onLongClick = onMenu,
         modifier = modifier,
     ) {
         when {
