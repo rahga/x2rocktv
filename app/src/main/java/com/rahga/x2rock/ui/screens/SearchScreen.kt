@@ -1,5 +1,14 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -69,7 +78,7 @@ import com.rahga.x2rock.viewmodel.key
  * answers arrive, focus moves to the first result — the field above otherwise traps a downward
  * press, as the service screen's did on the Streamer — and up from the first result returns to it.
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SearchScreen(
     room: String,
@@ -167,9 +176,14 @@ fun SearchScreen(
                             LazyHorizontalGrid(
                                 rows = GridCells.Fixed(rows),
                                 state = gridState,
-                                modifier = Modifier.height(CELL_HEIGHT * rows + CELL_GAP * (rows - 1) + 8.dp),
+                                // Right off a block's last column stays in it: it used to find the
+                                // Search button, the nearest thing that way. Properties before the
+                                // group, as for a modal's focus trap.
+                                modifier = Modifier.height(CELL_HEIGHT * rows + CELL_GAP * (rows - 1) + 8.dp)
+                                    .focusProperties { exit = { if (it == FocusDirection.Right) FocusRequester.Cancel else FocusRequester.Default } }
+                                    .focusGroup(),
                                 // A little room at the sides for the focused cell's outline, which the edge cut off.
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(CELL_GAP),
                             ) {
@@ -194,12 +208,18 @@ fun SearchScreen(
                                 // Two categories and eight hits a service is what keeps one search
                                 // across every service affordable; the rest is its own search away.
                                 if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
+                                    val more = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) }
                                     MediaRow(
                                         title = "More from ${section.name}",
                                         subtitle = "Every kind, every page",
                                         artUrl = serviceLogo(section.name),
-                                        onClick = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) },
+                                        onClick = more,
+                                        // Right goes on into it, as its chevron says: past the last
+                                        // column, "more" is the only way there is.
                                         modifier = Modifier.width(CELL_WIDTH)
+                                            .onKeyEvent { event ->
+                                                if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight) { more(); true } else false
+                                            }
                                             .then(if ("more:${section.key}" == openedFrom) Modifier.focusRequester(openedFocus) else Modifier),
                                     ) {
                                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
@@ -292,7 +312,6 @@ private fun HitRow(
     onMenu: () -> Unit,
     modifier: Modifier,
 ) {
-    val opens = hit is SearchViewModel.Hit.Service && ServiceContent.opens(hit.item)
     MediaRow(
         title = hit.title,
         subtitle = hit.subtitle,
@@ -302,9 +321,8 @@ private fun HitRow(
         onLongClick = onMenu,
         modifier = modifier,
     ) {
-        when {
-            isStarting -> RowStatus("Starting…")
-            opens -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
-        }
+        // No chevron here: in a block of cells running sideways, one reads as "this way", and the
+        // only thing that way is the block's own "More from". An album still opens on a press.
+        if (isStarting) RowStatus("Starting…")
     }
 }
