@@ -705,8 +705,9 @@ Each finding checked against the code, and the device where it could be, before 
     the envelope past its NAT (the capture leg only; see `DebugSwitches.serviceEnvelope`).
     **The on-device capture works**: on the Streamer at the office (2026-10-07, release build, cold
     start, nothing cached), Music Services listed the household's accounts, so the inbound GENA socket
-    and `.local`→IP path ran on a real TV. `queueServiceItem`'s live
-    `AddURIToQueue` leg has only been unit-tested — it mutates a room, so it waits for home. Amazon
+    and `.local`→IP path ran on a real TV. `queueServiceItem`'s live `AddURIToQueue` leg **works**
+    (home, 2026-10-07, through the emulator): Menu on Deezer's "Favorite tracks" playlist added its
+    track to Kitchen's queue, two tracks to three, and the paused room stayed paused. Amazon
     Music answers its `search` with HTTP 500 here (x2rock saw the same). iHeart ratings (0.1a) can
     now reuse this token read instead of a device link.
   - **Audiobooks resume in place** (Audible, added to the office household 2026-10-06). A book
@@ -715,9 +716,10 @@ Each finding checked against the code, and the device where it could be, before 
     `<id>` of the chapter to resume, and `<offsetMillis>`). So pressing an audiobook resolves that
     and plays the chapter, then seeks the offset (first chapter from the start when there is no saved
     position); it is treated as playable, not a container to open. Parsing is verified read-only
-    against the real account (`SmapiClient.chapters`, `parsePositionInformation`, tested); the
-    **load-then-seek has not run on hardware** — it makes sound, and a seek onto a freshly loaded
-    service chapter wants one look on a real device. Chapter-picking (browsing a book's chapters) is
+    against the real account (`SmapiClient.chapters`, `parsePositionInformation`, tested), and the
+    **load-then-seek works on hardware** (home, 2026-10-07, Kitchen through the emulator): Dune loaded
+    Chapter 1 and played from 12:37 rather than 0:00. A buffering moment showed the previous item's
+    metadata before the chapter's arrived; it corrected itself. Chapter-picking (browsing a book's chapters) is
     not offered yet; resume is.
   - **Radio stations play as streams, not queue content.** Much of the catalogue is radio (TuneIn,
     SomaFM, the German stations, …), and a station is `itemType=stream` with no universalMusicObjectId
@@ -752,7 +754,8 @@ Each finding checked against the code, and the device where it could be, before 
     LAROI) carried the id `artist_radio.32433934`, played from
     `x-sonosapi-radio:artist_radio.32433934?sid=6&flags=0&sn=22`, and opened on "STAY" — the
     artist's station, as iHeart's free tier plays no track on demand. So the row's title promised a
-    song and delivered its artist's radio. **Settled by searching iHeart as the Sonos app does**
+    song and delivered its artist's radio. Its playlists are no longer offered either, so they need no
+    radio check. **Settled by searching iHeart as the Sonos app does**
     (`ServiceContent.asSonosShowsThem`): Stations — its stations search, then its artists search,
     which together give Sonos's own list for "coldplay" and put live Z100 first for "z100" — and
     Podcasts. Tracks, albums, playlists and artists are gone, so an artist station is never offered
