@@ -108,4 +108,13 @@ class ServiceContentTest {
         // Every other service keeps what it publishes.
         assertEquals(published, ServiceContent.asSonosShowsThem("31", published))
     }
+
+    /** Saavn's favourites as the household holds them (2026-10-08), and ids that carry no prefix. */
+    @Test fun `a favourite's object id gives the service's own id`() {
+        assertEquals("ALBUM:79488223", ServiceContent.serviceId("1004206cALBUM:79488223"))
+        assertEquals("playlist:109815423", ServiceContent.serviceId("1006706cplaylist:109815423"))
+        assertEquals("album:9", ServiceContent.serviceId("1004206calbum%3a9"))
+        assertEquals("track:41805683:7", ServiceContent.serviceId("track:41805683:7"))
+        assertEquals("live_stations.6790", ServiceContent.serviceId("live_stations.6790"))
+    }
 }

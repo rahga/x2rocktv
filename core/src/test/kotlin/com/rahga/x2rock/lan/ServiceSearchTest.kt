@@ -50,6 +50,18 @@ class ServiceSearchTest {
             <SearchCategories><Category id="tracks" mappedId="track"/></SearchCategories>
         </Match></PresentationMap></Presentation>"""
 
+        /** Deezer's `NowPlayingRatings`, as its presentation map published it (2026-10-08), icons left out. */
+        const val DEEZER_RATINGS = """<Presentation><PresentationMap type="NowPlayingRatings">
+            <Match propname="ISFAVORITE" value="0"><Ratings>
+                <Rating AutoSkip="ALWAYS" Id="3" StringId="SKIP_TRACK" OnSuccessStringId="SKIP_TRACK_SUCCESS"></Rating>
+                <Rating AutoSkip="NEVER" Id="1" StringId="SAVE_TRACK" OnSuccessStringId="SAVE_TRACK_SUCCESS"></Rating>
+            </Ratings></Match>
+            <Match propname="ISFAVORITE" value="1"><Ratings>
+                <Rating AutoSkip="ALWAYS" Id="3" StringId="SKIP_TRACK" OnSuccessStringId="SKIP_TRACK_SUCCESS"></Rating>
+                <Rating AutoSkip="NEVER" Id="0" StringId="DELETE_TRACK" OnSuccessStringId="DELETE_TRACK_SUCCESS"></Rating>
+            </Ratings></Match>
+        </PresentationMap></Presentation>"""
+
         fun searchResponse() =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
                 """<searchResponse><searchResult><index>0</index><count>1</count><total>1</total>""" +
@@ -91,13 +103,20 @@ class ServiceSearchTest {
     /** Whether the player refuses `SetAVTransportURI` with a UPnP fault, as one refusing a source would. */
     @Volatile private var refuseSource = false
 
+    /** What `GetMediaInfo` says the room plays from, and the queue slot `GetPositionInfo` says is playing. */
+    @Volatile private var currentUri = "x-rincon-queue:RINCON_X#0"
+    @Volatile private var currentTrack = 3
+
+    /** The presentation map the service publishes; a test about ratings swaps in one that has them. */
+    @Volatile private var map = MAP
+
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         service = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                     "/manifest" -> MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map")}"}}""")
-                    "/map" -> MockResponse().setBody(MAP)
+                    "/map" -> MockResponse().setBody(map)
                     "/smapi" -> {
                         val body = request.body.readUtf8().also { smapiCalls += it }
                         MockResponse().setBody(
@@ -130,6 +149,12 @@ class ServiceSearchTest {
                         } else {
                             val resp = if ("SetAVTransportURI" in body) {
                                 """<u:SetAVTransportURIResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1"/>"""
+                            } else if ("GetMediaInfo" in body) {
+                                """<u:GetMediaInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
+                                    """<CurrentURI>$currentUri</CurrentURI></u:GetMediaInfoResponse>"""
+                            } else if ("GetPositionInfo" in body) {
+                                """<u:GetPositionInfoResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
+                                    """<Track>$currentTrack</Track></u:GetPositionInfoResponse>"""
                             } else {
                                 """<u:AddURIToQueueResponse xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">""" +
                                     """<FirstTrackNumberEnqueued>1</FirstTrackNumberEnqueued>""" +
@@ -320,5 +345,53 @@ class ServiceSearchTest {
         val failed = runCatching { household.queueServiceItem(groupId, qobuz(), artist) }.isFailure
         assertTrue("an artist holds no tracks to enqueue", failed)
         assertTrue("nothing was sent to the player", avTransport.none { "AddURIToQueue" in it })
+    }
+
+    private val album = com.rahga.x2rock.smapi.Item(
+        id = "album:9", title = "ASTROWORLD", itemType = "album", summary = null, artUrl = null, container = true,
+    )
+
+    /** "Next" is a slot, not a flag: `EnqueueAsNext` alone still appends (x2rock, verified). */
+    @Test fun `play next puts it in the slot after the track playing`() = runBlocking {
+        val groupId = connected()
+        household.queueServiceItem(groupId, qobuz(), album, next = true)
+        val body = avTransport.first { "AddURIToQueue" in it }
+        assertTrue(body, "<DesiredFirstTrackNumberEnqueued>4</DesiredFirstTrackNumberEnqueued>" in body)
+        assertTrue(body, "<EnqueueAsNext>1</EnqueueAsNext>" in body)
+    }
+
+    /** On a station the track number says nothing about the queue, so "next" appends. */
+    @Test fun `play next off the queue appends`() = runBlocking {
+        currentUri = "x-sonosapi-radio:hitlist?sid=303"
+        val groupId = connected()
+        household.queueServiceItem(groupId, qobuz(), album, next = true)
+        val body = avTransport.first { "AddURIToQueue" in it }
+        assertTrue(body, "<DesiredFirstTrackNumberEnqueued>0</DesiredFirstTrackNumberEnqueued>" in body)
+    }
+
+    private val track = com.rahga.x2rock.smapi.Item(
+        id = "track:41805683:7", title = "Your Freedom Is the End of Me", itemType = "track", summary = null, artUrl = null, container = false,
+    )
+
+    /** Qobuz publishes no favourite-shaped ratings, so its favourites are SMAPI's own create/delete. */
+    @Test fun `a favourite is created and deleted where no rating says how`() = runBlocking {
+        connected()
+        household.setServiceFavorite(qobuz(), track, favorite = true)
+        household.setServiceFavorite(qobuz(), track, favorite = false)
+        assertTrue(smapiCalls.any { "<createItem" in it && "<favorite>track:41805683:7</favorite>" in it })
+        assertTrue(smapiCalls.any { "<deleteItem" in it && "<favorite>track:41805683:7</favorite>" in it })
+        assertTrue(smapiCalls.none { "<rateItem" in it })
+    }
+
+    /** Deezer's heart is its ratings: `SAVE_TRACK` (1) and `DELETE_TRACK` (0), sent through `rateItem`. */
+    @Test fun `a favourite is a rating where the service's ratings are favourite-shaped`() = runBlocking {
+        map = DEEZER_RATINGS
+        connected()
+        household.setServiceFavorite(qobuz(), track, favorite = true)
+        household.setServiceFavorite(qobuz(), track, favorite = false)
+        val rates = smapiCalls.filter { "<rateItem" in it }
+        assertTrue(rates.toString(), rates.any { "<rating>1</rating>" in it })
+        assertTrue(rates.toString(), rates.any { "<rating>0</rating>" in it })
+        assertTrue(smapiCalls.none { "<createItem" in it || "<deleteItem" in it })
     }
 }

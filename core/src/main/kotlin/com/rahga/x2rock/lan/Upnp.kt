@@ -140,20 +140,33 @@ class Upnp(
     }
 
     /**
-     * Add [uri] to the end of the queue, with the DIDL [metadata] that says whose it is, leaving
-     * what plays alone. A container is expanded by the player into its tracks.
+     * Add [uri] to the queue, with the DIDL [metadata] that says whose it is, leaving what plays
+     * alone. A container is expanded by the player into its tracks. [position] is the 1-based slot
+     * its first track takes; 0 appends.
+     *
+     * **"Next" is a position, not a flag**: `EnqueueAsNext` on its own still appends (x2rock,
+     * verified), so a caller wanting "play next" names the slot after the current track.
      */
-    suspend fun addToQueue(hostname: String, uri: String, metadata: String): Unit = withContext(Dispatchers.IO) {
+    suspend fun addToQueue(hostname: String, uri: String, metadata: String, position: Int = 0): Unit = withContext(Dispatchers.IO) {
         soap(
             hostname, Service.AV_TRANSPORT, "AddURIToQueue",
             listOf(
                 "InstanceID" to "0",
                 "EnqueuedURI" to uri,
                 "EnqueuedURIMetaData" to metadata,
-                "DesiredFirstTrackNumberEnqueued" to "0",
-                "EnqueueAsNext" to "0",
+                "DesiredFirstTrackNumberEnqueued" to position.toString(),
+                "EnqueueAsNext" to if (position > 0) "1" else "0",
             ),
         )
+    }
+
+    /**
+     * The queue slot playing now, 1-based, from `GetPositionInfo`'s `Track`. Means something only
+     * while the queue is the source: on a stream it reads 1 whatever the queue holds.
+     */
+    suspend fun currentTrackNumber(hostname: String): Int = withContext(Dispatchers.IO) {
+        parse(soap(hostname, Service.AV_TRANSPORT, "GetPositionInfo", listOf("InstanceID" to "0")))
+            .text("Track")?.trim()?.toIntOrNull() ?: 0
     }
 
     /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */

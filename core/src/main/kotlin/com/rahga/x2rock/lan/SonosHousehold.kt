@@ -28,6 +28,7 @@ import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.smapi.AccountCapture
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
+import com.rahga.x2rock.smapi.ItemDetails
 import com.rahga.x2rock.smapi.ItemPage
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.Rating
@@ -36,6 +37,7 @@ import com.rahga.x2rock.smapi.RatingsMatch
 import com.rahga.x2rock.smapi.RatingsStore
 import com.rahga.x2rock.smapi.Service
 import com.rahga.x2rock.smapi.ServiceContent
+import com.rahga.x2rock.smapi.Shelf
 import com.rahga.x2rock.smapi.SmapiClient
 import com.rahga.x2rock.smapi.StoredAccounts
 import com.rahga.x2rock.smapi.Thumb
@@ -912,9 +914,14 @@ class SonosHousehold(
     suspend fun playAppleMusic(groupId: String, item: AppleMusicItem, accountId: String) =
         replay(groupId, item.asLoadable(accountId))
 
-    /** Add an Apple Music search result to the end of [groupId]'s queue, leaving what plays alone. */
-    suspend fun queueAppleMusic(groupId: String, item: AppleMusicItem, accountId: String) =
-        upnp.addToQueue(coordinatorHostname(groupId), AppleMusic.queueUri(item, accountId), AppleMusic.queueMetadata(item))
+    /**
+     * Add an Apple Music search result to [groupId]'s queue — at its end, or with [next] after the
+     * track playing — leaving what plays alone.
+     */
+    suspend fun queueAppleMusic(groupId: String, item: AppleMusicItem, accountId: String, next: Boolean = false) {
+        val hostname = coordinatorHostname(groupId)
+        upnp.addToQueue(hostname, AppleMusic.queueUri(item, accountId), AppleMusic.queueMetadata(item), if (next) nextSlot(hostname) else 0)
+    }
 
     // ---- Searching and browsing the household's own music services ----
     //
@@ -988,6 +995,31 @@ class SonosHousehold(
                 .awaitAll()
         }
         return ItemPage((first.items + second.items).distinctBy { it.id }, first.total + second.total)
+    }
+
+    /** The shelves of [linked]'s own page, where its SMAPI root has none — see [SmapiClient.shelves]. */
+    suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service)
+
+    /** [item]'s `getExtendedMetadata` answer from [linked], unparsed. */
+    suspend fun serviceItemDetailsBody(linked: LinkedService, item: Item): String =
+        smapi.extendedMetadataBody(linked.service, linked.token, item.id)
+
+    /** What [linked] says about [item] beyond itself: its artist, album, radio, favourite state. */
+    suspend fun serviceItemDetails(linked: LinkedService, item: Item): ItemDetails =
+        smapi.itemDetails(linked.service, linked.token, item.id)
+
+    /**
+     * Add [item] to the account's favourites in [linked], or take it out. A service whose ratings
+     * are favourite-shaped does it by rating — Deezer's `NowPlayingRatings` are `SAVE_TRACK` and
+     * `DELETE_TRACK`, and its heart is what they set — so that is used where published; anything
+     * else that offers `canAddToFavorites` takes SMAPI's `createItem`/`deleteItem`.
+     */
+    suspend fun setServiceFavorite(linked: LinkedService, item: Item, favorite: Boolean) {
+        val wanted = if (favorite) SAVE_TRACK else DELETE_TRACK
+        val rating = ratingsCatalogue.ratingsFor(linked.service)
+            .flatMap { it.ratings }.firstOrNull { it.stringId == wanted }
+        if (rating != null) smapi.rateItem(linked.service, linked.token, item.id, rating.id)
+        else smapi.setFavorite(linked.service, linked.token, item.id, favorite)
     }
 
     /** Browse into a container of [linked] — `root` for its top level. */
@@ -1086,19 +1118,32 @@ class SonosHousehold(
     }
 
     /**
-     * Add a service [item] to the end of [groupId]'s queue, leaving what plays alone — a track, or
+     * Add a service [item] to [groupId]'s queue — at its end, or with [next] straight after the
+     * track playing — leaving what plays alone. A track, or
      * a container that holds tracks (an album, a playlist), which the player expands into its rows.
      * The URI and DIDL are built from the item's own id and the account's cdudn, so no stream is
      * fetched. Fails for a container of containers (an artist), which a queue cannot take, and for
      * a service the player's type list gives no cdudn for.
      */
-    suspend fun queueServiceItem(groupId: String, linked: LinkedService, item: Item) {
+    suspend fun queueServiceItem(groupId: String, linked: LinkedService, item: Item, next: Boolean = false) {
         require(ServiceContent.canEnqueue(item)) { "${item.title} is not something a queue can hold" }
         val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
             ?: error("${linked.service.name} has no account to queue through")
         val uri = ServiceContent.enqueueUri(item, linked.service.id, linked.accountId?.removePrefix("sn_"))
-        upnp.addToQueue(coordinatorHostname(groupId), uri, ServiceContent.enqueueDidl(item, cdudn))
+        val hostname = coordinatorHostname(groupId)
+        upnp.addToQueue(hostname, uri, ServiceContent.enqueueDidl(item, cdudn), if (next) nextSlot(hostname) else 0)
     }
+
+    /**
+     * The queue slot after the one playing, for "play next" — or 0, which appends, when the queue
+     * is not what the room is playing. On a station the transport's track number reads 1 and says
+     * nothing about the queue, so "next" there would land at slot 2 of a queue nobody is playing;
+     * the Sonos app offers no Play Next at all then (seen 2026-10-08), and appending is the
+     * nearest honest reading. With the queue playing from a standstill the track reads 0, which
+     * puts it at the front.
+     */
+    private suspend fun nextSlot(hostname: String): Int =
+        if (upnp.mediaInfo(hostname).playingFromQueue) upnp.currentTrackNumber(hostname) + 1 else 0
 
     /**
      * Play [item] in [groupId] again, in place of what it is playing.
@@ -1408,6 +1453,10 @@ class SonosHousehold(
             PlayModes.toBody(mode),
         )
     }
+
+    /** Turn [groupId]'s shuffle on or off, leaving its repeat and crossfade as they are. */
+    suspend fun setShuffle(groupId: String, on: Boolean) =
+        setPlayMode(groupId, groupState(groupId).playMode.copy(shuffle = on))
 
     suspend fun setGroupVolume(groupId: String, volume: Int) {
         coordinator(groupId).command(

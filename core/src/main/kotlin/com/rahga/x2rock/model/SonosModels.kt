@@ -291,8 +291,12 @@ data class Favorite(
     val playable: Boolean get() = service?.name != null || resource?.type != null
 }
 data class FavoriteService(val id: String? = null, val name: String? = null)
-/** `STREAM`, `PLAYLIST`, `ALBUM`, `TRACK`, `PROGRAM` — when given. */
-data class FavoriteResource(val type: String? = null)
+/**
+ * [type] is `STREAM`, `PLAYLIST`, `ALBUM`, `TRACK`, `PROGRAM` — when given. [id] names it in its
+ * service: the `objectId` is the same id that service's SMAPI browse takes, which is how an album
+ * favourite opens on its tracks.
+ */
+data class FavoriteResource(val type: String? = null, val id: MusicObjectId? = null)
 /**
  * One Sonos playlist: a saved queue, what the Sonos app lists under its own playlists. A
  * different thing from a favourite, in a different namespace. **The id is bare** (`"6"`),

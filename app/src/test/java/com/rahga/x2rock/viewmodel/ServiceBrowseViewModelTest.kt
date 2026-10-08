@@ -42,17 +42,31 @@ class ServiceBrowseViewModelTest {
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
     private lateinit var viewModel: ServiceBrowseViewModel
+    /** Whether the service answers its root with nothing at all, as Sonos Radio does over SMAPI. */
+    @Volatile private var emptyRoot = false
+    /** Whether the service's manifest names a browse endpoint, as Sonos Radio's does. */
+    @Volatile private var shelvesOn = false
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         service = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
-                    "/manifest" -> MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map")}"}}""")
+                    "/manifest" -> MockResponse().setBody(
+                        if (shelvesOn) """{"presentationMap":{"uri":"${url("/map")}"},"endpoints":[{"type":"browse","uri":"${url("/browse")}"}]}"""
+                        else """{"presentationMap":{"uri":"${url("/map")}"}}"""
+                    )
+                    "/browse" -> MockResponse().setBody(FakePlayer.fixtureText("sonosradio.browse.json"))
                     "/map" -> MockResponse().setBody(MAP)
                     "/smapi" -> {
                         val body = request.body.readUtf8()
-                        MockResponse().setBody(if ("<getMetadata" in body) CHILDREN else SEARCH_ALBUM)
+                        MockResponse().setBody(when {
+                            "<getMetadata" !in body -> SEARCH_ALBUM
+                            "<id>root</id>" in body && emptyRoot -> EMPTY
+                            "<id>long</id><index>0</index>" in body -> page(0, 2, total = 3)
+                            "<id>long</id><index>2</index>" in body -> page(2, 1, total = 3)
+                            else -> CHILDREN
+                        })
                     }
                     else -> MockResponse().setResponseCode(404)
                 }
@@ -109,32 +123,118 @@ class ServiceBrowseViewModelTest {
         assertEquals("tracks", viewModel.categories.value.first().id)
     }
 
+    /**
+     * A service that can be searched still opens on its library: it used to open on a search field,
+     * which left every library behind one — Deezer's Flow, Qobuz's playlists — out of reach.
+     */
+    @Test fun `a searchable service opens on its library, not on the search`() = runBlocking {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        assertEquals("SICKO MODE", found().first().title)
+        withTimeout(5_000) { viewModel.categories.first { it.isNotEmpty() } }
+        assertFalse("the search waits to be asked for", viewModel.searching.value)
+    }
+
+    /** Sonos Radio answers its SMAPI root with nothing, so its search is all there is to open on. */
+    @Test fun `a searchable service with an empty root opens on the search`() = runBlocking {
+        emptyRoot = true
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        withTimeout(5_000) { viewModel.searching.first { it } }
+        assertTrue(viewModel.back())
+        assertEquals("Back from that search leaves the service", null, viewModel.active.value)
+    }
+
+    /** Sonos Radio: an empty SMAPI root, and a page of shelves from its own browse endpoint instead. */
+    @Test fun `an empty root with a browse endpoint opens on its shelves`() = runBlocking {
+        emptyRoot = true
+        shelvesOn = true
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        val shelves = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.isNotEmpty() == true } }
+            as ServiceBrowseViewModel.Results.Found
+        assertEquals("Trending Now", shelves.items.first().title)
+        assertFalse(viewModel.searching.value)
+        viewModel.select(shelves.items.first()) {}
+        val stations = viewModel.results.value as ServiceBrowseViewModel.Results.Found
+        assertTrue(stations.items.any { it.id == "sonos:2997" })
+        assertTrue(viewModel.back())
+        assertEquals("Trending Now", (viewModel.results.value as ServiceBrowseViewModel.Results.Found).items.first().title)
+    }
+
     @Test fun `descending into a container, then Back, climbs out a level at a time`() = runBlocking {
         val qobuz = ready().first { it.service.id == "31" }
         viewModel.open(qobuz)
+        assertEquals("SICKO MODE", found().first().title)
         withTimeout(5_000) { viewModel.category.first { it != null } }
 
+        viewModel.openSearch()
+        assertTrue(viewModel.searching.value)
         viewModel.setQuery("astroworld")
         viewModel.search()
+        withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.firstOrNull()?.container == true } }
         val hits = found()
         assertEquals("the search returns an album to open", "ASTROWORLD", hits.first().title)
-        assertTrue(hits.first().container)
 
         // Open the album: results become its children.
         viewModel.select(hits.first()) {}
         withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.firstOrNull()?.container == false } }
         assertEquals("SICKO MODE", found().first().title)
+        assertFalse(viewModel.searching.value)
 
         // Back out of the container — still inside the service, and back on the search's hits
         // rather than an empty list under the query.
         assertTrue(viewModel.back())
-        assertTrue(viewModel.active.value != null)
+        assertTrue(viewModel.searching.value)
         assertEquals("ASTROWORLD", (viewModel.results.value as ServiceBrowseViewModel.Results.Found).items.first().title)
+        // Back out of the search — onto the library it was entered from, as it was left.
+        assertTrue(viewModel.back())
+        assertFalse(viewModel.searching.value)
+        assertTrue(viewModel.active.value != null)
+        assertEquals("SICKO MODE", (viewModel.results.value as ServiceBrowseViewModel.Results.Found).items.first().title)
         // Back again — out to the service list.
         assertTrue(viewModel.back())
         assertEquals(null, viewModel.active.value)
         // Back once more — nothing left to climb; the screen itself should close.
         assertFalse(viewModel.back())
+    }
+
+    /**
+     * Opened from a Browse favourite, on its album: the album's tracks, with Play and Shuffle. Built
+     * in the constructor, which is where this crashed on the TV — a flow the entry path set was
+     * declared below the `init` that reached it, so it was still null.
+     */
+    @Test fun `a favourite's album opens on its tracks, playable whole`() = runBlocking {
+        val groupId = fake.groupId(household)
+        // Already read, as it is by the time Browse opens one: with nothing to wait for, the entry
+        // runs inside the constructor — the order the TV crashed in.
+        ready()
+        val fromFavorite = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
+            "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "favorite" to "84",
+        )))
+        val tracks = withTimeout(5_000) { fromFavorite.results.first { it is ServiceBrowseViewModel.Results.Found } }
+        assertEquals("SICKO MODE", (tracks as ServiceBrowseViewModel.Results.Found).items.first().title)
+        assertTrue(fromFavorite.playsWhole.value)
+        assertFalse("its top is where Back leaves, for Browse", fromFavorite.back())
+    }
+
+    /** A container longer than one answer is read on as the list nears its end, not cut short. */
+    @Test fun `a long container is read a page at a time`() = runBlocking {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        found()
+        viewModel.browse("long", "Long")
+        withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.total == 3 } }
+        val first = viewModel.results.value as ServiceBrowseViewModel.Results.Found
+        assertEquals(2, first.items.size)
+        assertTrue(first.hasMore)
+
+        viewModel.loadMore()
+        val all = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.size == 3 }
+        } as ServiceBrowseViewModel.Results.Found
+        assertEquals(listOf("t0", "t1", "t2"), all.items.map { it.id })
+        assertFalse(all.hasMore)
     }
 
     /**
@@ -157,7 +257,7 @@ class ServiceBrowseViewModelTest {
         viewModel.open(qobuz)
         withTimeout(5_000) { viewModel.category.first { it != null } }
         val artist = com.rahga.x2rock.smapi.Item("artist:1", "x", "artist", null, null, container = true)
-        viewModel.queue(artist)
+        viewModel.menu.queue(ServiceItemMenu.Target.Service(qobuz, artist))
         assertTrue(withTimeout(5_000) { viewModel.notice.first { it != null } }!!.contains("isn't something"))
     }
 
@@ -185,6 +285,19 @@ class ServiceBrowseViewModelTest {
         const val CHILDREN =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><getMetadataResponse><getMetadataResult>""" +
                 """<total>1</total><mediaMetadata><id>tr:1</id><itemType>track</itemType><title>SICKO MODE</title></mediaMetadata>""" +
+                """</getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+
+        const val EMPTY =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><getMetadataResponse><getMetadataResult>""" +
+                """<total>0</total></getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+
+        /** [count] tracks from [index] of a container of [total]. */
+        fun page(index: Int, count: Int, total: Int) =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><getMetadataResponse><getMetadataResult>""" +
+                "<index>$index</index><count>$count</count><total>$total</total>" +
+                (index until index + count).joinToString("") {
+                    "<mediaMetadata><id>t$it</id><itemType>track</itemType><title>Track $it</title></mediaMetadata>"
+                } +
                 """</getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
 
         fun seal(xml: String, householdId: String) = com.rahga.x2rock.smapi.TestEnvelope.seal(xml, householdId)

@@ -59,9 +59,17 @@ class FavoritesViewModel @Inject constructor(
     /** Why the last favourite did not load, for a few seconds. */
     val notice: StateFlow<String?> = _notice.text
 
+    /** The services this household can browse here, by [com.rahga.x2rock.smapi.LinkedService.key]. */
+    private val _browsable = MutableStateFlow<Set<String>>(emptySet())
+    val browsable: StateFlow<Set<String>> = _browsable.asStateFlow()
+
     init {
         load()
+        viewModelScope.launch {
+            _browsable.value = runCatching { household.searchableServices() }.getOrDefault(emptyList()).map { it.key() }.toSet()
+        }
     }
+
 
     /** This device's presets, newest last: see [Preset]. */
     val presets: StateFlow<List<Preset>> = presetStore.presets
