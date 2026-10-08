@@ -95,6 +95,8 @@ class ServiceSearchTest {
     private lateinit var upnp: MockWebServer
     private lateinit var service: MockWebServer
     private lateinit var scope: CoroutineScope
+    private val captureEntered = kotlinx.coroutines.CompletableDeferred<Unit>()
+    private var captureGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     private lateinit var household: SonosHousehold
 
     private val smapiCalls = CopyOnWriteArrayList<String>()
@@ -189,7 +191,11 @@ class ServiceSearchTest {
             internetClient = OkHttpClient(),
             port = fake.port,
             upnpPort = upnp.port,
-            accountCapture = { envelope },
+            accountCapture = {
+                captureEntered.complete(Unit)
+                captureGate?.await()
+                envelope
+            },
         )
     }
 
@@ -394,4 +400,23 @@ class ServiceSearchTest {
         assertTrue(rates.toString(), rates.any { "<rating>0</rating>" in it })
         assertTrue(smapiCalls.none { "<createItem" in it || "<deleteItem" in it })
     }
+    @Test fun `a cancelled account capture leaves the service list to be read again`() = runBlocking<Unit> {
+        connected()
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        captureGate = gate
+        val first = async(Dispatchers.Default) { household.searchableServices() }
+        withTimeout(5_000) { captureEntered.await() }
+        first.cancel()
+        first.join()
+        gate.complete(Unit)
+        val retried = household.searchableServices()
+        assertTrue("cancelled discovery cached only ${retried.map { it.service.name }} for the entire session",
+            retried.any { it.service.id == QOBUZ && it.added })
+    }
+
+    @Test fun `a capture left to finish lists the credentialed service`() = runBlocking<Unit> {
+        connected()
+        assertTrue(household.searchableServices().any { it.service.id == QOBUZ && it.added })
+    }
+
 }
