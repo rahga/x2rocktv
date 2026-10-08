@@ -745,6 +745,48 @@ favourite's album page each crashed on opening, because a flow the constructor's
 was declared below `init` — which only bites when nothing suspends first, as with a cached service
 list. The view-model test now primes that cache, and was mutation-checked to fail without the fix.
 
+## Outside review, `CODE_REVIEW_FINDINGS.md` (2026-10-08)
+
+Thirteen findings, each checked against the code, and on the emulator where it could be, before
+anything changed.
+
+- **2.1 a lost socket's watchers — fixed, and worse than reported.** The two jobs per socket collect
+  `SharedFlow`s, which never complete, so a member speaker that dropped left its pair suspended for
+  the rest of the session, holding the dead socket; the suggested prune-on-completion would never
+  have fired. Jobs are now kept per socket and a lost member's are cancelled. Tested (two watchers
+  to every open socket), mutation-checked.
+- **2.3 a second seek aimed from the old position — fixed.** The target was dropped when the
+  command was sent; the speaker pushes the new position later, so a press between went back. It is
+  now kept until a position pushed after the send arrives, advancing while playing. Not the review's
+  fixed 1.2s hold: a timing guess. Tested (failed first, at 10000 for 20000), mutation-checked.
+- **1.1 paging after a repeat — fixed, milder than reported.** Each repeat dropped made the next
+  page start one early; the overlap was dropped again, so nothing was lost — but a page of nothing
+  but overlap stalled the list. The next page now starts at the service's own count. Tested.
+- **2.4 UPnP calls not cancellable — fixed.** `execute()` held a thread to the read timeout (10s)
+  after its caller left. The cancellable `Call.await()` SMAPI had is shared now and UPnP uses it.
+  Tested against a player that never answers; mutation-checked.
+- **1.2 a second home on the back stack — fixed** (`popUpTo("home")`), by reading: not reproduced,
+  which needs a launcher tile opened over another screen.
+- **2.6 no art in the media session — fixed.** The cover is published as the room tiles' posters
+  are made fetchable (`PosterArt`): `dumpsys media_session` shows six metadata entries, was four;
+  still `volumeType=LOCAL`. The home screen's card itself not yet seen showing it.
+- **1.3 a braceless `if` over 90 lines — fixed**, braces only.
+- **1.4 a block's sideways scroll lost on scrolling — not a bug.** `rememberLazyGridState` is
+  saveable and a lazy list keeps a keyed item's saved state: scrolled far down and back on the
+  emulator, the block was where it was left.
+- **1.5 `PresetStore` races — not reachable.** Both writers run on the main thread, in view-model
+  coroutines; nothing writes from a background sync.
+- **2.2 `chooseHousehold` bailing, caches kept by `disconnect()` — not reachable.** Choices are
+  offered only with nothing connected and the reconnect loop stopped (it returns on
+  `HouseholdChoiceNeeded`); `disconnect()` is called by tests alone, and every reconnect clears the
+  caches through `teardown()`.
+- **2.5 focus on an overlay's close — no change.** General advice; the screens that open menus over
+  lists already return focus to the opener (service list, browse, search, queue).
+- **2.7 checking the leaf's issuer name — declined.** A self-signed certificate can carry any name,
+  so it would add no protection; real pinning needs Sonos's root, which players do not present.
+- **2.8 art colours on the main thread — not so.** Coil's `execute` does its loading off the main
+  thread already, and the palette is computed on `Dispatchers.Default`.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - **A poster cache for the launcher's room tiles — decided out (2026-10-07).** x2rock's widget needed
