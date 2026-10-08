@@ -9,21 +9,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
-      # :app needs a platform to compile against; :core does not. The action's default package
-      # list includes `tools`, which the runner's current SDK manager no longer has: every run
-      # from 2026-10-06 failed here, before any test ran. Gradle fetches the platform it needs.
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: 'platform-tools'
+      # :app needs a platform to compile against; :core does not. v3's default package list
+      # included `tools`, which the runner's SDK manager no longer has: every run from 2026-10-06
+      # failed here, before any test ran. v4 installs platform-tools only; Gradle fetches the
+      # platform it needs.
+      - uses: android-actions/setup-android@v4
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # No Sonos credentials, no speakers, no device. The transport is tested against
       # FakePlayer, which is the point of it existing — see core/src/testFixtures/.../FakePlayer.kt.
@@ -34,7 +33,7 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug
 
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-reports
           path: |
