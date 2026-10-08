@@ -1,5 +1,6 @@
 package com.rahga.x2rock.radio
 
+import com.rahga.x2rock.lan.await
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -61,7 +62,7 @@ class RadioDirectory(
                 .apply { countryCode?.let { addQueryParameter("countrycode", it) } }
                 .build()
             val request = Request.Builder().url(url).header("User-Agent", USER_AGENT).build()
-            val body = client.newCall(request).execute().use { response ->
+            val body = client.newCall(request).await().use { response ->
                 if (!response.isSuccessful) throw IOException("the radio directory answered HTTP ${response.code}")
                 response.body?.string().orEmpty()
             }
