@@ -1,5 +1,6 @@
 package com.rahga.x2rock.apple
 
+import com.rahga.x2rock.lan.await
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -40,7 +41,7 @@ class ITunesSearch(
                 .addQueryParameter("country", country)
                 .addQueryParameter("limit", limit.toString())
                 .build()
-            val body = client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+            val body = client.newCall(Request.Builder().url(url).build()).await().use { response ->
                 if (!response.isSuccessful) throw IOException("Apple's search answered HTTP ${response.code}")
                 response.body?.string().orEmpty()
             }
