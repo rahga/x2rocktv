@@ -1,5 +1,6 @@
 package com.rahga.x2rock.smapi
 
+import com.rahga.x2rock.lan.await
 import kotlin.coroutines.resumeWithException
 import okhttp3.Response
 import okhttp3.Callback
@@ -699,17 +700,3 @@ private fun Element.firstChildNamed(tag: String): Element? =
         .mapNotNull { childNodes.item(it) as? Element }
         .firstOrNull { it.tagName.substringAfter(':') == tag }
 
-/**
- * The call, answered — and cancelled with the coroutine that waits for it. `execute()` blocks and a
- * cancelled search could not stop it: every request a search had out ran to its end, holding a
- * thread each, after the viewer had already searched for something else.
- */
-private suspend fun Call.await(): Response = suspendCancellableCoroutine { waiting ->
-    waiting.invokeOnCancellation { cancel() }
-    enqueue(object : Callback {
-        override fun onResponse(call: Call, response: Response) = waiting.resume(response) { response.close() }
-        override fun onFailure(call: Call, e: IOException) {
-            if (!waiting.isCancelled) waiting.resumeWithException(e)
-        }
-    })
-}

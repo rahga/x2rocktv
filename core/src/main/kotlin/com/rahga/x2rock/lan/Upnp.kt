@@ -256,7 +256,7 @@ class Upnp(
 
     private suspend fun statusZp(hostname: String): String? = withContext(Dispatchers.IO) {
         require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
-        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).execute().use { response ->
+        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).await().use { response ->
             if (!response.isSuccessful) null else response.body?.string()
         }
     }
@@ -410,7 +410,7 @@ class Upnp(
      * read immediately before use rather than cached.
      */
     /** `ContentDirectory Browse` of the queue, `Q:0`, from [start] for up to [count] items. */
-    private fun browse(hostname: String, start: Int, count: Int): Element = parse(
+    private suspend fun browse(hostname: String, start: Int, count: Int): Element = parse(
         soap(
             hostname, Service.CONTENT_DIRECTORY, "Browse",
             listOf(
@@ -440,7 +440,7 @@ class Upnp(
      */
     @Volatile var switchedOff = false
 
-    private fun soap(hostname: String, service: Service, action: String, args: List<Pair<String, String>>): String {
+    private suspend fun soap(hostname: String, service: Service, action: String, args: List<Pair<String, String>>): String {
         require(PlayerNames.isLocalName(hostname)) {
             "UPnP must be addressed by a .local name: cleartext is only permitted for those"
         }
@@ -458,7 +458,7 @@ class Upnp(
             .post(envelope.toRequestBody("text/xml; charset=utf-8".toMediaType()))
             .build()
 
-        client.newCall(request).execute().use { response ->
+        client.newCall(request).await().use { response ->
             val body = response.body?.string().orEmpty()
             if (response.isSuccessful) return body
             if (response.code == 403) throw UpnpRefusedException(switchedOffMessage(hostname))
