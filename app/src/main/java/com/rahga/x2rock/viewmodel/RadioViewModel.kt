@@ -27,7 +27,7 @@ class RadioViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
 
     /** One way into the directory. At most one of [tag] and [countryCode]; neither is "Popular". */
     data class Category(val label: String, val tag: String? = null, val countryCode: String? = null)
@@ -85,7 +85,7 @@ class RadioViewModel @Inject constructor(
         if (_starting.value != null) return
         viewModelScope.launch {
             _starting.value = station.url
-            val outcome = runCatching { household.playStream(groupId, station.url, station.name) }
+            val outcome = runCatching { household.playStream(room.current(), station.url, station.name) }
             _starting.value = null
             outcome
                 .onSuccess { started ->
