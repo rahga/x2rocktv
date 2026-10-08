@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.SpeakerGroup
 import kotlinx.coroutines.flow.filter
@@ -230,6 +231,10 @@ fun PlayerPane(
     val sleepFocusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
         snapshotFlow { showSleepTimerPicker }.drop(1).filter { !it }.collect {
+            // A frame first, for the picker to leave: its focus trap is still in place when the
+            // close is noticed, and refuses a request to move out without saying so — focus then
+            // fell to the first room row when the picker went (seen on the emulator, 2026-10-08).
+            withFrameNanos { }
             if (!sleepFocusRequester.requestFocusSafely()) detailFocusRequester.requestFocusSafely()
         }
     }
