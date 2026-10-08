@@ -709,7 +709,10 @@ Each finding checked against the code, and the device where it could be, before 
     (home, 2026-10-07, through the emulator): Menu on Deezer's "Favorite tracks" playlist added its
     track to Kitchen's queue, two tracks to three, and the paused room stayed paused. Amazon
     Music answers its `search` with HTTP 500 here (x2rock saw the same). iHeart ratings (0.1a) can
-    now reuse this token read instead of a device link.
+    now reuse this token read instead of a device link. **Open:** a thumbs up on an iHeart artist
+    station's track is accepted ("Rated up on iHeartRadio", home, 2026-10-07), but the re-read that
+    follows still reports it unrated, so the thumb is never drawn filled. Whether iHeart reports a
+    station track's rating at all is unchecked; compare with the Sonos app before changing anything.
   - **Audiobooks resume in place** (Audible, added to the office household 2026-10-06). A book
     (`reftitle:…`) is not itself playable — `getMediaMetadata` faults "unsupported Sonos entity tag"
     — it is a list of chapter tracks, and its `getMetadata` carries a `positionInformation` (the
