@@ -406,4 +406,40 @@ class PlayerViewModelTest {
         assertFalse("still claiming to be loading", state.isLoading)
         assertNotNull(state.error)
     }
+
+    /**
+     * Volume steps belong to the room they were pressed in. +5 in one room and then +1 in another,
+     * inside the debounce, used to arrive as +6 in the second (outside review, 2026-10-08). The
+     * first room's steps are sent to it on leaving, and the second room gets only its own.
+     */
+    @Test fun `volume steps go to the room they were pressed in`() = runBlocking<Unit> {
+        val other = household.state.value.groups.first { it.id != groupId }
+        fake.clearHistory()
+        // All inside one debounce window, as quick presses either side of a room change are.
+        viewModel.adjustVolume(+5)
+        viewModel.selectGroup(other.id, other.name)
+        viewModel.adjustVolume(+1)
+        val deltas = mutableMapOf<String, Int>()
+        repeat(2) {
+            val sent = fake.awaitCommand(3_000) { it.get("command")?.asString == "setRelativeVolume" }
+            deltas[sent.get("groupId").asString] = sentDelta()!!
+        }
+        assertEquals("each room gets only the steps pressed in it", mapOf(groupId to 5, other.id to 1), deltas)
+    }
+
+    /** A seek pending in one room is not the next room's starting point. */
+    @Test fun `a pending seek does not become another room's baseline`() = runBlocking<Unit> {
+        val other = household.state.value.groups.first { it.id != groupId }
+        fake.pushPlaybackStatus(other.id, state = com.rahga.x2rock.model.PlaybackStates.PAUSED)
+        withTimeout(5_000) { household.groupStates.first { it[other.id]?.playbackState == com.rahga.x2rock.model.PlaybackStates.PAUSED } }
+        viewModel.seekTo(60_000)
+        viewModel.selectGroup(other.id, other.name)
+        withTimeout(5_000) { viewModel.uiState.first { it.groupName == other.name && it.playbackState == com.rahga.x2rock.model.PlaybackStates.PAUSED } }
+        viewModel.seekBy(10_000)
+        val sent = fake.awaitCommand(3_000) { it.get("command")?.asString == "seek" && it.get("groupId")?.asString == other.id }
+        assertEquals(other.id, sent.get("groupId").asString)
+        assertEquals("new room's zero position inherited the old room's pending seek", 10_000L,
+            fake.lastCommandBody("seek")!!.get("positionMillis").asLong)
+    }
+
 }
