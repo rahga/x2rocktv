@@ -354,7 +354,8 @@ package). Linking an account and `match` stay out — those do need a browser.
   presentation map. **A `User-Agent` is required** — Deezer and Amazon answer an empty 500/200
   without one, which reads like a broken endpoint (x2rock, `sonos/http.rs`).
 - **Play**: `loadContent` with the item's `{serviceId, accountId: sn_N, objectId}` — the same path
-  Recently Played and Apple Music use. Generic queue-append is not built; play-now is.
+  Recently Played and Apple Music use. Queueing — at the end, or next — is UPnP `AddURIToQueue`;
+  see the next section.
 
 **Verified against the office household, 2026-10-06** (`StoredAccountsLiveTest`, opt-in
 `-Dx2rock.capture=<player-ip>`, read-only, prints only byte lengths and public titles). The
@@ -365,6 +366,43 @@ with titles, artists and item types parsed. Amazon Music answered its `search` H
 saw the same); its catalogue is finicky. **Not yet run on a TV device**: the inbound GENA socket
 and `.local`→IP path want one run on a Shield/Streamer, as the mDNS fallback did — the capture is
 the same JVM code either way.
+
+---
+
+## A service item, beyond play and search (2026-10-08)
+
+Learned comparing the app with the Sonos app (89.01, a phone) on the office household, each run
+against real services, Media Room playing.
+
+- **The Sonos app's per-item actions are `getExtendedMetadata`.** Browse Artist and Album Info are
+  the item's own `artistId`/`albumId` (in `trackMetadata` for a track — Deezer, Qobuz and Saavn
+  alike); Start Radio is a `relatedPlay` (a `program`, Deezer's "Mix …", Saavn's "… Radio");
+  "Add to favourites" is `canAddToFavorites`, with the state in `dynamic/ISFAVORITE` where the
+  service says (Deezer does, Qobuz does not). Captures: `fixtures/getExtendedMetadata.*.xml`.
+- **A service favourite is set one of two ways.** Deezer's `NowPlayingRatings` are its heart:
+  `rateItem` with `SAVE_TRACK` (1) or `DELETE_TRACK` (0), and its ban is `SKIP_TRACK` (3, which
+  skips). Qobuz has no such ratings and takes SMAPI `createItem`/`deleteItem` with a `favorite`.
+  Both were set and cleared on the real accounts and read back.
+- **"Play next" is a slot.** `AddURIToQueue` with `DesiredFirstTrackNumberEnqueued` = the playing
+  track (`GetPositionInfo`'s `Track`) + 1 put Drive My Car in slot 2 behind Michelle. Only while
+  the queue is the source (`GetMediaInfo` `x-rincon-queue:`); on a station the track number reads
+  1 and means nothing, and the Sonos app offers no Play Next there either.
+- **`favorites:1 loadFavorite` appends an album unless told `REPLACE`.** Saavn's Irumudi on a
+  one-track queue left five tracks, pressed again nine; with `"action": "REPLACE"` the queue was
+  the album's four. A station favourite loads the same with it. x2rock recorded the opposite
+  ("replaces without being asked"), true for what it was tried on.
+- **A favourite's `objectId` is not always the service's id.** Containers carry the queue's
+  prefix: `1004206cALBUM:79488223`, `1006706cplaylist:109815423`. Saavn answers either whole with
+  `Item not found` and lists both with the eight characters taken off.
+- **A service may have a page SMAPI does not.** Sonos Radio's SMAPI `root` is empty, but its
+  manifest names `"endpoints":[{"type":"browse","uri":"https://sali.sonos.superhi.fi/browse/v1"}]`,
+  which answers with **no credential at all**: 28 `views` (Trending Now, Sonos Presents, moods,
+  genres), each with its stations inline as `trackList.program` items whose ids are the ones its
+  SMAPI search returns (`sonos:2997` is Hit List in both). That is the Sonos app's Sonos Radio
+  page. A view's own id is not fetchable by any form tried (path, `?objectId=`, `?id=` — 404 or
+  the root again), so a view with nothing inline ("Browse Radio") is not reachable yet. Deezer,
+  Amazon Music and Apple Music declare a `browse` endpoint too, and answer 400/500 without a
+  credential; what they take was not tried.
 
 ---
 
