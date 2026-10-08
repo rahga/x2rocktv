@@ -90,14 +90,20 @@ class MainActivity : ComponentActivity() {
      */
     private fun transportKey(event: KeyEvent): Boolean {
         val action: (() -> Unit) = when (event.keyCode) {
-            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PAUSE -> player::togglePlayPause
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> player::togglePlayPause
+            // Each as pressed: a Play key to a playing room used to pause it (outside review).
+            KeyEvent.KEYCODE_MEDIA_PLAY -> player::play
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> player::pause
             KeyEvent.KEYCODE_MEDIA_NEXT -> player::skipToNextTrack
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> player::skipToPreviousTrack
             KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> { { player.seekBy(+SEEK_STEP_MILLIS) } }
             KeyEvent.KEYCODE_MEDIA_REWIND -> { { player.seekBy(-SEEK_STEP_MILLIS) } }
             else -> return false
         }
-        if (event.action == KeyEvent.ACTION_DOWN) action()
+        // A held Play/Pause repeats; each repeat toggled again, so holding it flickered the room
+        // between playing and paused. Seeking is meant to repeat, and still does.
+        val repeats = event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD || event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND
+        if (event.action == KeyEvent.ACTION_DOWN && (event.repeatCount == 0 || repeats)) action()
         return true
     }
 

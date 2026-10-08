@@ -260,6 +260,8 @@ class PlayerViewModel @Inject constructor(
 
     private val controls = object : NowPlayingPublisher.Controls {
         override fun togglePlayPause() = this@PlayerViewModel.togglePlayPause()
+        override fun play() = this@PlayerViewModel.play()
+        override fun pause() = this@PlayerViewModel.pause()
         override fun next() = skipToNextTrack()
         override fun previous() = skipToPreviousTrack()
         override fun seekTo(positionMillis: Long) {
@@ -406,6 +408,25 @@ class PlayerViewModel @Inject constructor(
     // Fire and forget. The player answers with an event, and the flows above pick it up.
 
     fun togglePlayPause() = command("play or pause") { household.togglePlayPause(it) }
+
+    /**
+     * An explicit Play — the remote's own Play key, a voice "resume" — which a playing room ignores
+     * rather than toggling into a pause.
+     */
+    fun play() {
+        if (uiState.value.playbackState.isPlaying()) return
+        command("play") { household.play(it) }
+    }
+
+    /**
+     * An explicit Pause, which a room not playing ignores. A live stream cannot pause, only stop,
+     * and the toggle is what stops it, as the pane's own button does.
+     */
+    fun pause() {
+        val state = uiState.value
+        if (!state.playbackState.isPlaying()) return
+        command("pause") { if (state.actions.canPause) household.pause(it) else household.togglePlayPause(it) }
+    }
 
     /** Silence the ringing alarm for nine minutes; it rings again after. */
     fun snoozeAlarm() = command("snooze the alarm") { household.snoozeAlarm(it) }

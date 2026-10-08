@@ -24,6 +24,9 @@ interface NowPlayingPublisher {
     /** Play/pause, next, previous and seek, arriving from media keys or voice. */
     interface Controls {
         fun togglePlayPause()
+        /** An explicit Play: never pauses. And an explicit Pause: never resumes. */
+        fun play()
+        fun pause()
         fun next()
         fun previous()
         /** Absolute position the system asked for, in milliseconds. */
@@ -116,8 +119,10 @@ class MediaSessionPublisher @Inject constructor(
         attached = controls
         session.isActive = presenting
         session.setCallback(object : MediaSession.Callback() {
-            override fun onPlay() = controls.togglePlayPause()
-            override fun onPause() = controls.togglePlayPause()
+            // Each as asked: both used to toggle, so a "play" to a playing room paused it
+            // (outside review, 2026-10-08).
+            override fun onPlay() = controls.play()
+            override fun onPause() = controls.pause()
             override fun onSkipToNext() = controls.next()
             override fun onSkipToPrevious() = controls.previous()
             override fun onSeekTo(pos: Long) = controls.seekTo(pos)

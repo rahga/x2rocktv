@@ -224,6 +224,31 @@ class PlayerViewModelTest {
         assertEquals(start + 20_000, fake.lastCommandBody("seek")!!.get("positionMillis").asLong)
     }
 
+    /**
+     * An explicit Play or Pause — the remote's own keys, a voice command — does what it says. Both
+     * used to toggle, so Play to a playing room paused it (outside review, 2026-10-08).
+     */
+    @Test fun `explicit play and pause do what they say, never the opposite`() = runBlocking<Unit> {
+        val controls = publisher.controls!!
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == "PLAYBACK_STATE_PLAYING" } }
+        fake.clearHistory()
+        controls.play()
+        controls.pause()
+        fake.awaitCommand("pause", 3_000)
+        assertEquals("Play to a playing room sent something", 0, fake.commandsNamed("play"))
+        assertEquals(0, fake.commandsNamed("togglePlayPause"))
+
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PAUSED")
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == "PLAYBACK_STATE_PAUSED" } }
+        fake.clearHistory()
+        controls.pause()
+        controls.play()
+        fake.awaitCommand("play", 3_000)
+        assertEquals("Pause to a paused room sent something", 0, fake.commandsNamed("pause"))
+        assertEquals(0, fake.commandsNamed("togglePlayPause"))
+    }
+
     // ---------------------------------------------------------------- publishing
 
     @Test fun `metadata reaches the system when a track arrives`() = runBlocking<Unit> {
