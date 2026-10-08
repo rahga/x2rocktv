@@ -734,8 +734,9 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
 - [x] **Search.** *Done: laid out as the Sonos app's — each service a block under its logo and
   name, its hits three to a column running sideways, "More from <service>" in the ninth cell, the
   block wider than the screen so the next column shows cut off at the edge. "More from" opens that
-  service's own search for the term with every category and page; Back returns to the cell. Hits
-  have the item menu.*
+  service's own search for the term with every category and page, and Right on it does the same;
+  Back returns to the cell. Only "More from" carries a chevron, and Right off any other block's end
+  stays put — it used to climb to the Search button. Hits have the item menu.*
 - [x] **The pane drops the station once a track is known.** *Done: "BENEE • Hit List".*
 - **Review #1 again**: after a real screensaver on the emulator, the room row drew normally.
 
