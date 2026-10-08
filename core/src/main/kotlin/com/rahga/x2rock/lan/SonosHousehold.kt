@@ -854,8 +854,8 @@ class SonosHousehold(
      *
      * `REPLACE` is said out loud because it is not the default: `loadPlaylist` *appends*
      * unless told otherwise, with playback jumping to the end, so playing one playlist twice
-     * on a four-track queue left twelve (x2rock, verified 2026-09-04). `loadFavorite` replaces
-     * without being asked; the two sibling commands do not agree.
+     * on a four-track queue left twelve (x2rock, verified 2026-09-04). [loadFavorite] was thought
+     * to replace without being asked, and does not for an album: it says `REPLACE` too.
      */
     suspend fun loadPlaylist(groupId: String, playlistId: String) = loadPlaylist(groupId, playlistId, "REPLACE", play = true)
 
@@ -1460,12 +1460,21 @@ class SonosHousehold(
         )
     }
 
+    /**
+     * Play [favoriteId] in [groupId], in place of what it plays.
+     *
+     * `REPLACE` is said out loud, as for [loadPlaylist]: left out, an album favourite was **added
+     * after** what was queued and played from there — Saavn's Irumudi on a one-track queue left
+     * five tracks, and pressing it again nine (office, 2026-10-08). x2rock's note that
+     * `loadFavorite` replaces without being asked held for what it was tried on, not for this.
+     */
     suspend fun loadFavorite(groupId: String, favoriteId: String, playOnCompletion: Boolean = true) {
         coordinator(groupId).command(
             Frames.onGroup("favorites:1", "loadFavorite", groupId),
             JsonObject().apply {
                 addProperty("favoriteId", favoriteId)
                 addProperty("playOnCompletion", playOnCompletion)
+                addProperty("action", "REPLACE")
             },
         )
     }
