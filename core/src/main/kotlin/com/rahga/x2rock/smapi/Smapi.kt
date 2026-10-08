@@ -1,6 +1,6 @@
 package com.rahga.x2rock.smapi
 
-import com.rahga.x2rock.lan.await
+import com.rahga.x2rock.lan.awaitReply
 import kotlin.coroutines.resumeWithException
 import okhttp3.Response
 import okhttp3.Callback
@@ -392,9 +392,9 @@ class SmapiClient(client: OkHttpClient) {
     }
 
     private suspend fun get(url: String): String? {
-        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).await().use { response ->
+        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).awaitReply().let { response ->
             if (!response.isSuccessful) return null
-            return response.body?.string()
+            return response.body
         }
     }
 
@@ -418,8 +418,8 @@ class SmapiClient(client: OkHttpClient) {
             .header("User-Agent", USER_AGENT)
             .post(envelope(action, params, token).toRequestBody("text/xml; charset=utf-8".toMediaType()))
             .build()
-        client.newCall(request).await().use { response ->
-            val body = response.body?.string().orEmpty()
+        client.newCall(request).awaitReply().let { response ->
+            val body = response.body
             if (body.isBlank()) {
                 throw SmapiException("${service.name} answered HTTP ${response.code} with an empty body")
             }
