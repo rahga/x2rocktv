@@ -433,14 +433,23 @@ class PlayerViewModel @Inject constructor(
             // service's rule, and only its answer says which state the track is now in.
             if (outcome.isSuccess) loadRating(groupId)
             val message = outcome.fold(
-                onSuccess = { outcome ->
-                    val verb = if (outcome.up) "up" else "down"
-                    "Rated $verb on ${outcome.serviceName}" + if (outcome.skipped) " — skipping" else ""
-                },
+                onSuccess = { outcome -> rateMessage(outcome) },
                 onFailure = { it.message ?: "Could not rate this track" },
             )
             notice.post(message)
         }
+    }
+
+    /** What a rating did, in the words of the control pressed: a thumb, or Deezer's heart and ban. */
+    private fun rateMessage(outcome: SonosHousehold.RateOutcome): String {
+        val service = outcome.serviceName
+        val said = when (outcome.stringId.uppercase()) {
+            "SAVE_TRACK" -> "Added to your $service favourites"
+            "DELETE_TRACK" -> "Removed from your $service favourites"
+            "SKIP_TRACK" -> "$service won't play this again"
+            else -> "Rated ${if (outcome.up) "up" else "down"} on $service"
+        }
+        return said + if (outcome.skipped) " — skipping" else ""
     }
 
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */

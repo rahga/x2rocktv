@@ -30,6 +30,7 @@ import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemPage
 import com.rahga.x2rock.smapi.LinkedService
+import com.rahga.x2rock.smapi.Rating
 import com.rahga.x2rock.smapi.RatingsCatalogue
 import com.rahga.x2rock.smapi.RatingsMatch
 import com.rahga.x2rock.smapi.RatingsStore
@@ -1193,13 +1194,21 @@ class SonosHousehold(
     data class RateOutcome(
         val up: Boolean,
         val serviceName: String,
+        /** What was sent, as the service names it: `SAVE_TRACK`, `THUMBS_UP`, `SKIP_TRACK`. */
+        val stringId: String = "",
         /** Whether the service's "skip after rating" was acted on — a failed skip must not read
          * as the rating itself having failed, since it already landed. */
         val skipped: Boolean,
     )
 
-    /** Where the current track stands with its service, when it can be rated at all. */
-    data class RatingState(val serviceName: String, val current: Thumb)
+    /**
+     * Where the current track stands with its service, when it can be rated at all. [style] says
+     * which two buttons that is: thumbs, or — Deezer's — a heart and a ban, where [current] UP is
+     * "a favourite already" and the down button skips the track and is never drawn as set.
+     */
+    data class RatingState(val serviceName: String, val current: Thumb, val style: RatingStyle = RatingStyle.THUMBS)
+
+    enum class RatingStyle { THUMBS, FAVORITE }
 
     /** Everything a rate press needs, resolved: who to ask, with what credential, which ids it offers. */
     private class Rateable(
@@ -1256,21 +1265,33 @@ class SonosHousehold(
         } catch (e: Exception) {
             return null
         }
-        // Thumbs are for a genuine up/down service — iHeartRadio, Pandora. Some services publish a
-        // `NowPlayingRatings` map that is not thumbs at all: Deezer's is favourite/skip
-        // (`SAVE_TRACK`/`DELETE_TRACK`), with no up or down to send, so a thumb press would answer
-        // "offers no up rating here". Offer the thumbs only when the current state has both.
+        // Thumbs are for a genuine up/down service — iHeartRadio, Pandora. Deezer's map is not
+        // thumbs at all but a favourite and a skip (`SAVE_TRACK`/`DELETE_TRACK`, `SKIP_TRACK`),
+        // which the Sonos app draws as a heart and a ban (seen 2026-10-08); offered as that, never
+        // as thumbs, which would answer "offers no up rating here".
         val m = rateable.current
         val hasUp = RatingsMatch.find(rateable.matches, m.propname, m.value, up = true) != null
         val hasDown = RatingsMatch.find(rateable.matches, m.propname, m.value, up = false) != null
-        if (!hasUp || !hasDown) return null
-        return RatingState(rateable.service.name, rateable.current.selected)
+        if (hasUp && hasDown) return RatingState(rateable.service.name, rateable.current.selected)
+        val heart = favoriteRating(m, up = true) ?: return null
+        val isFavorite = heart.stringId.equals(DELETE_TRACK, ignoreCase = true)
+        return RatingState(rateable.service.name, if (isFavorite) Thumb.UP else Thumb.NONE, RatingStyle.FAVORITE)
     }
+
+    /**
+     * A favourite-shaped map's rating for a press: "up" is the heart, which is `SAVE_TRACK` on a
+     * track that is not a favourite and `DELETE_TRACK` on one that is — the state's own match
+     * offers whichever applies, so the heart toggles — and "down" is the ban, `SKIP_TRACK`.
+     */
+    private fun favoriteRating(current: RatingsMatch, up: Boolean): Rating? =
+        if (up) current.ratings.firstOrNull { it.stringId.equals(SAVE_TRACK, true) || it.stringId.equals(DELETE_TRACK, true) }
+        else current.ratings.firstOrNull { it.stringId.uppercase().contains("SKIP") || it.stringId.uppercase().contains("BAN") }
 
     /** Rate the track currently playing in [groupId]. Fails as [rateable] does. */
     suspend fun rate(groupId: String, up: Boolean): RateOutcome {
         val rateable = rateable(groupId)
         val chosen = RatingsMatch.find(rateable.matches, rateable.current.propname, rateable.current.value, up)
+            ?: favoriteRating(rateable.current, up)
             ?: error("${rateable.service.name} offers no ${if (up) "up" else "down"} rating here")
 
         val result = smapi.rateItem(rateable.service, rateable.token, id = rateable.objectId, rating = chosen.id)
@@ -1282,6 +1303,7 @@ class SonosHousehold(
         return RateOutcome(
             up = up,
             serviceName = rateable.service.name,
+            stringId = chosen.stringId,
             skipped = skipped,
         )
     }
@@ -2089,6 +2111,10 @@ const val SNOOZE_MINUTES = 9
 
 /** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
 private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
+
+/** The `StringId`s of a favourite-shaped ratings map: Deezer's heart, set and cleared. */
+private const val SAVE_TRACK = "SAVE_TRACK"
+private const val DELETE_TRACK = "DELETE_TRACK"
 
 /** How long mDNS is given after SSDP draws nothing. The office speaker answered within a second. */
 internal const val MDNS_TIMEOUT_MILLIS = 4_000L
