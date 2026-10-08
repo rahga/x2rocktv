@@ -88,8 +88,12 @@ class ServiceBrowseViewModel @Inject constructor(
     sealed interface Results {
         data object Idle : Results
         data object Loading : Results
-        /** [total] is what the service says the whole list holds; [items] may be only its first pages. */
-        data class Found(val items: List<Item>, val total: Int = items.size) : Results {
+        /**
+         * [total] is what the service says the whole list holds; [items] may be only its first
+         * pages. [nextIndex] is how many the service has sent, repeats included — where its next
+         * page starts, which the distinct [items] fall short of when it named one twice.
+         */
+        data class Found(val items: List<Item>, val total: Int = items.size, val nextIndex: Int = items.size) : Results {
             val hasMore: Boolean get() = items.size < total
         }
         data class Failed(val message: String) : Results
@@ -311,15 +315,15 @@ class ServiceBrowseViewModel @Inject constructor(
             val next = runCatching {
                 if (level.isSearch) {
                     val category = _category.value ?: return@launch
-                    household.searchService(service, category, _query.value.trim(), index = shown.items.size)
+                    household.searchService(service, category, _query.value.trim(), index = shown.nextIndex)
                 } else {
-                    household.browseService(service, level.id!!, index = shown.items.size)
+                    household.browseService(service, level.id!!, index = shown.nextIndex)
                 }
             }.getOrNull() ?: return@launch
             // A service that answers an empty page past where it said the list ended has no more,
             // whatever its total claimed; believing the total would ask again on every frame.
             val total = if (next.items.isEmpty()) shown.items.size else shown.total
-            publish(level, found(shown.items + next.items, total))
+            publish(level, found(shown.items + next.items, total, sent = shown.nextIndex + next.items.size))
         }
     }
 
@@ -467,13 +471,13 @@ const val WHOLE = "\u0000whole"
  * that names one item twice — radio directories and service browse trees both do — would otherwise
  * throw "Key was already used" and take the app down. The first occurrence is kept.
  */
-private fun found(page: ItemPage) = found(page.items, page.total)
+private fun found(page: ItemPage) = found(page.items, page.total, sent = page.items.size)
 
-private fun found(items: List<Item>, total: Int): ServiceBrowseViewModel.Results.Found {
+private fun found(items: List<Item>, total: Int, sent: Int): ServiceBrowseViewModel.Results.Found {
     val unique = items.distinctBy { it.id }
     // Duplicates dropped make the list shorter than the service counted; the shortfall is not more
     // to fetch, so the total moves down with it.
-    return ServiceBrowseViewModel.Results.Found(unique, (total - (items.size - unique.size)).coerceAtLeast(unique.size))
+    return ServiceBrowseViewModel.Results.Found(unique, (total - (items.size - unique.size)).coerceAtLeast(unique.size), nextIndex = sent)
 }
 
 /** A stable key for a linked service: the service, plus the account so two accounts of one are distinct. */
