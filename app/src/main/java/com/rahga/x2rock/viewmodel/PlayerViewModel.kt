@@ -380,10 +380,10 @@ class PlayerViewModel @Inject constructor(
             else -> roomActivity(state.playbackState, state.hasSource).label
         }
 
-        val metadataKey = "$title|$subtitle|${state.albumName}|${state.durationMillis}"
+        val metadataKey = "$title|$subtitle|${state.albumName}|${state.durationMillis}|${state.albumArtUrl}"
         if (metadataKey != lastMetadataKey) {
             lastMetadataKey = metadataKey
-            nowPlaying.publish(title, subtitle, state.albumName, state.durationMillis)
+            nowPlaying.publish(title, subtitle, state.albumName, state.durationMillis, state.albumArtUrl)
         }
 
         val playing = state.playbackState.isPlaying()

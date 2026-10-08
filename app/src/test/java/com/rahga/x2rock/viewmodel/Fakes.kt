@@ -59,7 +59,7 @@ class RecordingChannelSync : ChannelSync {
 
 /** Records what the system would have been told, and can drive the controls back. */
 class RecordingNowPlaying : NowPlayingPublisher {
-    data class Metadata(val title: String?, val artist: String?, val album: String?, val duration: Long)
+    data class Metadata(val title: String?, val artist: String?, val album: String?, val duration: Long, val artUrl: String? = null)
     data class State(
         val playing: Boolean,
         val idle: Boolean,
@@ -75,8 +75,8 @@ class RecordingNowPlaying : NowPlayingPublisher {
         private set
 
     override fun attach(controls: NowPlayingPublisher.Controls) { this.controls = controls }
-    override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long) {
-        metadata += Metadata(title, artist, album, durationMillis)
+    override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long, artUrl: String?) {
+        metadata += Metadata(title, artist, album, durationMillis, artUrl)
     }
     override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long, actions: PlaybackActions) {
         states += State(playing, idle, positionMillis, actions)

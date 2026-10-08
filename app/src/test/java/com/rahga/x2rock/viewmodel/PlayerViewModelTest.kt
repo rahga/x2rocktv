@@ -231,6 +231,9 @@ class PlayerViewModelTest {
         withTimeout(5_000) { viewModel.uiState.first { it.trackName != null } }
         assertTrue("nothing was published", publisher.metadata.isNotEmpty())
         assertEquals(viewModel.uiState.value.trackName, publisher.metadata.last().title)
+        // And its cover, for the home screen's media card, which drew a blank without one.
+        assertNotNull(viewModel.uiState.value.albumArtUrl)
+        assertEquals(viewModel.uiState.value.albumArtUrl, publisher.metadata.last().artUrl)
     }
 
     /** Media keys and voice transport arrive here; they must reach the speaker. */
