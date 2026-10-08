@@ -97,6 +97,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   └── WifiMulticastGate.kt       a MulticastLock held across SSDP
 ├── smapi/PrefsRatingsStore.kt     RatingsStore over Preferences
 ├── store/PresetStore.kt           presets: rooms, levels, a favourite — this device's, as JSON
+├── store/PrimaryAccounts.kt       a service's primary account on this device: first, and what Search asks
 ├── media/NowPlayingPublisher.kt   the MediaSession, behind an interface
 ├── channel/
 │   ├── RoomsChannelSync.kt        rooms as tiles on the TV home screen channel

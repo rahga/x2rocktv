@@ -1,6 +1,7 @@
 package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
+import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.LanHttp
 import com.rahga.x2rock.lan.MulticastGate
@@ -94,7 +95,7 @@ class ServiceBrowseViewModelTest {
             port = fake.port, upnpPort = upnp.port, accountCapture = { envelope },
         )
         runBlocking { household.connectTo(fake) }
-        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))))
+        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()))
     }
 
     @After fun tearDown() {
@@ -211,7 +212,7 @@ class ServiceBrowseViewModelTest {
         ready()
         val fromFavorite = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
             "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "favorite" to "84",
-        )))
+        )), PrimaryAccounts(FakePreferences()))
         val tracks = withTimeout(5_000) { fromFavorite.results.first { it is ServiceBrowseViewModel.Results.Found } }
         assertEquals("SICKO MODE", (tracks as ServiceBrowseViewModel.Results.Found).items.first().title)
         assertTrue(fromFavorite.playsWhole.value)
