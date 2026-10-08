@@ -525,7 +525,22 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   loud. Music that is not a favourite is not kept, and saving says so.
 - **Removing a favourite is deliberately absent.** The Control API cannot, and the sibling
   project probed and declined UPnP `DestroyObject` on the rule that creating or destroying
-  content belongs to the Sonos app. Same rule here.
+  content belongs to the Sonos app. Same rule here. That is a *Sonos* favourite. A *service's*
+  own favourites — Deezer's Favourite Tracks, Qobuz's — are the account's library in that service,
+  and the item menu adds to and removes from them, as the Sonos app's does (asked for, 2026-10-08).
+
+### Browse against the Sonos app (2026-10-08)
+
+Compared screen by screen with the Sonos app on a phone; the record is the punch list's "Against
+the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
+
+- **A service opens on its library, never on a keyboard.** Browsing is the cheap path on a remote;
+  "Search <service>" is one press up. A searchable service used to open on its search and hid every
+  library behind it.
+- **Hold or Menu on an item is its menu** (`ServiceItemMenu`), Sonos's actions first and the
+  service's under its name. **Play next only while the room plays from its queue**, as the Sonos
+  app; it is a queue slot, not a flag.
+- **A favourite says `REPLACE`.** `loadFavorite` appended an album to the queue without it.
 - **The content colour is provided once, at the root** (`X2RockTheme`). tv-material derives a
   transparent container's content colour from `LocalContentColor`, whose default is black, and the
   home screen has no Surface at its root: the pane, the room panel's title and every room name drew

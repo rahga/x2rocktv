@@ -662,6 +662,69 @@ Each finding checked against the code, and the device where it could be, before 
   select opens the room panel on "This room", Back returns to the row. The tap path cannot be pressed
   from a remote and was not seen.
 
+## Against the Sonos app, 2026-10-08 — Browse
+
+The Sonos app 89.01 on a moto g, beside a debug build on the emulator, both on the office household
+(Media Room); the Rust CLI's `browse` for what SMAPI itself answers. Screenshots are in
+`~/x2rocktv-sonos-compare-2026-10-08/` (not in the repo). Ordered by what a listener would miss.
+Everything below was built the same day and run on the emulator against the real services; the
+protocol facts it rests on are in `lan-transport.md`, "A service item, beyond play and search".
+
+- [x] **A searchable service's own library could not be reached.** *Done: a service opens on its
+  library — Deezer's Flow and My Music, Qobuz's playlists, TIDAL's collection — with "Search <service>"
+  one press up, and the keyboard raised only on asking. Back climbs a level at a time, each level
+  keeping its rows, and lands on the row that opened it. Containers read on past 100 as the list
+  nears its end (Qobuz Playlists, 4,699, scrolled past 104). A service with an empty root opens on
+  its search as before.*
+  - [x] **Sonos Radio's page.** *Done: its SMAPI root is empty, but its manifest's `browse`
+    endpoint answers anonymously with the shelves the Sonos app draws, stations inline, ids the same
+    as its search's. Listed as the service's page; Hit List played from Trending Now. "Browse Radio"
+    (News & Talk, Sports, Locations) is not listed: its rows are containers, and no form of asking
+    that endpoint for one container was found.*
+- [x] **Play Next.** *Done: a hold or Menu on any service item, in Music Services and Search, opens
+  its menu — Play now, Play next (only while the room plays from its queue, as the Sonos app does),
+  Add to end of queue. Play Next put Drive My Car straight after Michelle on Media Room. Apple Music
+  hits get the same, through their own queue path.*
+- [x] **Service actions on an item.** *Done, in the same menu under the service's name: Start radio,
+  Browse artist, Open album, and Add to / Remove from the account's favourites. Both favourite
+  mechanisms were run on the real accounts and put back: Deezer's by rating, Qobuz's by
+  `createItem`/`deleteItem`.* Adding to a service's own playlist is not built: it needs a picker of
+  that account's playlists and `addToContainer`, and nothing on a remote asked for it yet.
+- [x] **Favorites were one flat list, and press always played.** *Done: grouped as the Sonos app
+  groups them (playlists, albums, songs, stations), each line saying what it is and whose ("Album ·
+  Saavn"). An album or playlist favourite whose service can be browsed opens on its tracks, with
+  Play and Shuffle at the head; Play loads the favourite itself, so playing never depends on the
+  browse.* Found doing it: `loadFavorite` **appended** an album rather than replacing the queue —
+  true before this work too — and now says `REPLACE`.
+- [x] **Right from Browse's Music Services button landed on Play/Pause.** *Done: sideways stops at
+  either end of every screen header (`ScreenHeader`), as a modal's focus trap does.*
+- [x] **The service list.** *Done.* 80er-Radio harmony is listed among "Your services" now: an
+  anonymous service the household added keeps a stored record with no token, which counts as
+  added. **Logos** come from Sonos's own list of services (support.sonos.com/en-us/services, whose
+  records carry each one's logo), turned into `ui/ServiceLogos.kt` by `tools/service-logos.py` and
+  fetched at 112px PNG from media.sonos.com; names are matched loosely, which covers 99 of the
+  office's 108, and the rest keep an empty slot. **Amazon Music listed twice is right**: the two
+  accounts are the owner's and a family-plan member's, set up as a test. The Sonos app shows one.
+- [ ] **A service's preferred account.** Most services allow more than one account, and the Sonos
+  app lets the household prefer one; this lists every stored account of a service as its own row
+  (Amazon Music twice, here), and plays, searches and queues through whichever row was picked. Which
+  account Sonos treats as preferred is presumably in the stored records' flags, not read yet; once
+  known, that one should lead, or stand alone with the others a level down.
+- [x] **Deezer's heart and ban.** *Done: the pane draws them where a service's ratings are
+  favourite-shaped — a heart that toggles `SAVE_TRACK`/`DELETE_TRACK`, read back after each press,
+  and a ban that sends `SKIP_TRACK` and skips. Thumbs stay thumbs. The heart was pressed both ways
+  on FE!N against the real account.*
+- [x] **Search.** *Done: each service's section ends in "More from <service>", which opens that
+  service's own search for the same term with every category and every page; Back returns to the
+  row. Hits have the item menu.*
+- [x] **The pane drops the station once a track is known.** *Done: "BENEE • Hit List".*
+- **Review #1 again**: after a real screensaver on the emulator, the room row drew normally.
+
+Two crashes were found on the emulator during this and fixed before anything else: Browse and a
+favourite's album page each crashed on opening, because a flow the constructor's coroutine reached
+was declared below `init` — which only bites when nothing suspends first, as with a cached service
+list. The view-model test now primes that cache, and was mutation-checked to fail without the fix.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - **A poster cache for the launcher's room tiles — decided out (2026-10-07).** x2rock's widget needed
