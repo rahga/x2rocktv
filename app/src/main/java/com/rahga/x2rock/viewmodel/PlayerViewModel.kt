@@ -568,6 +568,21 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Set the room to [level] exactly — a hold on the volume. Steps still waiting to be sent are
+     * dropped: the level asked for is the answer to them too.
+     */
+    fun setVolume(level: Int) {
+        val groupId = _groupId.value ?: return
+        if (uiState.value.volumeFixed) return notice.post(FIXED_VOLUME)
+        volumeDebounceJob?.cancel()
+        pendingVolumeDelta = 0
+        viewModelScope.launch {
+            runCatching { household.setGroupVolume(groupId, level.coerceIn(0, 100)) }
+                .onFailure { notice.failure("set the volume", it) }
+        }
+    }
+
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
         // The player refuses a level it does not control; say so instead of asking it.

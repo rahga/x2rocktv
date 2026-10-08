@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.viewmodel.trackLine
+import com.rahga.x2rock.ui.components.SearchField
+import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
@@ -179,6 +181,16 @@ fun PlayerPane(
         label = "artTint",
     )
     var showSleepTimerPicker by remember { mutableStateOf(false) }
+    // The exact-level entry, opened by a hold on the volume; focus goes back to the volume after.
+    var showSetVolume by remember { mutableStateOf(false) }
+    val volumeFocusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) {
+        snapshotFlow { showSetVolume }.drop(1).filter { !it }.collect {
+            withFrameNanos { } // after the entry has left, as for the sleep timer above
+            volumeFocusRequester.requestFocusSafely()
+        }
+    }
+    val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester)
     var paneHasFocus by remember { mutableStateOf(false) }
 
     // Where focus starts, once, for the life of this pane.
@@ -264,7 +276,7 @@ fun PlayerPane(
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
                 if (state.onTvInput) {
-                    TvInfo(state, viewModel, sidebarFocusRequester)
+                    TvInfo(state, viewModel, sidebarFocusRequester, volumeEntry)
                     TvControls(
                         state = state,
                         viewModel = viewModel,
@@ -281,7 +293,7 @@ fun PlayerPane(
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
-                    TrackInfo(state, viewModel, sidebarFocusRequester)
+                    TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry)
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
@@ -300,6 +312,18 @@ fun PlayerPane(
                     )
                 }
             }
+        }
+
+        if (showSetVolume) {
+            SetVolumeOverlay(
+                room = state.groupName,
+                current = state.volume,
+                onSet = { level ->
+                    viewModel.setVolume(level)
+                    showSetVolume = false
+                },
+                onDismiss = { showSetVolume = false },
+            )
         }
 
         if (showSleepTimerPicker) {
@@ -355,9 +379,9 @@ private fun AlarmControls(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
     Column {
-        PaneHeader(state, viewModel, exitLeftFocusRequester)
+        PaneHeader(state, viewModel, exitLeftFocusRequester, volumeEntry)
         Spacer(modifier = Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (state.albumArtUrl != null) {
@@ -795,7 +819,7 @@ private fun PlaybackControls(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -831,13 +855,14 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLef
             onStep = { viewModel.adjustVolume(it) },
             onToggleMute = { viewModel.toggleMute() },
             onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
+            entry = volumeEntry,
         )
     }
 }
 
 /**
  * Speaker, wedge, level: one control. Select mutes; left and right step the level while it
- * has focus, with − and + drawn either side to say so. Deliberately small — the remote's own
+ * has focus, with − and + drawn either side to say so; a hold or Menu sets an exact level. Deliberately small — the remote's own
  * volume keys are the television's (see CLAUDE.md), and the system draws its own display
  * for those, so this is for the room rather than a second volume screen.
  *
@@ -848,14 +873,26 @@ private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLef
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun HeaderVolume(state: PlayerUiState, onStep: (Int) -> Unit, onToggleMute: () -> Unit, onExitLeft: () -> Unit) {
+private fun HeaderVolume(
+    state: PlayerUiState,
+    onStep: (Int) -> Unit,
+    onToggleMute: () -> Unit,
+    onExitLeft: () -> Unit,
+    entry: VolumeEntry,
+) {
     var focused by remember { mutableStateOf(false) }
     // A fixed line-out has no level to step: the view model says so if a step is tried.
     val showSteps = !state.volumeFixed && stepMarksShown(focused)
+    // A hold, or Menu, sets an exact level — where stepping there by fives would take a while.
+    // Not for a fixed line-out, which has no level to set.
+    val setExactly = entry.open.takeIf { !state.volumeFixed }
     Surface(
         onClick = onToggleMute,
+        onLongClick = setExactly,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         modifier = Modifier
+            .focusRequester(entry.focus)
+            .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -934,9 +971,9 @@ private fun VolumeWedge(volume: Int?, muted: Boolean) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
+private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
     Column {
-        PaneHeader(state, viewModel, exitLeftFocusRequester)
+        PaneHeader(state, viewModel, exitLeftFocusRequester, volumeEntry)
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -1164,6 +1201,65 @@ private fun SleepTimerPickerOverlay(
 }
 
 private val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
+
+/** What the volume control needs to offer an exact level: how to open the entry, and its own focus. */
+private class VolumeEntry(val open: () -> Unit, val focus: FocusRequester)
+
+/**
+ * An exact level for the room, opened by a hold on its volume: a number typed or said on the
+ * keyboard, which comes up for digits, or one of the levels most often wanted, picked with no
+ * typing at all. Anything outside 0 to 100 is not sent, and says why.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun SetVolumeOverlay(room: String, current: Int?, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
+    BackHandler { onDismiss() }
+    var text by remember { mutableStateOf("") }
+    var problem by remember { mutableStateOf<String?>(null) }
+    val fieldFocus = rememberAutoFocusRequester()
+    val submit = {
+        when (val level = text.trim().toIntOrNull()) {
+            null -> problem = "Type a level from 0 to 100"
+            !in 0..100 -> problem = "$level is past 100; a level goes from 0 to 100"
+            else -> onSet(level)
+        }
+    }
+    Overlay(onDismiss) {
+        Column(
+            modifier = Modifier
+                .width(520.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("Volume in $room", style = MaterialTheme.typography.titleLarge)
+            current?.let { Text("Now $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SearchField(
+                    value = text,
+                    placeholder = "0 to 100",
+                    onValueChange = { typed -> text = typed.filter { it.isDigit() }.take(3); problem = null },
+                    onSearch = submit,
+                    numeric = true,
+                    modifier = Modifier.weight(1f).focusRequester(fieldFocus),
+                )
+                Spacer(Modifier.width(12.dp))
+                AppButton(onClick = submit) { Text("Set") }
+            }
+            problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                QUICK_LEVELS.forEach { level ->
+                    AppButton(onClick = { onSet(level) }, modifier = Modifier.weight(1f)) {
+                        Text("$level", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The levels a room is most often set to, as one press each: quiet to loud, short of loud. */
+private val QUICK_LEVELS = listOf(5, 10, 15, 20, 25, 30, 40)
 
 /** "15 minutes", "1 hour", "1½ hours", "2 hours". */
 internal fun sleepChoiceLabel(minutes: Int): String = when {
