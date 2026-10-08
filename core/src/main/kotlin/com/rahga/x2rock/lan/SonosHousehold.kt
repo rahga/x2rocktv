@@ -739,14 +739,24 @@ class SonosHousehold(
      */
     suspend fun queue(groupId: String): QueueResponse {
         val hostname = coordinatorHostname(groupId)
-        val first = upnp.browseQueue(hostname)
-        val items = first.items.toMutableList()
-        while (items.size < first.totalItems) {
-            val page = upnp.browseQueue(hostname, start = items.size)
-            if (page.items.isEmpty()) break
-            items += page.items
+        // One version throughout, or not at all. A queue longer than a page is read in pages, and
+        // another controller's edit between two of them shifted the slots under the read: the
+        // pages were joined anyway and labelled with the first one's version, which an edit then
+        // quoted (outside review, 2026-10-08). A changed version starts the read again, a few
+        // times, rather than for as long as someone else keeps editing.
+        repeat(QUEUE_READ_ATTEMPTS) {
+            val first = upnp.browseQueue(hostname)
+            val items = first.items.toMutableList()
+            var consistent = true
+            while (items.size < first.totalItems) {
+                val page = upnp.browseQueue(hostname, start = items.size)
+                if (page.updateId != first.updateId) { consistent = false; break }
+                if (page.items.isEmpty()) break
+                items += page.items
+            }
+            if (consistent) return QueueResponse(items = items, totalItems = first.totalItems, updateId = first.updateId)
         }
-        return QueueResponse(items = items, totalItems = first.totalItems, updateId = first.updateId)
+        throw java.io.IOException("the queue kept changing while it was read")
     }
 
 
@@ -2210,6 +2220,9 @@ const val SNOOZE_MINUTES = 9
 
 /** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
 private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
+
+/** How many times a queue read starts again when the queue changes under it; see [SonosHousehold.queue]. */
+private const val QUEUE_READ_ATTEMPTS = 3
 
 /** The `StringId`s of a favourite-shaped ratings map: Deezer's heart, set and cleared. */
 private const val SAVE_TRACK = "SAVE_TRACK"

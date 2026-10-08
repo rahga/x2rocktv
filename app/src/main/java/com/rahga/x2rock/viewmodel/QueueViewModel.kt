@@ -214,7 +214,16 @@ class QueueViewModel @Inject constructor(
         viewModelScope.launch { read(quiet) }
     }
 
+    /**
+     * The latest read started. Reads overlap — a version event, Retry, a play, an edit's fallback —
+     * and each used to publish when it finished, so an older one finishing last rolled the list
+     * back over a newer one (outside review, 2026-10-08). Only the latest started may publish: it
+     * began after whatever made it, so it is the one that can be current.
+     */
+    private var latestRead = 0
+
     private suspend fun read(quiet: Boolean) {
+        val mine = ++latestRead
         if (!quiet || _uiState.value !is UiState.Success) _uiState.value = UiState.Loading
         runCatching {
             // The queue is the one thing still asked for rather than pushed; what is
@@ -230,13 +239,14 @@ class QueueViewModel @Inject constructor(
             )
         }
             .onSuccess { (version, state) ->
+                if (mine != latestRead) return@onSuccess
                 _uiState.value = state
                 // The version after the list it belongs to: an edit waiting on it then checks its
                 // track against this list, not the one before. The other way round it woke a moment
                 // early and acted on the old list.
                 _updateId.value = version ?: "0"
             }
-            .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
+            .onFailure { if (mine == latestRead) _uiState.value = UiState.Error(it.message ?: "Failed to load queue") }
     }
 
     private companion object {
