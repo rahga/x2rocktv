@@ -1,5 +1,9 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
@@ -72,6 +76,9 @@ fun ServiceBrowseScreen(
     val notice by viewModel.notice.collectAsState()
 
     BackHandler { if (!viewModel.back()) onBack() }
+    // The row a service was opened from, so Back lands on it rather than on the first row. Saved,
+    // because Apple Music is a screen of its own and this one is rebuilt on the way back.
+    var opened by rememberSaveable { mutableStateOf<String?>(null) }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -86,7 +93,12 @@ fun ServiceBrowseScreen(
 
                 val service = active
                 if (service == null) {
-                    ServiceList(services, onOpen = viewModel::open, onOpenAppleMusic = onOpenAppleMusic)
+                    ServiceList(
+                        services,
+                        returnTo = opened,
+                        onOpen = { opened = Entry.Service(it).key; viewModel.open(it) },
+                        onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic() },
+                    )
                 } else {
                     ServiceContent(viewModel, service, onPlayed)
                 }
@@ -100,12 +112,14 @@ fun ServiceBrowseScreen(
  * The household's services in two lists: the ones it **signed in to** — its own Deezer, TIDAL,
  * Audible, and Apple Music — and then the anonymous radio services every Sonos system carries,
  * which run to a hundred and bury the few that matter if listed together by name. Focus starts on
- * the first row, so Select opens a service rather than pressing Back.
+ * the first row, so Select opens a service rather than pressing Back — or, coming back out of a
+ * service, on [returnTo], the row that opened it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ServiceList(
     services: ServiceBrowseViewModel.Services,
+    returnTo: String?,
     onOpen: (LinkedService) -> Unit,
     onOpenAppleMusic: () -> Unit,
 ) {
@@ -116,10 +130,6 @@ private fun ServiceList(
             Text(services.message, style = MaterialTheme.typography.bodyMedium)
         is ServiceBrowseViewModel.Services.Ready -> {
             val (yours, others) = services.services.partition { it.token != null }
-            val firstFocus = remember { FocusRequester() }
-            LaunchedEffect(Unit) {
-                firstFocus.requestFocusRetrying()
-            }
             if (yours.isEmpty() && others.isEmpty() && !services.appleMusic) {
                 Text(
                     "No searchable services. Add a music service in the Sonos app, and this system's " +
@@ -137,12 +147,22 @@ private fun ServiceList(
                 others.forEach { add(Entry.Service(it)) }
             }
             val first = entries.indexOfFirst { it !is Entry.Heading }
+            val target = entries.indexOfFirst { it.key == returnTo }.takeIf { it >= 0 } ?: first
+            val targetFocus = remember { FocusRequester() }
+            val listState = rememberLazyListState()
+            LaunchedEffect(Unit) {
+                // A row far down "More radio" is not composed until scrolled to, and an uncomposed
+                // row cannot take focus.
+                if (target != first) listState.scrollToItem(target)
+                targetFocus.requestFocusRetrying()
+            }
             LazyColumn(
+                state = listState,
                 contentPadding = PaddingValues(bottom = 48.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemsIndexed(entries, key = { _, e -> e.key }) { index, entry ->
-                    val modifier = if (index == first) Modifier.focusRequester(firstFocus) else Modifier
+                    val modifier = if (index == target) Modifier.focusRequester(targetFocus) else Modifier
                     when (entry) {
                         is Entry.Heading -> SectionTitle(entry.title, first = index == 0)
                         Entry.Apple -> ServiceRow("Apple Music", "Searched through Apple", onOpenAppleMusic, modifier)

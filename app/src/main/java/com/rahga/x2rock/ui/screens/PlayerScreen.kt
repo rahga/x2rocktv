@@ -117,7 +117,6 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.components.VOLUME_STEP
@@ -398,19 +397,21 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeft
                     }
                     // A stream with no text of its own yet — the first ICY title has not come,
                     // or never will — is named once, by its station or, for a bare URL, its
-                    // host: x2rock's rule, and better than a transport word.
-                    state.isRadio && state.sourceName != null -> Text(
+                    // host: x2rock's rule, and better than a transport word. The same goes for
+                    // anything else that names its source and not a track: a radio program
+                    // stopped between songs (Radio Paradise's Main Mix) read "Idle" here.
+                    state.sourceName != null -> Text(
                         text = state.sourceName,
                         style = MaterialTheme.typography.displaySmall,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
-                    // "Idle" describes the transport; with nothing loaded at all it is the
-                    // wrong thing to say, because the room is not resting between tracks —
-                    // there are none. The Sonos app names this state, and so does this.
+                    // "Idle" describes the transport and says nothing a listener can use. With
+                    // nothing loaded at all the Sonos app says "No Content", and so does this;
+                    // otherwise the room's own word, the one the list and the panel use.
                     else -> Text(
                         text = if (!state.actions.canPlay) "No Content"
-                            else state.playbackState.toPlaybackLabel(),
+                            else roomActivity(state.playbackState, state.hasSource).label,
                         style = MaterialTheme.typography.headlineMedium
                     )
                 }

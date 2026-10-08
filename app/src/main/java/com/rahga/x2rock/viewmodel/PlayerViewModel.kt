@@ -11,7 +11,6 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.model.toPlaybackLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -358,7 +357,9 @@ class PlayerViewModel @Inject constructor(
         val title = state.trackName ?: state.groupName.takeIf { it.isNotBlank() }
         val subtitle = state.artistName ?: when {
             state.onTvInput -> state.inputFormat.takeIf { it.isNotBlank() } ?: "TV Audio"
-            else -> state.playbackState.toPlaybackLabel()
+            // The room's own word, as the list and pane say it: the transport's "Idle" told the
+            // launcher's card nothing.
+            else -> roomActivity(state.playbackState, state.hasSource).label
         }
 
         val metadataKey = "$title|$subtitle|${state.albumName}|${state.durationMillis}"
