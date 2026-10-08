@@ -61,7 +61,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.BookmarkAdd
-import androidx.compose.material.icons.filled.CallSplit
+import androidx.compose.material.icons.automirrored.filled.CallSplit
 import androidx.compose.material.icons.filled.RemoveCircleOutline
 import androidx.compose.material.icons.filled.SpeakerGroup
 import androidx.tv.material3.Icon
@@ -183,7 +183,7 @@ fun RoomPanel(
         if (otherGroups.isNotEmpty() || isPartying) {
             PanelSection("Everywhere")
             IconLabelButton(
-                if (isPartying) Icons.Default.CallSplit else Icons.Default.SpeakerGroup,
+                if (isPartying) Icons.AutoMirrored.Filled.CallSplit else Icons.Default.SpeakerGroup,
                 if (isPartying) "Split every room apart" else "Play everywhere",
                 if (isPartying) onStopParty else onParty,
                 Modifier.fillMaxWidth(),
