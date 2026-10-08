@@ -305,6 +305,7 @@ class PlayerViewModel @Inject constructor(
         // house — so without this, a track boundary in another room would clear the home
         // theatre reading and blank both toggles for a round-trip.
         if (_groupId.value == id) return
+        _groupId.value?.let { settlePending(it) }
         _groupId.value = id
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.
@@ -523,6 +524,29 @@ class PlayerViewModel @Inject constructor(
      * this job, possibly with the command already in flight — starts a new total rather than
      * resending this one or losing its own.
      */
+    /**
+     * What the room being left still owes: its volume steps and a seek waiting out the debounce,
+     * sent to it now, and the pending state cleared. They used to stay with the view model, and
+     * the next press in the newly selected room sent them there — +5 in one room then +1 in the
+     * next arrived as +6, and a pending seek became the next room's baseline (outside review,
+     * 2026-10-08). A seek already sent keeps nothing pending past here: its room has it.
+     */
+    private fun settlePending(leaving: String) {
+        volumeDebounceJob?.cancel()
+        val step = pendingVolumeDelta
+        pendingVolumeDelta = 0
+        if (step != 0) viewModelScope.launch {
+            runCatching { household.adjustGroupVolume(leaving, step) }.onFailure { notice.failure("change the volume", it) }
+        }
+        val unsent = pendingSeekMillis?.takeIf { pendingSentAt == null && seekDebounceJob?.isActive == true }
+        seekDebounceJob?.cancel()
+        pendingSeekMillis = null
+        pendingSentAt = null
+        if (unsent != null) viewModelScope.launch {
+            runCatching { household.seek(leaving, unsent) }.onFailure { notice.failure("seek", it) }
+        }
+    }
+
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
         // The player refuses a level it does not control; say so instead of asking it.
