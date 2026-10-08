@@ -256,8 +256,8 @@ class Upnp(
 
     private suspend fun statusZp(hostname: String): String? = withContext(Dispatchers.IO) {
         require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
-        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).await().use { response ->
-            if (!response.isSuccessful) null else response.body?.string()
+        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).awaitReply().let { response ->
+            if (!response.isSuccessful) null else response.body
         }
     }
 
@@ -458,8 +458,8 @@ class Upnp(
             .post(envelope.toRequestBody("text/xml; charset=utf-8".toMediaType()))
             .build()
 
-        client.newCall(request).await().use { response ->
-            val body = response.body?.string().orEmpty()
+        client.newCall(request).awaitReply().let { response ->
+            val body = response.body
             if (response.isSuccessful) return body
             if (response.code == 403) throw UpnpRefusedException(switchedOffMessage(hostname))
             throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}", errorCode(body))
