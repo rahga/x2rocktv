@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.QueueItem
+import com.rahga.x2rock.lan.GroupState
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +49,7 @@ class QueueViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
 
     sealed interface UiState {
         data object Loading : UiState
@@ -77,15 +78,19 @@ class QueueViewModel @Inject constructor(
         // The version the list is read at. Taken before the read, so an edit landing between the
         // two only costs a second read. Null when the room has not said yet, early in a session:
         // the first version to arrive is then a change, because nothing says the list has it.
-        val openedAt = household.groupStates.value[groupId]?.queueVersion
+        // The room's group and its version, as read now. A regroup moves the room to another group,
+        // whose queue is another queue: the pair changing reads that one, as a version does.
+        fun where(states: Map<String, GroupState>): Pair<String?, String?> =
+            room.currentOrNull().let { id -> id to id?.let { states[it]?.queueVersion } }
+        val openedAt = where(household.groupStates.value)
         load()
         // Kept current while this screen is open, which is this view model's whole life, by the
         // room's `queueVersion`. Verified at home on 2026-10-01: each edit moved it (26, 27, 28
         // for a move and its undo) and each arrived as a playback event, on an idle room too.
         // So nothing is browsed on a timer or per event; the version moving is the signal.
         viewModelScope.launch {
-            household.groupStates.map { it[groupId]?.queueVersion }
-                .filterNotNull()
+            household.groupStates.map { where(it) }
+                .filter { (id, version) -> id != null && version != null }
                 .distinctUntilChanged()
                 .filter { it != openedAt }
                 .collect { load(quiet = true) }
@@ -96,7 +101,7 @@ class QueueViewModel @Inject constructor(
 
     fun playItem(trackNumber: Int) {
         viewModelScope.launch {
-            runCatching { household.skipToQueueItem(groupId, trackNumber) }
+            runCatching { household.skipToQueueItem(room.current(), trackNumber) }
                 // Re-read on success: the queue may just have become the source again.
                 .onSuccess { load(quiet = true) }
                 .onFailure { _notice.failure("play that track", it) }
@@ -108,7 +113,7 @@ class QueueViewModel @Inject constructor(
      * the queue has no event to tell us it changed, so it is re-read after.
      */
     fun removeItem(trackNumber: Int) = edit("remove that track", trackNumber) {
-        household.removeFromQueue(groupId, trackNumber, updateId)
+        household.removeFromQueue(room.current(), trackNumber, updateId)
     }
 
     /**
@@ -116,10 +121,10 @@ class QueueViewModel @Inject constructor(
      * against the list as it then is, not as it was when pressed.
      */
     fun moveUp(trackNumber: Int) = edit("move that track", trackNumber) {
-        neighbourSlots(entries(), trackNumber).first?.let { household.moveInQueue(groupId, trackNumber, it, updateId) }
+        neighbourSlots(entries(), trackNumber).first?.let { household.moveInQueue(room.current(), trackNumber, it, updateId) }
     }
     fun moveDown(trackNumber: Int) = edit("move that track", trackNumber) {
-        neighbourSlots(entries(), trackNumber).second?.let { household.moveInQueue(groupId, trackNumber, it, updateId) }
+        neighbourSlots(entries(), trackNumber).second?.let { household.moveInQueue(room.current(), trackNumber, it, updateId) }
     }
 
     private fun entries() = (uiState.value as? UiState.Success)?.entries.orEmpty()
@@ -146,7 +151,7 @@ class QueueViewModel @Inject constructor(
         }
         disarm?.cancel()
         _clearArmed.value = false
-        edit("clear the queue", trackNumber = null) { household.clearQueue(groupId) }
+        edit("clear the queue", trackNumber = null) { household.clearQueue(room.current()) }
     }
 
     /**
@@ -154,10 +159,10 @@ class QueueViewModel @Inject constructor(
      * keyboard to ask with, and the Sonos app can rename it.
      */
     fun saveAsPlaylist() {
-        val room = household.state.value.groups.firstOrNull { it.id == groupId }?.name ?: "Queue"
-        val name = "$room, ${java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
+        val roomName = household.state.value.groups.firstOrNull { it.id == room.forNavigation() }?.name ?: "Queue"
+        val name = "$roomName, ${java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
         viewModelScope.launch {
-            runCatching { household.saveQueue(groupId, name) }
+            runCatching { household.saveQueue(room.current(), name) }
                 .onSuccess { _notice.post("Saved as \"$name\"") }
                 .onFailure { _notice.failure("save the queue", it) }
         }
@@ -194,7 +199,7 @@ class QueueViewModel @Inject constructor(
                 val before = updateId
                 runCatching { block() }
                     .onSuccess {
-                        val pushed = household.groupStates.value[groupId]?.queueVersion != null
+                        val pushed = household.groupStates.value[room.forNavigation()]?.queueVersion != null
                         val reread = pushed && withTimeoutOrNull(EDIT_SETTLE_MILLIS) { _updateId.first { it != before } } != null
                         if (!reread) read(quiet = true)
                     }
@@ -228,13 +233,13 @@ class QueueViewModel @Inject constructor(
         runCatching {
             // The queue is the one thing still asked for rather than pushed; what is
             // playing is already known from the household's subscriptions.
-            val queue = household.queue(groupId)
+            val queue = household.queue(room.current())
             // Unknown counts as in use: a failed read must not hide the marker it can't
             // disprove, and the play path checks again for itself.
-            val inUse = runCatching { household.playingFromQueue(groupId) }.getOrDefault(true)
+            val inUse = runCatching { household.playingFromQueue(room.current()) }.getOrDefault(true)
             queue.updateId to UiState.Success(
                 queueEntries(queue.items),
-                household.groupState(groupId).track?.name?.takeIf { inUse },
+                household.groupState(room.forNavigation()).track?.name?.takeIf { inUse },
                 inUse,
             )
         }

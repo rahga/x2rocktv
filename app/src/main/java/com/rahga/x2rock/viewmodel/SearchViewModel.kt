@@ -54,7 +54,7 @@ class SearchViewModel @Inject constructor(
     private val primaryAccounts: PrimaryAccounts,
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
 
     /** One result, whichever search it came from. */
     sealed interface Hit {
@@ -184,8 +184,8 @@ class SearchViewModel @Inject constructor(
             _starting.value = hit.key
             val started = runCatching {
                 when (hit) {
-                    is Hit.Apple -> household.playAppleMusic(groupId, hit.item, appleAccount())
-                    is Hit.Service -> household.startServiceItem(groupId, hit.linked, hit.item)
+                    is Hit.Apple -> household.playAppleMusic(room.current(), hit.item, appleAccount())
+                    is Hit.Service -> household.startServiceItem(room.current(), hit.linked, hit.item)
                 }
             }
             _starting.value = null
@@ -194,7 +194,7 @@ class SearchViewModel @Inject constructor(
     }
 
     /** The menu a hold or Menu on a hit opens: play now or next, queue, and the service's own. */
-    val menu = ServiceItemMenu(household, groupId, viewModelScope, _notice, _starting) { target ->
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, _starting) { target ->
         when (target) {
             is ServiceItemMenu.Target.Service -> Hit.Service(target.linked, target.item).key
             is ServiceItemMenu.Target.Apple -> Hit.Apple(target.item).key

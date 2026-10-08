@@ -26,7 +26,7 @@ class AppleMusicViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
 
     sealed interface Results {
         data object Idle : Results
@@ -86,7 +86,7 @@ class AppleMusicViewModel @Inject constructor(
         viewModelScope.launch {
             val account = account() ?: return@launch _notice.post(NO_ACCOUNT)
             _starting.value = item.objectId
-            val started = runCatching { household.playAppleMusic(groupId, item, account) }
+            val started = runCatching { household.playAppleMusic(room.current(), item, account) }
             _starting.value = null
             started.onSuccess { onDone() }.onFailure { _notice.failure("play ${item.title}", it) }
         }
@@ -96,7 +96,7 @@ class AppleMusicViewModel @Inject constructor(
     fun queue(item: AppleMusicItem) {
         viewModelScope.launch {
             val account = account() ?: return@launch _notice.post(NO_ACCOUNT)
-            runCatching { household.queueAppleMusic(groupId, item, account) }
+            runCatching { household.queueAppleMusic(room.current(), item, account) }
                 .onSuccess { _notice.post("Added \"${item.title}\" to the queue") }
                 .onFailure { _notice.failure("add ${item.title}", it) }
         }

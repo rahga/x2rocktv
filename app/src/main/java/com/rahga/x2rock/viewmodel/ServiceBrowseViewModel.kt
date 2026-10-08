@@ -44,7 +44,7 @@ class ServiceBrowseViewModel @Inject constructor(
     private val primaryAccounts: PrimaryAccounts,
 ) : ViewModel() {
 
-    private val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
 
     /**
      * Opened from search on one container — an album, an artist — rather than on the service list:
@@ -348,7 +348,7 @@ class ServiceBrowseViewModel @Inject constructor(
     }
 
     /** The menu a hold or Menu on a row opens. */
-    val menu = ServiceItemMenu(household, groupId, viewModelScope, _notice, _starting) {
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, _starting) {
         (it as ServiceItemMenu.Target.Service).item.id
     }
 
@@ -377,10 +377,10 @@ class ServiceBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             _starting.value = WHOLE
             val started = runCatching {
-                if (shuffle) household.setShuffle(groupId, true)
+                if (shuffle) household.setShuffle(room.current(), true)
                 when (whole) {
-                    is Whole.Favorite -> household.loadFavorite(groupId, whole.id)
-                    is Whole.Container -> household.playServiceItem(groupId, service, whole.item)
+                    is Whole.Favorite -> household.loadFavorite(room.current(), whole.id)
+                    is Whole.Container -> household.playServiceItem(room.current(), service, whole.item)
                 }
             }
             _starting.value = null
@@ -404,7 +404,7 @@ class ServiceBrowseViewModel @Inject constructor(
         val service = _active.value ?: return
         viewModelScope.launch {
             _starting.value = item.id
-            val started = runCatching { household.startServiceItem(groupId, service, item) }
+            val started = runCatching { household.startServiceItem(room.current(), service, item) }
             _starting.value = null
             started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${item.title}", it) }
         }

@@ -32,7 +32,10 @@ class FavoritesViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** The room this screen plays into; the Radio screen is opened on the same one. */
-    val groupId: String = checkNotNull(savedStateHandle["groupId"])
+    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+
+    /** The room's current group, for the screens opened from here; see [RoomTarget]. */
+    val groupId: String get() = room.forNavigation()
 
     sealed interface UiState {
         data object Loading : UiState
@@ -125,20 +128,20 @@ class FavoritesViewModel @Inject constructor(
     fun reload() = load()
 
     fun loadFavorite(favoriteId: String, onDone: () -> Unit) =
-        startOne(favoriteId, "play that favourite", onDone) { household.loadFavorite(groupId, favoriteId) }
+        startOne(favoriteId, "play that favourite", onDone) { household.loadFavorite(room.current(), favoriteId) }
 
     /** Play a Sonos playlist in place of the queue, the same way a favourite is played. */
     fun loadPlaylist(playlistId: String, onDone: () -> Unit) =
-        startOne(playlistKey(playlistId), "play that playlist", onDone) { household.loadPlaylist(groupId, playlistId) }
+        startOne(playlistKey(playlistId), "play that playlist", onDone) { household.loadPlaylist(room.current(), playlistId) }
 
     /** Play something from recently played again. See `SonosHousehold.replay`. */
     fun replay(item: HistoryItem, onDone: () -> Unit) =
-        startOne(recentKey(item), "play ${item.name}", onDone) { household.replay(groupId, item) }
+        startOne(recentKey(item), "play ${item.name}", onDone) { household.replay(room.current(), item) }
 
     /** Add a playlist to the end of the queue, leaving what plays alone. */
     fun appendPlaylist(playlist: Playlist) {
         viewModelScope.launch {
-            runCatching { household.appendPlaylist(groupId, playlist.id) }
+            runCatching { household.appendPlaylist(room.current(), playlist.id) }
                 .onSuccess { _notice.post("Added \"${playlist.name}\" to the queue") }
                 .onFailure { _notice.failure("add that playlist", it) }
         }
@@ -181,7 +184,7 @@ class FavoritesViewModel @Inject constructor(
                     Triple(favs.await(), playlists.await(), history.await())
                 }
                 // What is playing comes from the subscription, so only the list is fetched.
-                val containerName = household.groupState(groupId).container?.name
+                val containerName = household.groupState(room.forNavigation()).container?.name
                 val activeId = containerName?.let { playingFavorite(favs.items, it)?.id }
                 // Not de-duplicated by name: two "The Main Mix" in the office history are two
                 // different Radio Paradise streams, with different ids.

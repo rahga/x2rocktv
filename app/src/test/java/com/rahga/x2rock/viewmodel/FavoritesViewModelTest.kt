@@ -174,4 +174,20 @@ class FavoritesViewModelTest {
         assertEquals(groups.first { it.name == "Kitchen" }.id, regroup.get("groupId").asString)
         fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
     }
+
+    @Test fun `Browse opened before a regroup still plays into the same room`() = runBlocking<Unit> {
+        val original = household.state.value.groups.first { it.id == viewModel.groupId }
+        val member = household.state.value.groups.first { it.id != original.id }
+        val topology = FakePlayer.groupedTopology(original.name, member.name)
+        fake.pushTopology(topology)
+        withTimeout(5_000) { household.state.first { s -> s.groups.none { it.id == original.id } } }
+        val changed = household.state.value.groups.first { original.coordinatorId in it.playerIds }
+        assertTrue("fixture must replace the target group id", original.id != changed.id)
+        val finished = kotlinx.coroutines.CompletableDeferred<Unit>()
+        viewModel.loadFavorite("1") { finished.complete(Unit) }
+        kotlinx.coroutines.withTimeoutOrNull(1_000) { finished.await() }
+        assertTrue("saved target became invalid after regroup: ${viewModel.notice.value}", finished.isCompleted)
+        assertEquals(changed.id, fake.awaitCommand("loadFavorite").get("groupId").asString)
+    }
+
 }

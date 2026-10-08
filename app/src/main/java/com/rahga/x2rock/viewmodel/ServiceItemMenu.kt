@@ -24,7 +24,8 @@ import kotlinx.coroutines.launch
  */
 class ServiceItemMenu(
     private val household: SonosHousehold,
-    private val groupId: String,
+    /** The room's group as it is now: see [RoomTarget]. */
+    private val groupId: () -> String,
     private val scope: CoroutineScope,
     private val notice: TransientNotice,
     private val starting: MutableStateFlow<String?>,
@@ -74,7 +75,7 @@ class ServiceItemMenu(
         _fromQueue.value = false
         _details.value = null
         scope.launch {
-            _fromQueue.value = runCatching { household.playingFromQueue(groupId) }.getOrDefault(false)
+            _fromQueue.value = runCatching { household.playingFromQueue(groupId()) }.getOrDefault(false)
         }
         detailsJob?.cancel()
         detailsJob = scope.launch {
@@ -98,10 +99,10 @@ class ServiceItemMenu(
             starting.value = keyOf(target)
             val started = runCatching {
                 when (target) {
-                    is Target.Apple -> household.playAppleMusic(groupId, target.item, appleAccount())
+                    is Target.Apple -> household.playAppleMusic(groupId(), target.item, appleAccount())
                     is Target.Service ->
-                        if (ServiceContent.opens(target.item)) household.playServiceItem(groupId, target.linked, target.item)
-                        else household.startServiceItem(groupId, target.linked, target.item)
+                        if (ServiceContent.opens(target.item)) household.playServiceItem(groupId(), target.linked, target.item)
+                        else household.startServiceItem(groupId(), target.linked, target.item)
                 }
             }
             starting.value = null
@@ -118,8 +119,8 @@ class ServiceItemMenu(
         scope.launch {
             runCatching {
                 when (target) {
-                    is Target.Apple -> household.queueAppleMusic(groupId, target.item, appleAccount(), next)
-                    is Target.Service -> household.queueServiceItem(groupId, target.linked, target.item, next)
+                    is Target.Apple -> household.queueAppleMusic(groupId(), target.item, appleAccount(), next)
+                    is Target.Service -> household.queueServiceItem(groupId(), target.linked, target.item, next)
                 }
             }.onSuccess { notice.post(if (next) "\"${target.title}\" plays next" else "Added \"${target.title}\" to the queue") }
                 .onFailure { notice.failure("add ${target.title}", it) }
