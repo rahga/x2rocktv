@@ -787,6 +787,21 @@ anything changed.
 - **2.8 art colours on the main thread — not so.** Coil's `execute` does its loading off the main
   thread already, and the palette is computed on `Dispatchers.Default`.
 
+### Round two (same day): optimisations and clean-ups
+
+- **Taken**: Apple's search and the radio directory on the cancellable `Call.await()`, as UPnP now is
+  (3.1; the radio screen run on the emulator); the four fixed colour schemes built once (3.3) — the
+  theme recomposes on every cover change, and a scheme built anew is a changed one to every reader of
+  its colours; `serviceLogo` matching names worked out once (3.2); `withPrimariesFirst` and
+  `searchedAccounts` by grouping (3.4, 3.5; their tests unchanged and passing); `queueEntries` in one
+  pass (3.6); the two compiler warnings (3.8, 3.9); `:app` on `compilerOptions` as `:core` is (3.14).
+  The build is now free of warnings.
+- **Declined**: caching the `DocumentBuilderFactory` (3.10) — a factory is not promised safe across
+  threads, and replies are parsed on several at once; the SSDP buffer (3.11) and the metadata key
+  (3.12), each an allocation per packet or event, against more code; `accountIn` (3.7), a few short
+  lists, and the suggested form does not compile against a nullable track; the progress knob's
+  offset read at layout (3.13), as the bar recomposes every second for its time text anyway.
+
 ## Tier 5 — decided out, or waiting on a decision
 
 - **A poster cache for the launcher's room tiles — decided out (2026-10-07).** x2rock's widget needed
