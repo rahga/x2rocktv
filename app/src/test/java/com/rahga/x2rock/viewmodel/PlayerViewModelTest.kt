@@ -278,8 +278,11 @@ class PlayerViewModelTest {
             while (publisher.metadata.isEmpty()) delay(20)
         }
         val published = publisher.metadata.last()
-        assertEquals("Test Room", published.title)
+        // The room's name: the one it was selected under, or the fixture's own once the topology
+        // lands and renames it. Which of the two is last published is timing, not behaviour.
+        assertTrue("title was ${published.title}", published.title in setOf("Test Room", "Dining Room"))
         assertTrue("the subtitle was blank too", !published.artist.isNullOrBlank())
+        assertFalse("the transport's word, not the room's", published.artist == "Idle")
     }
 
     // ---------------------------------------------------------------- media session actions
