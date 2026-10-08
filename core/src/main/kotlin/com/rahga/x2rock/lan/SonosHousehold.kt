@@ -566,6 +566,16 @@ class SonosHousehold(
             groups.players.forEach { player ->
                 subscribePlayer(player)
             }
+
+            // Still standing? The seed can die during the best-effort setup above, whose failures
+            // are swallowed, and its loss is not acted on while this reconnect runs — the guard
+            // that stops a second reconnect starting. Finishing anyway left a session marked
+            // connected with no groups:1 subscription, deaf to every regroup (outside review,
+            // 2026-10-08). So this attempt fails, cleanly, and the reconnect tries again.
+            if (sockets[hostname] !== seedSocket) {
+                teardown()
+                throw java.io.IOException("$hostname went away while the connection was being set up")
+            }
         } catch (e: Exception) {
             // With Authentication on, every Control API command is refused with
             // ERROR_NO_PERMISSION, getGroups first, while UPnP keeps answering (x2rock, verified
