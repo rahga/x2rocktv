@@ -706,15 +706,23 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   office's 108, and the rest keep an empty slot. **Amazon Music listed twice is right**: the two
   accounts are the owner's and a family-plan member's, set up as a test. The Sonos app shows one.
 - [ ] **A service's preferred account.** Most services allow more than one account, and the Sonos
-  app lets the household prefer one; this lists every stored account of a service as its own row
-  (Amazon Music twice, here), and plays, searches and queues through whichever row was picked.
-  **The stored records do not say which is preferred** (read 2026-10-08, secrets masked): the two
-  Amazon records — serial 17, "Amazon Music User 139f5452", and 18, "Amazon Music User" — carry
-  the same `Flags0=4`, `Tier0=3`, `NumAccounts=1` and empty `Md0`, and differ only in serial,
-  selector and credential. The Sonos app shows serial 18, the newer, which "highest serial wins"
-  would match, but that is one case. `Flags0` is 0 on serials 1-11 and 4 from 13 on, a format
-  change rather than a preference. The preference most likely lives in Sonos's cloud; next place to
-  look is the player's other GENA variables and `SystemProperties`, read-only.
+  app lets one be "Primary"; this lists every stored account of a service as its own row (Amazon
+  Music twice, here), and plays, searches and queues through whichever row was picked.
+
+  **The primary is not the household's — it is the app's.** The Sonos app words it "Prioritize
+  this account in your app", and changing it (2026-10-08, Amazon Music, the 139f5452 account made
+  primary and then put back) changed nothing a player reports: the decrypted account records were
+  identical before and after, attribute for attribute and in order, and so was every variable of
+  every GENA service's initial event (ZoneGroupTopology, SystemProperties, MusicServices,
+  DeviceProperties, ContentDirectory, AVTransport, AlarmClock). `ThirdPartyMediaServersX`'s
+  ciphertext differs on every read, change or not — a fresh IV — so its hash is no signal; a capture
+  with nothing changed showed that. The account list's order did not follow the primary either.
+  Control API `musicServiceAccounts:1` exists but answers `ERROR_UNSUPPORTED_COMMAND` to
+  `getAccounts`, `listAccounts` and `getMusicServiceAccounts`.
+
+  So the honest equivalent here is this device's own choice, stored like presets: a "Make primary"
+  in a service's menu, the primary leading the list and the others a level down — or, without one,
+  the account last played from. Nothing on the speakers to read or write.
 - [x] **Deezer's heart and ban.** *Done: the pane draws them where a service's ratings are
   favourite-shaped — a heart that toggles `SAVE_TRACK`/`DELETE_TRACK`, read back after each press,
   and a ban that sends `SKIP_TRACK` and skips. Thumbs stay thumbs. The heart was pressed both ways
