@@ -637,95 +637,95 @@ private fun PlaybackControls(
         if (hasContent) Spacer(modifier = Modifier.height(24.dp))
 
         val transportExit = booleanArrayOf(false)
-        if (hasContent)
-
-        Row(
-            // Icons, as every television player draws a transport, and as the Sonos app does: as
-            // labelled buttons ("⏮  Prev", "Next  ⏭") they took twice the width, which is what had
-            // pushed the thumbs off the row. Spaced at 12dp so shuffle, the transport, repeat and a
-            // pair of thumbs all fit the pane at 1080p.
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.focusGroup()
-        ) {
-            // Drawn only where the source permits them. A live stream refuses skip, seek
-            // and shuffle outright, and a row of controls that cannot act is worse on a
-            // remote than a shorter row: each is still a focus stop that does nothing.
-            //
-            // Shuffle and repeat flank the transport as icons, where the Sonos app puts them.
-            // Like the rest of this row they are not drawn with no content, even though the
-            // player reports both as available: `availablePlaybackActions` answers "what may I
-            // do to this content", not "is there any".
-            if (state.actions.canShuffle) {
-                ModeButton(
-                    icon = if (state.shuffle) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
-                    description = if (state.shuffle) "Shuffle, on" else "Shuffle, off",
-                    onClick = { viewModel.toggleShuffle() },
-                    modifier = Modifier.claimExit(transportExit),
-                )
-            }
-            if (state.actions.canGoBack) {
-                ModeButton(
-                    icon = Icons.Filled.SkipPrevious,
-                    description = "Previous",
-                    onClick = { viewModel.skipToPreviousTrack() },
-                    modifier = Modifier.claimExit(transportExit),
-                )
-            }
-            AppButton(
-                onClick = { viewModel.togglePlayPause() },
-                // Holding it is thumbs up, where the thumbs are offered: the remote's star button,
-                // the obvious key for it, is Google TV's own and never reaches an app (it is a
-                // global key, handed to the launcher). The thumbs beside it stay the visible way.
-                onLongClick = state.rating?.let { { viewModel.rateUp() } },
-                // The widest control, so the one pressed most is the one found first; wide enough
-                // that Play and Pause do not shuffle the row as it toggles.
-                modifier = Modifier
-                    .widthIn(min = 104.dp)
-                    .focusRequester(playPauseFocusRequester)
-                    .claimExit(transportExit)
+        if (hasContent) {
+            Row(
+                // Icons, as every television player draws a transport, and as the Sonos app does: as
+                // labelled buttons ("⏮  Prev", "Next  ⏭") they took twice the width, which is what had
+                // pushed the thumbs off the row. Spaced at 12dp so shuffle, the transport, repeat and a
+                // pair of thumbs all fit the pane at 1080p.
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.focusGroup()
             ) {
-                // A live stream cannot be paused, only stopped: pausing one leaves the room
-                // IDLE rather than PAUSED, verified on hardware. The command is the same
-                // either way — the player does the right thing — so only the glyph changes,
-                // to the one that describes what will actually happen.
-                val (icon, description) = state.playPauseGlyph()
-                // Centred in the button's own minimum width, not the row's: on a stream it is the only
-                // transport control, and a filling box stretched it across the pane.
-                Box(Modifier.widthIn(min = 80.dp), contentAlignment = Alignment.Center) {
-                    Icon(icon, contentDescription = description, modifier = Modifier.size(36.dp))
+                // Drawn only where the source permits them. A live stream refuses skip, seek
+                // and shuffle outright, and a row of controls that cannot act is worse on a
+                // remote than a shorter row: each is still a focus stop that does nothing.
+                //
+                // Shuffle and repeat flank the transport as icons, where the Sonos app puts them.
+                // Like the rest of this row they are not drawn with no content, even though the
+                // player reports both as available: `availablePlaybackActions` answers "what may I
+                // do to this content", not "is there any".
+                if (state.actions.canShuffle) {
+                    ModeButton(
+                        icon = if (state.shuffle) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
+                        description = if (state.shuffle) "Shuffle, on" else "Shuffle, off",
+                        onClick = { viewModel.toggleShuffle() },
+                        modifier = Modifier.claimExit(transportExit),
+                    )
                 }
-            }
-            if (state.actions.canSkip) {
-                ModeButton(icon = Icons.Filled.SkipNext, description = "Next", onClick = { viewModel.skipToNextTrack() })
-            }
-            if (state.actions.canRepeat) {
-                ModeButton(
-                    icon = when (state.repeat) {
-                        RepeatModes.ALL -> Icons.Filled.RepeatOn
-                        RepeatModes.ONE -> Icons.Filled.RepeatOneOn
-                        else -> Icons.Filled.Repeat
-                    },
-                    description = when (state.repeat) {
-                        RepeatModes.ALL -> "Repeat all"
-                        RepeatModes.ONE -> "Repeat one"
-                        else -> "Repeat, off"
-                    },
-                    onClick = { viewModel.cycleRepeat() },
-                )
-            }
-            // Drawn only where a press can succeed: the track has an id, its service needs no
-            // account and publishes ratings. A Live broadcast — this household's ordinary
-            // iHeartRadio listening — has no track id, so it never shows them.
-            state.rating?.let { rating ->
-                if (rating.style == SonosHousehold.RatingStyle.FAVORITE) {
-                    // Deezer's pair, as the Sonos app draws it: a heart that toggles, and a ban
-                    // that skips the track and so is never shown as set.
-                    HeartButton(favorite = rating.current == Thumb.UP) { viewModel.rateUp() }
-                    BanButton { viewModel.rateDown() }
-                } else {
-                    RateButton(up = true, selected = rating.current == Thumb.UP) { viewModel.rateUp() }
-                    RateButton(up = false, selected = rating.current == Thumb.DOWN) { viewModel.rateDown() }
+                if (state.actions.canGoBack) {
+                    ModeButton(
+                        icon = Icons.Filled.SkipPrevious,
+                        description = "Previous",
+                        onClick = { viewModel.skipToPreviousTrack() },
+                        modifier = Modifier.claimExit(transportExit),
+                    )
+                }
+                AppButton(
+                    onClick = { viewModel.togglePlayPause() },
+                    // Holding it is thumbs up, where the thumbs are offered: the remote's star button,
+                    // the obvious key for it, is Google TV's own and never reaches an app (it is a
+                    // global key, handed to the launcher). The thumbs beside it stay the visible way.
+                    onLongClick = state.rating?.let { { viewModel.rateUp() } },
+                    // The widest control, so the one pressed most is the one found first; wide enough
+                    // that Play and Pause do not shuffle the row as it toggles.
+                    modifier = Modifier
+                        .widthIn(min = 104.dp)
+                        .focusRequester(playPauseFocusRequester)
+                        .claimExit(transportExit)
+                ) {
+                    // A live stream cannot be paused, only stopped: pausing one leaves the room
+                    // IDLE rather than PAUSED, verified on hardware. The command is the same
+                    // either way — the player does the right thing — so only the glyph changes,
+                    // to the one that describes what will actually happen.
+                    val (icon, description) = state.playPauseGlyph()
+                    // Centred in the button's own minimum width, not the row's: on a stream it is the only
+                    // transport control, and a filling box stretched it across the pane.
+                    Box(Modifier.widthIn(min = 80.dp), contentAlignment = Alignment.Center) {
+                        Icon(icon, contentDescription = description, modifier = Modifier.size(36.dp))
+                    }
+                }
+                if (state.actions.canSkip) {
+                    ModeButton(icon = Icons.Filled.SkipNext, description = "Next", onClick = { viewModel.skipToNextTrack() })
+                }
+                if (state.actions.canRepeat) {
+                    ModeButton(
+                        icon = when (state.repeat) {
+                            RepeatModes.ALL -> Icons.Filled.RepeatOn
+                            RepeatModes.ONE -> Icons.Filled.RepeatOneOn
+                            else -> Icons.Filled.Repeat
+                        },
+                        description = when (state.repeat) {
+                            RepeatModes.ALL -> "Repeat all"
+                            RepeatModes.ONE -> "Repeat one"
+                            else -> "Repeat, off"
+                        },
+                        onClick = { viewModel.cycleRepeat() },
+                    )
+                }
+                // Drawn only where a press can succeed: the track has an id, its service needs no
+                // account and publishes ratings. A Live broadcast — this household's ordinary
+                // iHeartRadio listening — has no track id, so it never shows them.
+                state.rating?.let { rating ->
+                    if (rating.style == SonosHousehold.RatingStyle.FAVORITE) {
+                        // Deezer's pair, as the Sonos app draws it: a heart that toggles, and a ban
+                        // that skips the track and so is never shown as set.
+                        HeartButton(favorite = rating.current == Thumb.UP) { viewModel.rateUp() }
+                        BanButton { viewModel.rateDown() }
+                    } else {
+                        RateButton(up = true, selected = rating.current == Thumb.UP) { viewModel.rateUp() }
+                        RateButton(up = false, selected = rating.current == Thumb.DOWN) { viewModel.rateDown() }
+                    }
                 }
             }
         }
