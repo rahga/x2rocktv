@@ -669,6 +669,10 @@ private fun PlaybackControls(
             }
             AppButton(
                 onClick = { viewModel.togglePlayPause() },
+                // Holding it is thumbs up, where the thumbs are offered: the remote's star button,
+                // the obvious key for it, is Google TV's own and never reaches an app (it is a
+                // global key, handed to the launcher). The thumbs beside it stay the visible way.
+                onLongClick = state.rating?.let { { viewModel.rateUp() } },
                 // The widest control, so the one pressed most is the one found first; wide enough
                 // that Play and Pause do not shuffle the row as it toggles.
                 modifier = Modifier
