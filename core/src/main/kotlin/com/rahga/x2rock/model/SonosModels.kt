@@ -344,9 +344,3 @@ fun String.isPlaying() = this == PlaybackStates.PLAYING
 /** False only when the group is idle, i.e. there is no track worth asking the API about. */
 fun String.hasLoadedContent() = this != PlaybackStates.IDLE
 
-fun String.toPlaybackLabel(): String = when (this) {
-    PlaybackStates.PLAYING -> "Playing"
-    PlaybackStates.PAUSED -> "Paused"
-    PlaybackStates.BUFFERING -> "Buffering"
-    else -> "Idle"
-}

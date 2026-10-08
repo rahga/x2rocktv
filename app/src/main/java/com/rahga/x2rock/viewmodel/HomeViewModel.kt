@@ -13,7 +13,6 @@ import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.lan.Upnp
 import com.rahga.x2rock.model.AppColorTheme
-import com.rahga.x2rock.model.toPlaybackLabel
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.Track
@@ -660,7 +659,8 @@ fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<Stri
     // The chime has no track and no name but `x-rincon-buzzer:0`, so it would read "Playing";
     // an alarm with music would read as that music. Either way, what is happening is an alarm.
     info.alarmRinging -> listOfNotNull("Alarm", info.track?.name)
-    info.onTvInput -> listOfNotNull(info.inputFormat.ifEmpty { null } ?: playbackState.toPlaybackLabel(), info.source)
+    // Before the first format arrives, the room's own word; the transport's "Idle" said nothing.
+    info.onTvInput -> listOfNotNull(info.inputFormat.ifEmpty { null } ?: roomActivity(playbackState, hasSource = true).label, info.source)
     info.track?.name != null -> listOfNotNull(
         info.track.name,
         info.track.artist?.name ?: info.streamInfo?.takeIf { it != info.track.name },
