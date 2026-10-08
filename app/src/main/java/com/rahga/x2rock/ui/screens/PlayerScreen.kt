@@ -81,9 +81,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
 import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
 import androidx.tv.material3.ClickableSurfaceDefaults
@@ -715,8 +718,15 @@ private fun PlaybackControls(
             // account and publishes ratings. A Live broadcast — this household's ordinary
             // iHeartRadio listening — has no track id, so it never shows them.
             state.rating?.let { rating ->
-                RateButton(up = true, selected = rating.current == Thumb.UP) { viewModel.rateUp() }
-                RateButton(up = false, selected = rating.current == Thumb.DOWN) { viewModel.rateDown() }
+                if (rating.style == SonosHousehold.RatingStyle.FAVORITE) {
+                    // Deezer's pair, as the Sonos app draws it: a heart that toggles, and a ban
+                    // that skips the track and so is never shown as set.
+                    HeartButton(favorite = rating.current == Thumb.UP) { viewModel.rateUp() }
+                    BanButton { viewModel.rateDown() }
+                } else {
+                    RateButton(up = true, selected = rating.current == Thumb.UP) { viewModel.rateUp() }
+                    RateButton(up = false, selected = rating.current == Thumb.DOWN) { viewModel.rateDown() }
+                }
             }
         }
 
@@ -1324,6 +1334,26 @@ private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Un
 }
 
 /** A thumb, filled once the track is already rated that way and outlined otherwise. */
+@Composable
+private fun HeartButton(favorite: Boolean, onClick: () -> Unit) {
+    IconAppButton(onClick = onClick) {
+        Icon(
+            imageVector = if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+            contentDescription = if (favorite) "A favourite — remove it" else "Add to favourites",
+            modifier = Modifier.size(30.dp),
+        )
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun BanButton(onClick: () -> Unit) {
+    IconAppButton(onClick = onClick) {
+        Icon(Icons.Outlined.Block, contentDescription = "Don't play this again", modifier = Modifier.size(30.dp))
+    }
+}
+
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
     IconAppButton(onClick = onClick) {

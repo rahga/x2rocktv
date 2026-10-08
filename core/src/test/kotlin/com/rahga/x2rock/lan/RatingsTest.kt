@@ -311,13 +311,33 @@ class RatingsTest {
     }
 
     /**
-     * A service whose `NowPlayingRatings` is favourite/skip rather than thumbs (Deezer) shows no
-     * rating buttons: there is no up or down to send, so offering a thumb would only fail on the
-     * press with "offers no up rating here". The thumbs are withheld even though ratings exist.
+     * A service whose `NowPlayingRatings` is favourite/skip rather than thumbs (Deezer) is offered
+     * as what it is — a heart and a ban, as the Sonos app draws it (2026-10-08) — never as thumbs,
+     * which would only fail on the press. The heart reads set from the track's own state.
      */
-    @Test fun `a favourite-not-thumbs service offers no rating buttons`() = runBlocking {
+    @Test fun `a favourite-not-thumbs service is offered as a heart, set from the track's state`() = runBlocking {
         val groupId = playing(FAVOURITE_SVC)
         state = "ISFAVORITE" to "0"
-        assertNull("favourite/skip is not thumbs", household.ratingState(groupId))
+        assertEquals(
+            SonosHousehold.RatingState("Deezer", Thumb.NONE, SonosHousehold.RatingStyle.FAVORITE),
+            household.ratingState(groupId),
+        )
+        state = "ISFAVORITE" to "1"
+        assertEquals(Thumb.UP, household.ratingState(groupId)?.current)
+    }
+
+    /** The heart toggles — save on a track that is not a favourite, delete on one that is — and the ban skips. */
+    @Test fun `the heart saves or deletes by the track's state, and the ban sends the skip`() = runBlocking {
+        val groupId = playing(FAVOURITE_SVC)
+        state = "ISFAVORITE" to "0"
+        assertEquals("SAVE_TRACK", household.rate(groupId, up = true).stringId)
+        assertTrue(smapiCalls.last(), "<rating>1</rating>" in smapiCalls.last())
+
+        state = "ISFAVORITE" to "1"
+        assertEquals("DELETE_TRACK", household.rate(groupId, up = true).stringId)
+        assertTrue(smapiCalls.last(), "<rating>0</rating>" in smapiCalls.last())
+
+        assertEquals("SKIP_TRACK", household.rate(groupId, up = false).stringId)
+        assertTrue(smapiCalls.last(), "<rating>3</rating>" in smapiCalls.last())
     }
 }
