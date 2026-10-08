@@ -707,9 +707,14 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   accounts are the owner's and a family-plan member's, set up as a test. The Sonos app shows one.
 - [ ] **A service's preferred account.** Most services allow more than one account, and the Sonos
   app lets the household prefer one; this lists every stored account of a service as its own row
-  (Amazon Music twice, here), and plays, searches and queues through whichever row was picked. Which
-  account Sonos treats as preferred is presumably in the stored records' flags, not read yet; once
-  known, that one should lead, or stand alone with the others a level down.
+  (Amazon Music twice, here), and plays, searches and queues through whichever row was picked.
+  **The stored records do not say which is preferred** (read 2026-10-08, secrets masked): the two
+  Amazon records — serial 17, "Amazon Music User 139f5452", and 18, "Amazon Music User" — carry
+  the same `Flags0=4`, `Tier0=3`, `NumAccounts=1` and empty `Md0`, and differ only in serial,
+  selector and credential. The Sonos app shows serial 18, the newer, which "highest serial wins"
+  would match, but that is one case. `Flags0` is 0 on serials 1-11 and 4 from 13 on, a format
+  change rather than a preference. The preference most likely lives in Sonos's cloud; next place to
+  look is the player's other GENA variables and `SystemProperties`, read-only.
 - [x] **Deezer's heart and ban.** *Done: the pane draws them where a service's ratings are
   favourite-shaped — a heart that toggles `SAVE_TRACK`/`DELETE_TRACK`, read back after each press,
   and a ban that sends `SKIP_TRACK` and skips. Thumbs stay thumbs. The heart was pressed both ways
