@@ -47,6 +47,17 @@ class LinkedServicesTest {
         assertEquals("an empty token unlocks nothing", 0, linked.size)
     }
 
+    /**
+     * The household added 80er-Radio harmony, so the Sonos app lists it among its connected
+     * services; an anonymous service it never added is one of the hundred every household has.
+     */
+    @Test fun `an anonymous service the household added is its own, one it did not is not`() {
+        val services = listOf(service("894", Auth.ANONYMOUS), service("895", Auth.ANONYMOUS))
+        val linked = linkedServices(services, listOf(account(894, 9, token = "")), "hh")
+        assertEquals(listOf(true, false), linked.map { it.added })
+        assertNull("still no credential to send", linked[0].token)
+    }
+
     @Test fun `two accounts of one service yield two usable entries`() {
         val services = listOf(service("201", Auth.APP_LINK)) // Amazon Music
         val linked = linkedServices(

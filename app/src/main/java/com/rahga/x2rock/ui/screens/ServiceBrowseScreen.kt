@@ -44,6 +44,8 @@ import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.ui.components.NoticeBanner
+import com.rahga.x2rock.ui.components.ArtSlot
+import com.rahga.x2rock.ui.serviceLogo
 import com.rahga.x2rock.ui.components.SearchField
 import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.RowStatus
@@ -109,8 +111,9 @@ fun ServiceBrowseScreen(
 }
 
 /**
- * The household's services in two lists: the ones it **signed in to** — its own Deezer, TIDAL,
- * Audible, and Apple Music — and then the anonymous radio services every Sonos system carries,
+ * The household's services in two lists: the ones it **added** — its own Deezer, TIDAL, Audible,
+ * Apple Music, and any radio service it chose — and then the anonymous radio services every Sonos
+ * system carries,
  * which run to a hundred and bury the few that matter if listed together by name. Focus starts on
  * the first row, so Select opens a service rather than pressing Back — or, coming back out of a
  * service, on [returnTo], the row that opened it.
@@ -129,7 +132,7 @@ private fun ServiceList(
         is ServiceBrowseViewModel.Services.Failed ->
             Text(services.message, style = MaterialTheme.typography.bodyMedium)
         is ServiceBrowseViewModel.Services.Ready -> {
-            val (yours, others) = services.services.partition { it.token != null }
+            val (yours, others) = services.services.partition { it.added }
             if (yours.isEmpty() && others.isEmpty() && !services.appleMusic) {
                 Text(
                     "No searchable services. Add a music service in the Sonos app, and this system's " +
@@ -190,7 +193,10 @@ private sealed interface Entry {
 @Composable
 private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modifier: Modifier) {
     AppCard(onClick = onClick, modifier = modifier.fillMaxWidth()) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // Sonos's own logo for it, in the slot every list row keeps; see serviceLogo.
+            ArtSlot(serviceLogo(name))
+            Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(name, style = MaterialTheme.typography.titleMedium)
                 if (detail != null) {
