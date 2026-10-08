@@ -64,6 +64,10 @@ class ServiceBrowseViewModelTest {
                         MockResponse().setBody(when {
                             "<getMetadata" !in body -> SEARCH_ALBUM
                             "<id>root</id>" in body && emptyRoot -> EMPTY
+                            // A page naming one item twice, as radio directories do: t1 at 1 and 2.
+                            "<id>dups</id><index>0</index>" in body -> pageOf(listOf(0, 1, 1), total = 4)
+                            "<id>dups</id><index>2</index>" in body -> pageOf(listOf(1), total = 4)
+                            "<id>dups</id><index>3</index>" in body -> pageOf(listOf(3), total = 4)
                             "<id>long</id><index>0</index>" in body -> page(0, 2, total = 3)
                             "<id>long</id><index>2</index>" in body -> page(2, 1, total = 3)
                             else -> CHILDREN
@@ -219,6 +223,28 @@ class ServiceBrowseViewModelTest {
         assertFalse("its top is where Back leaves, for Browse", fromFavorite.back())
     }
 
+    /**
+     * The next page starts where the service's count says, not where the list of distinct rows
+     * does: a page that named one item twice used to make the next ask one too early, and here
+     * that ask comes back as nothing but the repeat — the list then stalled short of its end.
+     */
+    @Test fun `a page with a repeat is read on from the service's own count`() = runBlocking {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        found()
+        viewModel.browse("dups", "Dups")
+        val first = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.map { i -> i.id } == listOf("t0", "t1") } }
+            as ServiceBrowseViewModel.Results.Found
+        assertTrue(first.hasMore)
+
+        viewModel.loadMore()
+        val all = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.size == 3 }
+        } as ServiceBrowseViewModel.Results.Found
+        assertEquals(listOf("t0", "t1", "t3"), all.items.map { it.id })
+        assertFalse(all.hasMore)
+    }
+
     /** A container longer than one answer is read on as the list nears its end, not cut short. */
     @Test fun `a long container is read a page at a time`() = runBlocking {
         val qobuz = ready().first { it.service.id == "31" }
@@ -291,6 +317,13 @@ class ServiceBrowseViewModelTest {
         const val EMPTY =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><getMetadataResponse><getMetadataResult>""" +
                 """<total>0</total></getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+
+        /** Tracks `t<n>` for each of [ids], as one page of a container of [total]. */
+        fun pageOf(ids: List<Int>, total: Int) =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><getMetadataResponse><getMetadataResult>""" +
+                "<count>${ids.size}</count><total>$total</total>" +
+                ids.joinToString("") { "<mediaMetadata><id>t$it</id><itemType>track</itemType><title>Track $it</title></mediaMetadata>" } +
+                """</getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
 
         /** [count] tracks from [index] of a container of [total]. */
         fun page(index: Int, count: Int, total: Int) =
