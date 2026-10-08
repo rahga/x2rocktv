@@ -40,6 +40,63 @@ import androidx.tv.material3.darkColorScheme
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.ui.components.tapToClick
 
+/**
+ * The fixed themes' schemes, built once. Inside the theme they were built again whenever it
+ * recomposed — on every change of cover colours — and a new scheme is a changed one to everything
+ * reading the theme's colours, though not one colour had moved (outside review, 2026-10-08).
+ */
+private val OceanScheme = darkColorScheme(
+    primary = Color(0xFF4FC3F7),
+    onPrimary = Color(0xFF003048),
+    primaryContainer = Color(0xFF00607A),
+    onPrimaryContainer = Color(0xFFB3EBFF),
+    background = Color(0xFF0A1929),
+    onBackground = Color(0xFFE3F2FD),
+    surface = Color(0xFF0D2137),
+    onSurface = Color(0xFFE3F2FD),
+    surfaceVariant = Color(0xFF1A3A50),
+    onSurfaceVariant = Color(0xFFB3EBFF),
+)
+
+private val EmberScheme = darkColorScheme(
+    primary = Color(0xFFFF7043),
+    onPrimary = Color(0xFF3B1100),
+    primaryContainer = Color(0xFF712600),
+    onPrimaryContainer = Color(0xFFFFDBCF),
+    background = Color(0xFF1A0A00),
+    onBackground = Color(0xFFFFF3E0),
+    surface = Color(0xFF2D1000),
+    onSurface = Color(0xFFFFF3E0),
+    surfaceVariant = Color(0xFF4A1E00),
+    onSurfaceVariant = Color(0xFFFFDBCF),
+)
+
+private val ForestScheme = darkColorScheme(
+    primary = Color(0xFF66BB6A),
+    onPrimary = Color(0xFF003910),
+    primaryContainer = Color(0xFF005320),
+    onPrimaryContainer = Color(0xFFA9F4B5),
+    background = Color(0xFF061209),
+    onBackground = Color(0xFFE8F5E9),
+    surface = Color(0xFF0D2110),
+    onSurface = Color(0xFFE8F5E9),
+    surfaceVariant = Color(0xFF1B3A1E),
+    onSurfaceVariant = Color(0xFFA9F4B5),
+)
+
+private val OrchidScheme = darkColorScheme(
+    primary = Color(0xFFCE93D8),
+    onPrimary = Color(0xFF3E0056),
+    primaryContainer = Color(0xFF5B0080),
+    onPrimaryContainer = Color(0xFFF2DAFF),
+    background = Color(0xFF120D16),
+    onBackground = Color(0xFFF3E5F5),
+    surface = Color(0xFF1E1525),
+    onSurface = Color(0xFFF3E5F5),
+    surfaceVariant = Color(0xFF36204A),
+    onSurfaceVariant = Color(0xFFF2DAFF),
+)
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun X2RockTheme(
@@ -59,54 +116,10 @@ fun X2RockTheme(
         AppColorTheme.DEFAULT -> default
         // Until a cover has been read, and for a room with none, the default stands in.
         AppColorTheme.ARTWORK -> art?.let { default.copy(primary = it.accent, onPrimary = onAccent(it.accent)) } ?: default
-        AppColorTheme.OCEAN -> darkColorScheme(
-            primary = Color(0xFF4FC3F7),
-            onPrimary = Color(0xFF003048),
-            primaryContainer = Color(0xFF00607A),
-            onPrimaryContainer = Color(0xFFB3EBFF),
-            background = Color(0xFF0A1929),
-            onBackground = Color(0xFFE3F2FD),
-            surface = Color(0xFF0D2137),
-            onSurface = Color(0xFFE3F2FD),
-            surfaceVariant = Color(0xFF1A3A50),
-            onSurfaceVariant = Color(0xFFB3EBFF),
-        )
-        AppColorTheme.EMBER -> darkColorScheme(
-            primary = Color(0xFFFF7043),
-            onPrimary = Color(0xFF3B1100),
-            primaryContainer = Color(0xFF712600),
-            onPrimaryContainer = Color(0xFFFFDBCF),
-            background = Color(0xFF1A0A00),
-            onBackground = Color(0xFFFFF3E0),
-            surface = Color(0xFF2D1000),
-            onSurface = Color(0xFFFFF3E0),
-            surfaceVariant = Color(0xFF4A1E00),
-            onSurfaceVariant = Color(0xFFFFDBCF),
-        )
-        AppColorTheme.FOREST -> darkColorScheme(
-            primary = Color(0xFF66BB6A),
-            onPrimary = Color(0xFF003910),
-            primaryContainer = Color(0xFF005320),
-            onPrimaryContainer = Color(0xFFA9F4B5),
-            background = Color(0xFF061209),
-            onBackground = Color(0xFFE8F5E9),
-            surface = Color(0xFF0D2110),
-            onSurface = Color(0xFFE8F5E9),
-            surfaceVariant = Color(0xFF1B3A1E),
-            onSurfaceVariant = Color(0xFFA9F4B5),
-        )
-        AppColorTheme.ORCHID -> darkColorScheme(
-            primary = Color(0xFFCE93D8),
-            onPrimary = Color(0xFF3E0056),
-            primaryContainer = Color(0xFF5B0080),
-            onPrimaryContainer = Color(0xFFF2DAFF),
-            background = Color(0xFF120D16),
-            onBackground = Color(0xFFF3E5F5),
-            surface = Color(0xFF1E1525),
-            onSurface = Color(0xFFF3E5F5),
-            surfaceVariant = Color(0xFF36204A),
-            onSurfaceVariant = Color(0xFFF2DAFF),
-        )
+        AppColorTheme.OCEAN -> OceanScheme
+        AppColorTheme.EMBER -> EmberScheme
+        AppColorTheme.FOREST -> ForestScheme
+        AppColorTheme.ORCHID -> OrchidScheme
     }
     MaterialTheme(colorScheme = colorScheme, typography = TenFootTypography) {
         // The content colour, provided once at the root. tv-material derives a transparent
