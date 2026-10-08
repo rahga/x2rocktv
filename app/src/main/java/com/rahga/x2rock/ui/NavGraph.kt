@@ -46,7 +46,13 @@ fun X2RockNavGraph() {
     val navigateToRoom by homeViewModel.navigateToRoom.collectAsState()
     LaunchedEffect(navigateToRoom) {
         if (navigateToRoom) {
-            navController.navigate("home") { launchSingleTop = true }
+            // Back to the home already at the bottom, not a second one on top: with only
+            // launchSingleTop, a room opened from the launcher while Search was showing left
+            // [home, search, home], and Back from home went into Search (outside review, 2026-10-08).
+            navController.navigate("home") {
+                popUpTo("home") { inclusive = false }
+                launchSingleTop = true
+            }
             homeViewModel.clearNavigateToRoom()
         }
     }
