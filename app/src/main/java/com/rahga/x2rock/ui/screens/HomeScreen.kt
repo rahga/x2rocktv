@@ -8,8 +8,6 @@ import com.rahga.x2rock.ui.theme.IconLabelButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.basicMarquee
@@ -651,11 +649,10 @@ private fun RoomListItem(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                // What the room is doing, on every row, in one glyph: bars for playing, a pause
-                // mark for paused, a stop mark for a stream that can only stop. Nothing for an
-                // empty room. This used to be a 12sp "▶" on playing rows alone, so paused looked
-                // exactly like idle.
-                ActivityGlyph(activity)
+                // A playing room's level meter. Paused and stopped have no mark: a pause or stop
+                // glyph read as a button to press rather than a state (2026-10-08), and a room not
+                // playing already says so by its quieted art and text.
+                PlayingGlyph(activity)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     // Which rooms even have a television attached. Shown only while the room is
                     // *not* on that input: once it is, the art tile carries the same glyph and
@@ -695,21 +692,13 @@ private fun RoomListItem(
 }
 
 /**
- * A room's [RoomActivity] as one glyph; an empty room draws none. All three in one colour,
- * the equalizer's, in one 24dp box, so a row's mark sits in the same place whatever it says.
+ * The level meter while [activity] is playing, and otherwise the same 24dp left empty, so the
+ * badges under it sit at one height on every row.
  */
-@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ActivityGlyph(activity: RoomActivity) {
-    if (activity == RoomActivity.EMPTY) return
+private fun PlayingGlyph(activity: RoomActivity) {
     Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-        when (activity) {
-            RoomActivity.PLAYING -> DotEqualizer(glyphTint(), description = activity.label)
-            // Sized to the equalizer's height: the icons' own glyphs fill only part of their box.
-            RoomActivity.PAUSED -> Icon(Icons.Default.Pause, contentDescription = activity.label, modifier = Modifier.size(26.dp), tint = glyphTint())
-            RoomActivity.STOPPED -> Icon(Icons.Default.Stop, contentDescription = activity.label, modifier = Modifier.size(26.dp), tint = glyphTint())
-            RoomActivity.EMPTY -> Unit
-        }
+        if (activity == RoomActivity.PLAYING) DotEqualizer(glyphTint(), description = activity.label)
     }
 }
 
