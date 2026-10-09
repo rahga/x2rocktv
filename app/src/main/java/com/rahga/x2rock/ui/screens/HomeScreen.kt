@@ -1,13 +1,13 @@
 package com.rahga.x2rock.ui.screens
 
 import com.rahga.x2rock.viewmodel.label
+import com.rahga.x2rock.ui.components.DotEqualizer
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.foundation.layout.PaddingValues
@@ -645,8 +645,10 @@ private fun RoomListItem(
                     )
                 }
             }
+            // Centred, not end-aligned: the glyphs differ in width, and end-aligned their middles
+            // wandered from row to row.
             Column(
-                horizontalAlignment = Alignment.End,
+                horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 // What the room is doing, on every row, in one glyph: bars for playing, a pause
@@ -664,7 +666,7 @@ private fun RoomListItem(
                             imageVector = Icons.Default.Tv,
                             contentDescription = "Has a TV input",
                             modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            tint = glyphTint(),
                         )
                     }
                     // A bonded speaker gone from the network: the room plays on without it and
@@ -692,18 +694,29 @@ private fun RoomListItem(
     }
 }
 
-/** A room's [RoomActivity] as one glyph; an empty room draws none. */
+/**
+ * A room's [RoomActivity] as one glyph; an empty room draws none. All three in one colour,
+ * the equalizer's, in one 24dp box, so a row's mark sits in the same place whatever it says.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ActivityGlyph(activity: RoomActivity) {
-    val (icon, tint) = when (activity) {
-        RoomActivity.PLAYING -> Icons.Default.GraphicEq to MaterialTheme.colorScheme.primary
-        RoomActivity.PAUSED -> Icons.Default.Pause to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        RoomActivity.STOPPED -> Icons.Default.Stop to MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-        RoomActivity.EMPTY -> return
+    if (activity == RoomActivity.EMPTY) return
+    Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+        when (activity) {
+            RoomActivity.PLAYING -> DotEqualizer(glyphTint(), description = activity.label)
+            // Sized to the equalizer's height: the icons' own glyphs fill only part of their box.
+            RoomActivity.PAUSED -> Icon(Icons.Default.Pause, contentDescription = activity.label, modifier = Modifier.size(26.dp), tint = glyphTint())
+            RoomActivity.STOPPED -> Icon(Icons.Default.Stop, contentDescription = activity.label, modifier = Modifier.size(26.dp), tint = glyphTint())
+            RoomActivity.EMPTY -> Unit
+        }
     }
-    Icon(icon, contentDescription = activity.label, modifier = Modifier.size(22.dp), tint = tint)
 }
+
+/** The room list's glyph colour: the primary, softened, as the equalizer's lit dots are. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun glyphTint() = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
 
 /** How quiet a room that is not playing draws its art; its text is quieted by colour instead. */
 private const val IDLE_ALPHA = 0.62f
