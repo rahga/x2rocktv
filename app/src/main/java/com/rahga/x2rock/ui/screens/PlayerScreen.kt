@@ -1,9 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material.icons.filled.SpeakerGroup
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
 import com.rahga.x2rock.lan.SonosHousehold
@@ -128,6 +126,9 @@ import coil.compose.AsyncImage
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.handOffFocus
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.components.VOLUME_STEP
 import com.rahga.x2rock.ui.components.mutedInk
@@ -184,11 +185,11 @@ fun PlayerPane(
     // The exact-level entry, opened by a hold on the volume; focus goes back to the volume after.
     var showSetVolume by remember { mutableStateOf(false) }
     val volumeFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        snapshotFlow { showSetVolume }.drop(1).filter { !it }.collect {
-            withFrameNanos { } // after the entry has left, as for the sleep timer above
-            volumeFocusRequester.requestFocusSafely()
-        }
+    // An overlay closing here gives focus back before it goes; see [handOffFocus].
+    var overlayReleasing by remember { mutableStateOf(false) }
+    val closeScope = rememberCoroutineScope()
+    fun closeOverlay(close: () -> Unit, vararg targets: FocusRequester) {
+        closeScope.launch { handOffFocus({ overlayReleasing = it }, close, *targets) }
     }
     val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester)
     var paneHasFocus by remember { mutableStateOf(false) }
@@ -236,20 +237,9 @@ fun PlayerPane(
         }
     }
 
-    // The picker traps focus, so closing it has to hand focus back explicitly — to Zzz, the
-    // button that opened it, where the remote was; the pane's first control only if Zzz has
-    // gone meanwhile. Only on a close, never the first composition: where focus starts is the grab
-    // above's to decide, and requesting here too overrode it, sending Back from Queue to Browse.
+    // The picker traps focus, so closing it hands focus back to Zzz, the button that opened it,
+    // where the remote was; the pane's first control only if Zzz has gone meanwhile.
     val sleepFocusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) {
-        snapshotFlow { showSleepTimerPicker }.drop(1).filter { !it }.collect {
-            // A frame first, for the picker to leave: its focus trap is still in place when the
-            // close is noticed, and refuses a request to move out without saying so — focus then
-            // fell to the first room row when the picker went (seen on the emulator, 2026-10-08).
-            withFrameNanos { }
-            if (!sleepFocusRequester.requestFocusSafely()) detailFocusRequester.requestFocusSafely()
-        }
-    }
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
@@ -318,21 +308,23 @@ fun PlayerPane(
             SetVolumeOverlay(
                 room = state.groupName,
                 current = state.volume,
+                trapped = !overlayReleasing,
                 onSet = { level ->
                     viewModel.setVolume(level)
-                    showSetVolume = false
+                    closeOverlay({ showSetVolume = false }, volumeFocusRequester)
                 },
-                onDismiss = { showSetVolume = false },
+                onDismiss = { closeOverlay({ showSetVolume = false }, volumeFocusRequester) },
             )
         }
 
         if (showSleepTimerPicker) {
             SleepTimerPickerOverlay(
+                trapped = !overlayReleasing,
                 onSelect = { minutes ->
                     viewModel.setSleepTimer(minutes)
-                    showSleepTimerPicker = false
+                    closeOverlay({ showSleepTimerPicker = false }, sleepFocusRequester, detailFocusRequester)
                 },
-                onDismiss = { showSleepTimerPicker = false }
+                onDismiss = { closeOverlay({ showSleepTimerPicker = false }, sleepFocusRequester, detailFocusRequester) }
             )
         }
     }
@@ -1162,13 +1154,14 @@ private fun PlayerVolumeRow(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun SleepTimerPickerOverlay(
+    trapped: Boolean,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
 
-    Overlay(onDismiss) {
+    Overlay(onDismiss, trapped) {
         Column(
             modifier = Modifier
                 .width(440.dp)
@@ -1212,7 +1205,7 @@ private class VolumeEntry(val open: () -> Unit, val focus: FocusRequester)
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SetVolumeOverlay(room: String, current: Int?, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
+private fun SetVolumeOverlay(room: String, current: Int?, trapped: Boolean, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
     BackHandler { onDismiss() }
     var text by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
@@ -1224,7 +1217,7 @@ private fun SetVolumeOverlay(room: String, current: Int?, onSet: (Int) -> Unit, 
             else -> onSet(level)
         }
     }
-    Overlay(onDismiss) {
+    Overlay(onDismiss, trapped) {
         Column(
             modifier = Modifier
                 .width(520.dp)

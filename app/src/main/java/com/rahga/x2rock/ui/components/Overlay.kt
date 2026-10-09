@@ -5,6 +5,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -14,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 
 /**
  * Pins D-pad focus inside a modal, without blocking movement within it.
@@ -31,18 +33,19 @@ import androidx.compose.ui.input.key.onKeyEvent
  * the Shield, 2026-10-03.
  */
 @OptIn(ExperimentalComposeUiApi::class)
-fun Modifier.modalFocusTrap(): Modifier =
-    focusProperties { exit = { FocusRequester.Cancel } }.focusGroup()
+fun Modifier.modalFocusTrap(trapped: Boolean = true): Modifier =
+    focusProperties { if (trapped) exit = { FocusRequester.Cancel } }.focusGroup()
 
 /**
  * Scrim + centred, focus-trapped content. A tap on the scrim is [onDismiss]; Back is each
- * overlay's own `BackHandler`.
+ * overlay's own `BackHandler`. [trapped] false lets focus out for the frames an overlay closing
+ * through [handOffFocus] spends handing it back.
  *
  * The scrim has to take taps either way: without a handler of its own a tap passes through it
  * to whichever control is drawn behind, which the viewer cannot see is there.
  */
 @Composable
-fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
+fun Overlay(onDismiss: () -> Unit, trapped: Boolean = true, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -50,7 +53,7 @@ fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
             .tapToClick(onDismiss),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.modalFocusTrap().keepTaps()) {
+        Box(modifier = Modifier.modalFocusTrap(trapped).keepTaps()) {
             content()
         }
     }
@@ -63,3 +66,20 @@ fun Overlay(onDismiss: () -> Unit, content: @Composable () -> Unit) {
  */
 @Composable
 fun Modifier.keepTaps(): Modifier = tapToClick(onClick = {})
+
+/**
+ * Closes an overlay by handing focus back *before* it leaves: the trap is released, [target] takes
+ * focus while the overlay is still there, and only then is [close] run. Never a moment with focus
+ * nowhere — which is what closing first and requesting after left. The emulator got away with it;
+ * on the Streamer (2026-10-08) the platform filled the gap by focusing the first room row, and the
+ * list, which selects on focus, switched the room to Bedroom. [releasing] is the overlay's
+ * `trapped = false` while this runs. [targets] are tried in turn; if none takes focus, it is
+ * closed anyway.
+ */
+suspend fun handOffFocus(releasing: (Boolean) -> Unit, close: () -> Unit, vararg targets: FocusRequester) {
+    releasing(true)
+    withFrameNanos { } // for the released trap to apply
+    targets.firstOrNull { it.requestFocusRetrying(attempts = 3) }
+    close()
+    releasing(false)
+}
