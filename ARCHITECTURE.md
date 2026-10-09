@@ -7,7 +7,7 @@ A Sonos controller for Google TV / Android TV, written in Kotlin with Jetpack Co
 > themselves, it pushes instead of polling, and Sonos's consent page cannot be completed
 > with a TV remote anyway. The protocol, and the evidence behind every claim about it, is
 > in [`docs/lan-transport.md`](docs/lan-transport.md) — read that before touching `:core`.
-> What is still to do is in [`docs/punch-list.md`](docs/punch-list.md).
+> What is still open is at the head of [`docs/punch-list.md`](docs/punch-list.md); the rest of it is the record.
 
 ---
 
@@ -18,8 +18,8 @@ the local network by SSDP (or remembered from last time) and answers without an 
 
 Rooms are listed in a sidebar, alphabetically, as Sonos lists them. Selecting a room shows
 what it is playing with the controls its source permits; a room on its soundbar's TV input
-gets its own pane with Night Sound and Speech Enhancement instead. Clicking a room opens its
-room panel: party mode, the rooms playing together and their levels, the rooms that could
+gets its own pane with Night Sound and Speech Enhancement instead. The pane's Group button, or a
+long press or Menu on a room, opens its room panel: party mode, the rooms playing together and their levels, the rooms that could
 join, and — for a room with a soundbar — the TV input and "This is my TV". The queue and the
 household's favourites each have a screen. A track on a service that publishes ratings can be
 rated up or down. There are five dark colour themes.
@@ -178,10 +178,10 @@ exists. Posters are the speaker's art by address (`PosterArt`), since the launch
 **HomeScreen** is a split pane:
 - Left: `RoomSidebar` — the rooms, then Settings at the foot. Each row carries a 56dp art slot
   (cover, station logo, or a TV or radio glyph), the room name, two lines of what is playing
-  (three for a soundbar on its input), a glyph for what the room is doing (bars, pause, stop),
-  and a dim TV badge on a room that has an HDMI input but is not on it. A room not playing is
+  (three for a soundbar on its input), a dotted level meter on a room that is playing (nothing
+  on one that is not), and a dim TV badge on a room that has an HDMI input but is not on it. A room not playing is
   drawn quieter; the selected room keeps a tint while focus is in the pane. Selection follows
-  focus. Click, hold-select or the Menu key opens `RoomPanel`.
+  focus. Select enters the player pane; a long press or the Menu key opens `RoomPanel`.
 - Right: `PlayerScreen` for the selected room.
 
 **PlayerScreen** — the player pane — draws one of two panes under a shared header: the room's
@@ -414,8 +414,8 @@ Two suites; `CLAUDE.md` explains why both exist and how to run the live one.
 - Large touch targets, high-contrast dark themes
 - All screens handle `BackHandler` for the remote's back button
 - A disabled `tv-material3` button still takes focus and draws no highlight, so rows are
-  hidden rather than disabled where a source does not permit them. The volume buttons, still
-  disabled while muted, are the exception and are on the punch list
+  hidden rather than disabled where a source does not permit them. The volume buttons are never
+  disabled: a step on a muted room unmutes it
 
 ---
 

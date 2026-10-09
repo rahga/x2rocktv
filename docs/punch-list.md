@@ -16,6 +16,35 @@ Decisions already taken (2026-10-01):
 
 Status: `[ ]` open · `[x]` done · `[-]` decided out
 
+**Closed 2026-10-09.** Every item below is done or decided out, and the four outside reviews
+(`docs/findings-review.md`, `CODE_REVIEW_FINDINGS.md`, `.local-review/astra-findings.md`, and the
+2026-10-03 pass) are answered finding by finding in their sections; those review files are gone,
+their regression tests kept. The rest of this file is the record. What is still open, gathered
+from the notes below:
+
+**Owed a look on hardware**
+- 1.3's stall path: group a room onto a Beam on its TV input and see it land or a banner say it
+  did not, within about 25s. Only the ordinary path has run on a device.
+- 3.4's queue edits pressed through the UI — save, move, clear, add a playlist — and #11, focus
+  returning to the row's slot after its menu closes.
+- The ten-foot pass's unseen screens: the other search sections, an album opened from search,
+  Music Services' two sections, Queue and Radio on the shared rows, applying a preset, the
+  Artwork theme.
+- The launcher's media card showing the cover (review 2.6).
+- 2.4: whether a later satellite disconnect is pushed while `zones:1` is subscribed.
+- 4.2 on a real two-household network; the network key, default-network callback and mDNS
+  resolve lock during a real change of network.
+- The radio-program fallback through `getMediaURI`, which nothing in either household reaches.
+
+**Open question**
+- An iHeart artist station's thumb up is accepted but reads back unrated; compare with the
+  Sonos app before changing anything (Tier 5, Stage 2).
+
+**Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; a "Play URL"
+row; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; adding
+to a service's own playlist; picking an audiobook's chapter; Sonos Radio's "Browse Radio";
+the port-1443 connect-scan; `tvPowerStatus` in TV detection.
+
 ---
 
 ## Tier 0 — the open work and the stale record
