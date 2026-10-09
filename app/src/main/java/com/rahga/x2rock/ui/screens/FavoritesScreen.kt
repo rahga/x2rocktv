@@ -36,6 +36,7 @@ import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.HistoryItem
 import com.rahga.x2rock.store.Preset
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.RowStatus
@@ -105,8 +106,7 @@ fun FavoritesScreen(
                     }
                     Spacer(Modifier.height(20.dp))
                     when (val s = state) {
-                        is FavoritesViewModel.UiState.Loading ->
-                            Text("Loading…", style = MaterialTheme.typography.titleLarge)
+                        is FavoritesViewModel.UiState.Loading -> DotScanner()
                         is FavoritesViewModel.UiState.Error -> Column {
                             Text("Couldn't load favourites", style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.height(8.dp))

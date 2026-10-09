@@ -4,6 +4,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.saveable.rememberSaveable
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
@@ -346,8 +347,7 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
             else "Opening ${service.service.name}…",
             style = MaterialTheme.typography.bodyMedium,
         )
-        ServiceBrowseViewModel.Results.Loading ->
-            Text("Loading…", style = MaterialTheme.typography.titleMedium)
+        ServiceBrowseViewModel.Results.Loading -> DotScanner()
         is ServiceBrowseViewModel.Results.Failed ->
             Text(r.message, style = MaterialTheme.typography.bodyMedium)
         is ServiceBrowseViewModel.Results.Found ->

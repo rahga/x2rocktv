@@ -35,6 +35,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.radio.Station
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.RowStatus
@@ -93,7 +94,7 @@ fun RadioScreen(
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         when (val s = stations) {
                             is RadioViewModel.Stations.Loading ->
-                                Text("Loading stations…", style = MaterialTheme.typography.titleMedium)
+                                DotScanner(description = "Loading stations")
                             is RadioViewModel.Stations.Failed -> Column {
                                 Text(s.message, style = MaterialTheme.typography.bodyMedium)
                                 Spacer(Modifier.height(16.dp))

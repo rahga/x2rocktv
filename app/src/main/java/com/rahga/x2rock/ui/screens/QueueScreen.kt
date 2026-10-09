@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.RowStatus
@@ -68,7 +69,7 @@ fun QueueScreen(
             Box(modifier = Modifier.weight(1f)) {
                 when (val s = state) {
                     is QueueViewModel.UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Loading queue…", style = MaterialTheme.typography.titleLarge)
+                        DotScanner(description = "Loading the queue")
                     }
                     is QueueViewModel.UiState.Error -> Column(
                         Modifier.fillMaxSize(),
