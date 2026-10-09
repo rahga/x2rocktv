@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.viewmodel.trackLine
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.SearchField
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.exitOnKey
@@ -395,7 +396,7 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeft
             }
             Column {
                 when {
-                    state.isLoading -> Text("Loading…", style = MaterialTheme.typography.bodyLarge)
+                    state.isLoading -> DotScanner()
                     state.trackName != null -> {
                         Text(
                             text = state.trackName,

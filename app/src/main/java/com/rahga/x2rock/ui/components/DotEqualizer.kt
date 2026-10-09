@@ -19,6 +19,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.MaterialTheme
+import kotlin.math.PI
+import kotlin.math.cos
 
 /**
  * A playing room's mark: a hi-fi's LED level meter, four columns of dots on a flat bottom. The
@@ -80,3 +84,55 @@ private val LEVELS = listOf(
 
 /** About half a second from one level to the next. */
 private const val LOOP_MILLIS = 4_400
+
+/**
+ * Loading, in the equalizer's dots: one row of larger blocks with a lit head sweeping back and
+ * forth and a fading trail behind it, KITT's scanner. Easing at each end, where the head turns,
+ * as the original's did. Like [DotEqualizer], only the draw phase reads the clock.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun DotScanner(
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+    description: String = "Loading",
+) {
+    val clock by rememberInfiniteTransition(label = "scanner").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(SCAN_MILLIS, easing = LinearEasing)),
+        label = "scanner clock",
+    )
+    Canvas(
+        modifier
+            .size(width = SCAN_BLOCK * SCAN_BLOCKS + SCAN_GAP * (SCAN_BLOCKS - 1), height = SCAN_BLOCK)
+            .semantics { contentDescription = description }
+    ) {
+        val block = SCAN_BLOCK.toPx()
+        val pitch = block + SCAN_GAP.toPx()
+        val outward = clock < 0.5f
+        val sweep = if (outward) clock * 2 else 2 - clock * 2
+        val head = (1 - cos(PI * sweep).toFloat()) / 2 * (SCAN_BLOCKS - 1)
+        val direction = if (outward) 1 else -1
+        for (i in 0 until SCAN_BLOCKS) {
+            val behind = (head - i) * direction // how far behind the head this block is; negative is ahead
+            val glow = (if (behind >= 0) 1 - behind / SCAN_TRAIL else 1 + behind / SCAN_LEAD).coerceIn(0f, 1f)
+            drawRoundRect(
+                // Squared, so the trail falls away quickly behind a bright head rather than evenly.
+                color = lerp(color.copy(alpha = color.alpha * UNLIT_ALPHA), color, glow * glow),
+                topLeft = Offset(i * pitch, 0f),
+                size = Size(block, block),
+                cornerRadius = CornerRadius(block * 0.2f),
+            )
+        }
+    }
+}
+
+private const val SCAN_BLOCKS = 8
+private val SCAN_BLOCK = 12.dp
+private val SCAN_GAP = 5.dp
+/** How many blocks the trail fades over, behind the head, and how sharply it lights ahead of it. */
+private const val SCAN_TRAIL = 3f
+private const val SCAN_LEAD = 0.7f
+/** There and back. */
+private const val SCAN_MILLIS = 1_800

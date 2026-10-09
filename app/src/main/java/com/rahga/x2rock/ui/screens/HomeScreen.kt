@@ -2,6 +2,7 @@ package com.rahga.x2rock.ui.screens
 
 import com.rahga.x2rock.viewmodel.label
 import com.rahga.x2rock.ui.components.DotEqualizer
+import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
@@ -266,9 +267,19 @@ fun HomeScreen(
                     .focusGroup()
                     .focusProperties { left = sidebarFocusRequester }
             ) {
-                if (selectedGroupId == null) {
+                // The pane only for a room the list holds. A selection outlives the household it
+                // was made in: with the Wi-Fi off it went on drawing Bedroom, "Nothing playing",
+                // over the list's own error (2026-10-09).
+                if (!listReady) {
+                    // The room list says in words what is happening; this side shows it. The scanner
+                    // only while the household is first being found — not while reconnecting, when
+                    // nothing is loading but a network is being waited for, and not over an error.
+                    // "Select a room" only when there is one to select.
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Select a room", style = MaterialTheme.typography.titleLarge)
+                        when {
+                            (state as? HomeViewModel.UiState.Loading)?.reconnecting == false -> DotScanner()
+                            groups.isNotEmpty() -> Text("Select a room", style = MaterialTheme.typography.titleLarge)
+                        }
                     }
                 } else {
                     PlayerPane(
