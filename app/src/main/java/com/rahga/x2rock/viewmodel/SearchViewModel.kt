@@ -7,6 +7,8 @@ import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.apple.ITunesSearch
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.store.PrimaryAccounts
+import com.rahga.x2rock.store.PreferredServices
+import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.searchedAccounts
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
@@ -52,6 +54,7 @@ class SearchViewModel @Inject constructor(
     private val itunes: ITunesSearch,
     savedStateHandle: SavedStateHandle,
     private val primaryAccounts: PrimaryAccounts,
+    private val preferredServices: PreferredServices,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -83,7 +86,10 @@ class SearchViewModel @Inject constructor(
      * One service's answers, under its name. [key] tells two accounts of one service apart: both
      * are named, say, "Spotify", and a list keyed on the name alone threw on the second section.
      */
-    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>, val key: String)
+    data class Section(val name: String, val signedIn: Boolean, val hits: List<Hit>, val key: String) {
+        /** The service, whichever account answered: what [PreferredServices] ranks. */
+        val serviceId: String get() = key.substringBefore(':')
+    }
 
     data class Results(
         val sections: List<Section> = emptyList(),
@@ -92,6 +98,14 @@ class SearchViewModel @Inject constructor(
         /** Services that failed or did not answer in time. */
         val silent: Int = 0,
         val searched: Boolean = false,
+        /**
+         * Whether the first section is where the list should start: no preferred service that
+         * would rank above it is still out. Until then focus waits, so it lands on the top
+         * preferred service rather than on whichever answered first.
+         */
+        val leadSettled: Boolean = true,
+        /** Preferred services still out, by service id. */
+        val waiting: Set<String> = emptySet(),
     )
 
     private val _query = MutableStateFlow("")
@@ -123,16 +137,25 @@ class SearchViewModel @Inject constructor(
                 return@launch _notice.failure("read this system's services", it)
             }
             val apple = appleKnown.await()
-            _results.value = Results(pending = services.size + if (apple) 1 else 0, searched = true)
+            val order = preferredServices.order.value
+            val asked = services.map { it.service.id } + if (apple) listOf(PreferredServices.APPLE_MUSIC) else emptyList()
+            val waiting = asked.filter { preferredRank(it, order) != Int.MAX_VALUE }.toSet()
+            _results.value = Results(
+                pending = services.size + if (apple) 1 else 0, searched = true,
+                waiting = waiting, leadSettled = waiting.isEmpty(),
+            )
             // At most a few services at once, per search: a household carries a hundred anonymous
             // radio services, and each search is up to two requests to every one. Its own permits,
             // so a search never waits on the one it replaced.
             val requests = Semaphore(MAX_CONCURRENT_SERVICES)
+            // Preferred services are asked first, so they hold the first permits.
+            val asks = services.map { linked ->
+                linked.service.id to suspend { arrive(requests, order, linked.service.name, linked.key(), linked.added) { searchOne(linked, term) } }
+            } + if (apple) listOf(PreferredServices.APPLE_MUSIC to suspend {
+                arrive(requests, order, "Apple Music", "apple", signedIn = true) { searchApple(term) }
+            }) else emptyList()
             coroutineScope {
-                services.forEach { linked ->
-                    launch { arrive(requests, linked.service.name, linked.key(), linked.added) { searchOne(linked, term) } }
-                }
-                if (apple) launch { arrive(requests, "Apple Music", "apple", signedIn = true) { searchApple(term) } }
+                asks.sortedBy { (id, _) -> preferredRank(id, order) }.forEach { (_, ask) -> launch { ask() } }
             }
         }
     }
@@ -141,7 +164,7 @@ class SearchViewModel @Inject constructor(
      * Fold one service's answer in: its section in place if it found anything, a count if it did
      * not answer. A service with no search at all answers an empty list and simply has no section.
      */
-    private suspend fun arrive(requests: Semaphore, name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
+    private suspend fun arrive(requests: Semaphore, order: List<String>, name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
         val hits = requests.withPermit {
             withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
         }
@@ -150,8 +173,13 @@ class SearchViewModel @Inject constructor(
         currentCoroutineContext().ensureActive()
         _results.update { r ->
             val sections = if (hits.isNullOrEmpty()) r.sections
-            else (r.sections + Section(name, signedIn, hits, key)).sortedWith(sectionOrder)
-            r.copy(sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0)
+            else (r.sections + Section(name, signedIn, hits, key)).sortedWith(sectionOrder(order))
+            val waiting = r.waiting - key.substringBefore(':')
+            val firstRank = sections.firstOrNull()?.let { preferredRank(it.serviceId, order) } ?: Int.MAX_VALUE
+            r.copy(
+                sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0,
+                waiting = waiting, leadSettled = waiting.none { preferredRank(it, order) < firstRank },
+            )
         }
     }
 
@@ -228,7 +256,11 @@ class SearchViewModel @Inject constructor(
             return (preferred.ifEmpty { available }).take(2)
         }
 
-        /** Signed-in services first — the household chose those — then the rest, each by name. */
-        internal val sectionOrder = compareBy<Section>({ !it.signedIn }, { it.name.lowercase() })
+        /**
+         * This device's preferred services first, in its order; then signed-in services — the
+         * household chose those — then the rest, each by name.
+         */
+        internal fun sectionOrder(preferred: List<String>) =
+            compareBy<Section>({ preferredRank(it.serviceId, preferred) }, { !it.signedIn }, { it.name.lowercase() })
     }
 }

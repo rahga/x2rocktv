@@ -260,6 +260,9 @@ fun AppCard(
         onLongClick = onLongClick,
         modifier = modifier.tapToClick(onTap, onLongClick),
         border = appCardBorder(),
+        // The border is the focus. tv-material3 also grows a focused card, which made a list's
+        // focused row overhang the list on both sides and was the second focus language anyway.
+        scale = CardDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         colors = colors,
         content = content,
     )
@@ -269,6 +272,7 @@ fun AppCard(
  * A focused card wears the same colour a focused button is filled with. tv-material3's own focus
  * for a card is a slight scale and a marginally lighter grey, which beside a button's bright fill
  * read as two focus languages — and across a room, a list's focused row was hard to find at all.
+ * [AppCard] turns the scale off too, so the border alone says it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable

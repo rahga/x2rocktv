@@ -1,6 +1,9 @@
 package com.rahga.x2rock.ui.screens
 
 import com.rahga.x2rock.viewmodel.label
+import androidx.compose.runtime.rememberCoroutineScope
+import com.rahga.x2rock.ui.components.handOffFocus
+import kotlinx.coroutines.launch
 import com.rahga.x2rock.ui.components.DotEqualizer
 import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.exitOnKey
@@ -114,6 +117,7 @@ fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit = {},
     onOpenFavorites: (groupId: String) -> Unit = {},
     onOpenSearch: (groupId: String) -> Unit,
+    onOpenPreferredServices: () -> Unit = {},
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -137,12 +141,16 @@ fun HomeScreen(
     // back to whatever opened it, the button or the room.
     val groupFocus = remember { FocusRequester() }
     var panelFromPane by remember { mutableStateOf(false) }
+    // Settings opens from its own button at the foot of the list, and closing it goes back there.
+    var fromSettings by remember { mutableStateOf(false) }
+    val settingsButtonFocus = remember { FocusRequester() }
     var opener by rememberSaveable { mutableStateOf<Opener?>(null) }
     fun openerFocus(opener: Opener?): FocusRequester? = when (opener) {
         Opener.QUEUE -> queueFocus
         Opener.BROWSE -> browseFocus
         Opener.SEARCH -> searchFocus
-        null -> null
+        // Not the pane's: the Settings button is at the foot of the list; see the resume below.
+        Opener.SETTINGS, null -> null
     }
 
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -177,7 +185,11 @@ fun HomeScreen(
             // Back from another screen returns to the control that opened it — Queue, Browse,
             // Search — rather than to the room. The pane puts it there itself, from its first frame
             // (`startFocusRequester`); here it only counts as placed, and the opener is spent.
-            if (opener != null) {
+            if (opener == Opener.SETTINGS) {
+                // Back from a screen Settings opened: to the Settings button, which opened Settings.
+                opener = null
+                if (settingsButtonFocus.requestFocusRetrying()) focusPlaced = true else place(sidebarFocusRequester)
+            } else if (opener != null) {
                 opener = null
                 focusPlaced = true
             } else {
@@ -186,7 +198,15 @@ fun HomeScreen(
         }
     }
 
-    BackHandler(enabled = showSettings) { showSettings = false }
+    // Settings traps focus like any panel, and slides out rather than vanishing, so it hands focus
+    // back to its button before it goes; closing first left a gap the platform filled with the
+    // room row. See [handOffFocus].
+    var settingsReleasing by remember { mutableStateOf(false) }
+    val closeScope = rememberCoroutineScope()
+    fun closeSettings() {
+        closeScope.launch { handOffFocus({ settingsReleasing = it }, { showSettings = false }, settingsButtonFocus) }
+    }
+    BackHandler(enabled = showSettings) { closeSettings() }
     BackHandler(enabled = panelGroup != null) { panelGroup = null }
 
     val settingsFocus = remember { FocusRequester() }
@@ -198,7 +218,13 @@ fun HomeScreen(
     // on a node that just left the composition and the remote goes dead until a direction press.
     val modalVisible = showSettings || panelGroup != null
     LaunchedEffect(modalVisible) {
-        if (!modalVisible) place(if (panelFromPane) groupFocus else sidebarFocusRequester)
+        if (!modalVisible) place(
+            when {
+                fromSettings -> settingsButtonFocus
+                panelFromPane -> groupFocus
+                else -> sidebarFocusRequester
+            }
+        )
     }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
@@ -240,8 +266,9 @@ fun HomeScreen(
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
                 onFocused = { if (focusPlaced) homeViewModel.selectGroup(it.id) },
-                onOpenPanel = { panelFromPane = false; panelGroup = it },
-                onSettingsClick = { showSettings = true },
+                onOpenPanel = { panelFromPane = false; fromSettings = false; panelGroup = it },
+                onSettingsClick = { fromSettings = true; showSettings = true },
+                settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
                 onChooseHousehold = { homeViewModel.chooseHousehold(it) },
                 upnpOff = homeViewModel.upnpOff.collectAsState().value,
@@ -295,7 +322,7 @@ fun HomeScreen(
                         onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
                         onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
                         onOpenGroup = {
-                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelGroup = it }
+                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; fromSettings = false; panelGroup = it }
                         },
                     )
                 }
@@ -307,7 +334,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(Color.Black.copy(alpha = 0.6f))
-                    .tapToClick(onClick = { showSettings = false })
+                    .tapToClick(onClick = { closeSettings() })
             )
         }
 
@@ -320,6 +347,12 @@ fun HomeScreen(
             SettingsPanel(
                 currentTheme = selectedTheme,
                 firstFocus = settingsFocus,
+                trapped = !settingsReleasing,
+                onOpenPreferredServices = {
+                    opener = Opener.SETTINGS
+                    showSettings = false
+                    onOpenPreferredServices()
+                },
                 onThemeSelected = { homeViewModel.setTheme(it) }
             )
         }
@@ -413,6 +446,7 @@ private fun RoomSidebar(
     onFocused: (Group) -> Unit,
     onOpenPanel: (Group) -> Unit,
     onSettingsClick: () -> Unit,
+    settingsFocusRequester: FocusRequester,
     onRetry: () -> Unit,
     onChooseHousehold: (HouseholdChoice) -> Unit,
     /** The household's UPnP switch is off: said here once, at the foot of the list. */
@@ -515,7 +549,7 @@ private fun RoomSidebar(
         Row(modifier = Modifier.padding(start = SIDEBAR_START, bottom = 12.dp, top = 2.dp)) {
             IconLabelButton(
                 Icons.Default.Settings, "Settings", onSettingsClick,
-                Modifier.exitOnKey(Key.DirectionRight, detailFocusRequester),
+                Modifier.focusRequester(settingsFocusRequester).exitOnKey(Key.DirectionRight, detailFocusRequester),
             )
         }
     }
@@ -735,6 +769,9 @@ private val SIDEBAR_START = 48.dp
 private fun SettingsPanel(
     currentTheme: AppColorTheme,
     firstFocus: FocusRequester,
+    /** False for the frames closing spends handing focus back to the Settings button. */
+    trapped: Boolean,
+    onOpenPreferredServices: () -> Unit,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
     Box(
@@ -742,7 +779,7 @@ private fun SettingsPanel(
             .width(380.dp)
             .fillMaxHeight()
             .background(MaterialTheme.colorScheme.surfaceVariant)
-            .modalFocusTrap()
+            .modalFocusTrap(trapped)
             .keepTaps()
     ) {
         Column(
@@ -760,6 +797,14 @@ private fun SettingsPanel(
                 onThemeSelected = onThemeSelected,
                 modifier = Modifier.focusRequester(firstFocus)
             )
+            Spacer(Modifier.height(32.dp))
+            Text("Services", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            // Which services Search starts on and lists first: a screen of its own, since ordering
+            // a list needs more room than this panel has.
+            AppButton(onClick = onOpenPreferredServices, modifier = Modifier.fillMaxWidth()) {
+                Text("Preferred services")
+            }
         }
     }
 }
@@ -831,4 +876,4 @@ private fun ThemeSelector(
 }
 
 /** The pane's buttons that open another screen, so Back can return focus to the one that did. */
-private enum class Opener { QUEUE, BROWSE, SEARCH }
+private enum class Opener { QUEUE, BROWSE, SEARCH, SETTINGS }

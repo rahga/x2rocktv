@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.store.PrimaryAccounts
+import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemPage
@@ -42,6 +43,7 @@ class ServiceBrowseViewModel @Inject constructor(
     private val household: SonosHousehold,
     savedStateHandle: SavedStateHandle,
     private val primaryAccounts: PrimaryAccounts,
+    preferredServices: PreferredServices,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -63,6 +65,19 @@ class ServiceBrowseViewModel @Inject constructor(
      * playing never depends on the service's browse having worked.
      */
     private val entryFavorite: String? = savedStateHandle.get<String>("favorite")?.takeIf { it.isNotEmpty() }
+
+    /**
+     * What the entry container is (`album`, `playlist`, `artist`, …), when search opened it: an
+     * album or playlist found there gets Play and Shuffle at its head, as one opened from Browse
+     * does. Without it the page could not tell an album from an artist, and offered neither.
+     */
+    private val entryKind: String? = savedStateHandle.get<String>("kind")?.takeIf { it.isNotEmpty() }
+
+    /** What the entry container's Play and Shuffle start, if it has them. */
+    private fun entryWhole(container: String, title: String): Whole? =
+        entryFavorite?.let { Whole.Favorite(it) }
+            ?: entryKind?.let { Item(container, title, it, null, null, container = true) }
+                ?.takeIf { ServiceContent.canEnqueue(it) }?.let { Whole.Container(it) }
 
     /**
      * Opened from search's "More from" on one service: its [LinkedService.key] and the term, so the
@@ -177,7 +192,7 @@ class ServiceBrowseViewModel @Inject constructor(
             entry?.let { (key, container, title) ->
                 services.getOrNull()?.firstOrNull { it.key() == key }?.let { service ->
                     _active.value = service
-                    browse(container, title, entryFavorite?.let { Whole.Favorite(it) })
+                    browse(container, title, entryWhole(container, title))
                 }
             }
             if (entry == null) entrySearch?.let { (key, query) ->
@@ -329,6 +344,9 @@ class ServiceBrowseViewModel @Inject constructor(
 
     /** Each service's primary account on this device; see [PrimaryAccounts]. */
     val primaries: StateFlow<Map<String, String>> = primaryAccounts.primaries
+
+    /** This device's preferred services, which lead the list in their order. */
+    val preferred: StateFlow<List<String>> = preferredServices.order
 
     /** The service row whose hold menu is open — "Make primary" — or `null`. */
     private val _serviceMenu = MutableStateFlow<LinkedService?>(null)

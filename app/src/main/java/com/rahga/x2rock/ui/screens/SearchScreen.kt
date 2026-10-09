@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -146,10 +147,13 @@ fun SearchScreen(
 
                 val firstKey = results.sections.firstOrNull()?.hits?.firstOrNull()?.key
                 if (firstKey != null) {
-                    // The first answer to arrive takes focus once; later sections slotting in
-                    // above it do not pull it about while the viewer is reading.
-                    LaunchedEffect(results.searched) {
-                        if (openedFrom == null) resultsFocus.requestFocusRetrying()
+                    // Focus goes to the top section once, when it is settled: at once with no
+                    // preferred services, else when none that would rank above it is still out —
+                    // so it starts on the top preferred service, not on whichever answered first.
+                    // Later sections slotting in above it do not pull it about while the viewer
+                    // is reading.
+                    LaunchedEffect(results.searched, results.leadSettled) {
+                        if (results.leadSettled && openedFrom == null) resultsFocus.requestFocusRetrying()
                     }
                 }
                 LazyColumn(
@@ -236,8 +240,10 @@ fun SearchScreen(
                     menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
                     here = null,
                     onOpen = service?.let { { onOpen(it.linked.key(), it.item) } },
-                    onOpenRelated = { id, title, _ ->
-                        service?.let { onOpen(it.linked.key(), Item(id, title, "container", null, null, container = true)) }
+                    // An album says so, so the page it opens on has Play and Shuffle at its head.
+                    onOpenRelated = { id, title, album ->
+                        val kind = if (album) "album" else "container"
+                        service?.let { onOpen(it.linked.key(), Item(id, title, kind, null, null, container = true)) }
                     },
                     onPlayed = onPlayed,
                 )
@@ -286,21 +292,40 @@ private val CELL_WIDTH = 340.dp
 /** The section key Apple Music's hits are listed under; it has no SMAPI search to send "More" to. */
 private const val APPLE_SECTION = "apple"
 
-/** How the search stands: what is still out, what found nothing, and who did not answer. */
+/**
+ * How the search stands. Before one, what Search does. Then two ends of one line: on the left a
+ * running total of what has been found, counting up as each service answers; on the right what
+ * is still out, and once nothing is, who did not answer.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun Status(results: SearchViewModel.Results) {
-    val text = when {
-        !results.searched -> "Searches every music service this system has, and Apple Music, at once. " +
-            "Press the microphone on the keyboard to say it instead."
+    val style = MaterialTheme.typography.bodyLarge
+    val color = MaterialTheme.colorScheme.onSurfaceVariant
+    if (!results.searched) {
+        Text(
+            "Searches every music service this system has, and Apple Music, at once. " +
+                "Press the microphone on the keyboard to say it instead.",
+            style = style, color = color,
+        )
+        return
+    }
+    val found = results.sections.sumOf { it.hits.size }
+    val services = results.sections.size
+    val total = when {
+        found == 0 -> if (results.pending > 0) "Nothing yet" else "Nothing found"
+        else -> "$found ${if (found == 1) "result" else "results"} from $services " +
+            if (services == 1) "service" else "services"
+    }
+    val outstanding = when {
         results.pending > 0 -> "Searching… ${results.pending} still to answer"
-        results.sections.isEmpty() -> "Nothing found."
+        results.silent == 1 -> "1 service didn't answer"
+        results.silent > 1 -> "${results.silent} services didn't answer"
         else -> null
     }
-    val silent = results.silent.takeIf { it > 0 && results.pending == 0 }
-        ?.let { if (it == 1) "1 service didn't answer." else "$it services didn't answer." }
-    listOfNotNull(text, silent).joinToString(" ").takeIf { it.isNotEmpty() }?.let {
-        Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(total, style = style, color = color, modifier = Modifier.weight(1f))
+        outstanding?.let { Text(it, style = style, color = color) }
     }
 }
 
