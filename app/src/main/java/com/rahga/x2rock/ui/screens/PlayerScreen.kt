@@ -59,6 +59,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.offset
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -773,7 +775,14 @@ private fun PlaybackControls(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
-            modifier = Modifier.focusGroup().horizontalScroll(rememberScrollState())
+            // The scroll clips at its edges, which cut a focused end button's name ("Sleep tim");
+            // so it reaches LABEL_OVERHANG past the pane on both sides and its content is inset by
+            // the same, leaving the buttons where they were and room for a name at either end.
+            modifier = Modifier
+                .overhang(LABEL_OVERHANG)
+                .focusGroup()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = LABEL_OVERHANG)
         ) {
             val placesExit = booleanArrayOf(false)
             // Queue keeps its place whatever the source permits: it is a way to look at what
@@ -1419,6 +1428,20 @@ internal fun Long.toTimeString(): String {
 @Composable
 private fun GroupButton(onClick: () -> Unit, focusRequester: FocusRequester) =
     PlaceButton(Icons.Filled.SpeakerGroup, "Group", onClick, Modifier.focusRequester(focusRequester))
+
+/** How far a [Named] name may reach past either end of its row: "Cancel sleep timer" needs most. */
+private val LABEL_OVERHANG = 48.dp
+
+/**
+ * Measure [by] wider on each side than offered and sit that much further left, so whatever this
+ * draws — and clips — reaches past both edges of its slot equally while the layout around it is
+ * unchanged.
+ */
+private fun Modifier.overhang(by: Dp): Modifier = layout { measurable, constraints ->
+    val extra = by.roundToPx()
+    val placeable = measurable.measure(constraints.offset(horizontal = 2 * extra))
+    layout((placeable.width - 2 * extra).coerceAtLeast(0), placeable.height) { placeable.place(-extra, 0) }
+}
 
 /** A place to go from the pane, as an icon: [Named] says which while it has focus. */
 @Composable
