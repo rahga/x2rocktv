@@ -13,7 +13,7 @@ the evidence behind it.
 In use on an NVIDIA Shield (Android 11, Ethernet) and a Google TV Streamer (Android 14,
 Wi-Fi). Rooms, transport, volume, grouping and party mode, the queue, favourites, a
 soundbar's TV input with Night Sound and Speech Enhancement, and track ratings all work.
-What is still to do is in [`docs/punch-list.md`](docs/punch-list.md).
+What is still open is at the head of [`docs/punch-list.md`](docs/punch-list.md).
 
 Speakers are found by SSDP, with mDNS as the fallback on networks that drop SSDP.
 
