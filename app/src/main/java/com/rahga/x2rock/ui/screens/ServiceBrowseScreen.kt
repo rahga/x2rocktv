@@ -50,6 +50,8 @@ import com.rahga.x2rock.ui.components.MenuAction
 import com.rahga.x2rock.ui.components.MenuSection
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.store.isPrimary
+import com.rahga.x2rock.store.PreferredServices
+import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.withPrimariesFirst
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
@@ -92,6 +94,7 @@ fun ServiceBrowseScreen(
     val notice by viewModel.notice.collectAsState()
 
     val primaries by viewModel.primaries.collectAsState()
+    val preferred by viewModel.preferred.collectAsState()
     val serviceMenu by viewModel.serviceMenu.collectAsState()
     BackHandler { if (!viewModel.back()) onBack() }
     // The row a service was opened from, so Back lands on it rather than on the first row. Saved,
@@ -114,6 +117,7 @@ fun ServiceBrowseScreen(
                     ServiceList(
                         services,
                         primaries = primaries,
+                        preferred = preferred,
                         returnTo = opened,
                         onOpen = { opened = Entry.Service(it).key; viewModel.open(it) },
                         onMenu = { opened = Entry.Service(it).key; viewModel.openServiceMenu(it) },
@@ -159,6 +163,8 @@ fun ServiceBrowseScreen(
 private fun ServiceList(
     services: ServiceBrowseViewModel.Services,
     primaries: Map<String, String>,
+    /** This device's preferred services, which lead each section in their order. */
+    preferred: List<String>,
     returnTo: String?,
     onOpen: (LinkedService) -> Unit,
     onMenu: (LinkedService) -> Unit,
@@ -182,12 +188,18 @@ private fun ServiceList(
                 return
             }
             // A row is one entry in a flat list of rows and headings, so the first one is easy to name.
+            // Preferred services first in each section, in this device's order; the rest as before.
+            // The sort is stable, so accounts of one service stay together, primary first.
+            fun rank(entry: Entry) = when (entry) {
+                Entry.Apple -> preferredRank(PreferredServices.APPLE_MUSIC, preferred)
+                is Entry.Service -> preferredRank(entry.linked.service.id, preferred)
+                is Entry.Heading -> Int.MAX_VALUE
+            }
             val entries = buildList {
                 if (yours.isNotEmpty() || services.appleMusic) add(Entry.Heading("Your services"))
-                if (services.appleMusic) add(Entry.Apple)
-                yours.forEach { add(Entry.Service(it)) }
+                addAll(((if (services.appleMusic) listOf(Entry.Apple) else emptyList()) + yours.map { Entry.Service(it) }).sortedBy(::rank))
                 if (others.isNotEmpty()) add(Entry.Heading("More radio"))
-                others.forEach { add(Entry.Service(it)) }
+                addAll(others.map { Entry.Service(it) }.sortedBy(::rank))
             }
             val first = entries.indexOfFirst { it !is Entry.Heading }
             val target = entries.indexOfFirst { it.key == returnTo }.takeIf { it >= 0 } ?: first
@@ -234,7 +246,15 @@ private sealed interface Entry {
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modifier: Modifier, onMenu: (() -> Unit)? = null) {
+internal fun ServiceRow(
+    name: String,
+    detail: String?,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    onMenu: (() -> Unit)? = null,
+    /** The "opens" chevron: off where a press does something other than open the service. */
+    opens: Boolean = true,
+) {
     AppCard(
         onClick = onClick,
         onLongClick = onMenu,
@@ -250,7 +270,7 @@ private fun ServiceRow(name: String, detail: String?, onClick: () -> Unit, modif
                     Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
+            if (opens) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
         }
     }
 }

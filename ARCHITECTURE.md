@@ -98,6 +98,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── smapi/PrefsRatingsStore.kt     RatingsStore over Preferences
 ├── store/PresetStore.kt           presets: rooms, levels, a favourite — this device's, as JSON
 ├── store/PrimaryAccounts.kt       a service's primary account on this device: first, and what Search asks
+├── store/PreferredServices.kt     the services this device leads with, in order: Search and Music Services
 ├── media/NowPlayingPublisher.kt   the MediaSession, behind an interface
 ├── channel/
 │   ├── RoomsChannelSync.kt        rooms as tiles on the TV home screen channel
@@ -133,6 +134,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── FavoritesScreen.kt     Browse: presets, favourites by kind, playlists, recently played;
 │       │                          Radio and Music Services one press up
 │       ├── SearchScreen.kt        one search across every service and Apple Music, by section
+│       ├── PreferredServicesScreen.kt  Settings' sorter: mark services preferred, carry them into order
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       ├── ServiceBrowseScreen.kt the household's own services — each opens on its library (or its
@@ -148,6 +150,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── AppleMusicViewModel.kt
     ├── ServiceBrowseViewModel.kt   browse/search the household's own services, a level at a time
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
+    ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
     ├── FavoriteGroups.kt           favourites grouped and labelled, and which open on a page
     └── RoomActivity.kt             Playing / Paused / Stopped / Nothing playing — one rule for every screen

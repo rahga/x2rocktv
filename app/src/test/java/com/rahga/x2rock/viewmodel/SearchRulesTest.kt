@@ -33,7 +33,25 @@ class SearchRulesTest {
         )
         assertEquals(
             listOf("audible", "Qobuz", "Calm Radio", "TuneIn"),
-            sections.sortedWith(SearchViewModel.sectionOrder).map { it.name },
+            sections.sortedWith(SearchViewModel.sectionOrder(emptyList())).map { it.name },
+        )
+    }
+
+    /**
+     * Preferred services lead, in this device's order, above every signed-in one — TuneIn here,
+     * anonymous, ranked first because it was put first — and the rest keep their order.
+     */
+    @Test fun `preferred services come first, in their order`() {
+        val sections = listOf(
+            SearchViewModel.Section("TuneIn", signedIn = false, hits = emptyList(), key = "254:anon"),
+            SearchViewModel.Section("Qobuz", signedIn = true, hits = emptyList(), key = "31:sn_14"),
+            SearchViewModel.Section("Deezer", signedIn = true, hits = emptyList(), key = "2:sn_3"),
+            SearchViewModel.Section("Apple Music", signedIn = true, hits = emptyList(), key = "apple"),
+            SearchViewModel.Section("Calm Radio", signedIn = false, hits = emptyList(), key = "144:anon"),
+        )
+        assertEquals(
+            listOf("TuneIn", "Deezer", "Apple Music", "Qobuz", "Calm Radio"),
+            sections.sortedWith(SearchViewModel.sectionOrder(listOf("254", "2"))).map { it.name },
         )
     }
 }

@@ -23,11 +23,15 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -88,8 +92,30 @@ fun FavoritesScreen(
     val backFocus = remember { FocusRequester() }
     val rowFocus = remember { FocusRequester() }
     val firstSection = (state as? FavoritesViewModel.UiState.Success)?.let { firstSection(presets, it) }
+    // The row or header button focus was last on. Saved, so Back from a screen this one opened —
+    // a favourite's page, Radio, Music Services — lands on what opened it rather than on the first
+    // row (it landed on Back, 2026-10-09).
+    var focusKey by rememberSaveable { mutableStateOf<String?>(null) }
+    val keyFocus = remember { FocusRequester() }
+    fun tracked(key: String): Modifier = Modifier
+        .onFocusChanged { if (it.hasFocus) focusKey = key }
+        .then(if (key == focusKey) Modifier.focusRequester(keyFocus) else Modifier)
     LaunchedEffect(firstSection, state::class) {
+        if (focusKey != null && firstSection != null && keyFocus.requestFocusRetrying()) return@LaunchedEffect
         (if (firstSection != null) rowFocus else backFocus).requestFocusRetrying()
+    }
+    // A deleted preset takes focus with it; its neighbour gets it, as in any list a row leaves.
+    // Without this the platform chose, and chose Back.
+    var shownPresets by remember { mutableStateOf(presets) }
+    LaunchedEffect(presets) {
+        val before = shownPresets
+        shownPresets = presets
+        val gone = before.indexOfFirst { "preset:${it.id}" == focusKey }
+        if (gone < 0 || presets.any { "preset:${it.id}" == focusKey }) return@LaunchedEffect
+        val next = presets.getOrNull(gone) ?: presets.lastOrNull()
+        focusKey = next?.let { "preset:${it.id}" }
+        // With none left the first section changes, and the effect above takes it from there.
+        if (next != null) keyFocus.requestFocusRetrying()
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -100,9 +126,9 @@ fun FavoritesScreen(
                         // The radio directory: stations no favourite holds, with no account and no
                         // typing. And the household's own services, searched and browsed with its
                         // stored login — Apple Music among them.
-                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) })
+                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) }, tracked("header:radio"))
                         Spacer(Modifier.width(16.dp))
-                        IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) })
+                        IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) }, tracked("header:services"))
                     }
                     Spacer(Modifier.height(20.dp))
                     when (val s = state) {
@@ -117,6 +143,7 @@ fun FavoritesScreen(
                         is FavoritesViewModel.UiState.Success -> BrowseList(
                             firstSection = firstSection,
                             rowFocus = rowFocus,
+                            tracked = ::tracked,
                             presets = presets,
                             deleteArmed = deleteArmed,
                             state = s,
@@ -152,6 +179,8 @@ private fun BrowseList(
     /** Which section's first row takes focus, or `null` when there is nothing listed. */
     firstSection: String?,
     rowFocus: FocusRequester,
+    /** Marks a row by its list key, so focus can be put back on it. */
+    tracked: (String) -> Modifier,
     presets: List<Preset>,
     deleteArmed: String?,
     state: FavoritesViewModel.UiState.Success,
@@ -191,7 +220,7 @@ private fun BrowseList(
                     onClick = { onPreset(preset) },
                     // Menu, twice, deletes: the first press arms and says so.
                     onLongClick = { onDeletePreset(preset) },
-                    modifier = if (index == 0) presetFocus else Modifier,
+                    modifier = tracked("preset:${preset.id}").then(if (index == 0) presetFocus else Modifier),
                 ) {
                     when {
                         loadingId == presetKey(preset.id) -> RowStatus("Starting…")
@@ -211,7 +240,7 @@ private fun BrowseList(
                         artUrl = fav.imageUrl,
                         active = state.activeId == fav.id,
                         onClick = { onPlay(fav) },
-                        modifier = if (groupIndex == 0 && index == 0) favFocus else Modifier,
+                        modifier = tracked("fav:${fav.id}").then(if (groupIndex == 0 && index == 0) favFocus else Modifier),
                     ) {
                         when {
                             loadingId == fav.id -> RowStatus("Starting…")
@@ -236,7 +265,7 @@ private fun BrowseList(
                     onClick = { onPlayPlaylist(playlist) },
                     // Hold, or the Menu key: add to the end of the queue instead of replacing it.
                     onLongClick = { onAppendPlaylist(playlist) },
-                    modifier = if (index == 0) listFocus else Modifier,
+                    modifier = tracked("playlist:${playlist.id}").then(if (index == 0) listFocus else Modifier),
                 ) {
                     if (loadingId == playlistKey(playlist.id)) RowStatus("Starting…")
                 }
@@ -254,7 +283,7 @@ private fun BrowseList(
                     subtitle = kindLabel(entry.type),
                     artUrl = entry.images.firstOrNull()?.url,
                     onClick = { onReplay(entry) },
-                    modifier = if (index == 0) recentFocus else Modifier,
+                    modifier = tracked("recent:$index:${entry.id.objectId}").then(if (index == 0) recentFocus else Modifier),
                 ) {
                     if (loadingId == recentKey(entry)) RowStatus("Starting…")
                 }

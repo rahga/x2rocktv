@@ -11,7 +11,6 @@ import com.rahga.x2rock.ui.components.SearchField
 import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
-import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.ui.theme.LocalArtColors
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -58,6 +57,8 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -767,9 +768,11 @@ private fun PlaybackControls(
         // With Group added it is one button wider than the pane again (Sleep was cut off on the
         // Streamer), so the row scrolls, as rows on a TV do: focus moving right brings the next
         // button into view, and the sliver at the edge says there is one.
+        // Icons since 2026-10-09, each named under it while it has focus: as labelled buttons the
+        // row overran the pane and scrolled, which left "Queue" cut in half at the left edge.
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
             modifier = Modifier.focusGroup().horizontalScroll(rememberScrollState())
         ) {
             val placesExit = booleanArrayOf(false)
@@ -777,7 +780,7 @@ private fun PlaybackControls(
             // is loaded rather than an action on the current item. Only UPnP being off takes
             // it away, since the queue lives nowhere else; the pane says so below.
             if (!state.upnpOff) {
-                IconLabelButton(
+                PlaceButton(
                     Icons.AutoMirrored.Filled.QueueMusic, "Queue", onOpenQueue,
                     Modifier.focusRequester(queueFocusRequester).claimExit(placesExit),
                 )
@@ -785,13 +788,13 @@ private fun PlaybackControls(
             // With no transport drawn there is nothing for a right-press from the room list
             // to land on, so the entry point moves here — which is also the one control that
             // helps, being how an empty room is given something to play.
-            IconLabelButton(
+            PlaceButton(
                 Icons.AutoMirrored.Filled.LibraryBooks, "Browse", onOpenFavorites,
                 Modifier.focusRequester(browseFocusRequester).claimExit(placesExit).then(
                     if (hasContent) Modifier else Modifier.focusRequester(playPauseFocusRequester)
                 ),
             )
-            IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
+            PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             GroupButton(onOpenGroup, groupFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
@@ -1050,20 +1053,21 @@ private fun TvControls(
 
         Spacer(modifier = Modifier.height(24.dp))
         Row(
-            horizontalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top,
             modifier = Modifier.focusGroup(),
         ) {
             // The way out of the television and back into music. Sonos's own TV screen has no
             // such row, but a room on its HDMI input is exactly where wanting to put music on
             // instead is a live thought, and nothing else here offers it.
-            IconLabelButton(
+            PlaceButton(
                 Icons.AutoMirrored.Filled.LibraryBooks, "Browse", onOpenFavorites,
                 Modifier
                     .focusRequester(browseFocusRequester)
                     .exitLeftTo(exitLeftFocusRequester)
                     .then(if (state.upnpOff) Modifier.focusRequester(firstFocusRequester) else Modifier),
             )
-            IconLabelButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
+            PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             GroupButton(onOpenGroup, groupFocusRequester)
             SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
         }
@@ -1311,27 +1315,29 @@ private fun SleepTimerButton(
     if (state.upnpOff) return
     val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
     val context = LocalContext.current
-    AppButton(
-        onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
-        modifier = Modifier.focusRequester(focusRequester),
-    ) {
-        Icon(
-            imageVector = SleepIcon,
-            contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
-            else "Sleep timer",
-            modifier = Modifier.size(30.dp),
-        )
-        if (sleepLeft != null) {
-            Spacer(modifier = Modifier.width(8.dp))
-            // The clock time it ends, which is what someone going to bed is asking — in the device's
-            // own 12- or 24-hour form. One short line: "14:34 · ends 8:58 PM" wrapped to four lines
-            // in the pane's button row at 1080p (Streamer, 2026-10-06). What is left stays in the
-            // description, and the time it ends does not tick.
-            val endsAt = remember(state.sleepTimerEndsAt) {
-                android.text.format.DateFormat.getTimeFormat(context)
-                    .format(java.util.Date(System.currentTimeMillis() + sleepLeft))
+    Named(if (sleepLeft != null) "Cancel sleep timer" else "Sleep timer") { named ->
+        IconAppButton(
+            onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
+            modifier = Modifier.focusRequester(focusRequester).then(named),
+        ) {
+            Icon(
+                imageVector = SleepIcon,
+                contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
+                else "Sleep timer",
+                modifier = Modifier.size(30.dp),
+            )
+            if (sleepLeft != null) {
+                Spacer(modifier = Modifier.width(8.dp))
+                // The clock time it ends, which is what someone going to bed is asking — in the device's
+                // own 12- or 24-hour form. One short line: "14:34 · ends 8:58 PM" wrapped to four lines
+                // in the pane's button row at 1080p (Streamer, 2026-10-06). What is left stays in the
+                // description, and the time it ends does not tick.
+                val endsAt = remember(state.sleepTimerEndsAt) {
+                    android.text.format.DateFormat.getTimeFormat(context)
+                        .format(java.util.Date(System.currentTimeMillis() + sleepLeft))
+                }
+                Text(endsAt, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
             }
-            Text(endsAt, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -1412,7 +1418,43 @@ internal fun Long.toTimeString(): String {
  */
 @Composable
 private fun GroupButton(onClick: () -> Unit, focusRequester: FocusRequester) =
-    IconLabelButton(Icons.Filled.SpeakerGroup, "Group", onClick, Modifier.focusRequester(focusRequester))
+    PlaceButton(Icons.Filled.SpeakerGroup, "Group", onClick, Modifier.focusRequester(focusRequester))
+
+/** A place to go from the pane, as an icon: [Named] says which while it has focus. */
+@Composable
+private fun PlaceButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
+    Named(label) { named ->
+        IconAppButton(onClick = onClick, modifier = modifier.then(named)) {
+            Icon(icon, contentDescription = label, modifier = Modifier.size(30.dp))
+        }
+    }
+
+/**
+ * A button with its name under it, shown only while it has focus — the way a TV's player
+ * controls name their icons. The name takes no width of its own, so a long one never spreads
+ * the row; its height is always kept, so the row does not jump as focus moves along it.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun Named(label: String, button: @Composable (Modifier) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        button(Modifier.onFocusChanged { focused = it.hasFocus })
+        Spacer(Modifier.height(6.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier
+                .alpha(if (focused) 1f else 0f)
+                .layout { measurable, _ ->
+                    val text = measurable.measure(Constraints())
+                    layout(0, text.height) { text.place(-text.width / 2, 0) }
+                },
+        )
+    }
+}
 
 
 /**

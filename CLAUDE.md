@@ -502,8 +502,12 @@ A review against Sonos 27's app and Google's TV guidance, applied across every s
 checked on the Streamer. What it settled, so it is not undone by accident:
 
 - **One focus language.** A focused button is filled with the primary colour; a focused card
-  wears a 3dp border in that same colour (`appCardBorder`). tv-material3's own card focus — a
-  slight scale and a lighter grey — read as a second language and was hard to find across a room.
+  wears a 3dp border in that same colour (`appCardBorder`), and does not grow. tv-material3's own
+  card focus — a slight scale and a lighter grey — read as a second language and was hard to find
+  across a room; the scale went too (2026-10-09), since it made a focused row overhang its list.
+- **The pane's places are icons, each named under it while focused** (`Named`, 2026-10-09):
+  Queue, Browse, Search, Group and the sleep timer, as a TV's player controls name theirs. As
+  labelled buttons the row overran the pane and scrolled, leaving "Queue" cut in half at its edge.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
@@ -520,6 +524,13 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   signed-in services first, sections filling in as each answers, on submit only — per keystroke
   would be thirty requests a letter. An album or artist found there opens in its service's
   browser rather than being played blind.
+- **Preferred services lead** (`PreferredServices`, Settings → Preferred services, 2026-10-09):
+  an ordered tier this device keeps, above the signed-in rule, in Search and Music Services alike.
+  The Sonos app has a single "Preferred Service"; a tier was asked for, since nothing is gained by
+  ranking a household's second service by accident. Nothing is hidden. Search asks preferred
+  services first and holds its first focus until none that would rank above the first section is
+  still out — focus used to go to whichever service answered first, which on a slow box was Hype
+  Machine, with the household's own services sorting in above it, off-screen.
 - **Presets** are this device's (`PresetStore`): players, each one's level, and a Sonos favourite,
   saved from the room panel and played from Browse. Players, not groups, for the reason the TV
   room stores a player. Applying one sets levels **before** it starts the music, so nothing starts
