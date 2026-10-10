@@ -450,10 +450,12 @@ Two things sit outside the widget's version, in the order asked for:
 - **Party is first** — labelled "Play everywhere" — because it is the one press that answers "put this everywhere". It
   hosts from *the room the panel was opened on* — `partyMode(hostGroupId)` — since party
   mode hinges on a source, which is the whole reason it moved off the sidebar.
-- **Source, then Room settings**, both only for a room with a soundbar in it. TV Input is
-  the one row that changes what the room is *playing* rather than which rooms are listening,
-  and it sits above "This is my TV" because it is a thing to do where that is a thing to
-  state once and never touch again.
+- **Source, then Room settings.** Source is for a room with a soundbar (TV Input) or a line-in.
+  TV Input is the one row that changes what the room is *playing* rather than which rooms are
+  listening, and it sits above "This is my TV" because it is a thing to do where that is a thing
+  to state once and never touch again. Room settings is every room's since T-08 (2026-10-10): the
+  room's own speaker's **Status light** and **Touch controls** (the Sonos app's Button Control,
+  so On is unlocked), read with its tone, then "This is my TV" where there is a television.
 
 Settings sits at the **foot** of the room list, past the last room. At the top it was the first
 thing Compose found, and focus fell onto it three different ways. Moving it exposed what it had
