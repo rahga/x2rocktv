@@ -512,7 +512,9 @@ private fun PlaybackControls(
     // nothing but such buttons.
     val hasContent = state.actions.canPlay
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // The pane's full width, so the rows centre on the pane: as wide as its widest row only, the
+    // column sat at the left and centred them on itself, off the pane's middle.
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         val transportExit = booleanArrayOf(false)
         if (hasContent) {
             Row(
@@ -722,7 +724,9 @@ private fun TvControls(
     groupFocusRequester: FocusRequester,
     onOpenGroup: () -> Unit,
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // The pane's full width, so the rows centre on the pane: as wide as its widest row only, the
+    // column sat at the left and centred them on itself, off the pane's middle.
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         // Written over UPnP, so with it off they are not drawn at all; the room list says why,
         // once, and Favorites takes over as where focus enters.
         if (!state.upnpOff) {
