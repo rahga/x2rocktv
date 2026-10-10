@@ -426,6 +426,10 @@ fun HomeScreen(
                         homeViewModel.useTvInput(liveGroup.id)
                         closePanel()
                     },
+                    onUseLineIn = {
+                        homeViewModel.useLineIn(liveGroup.id)
+                        closePanel()
+                    },
                     upnpOff = upnpOff,
                     tone = tone?.takeIf { it.playerId == liveGroup.coordinatorId },
                     onStepBass = homeViewModel::stepBass,

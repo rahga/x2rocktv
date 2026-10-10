@@ -94,6 +94,25 @@ class HomeViewModelTest {
         }
     }
 
+    /**
+     * A room whose player reports a line-in offers it; the rest do not. Untested on hardware: the
+     * captured topology with `LINE_IN` added to one player, the capability from Sonos's list.
+     */
+    @Test fun `only a room with a line-in offers one`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        fake.pushTopology(FakePlayer.reachableTopology().also { topology ->
+            topology.getAsJsonArray("players").map { it.asJsonObject }
+                .first { it.get("id").asString == kitchen.coordinatorId }
+                .getAsJsonArray("capabilities").add(com.rahga.x2rock.lan.LINE_IN)
+        })
+        val rooms = withTimeout(5_000) {
+            viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.values?.any { r -> r.hasLineIn } == true }
+                as HomeViewModel.UiState.Success
+        }.rooms
+        assertEquals(listOf(kitchen.id), rooms.filterValues { it.hasLineIn }.keys.toList())
+    }
+
     // ---------------------------------------------------------------- channel tiles
 
     /**

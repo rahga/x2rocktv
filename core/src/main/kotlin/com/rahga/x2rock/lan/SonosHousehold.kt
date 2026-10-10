@@ -240,6 +240,16 @@ data class HouseholdState(
             HT_PLAYBACK in (byId[it]?.capabilities ?: emptyList()) && hdmiConnection[it] != NO_HDMI_CONNECTION
         }
     }
+
+    /**
+     * The player in [group] with an analog line-in, the coordinator first, or null for none.
+     * Like the HDMI socket it belongs to a player, so every member is asked. **Untested on
+     * hardware**: see [LINE_IN].
+     */
+    fun lineInPlayer(group: Group): String? {
+        val byId = players.associateBy { it.id }
+        return (listOf(group.coordinatorId) + group.playerIds).firstOrNull { LINE_IN in byId[it]?.capabilities.orEmpty() }
+    }
 }
 
 /**
@@ -254,6 +264,15 @@ class HouseholdChoiceNeeded(count: Int) :
 
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
+
+/**
+ * The capability of a player with an analog line-in — a Port, a Five, an Amp, a Play:5.
+ *
+ * **Untested on hardware** (2026-10-10): taken from Sonos's published capability list, never seen
+ * in a capture, because no player in either household this was built against has a line-in. Mark
+ * it so in any release notes until a real player has reported it and taken [SonosHousehold.useLineIn].
+ */
+const val LINE_IN = "LINE_IN"
 
 /**
  * `hdmi:1`'s word for a soundbar's HDMI port with nothing in it. Such a room has an input in
@@ -915,6 +934,27 @@ class SonosHousehold(
     private fun coordinatorHostname(groupId: String): String {
         val group = group(groupId)
         return hostnameOf(group.coordinatorId)
+    }
+
+    /**
+     * Put this room on a player's analog line-in: `playback:1 loadLineIn`, to the group, naming the
+     * player whose input it is. The Control API's own command, unlike the TV input, which is UPnP:
+     * x2rock found `loadLineIn` refused on a Beam as "player does not have line-in"
+     * (`ERROR_NOT_CAPABLE`), which is what says it is checked per player and meant for this.
+     *
+     * Fire and forget, as every playback command here: the effect arrives as metadata. **Untested
+     * on hardware** — see [LINE_IN]; what a room on its line-in reports is not known, so nothing
+     * here waits for it or recognises it.
+     */
+    suspend fun useLineIn(groupId: String) {
+        val player = _state.value.lineInPlayer(group(groupId)) ?: error("this room has no line-in")
+        groupCommand(
+            groupId, "playback:1", "loadLineIn",
+            JsonObject().apply {
+                addProperty("deviceId", player)
+                addProperty("playOnCompletion", true)
+            },
+        )
     }
 
     /**

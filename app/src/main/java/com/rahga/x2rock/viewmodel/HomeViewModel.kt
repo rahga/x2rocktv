@@ -91,6 +91,8 @@ class HomeViewModel @Inject constructor(
         val inputFormat: String = "",
         /** Whether this room has an HDMI input at all, from any of its speakers. */
         val hasTvInput: Boolean = false,
+        /** Whether one of its speakers has an analog line-in. Untested on hardware: see `LINE_IN`. */
+        val hasLineIn: Boolean = false,
         /** The container: an album, a station, or "TV Audio". */
         val source: String? = null,
         /**
@@ -144,6 +146,7 @@ class HomeViewModel @Inject constructor(
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,
                             hasTvInput = state.hasTvInput(group),
+                            hasLineIn = state.lineInPlayer(group) != null,
                             source = pushed?.container?.name,
                             alarmRinging = pushed?.ringingAlarm != null,
                             crossfade = pushed
@@ -383,6 +386,14 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.useTvInput(groupId, preferSoundbar = named) }
                 .onFailure { _notice.failure("switch to the TV", it) }
+        }
+    }
+
+    /** Put the room on its line-in. Untested on hardware: see `SonosHousehold.useLineIn`. */
+    fun useLineIn(groupId: String) {
+        viewModelScope.launch {
+            runCatching { household.useLineIn(groupId) }
+                .onFailure { _notice.failure("switch to the line-in", it) }
         }
     }
 

@@ -124,6 +124,7 @@ fun RoomPanel(
     onJoin: (Group) -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
+    onUseLineIn: () -> Unit,
     /** UPnP is off for the household, so the TV input cannot be switched to. */
     upnpOff: Boolean,
     /** This room's tone, or `null` while it is read. */
@@ -279,24 +280,33 @@ fun RoomPanel(
             }
         }
 
-        if (info.hasTvInput) {
-            // Switching the input is UPnP, so with UPnP off there is no Source to offer; the
-            // setting below needs nothing from the speakers and stays.
-            if (!upnpOff) {
-                PanelSection("Source")
-                AppButton(
-                    onClick = onUseTvInput,
-                    // Deliberately *not* disabled while it is already the source. A disabled
-                    // button here still takes focus and draws no highlight, so pressing down
-                    // onto it left the remote sitting on an invisible row — seen on the
-                    // Streamer. Re-selecting the input it is already on is harmless anyway,
-                    // and is the obvious thing to press when the TV audio has dropped out.
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
-                }
+        // TV Input is UPnP, so with UPnP off it is not offered; Line-In is the Control API's own
+        // `loadLineIn` and needs nothing else. Either makes a Source section.
+        val tvSwitchable = info.hasTvInput && !upnpOff
+        if (tvSwitchable || info.hasLineIn) PanelSection("Source")
+        if (tvSwitchable) {
+            AppButton(
+                onClick = onUseTvInput,
+                // Deliberately *not* disabled while it is already the source. A disabled
+                // button here still takes focus and draws no highlight, so pressing down
+                // onto it left the remote sitting on an invisible row — seen on the
+                // Streamer. Re-selecting the input it is already on is harmless anyway,
+                // and is the obvious thing to press when the TV audio has dropped out.
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
             }
+        }
+        // Untested on hardware: no player here has a line-in (see `LINE_IN`). Nothing says when a
+        // room is already on it — what such a room reports has never been seen — so this row
+        // never claims "current source".
+        if (info.hasLineIn) {
+            AppButton(onClick = onUseLineIn, modifier = Modifier.fillMaxWidth()) {
+                Text("Line-In")
+            }
+        }
 
+        if (info.hasTvInput) {
             // Detection fills this in on its own but has been seen to answer wrongly and
             // then keep the answer, so it has to be correctable by hand. There is no
             // un-naming: the crown simply moves to whichever room is named next.
