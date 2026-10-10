@@ -832,6 +832,37 @@ class SonosHousehold(
     suspend fun setSleepTimer(groupId: String, minutes: Int?) =
         upnp.setSleepTimer(coordinatorHostname(groupId), minutes?.let { it * 60_000L })
 
+    // Alarms are the household's, not a room's: any player answers for all of them, so these ask
+    // the speaker this session was seeded from, or failing that the first coordinator.
+
+    private fun anyHostname(): String =
+        hostnameOf(seedPlayerId ?: _state.value.groups.firstOrNull()?.coordinatorId ?: error("no speaker to ask"))
+
+    /** Every alarm in the household, each naming its room by a player id. Asked: nothing pushes them. */
+    suspend fun alarms(): List<Alarm> = upnp.listAlarms(anyHostname())
+
+    /** The clock alarm times are on; see [HouseholdClock]. */
+    suspend fun householdClock(): HouseholdClock = upnp.householdClock(anyHostname())
+
+    /** The household's Sonos favourites as things an alarm can play. */
+    suspend fun alarmPrograms(): List<AlarmProgram> = upnp.favoritePrograms(anyHostname())
+
+    /**
+     * Arm or disarm alarm [id]. Read fresh and written back whole, `Enabled` alone changed: the
+     * player takes only a complete record, and one read earlier may be stale — another controller
+     * could have moved the time since, which writing the old record would quietly undo.
+     */
+    suspend fun setAlarmEnabled(id: Int, enabled: Boolean) {
+        val hostname = anyHostname()
+        val alarm = upnp.listAlarms(hostname).firstOrNull { it.id == id }
+            ?: throw IOException("that alarm is no longer in this system")
+        if (alarm.enabled == enabled) return
+        upnp.updateAlarm(hostname, alarm.copy(enabled = enabled))
+    }
+
+    /** Create [alarm], its id ignored; answers the id the household gives it. */
+    suspend fun createAlarm(alarm: Alarm): Int = upnp.createAlarm(anyHostname(), alarm)
+
     /**
      * Snooze [groupId]'s ringing alarm for [minutes] — the clock radio's nine, as x2rock's
      * default. To stop it outright, [pause]: that ends it, where deleting the alarm would not.

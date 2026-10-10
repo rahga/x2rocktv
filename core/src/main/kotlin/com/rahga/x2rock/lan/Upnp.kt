@@ -387,6 +387,67 @@ class Upnp(
         ),
     )
 
+    // ---------------------------------------------------------------- alarms
+    //
+    // `AlarmClock:1` is household-wide: any player answers for every alarm. Nothing in the
+    // Control API touches alarms.
+
+    /** Every alarm in the household. See [parseAlarms] for why the reply is parsed twice. */
+    suspend fun listAlarms(hostname: String): List<Alarm> = withContext(Dispatchers.IO) {
+        parseAlarms(parse(soap(hostname, Service.ALARM_CLOCK, "ListAlarms", emptyList())).text("CurrentAlarmList").orEmpty())
+    }
+
+    /** Write [alarm] back whole — the player refuses a partial record (402); see [Alarm]. */
+    suspend fun updateAlarm(hostname: String, alarm: Alarm): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.ALARM_CLOCK, "UpdateAlarm", listOf("ID" to alarm.id.toString()) + alarm.writeArgs())
+    }
+
+    /**
+     * Create [alarm], its id ignored, answering the id the household assigns. Refused with 801
+     * when the room already has an alarm at that start time, whatever its recurrence (Kitchen,
+     * 2026-10-10).
+     */
+    suspend fun createAlarm(hostname: String, alarm: Alarm): Int = withContext(Dispatchers.IO) {
+        val reply = parse(soap(hostname, Service.ALARM_CLOCK, "CreateAlarm", alarm.writeArgs()))
+        reply.text("AssignedID")?.trim()?.toIntOrNull() ?: throw IOException("CreateAlarm answered without an id")
+    }
+
+    /** The household's clock, which alarm times are on, and whether it knows its timezone. */
+    suspend fun householdClock(hostname: String): HouseholdClock = withContext(Dispatchers.IO) {
+        val now = parse(soap(hostname, Service.ALARM_CLOCK, "GetTimeNow", emptyList())).text("CurrentLocalTime").orEmpty()
+        val zone = parse(soap(hostname, Service.ALARM_CLOCK, "GetTimeZone", emptyList())).text("Index")?.trim()?.toIntOrNull() ?: -1
+        HouseholdClock(localTime = now, timeZoneSet = zone >= 0)
+    }
+
+    /**
+     * The household's Sonos favourites as alarm programs: `Browse FV:2`, each item's `res` and
+     * `r:resMD`, which is exactly what `CreateAlarm` takes. The Control API's favourites carry ids
+     * only. An item with no URI cannot be a program and is left out.
+     */
+    suspend fun favoritePrograms(hostname: String): List<AlarmProgram> = withContext(Dispatchers.IO) {
+        val envelope = parse(
+            soap(
+                hostname, Service.CONTENT_DIRECTORY, "Browse",
+                listOf(
+                    "ObjectID" to "FV:2",
+                    "BrowseFlag" to "BrowseDirectChildren",
+                    "Filter" to "*",
+                    "StartingIndex" to "0",
+                    "RequestedCount" to "100",
+                    "SortCriteria" to "",
+                ),
+            ),
+        )
+        val didl = envelope.text("Result").orEmpty()
+        if (didl.isBlank()) return@withContext emptyList()
+        val items = parse(didl).getElementsByTagName("item")
+        (0 until items.length).mapNotNull { i ->
+            val item = items.item(i) as Element
+            val uri = item.child("res") ?: return@mapNotNull null
+            AlarmProgram(title = item.child("dc:title") ?: uri, uri = uri, metaData = item.child("r:resMD").orEmpty())
+        }
+    }
+
     // ---------------------------------------------------------------- SOAP
 
     /** An AVTransport action, on the coordinator; every one takes `InstanceID` 0 first. */
@@ -402,6 +463,7 @@ class Upnp(
         CONTENT_DIRECTORY("/MediaServer/ContentDirectory/Control", "urn:schemas-upnp-org:service:ContentDirectory:1"),
         RENDERING_CONTROL("/MediaRenderer/RenderingControl/Control", "urn:schemas-upnp-org:service:RenderingControl:1"),
         MUSIC_SERVICES("/MusicServices/Control", "urn:schemas-upnp-org:service:MusicServices:1"),
+        ALARM_CLOCK("/AlarmClock/Control", "urn:schemas-upnp-org:service:AlarmClock:1"),
     }
 
     /**
@@ -516,6 +578,7 @@ class Upnp(
             "711" to "no such track in the queue",
             "402" to "invalid arguments",
             "1028" to "the queue changed while this was in flight; try again",
+            "801" to "that room already has an alarm at that time",
         )
     }
 }

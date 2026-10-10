@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:UpdateAlarmResponse xmlns:u="urn:schemas-upnp-org:service:AlarmClock:1"></u:UpdateAlarmResponse></s:Body></s:Envelope>

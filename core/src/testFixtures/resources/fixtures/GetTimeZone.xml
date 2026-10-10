@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetTimeZoneResponse xmlns:u="urn:schemas-upnp-org:service:AlarmClock:1"><Index>9</Index><AutoAdjustDst>1</AutoAdjustDst></u:GetTimeZoneResponse></s:Body></s:Envelope>
