@@ -204,15 +204,20 @@ fun AppButton(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier.tapToClick(onClick, onLongClick),
-        colors = ButtonDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
-            pressedContainerColor = MaterialTheme.colorScheme.primary,
-            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
+        colors = appButtonColors(),
         content = content
     )
 }
+
+/** A focused or pressed button is filled with the primary colour: the one focus language. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+private fun appButtonColors() = ButtonDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.primary,
+    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+    pressedContainerColor = MaterialTheme.colorScheme.primary,
+    pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+)
 
 /**
  * [AppButton] holding only an icon: tighter padding, so a row of them — the transport — fits the
@@ -229,12 +234,7 @@ fun IconAppButton(
         onClick = onClick,
         modifier = modifier.tapToClick(onClick),
         contentPadding = PaddingValues(12.dp),
-        colors = ButtonDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
-            pressedContainerColor = MaterialTheme.colorScheme.primary,
-            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
+        colors = appButtonColors(),
         content = content
     )
 }

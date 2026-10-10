@@ -55,13 +55,15 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
+import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.drop
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -114,16 +116,17 @@ import com.rahga.x2rock.viewmodel.sortGroups
 @OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(
-    onOpenQueue: (groupId: String) -> Unit = {},
-    onOpenFavorites: (groupId: String) -> Unit = {},
+    onOpenQueue: (groupId: String) -> Unit,
+    onOpenFavorites: (groupId: String) -> Unit,
     onOpenSearch: (groupId: String) -> Unit,
-    onOpenPreferredServices: () -> Unit = {},
+    onOpenPreferredServices: () -> Unit,
     homeViewModel: HomeViewModel = hiltViewModel(),
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
     val state by homeViewModel.uiState.collectAsState()
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
+    val upnpOff by homeViewModel.upnpOff.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
@@ -216,15 +219,19 @@ fun HomeScreen(
 
     // Modals trap focus, so closing one has to hand it back explicitly — otherwise focus is left
     // on a node that just left the composition and the remote goes dead until a direction press.
+    // On closes only: run on the first composition, it placed focus before the resume handler
+    // above had waited out the frames a deep link's selection takes.
     val modalVisible = showSettings || panelGroup != null
-    LaunchedEffect(modalVisible) {
-        if (!modalVisible) place(
-            when {
-                fromSettings -> settingsButtonFocus
-                panelFromPane -> groupFocus
-                else -> sidebarFocusRequester
-            }
-        )
+    LaunchedEffect(Unit) {
+        snapshotFlow { modalVisible }.drop(1).collect { visible ->
+            if (!visible) place(
+                when {
+                    fromSettings -> settingsButtonFocus
+                    panelFromPane -> groupFocus
+                    else -> sidebarFocusRequester
+                }
+            )
+        }
     }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
@@ -271,7 +278,7 @@ fun HomeScreen(
                 settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
                 onChooseHousehold = { homeViewModel.chooseHousehold(it) },
-                upnpOff = homeViewModel.upnpOff.collectAsState().value,
+                upnpOff = upnpOff,
                 onListFocusChanged = { listHasFocus = it },
             )
 
@@ -378,7 +385,6 @@ fun HomeScreen(
             val playerNames = remember(liveGroup) { homeViewModel.playerNamesForGroup(liveGroup) }
             val volumes by homeViewModel.playerVolumes.collectAsState()
             val groupVolumes by homeViewModel.groupVolumes.collectAsState()
-            val upnpOff by homeViewModel.upnpOff.collectAsState()
             val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
             val tone by homeViewModel.tone.collectAsState()
             LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }

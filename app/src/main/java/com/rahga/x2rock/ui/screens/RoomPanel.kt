@@ -107,9 +107,9 @@ fun RoomPanel(
     playerNames: List<Pair<String, String>>,
     playerVolumes: Map<String, Int>,
     /** Set every member to the group's level; offered only while their levels differ. */
-    onNormalize: () -> Unit = {},
+    onNormalize: () -> Unit,
     /** The speakers whose own volume is muted, for their rows. */
-    mutedPlayers: Set<String> = emptySet(),
+    mutedPlayers: Set<String>,
     /** Each joinable group's own level, keyed by group id. */
     groupVolumes: Map<String, Int>,
     /** One group holding the whole household, which is what party mode leaves behind. */
@@ -125,16 +125,16 @@ fun RoomPanel(
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
     /** UPnP is off for the household, so the TV input cannot be switched to. */
-    upnpOff: Boolean = false,
+    upnpOff: Boolean,
     /** This room's tone, or `null` while it is read. */
-    tone: HomeViewModel.ToneUi? = null,
-    onStepBass: (Int) -> Unit = {},
-    onStepTreble: (Int) -> Unit = {},
-    onToggleLoudness: () -> Unit = {},
-    onToggleTrueplay: () -> Unit = {},
-    onToggleCrossfade: () -> Unit = {},
+    tone: HomeViewModel.ToneUi?,
+    onStepBass: (Int) -> Unit,
+    onStepTreble: (Int) -> Unit,
+    onToggleLoudness: () -> Unit,
+    onToggleTrueplay: () -> Unit,
+    onToggleCrossfade: () -> Unit,
     /** Keep this room's speakers, levels and favourite as a preset in Browse. */
-    onSavePreset: () -> Unit = {},
+    onSavePreset: () -> Unit,
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -224,7 +224,6 @@ fun RoomPanel(
             PanelSection(if (members > 1) "Add another" else "Play together with")
             otherGroups.forEach { other ->
                 RoomRow(
-                    modifier = Modifier,
                     name = other.label,
                     subtitle = rooms[other.id]?.let { roomRowLines(it, other.playbackState ?: PlaybackStates.IDLE).firstOrNull() }
                         ?: roomActivity(other.playbackState, false).label,
@@ -259,16 +258,16 @@ fun RoomPanel(
         // a level would step from the wrong one.
         // Crossfade is the group's, over the Control API, so it needs neither the tone nor UPnP;
         // it moved here from the pane's button row, which needed the room for Group.
-        val toneShown = tone != null && !upnpOff
-        if (toneShown || info.crossfade != null) PanelSection("Sound")
-        if (toneShown) {
-            ToneRow("Bass", tone!!.bass, onStepBass)
-            ToneRow("Treble", tone.treble, onStepTreble)
+        val shownTone = tone?.takeIf { !upnpOff }
+        if (shownTone != null || info.crossfade != null) PanelSection("Sound")
+        if (shownTone != null) {
+            ToneRow("Bass", shownTone.bass, onStepBass)
+            ToneRow("Treble", shownTone.treble, onStepTreble)
             AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
-                Text(if (tone.loudness) "Loudness   On" else "Loudness   Off")
+                Text(if (shownTone.loudness) "Loudness   On" else "Loudness   Off")
             }
             // Only where the speaker has a calibration to turn back on; measuring is the app's.
-            tone.trueplay?.takeIf { it.available }?.let { trueplay ->
+            shownTone.trueplay?.takeIf { it.available }?.let { trueplay ->
                 AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
                     Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
                 }
@@ -331,7 +330,6 @@ private fun PanelSection(title: String) {
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RoomRow(
-    modifier: Modifier,
     name: String,
     volume: Int?,
     /** "join", "leave", or none — the coordinator has nothing to leave. */
@@ -342,6 +340,7 @@ private fun RoomRow(
     subtitle: String? = null,
     /** Kept at its level and dimmed, the way the desktop widget draws a muted room. */
     muted: Boolean = false,
+    modifier: Modifier = Modifier,
 ) {
     AppButton(
         onClick = onActivate,

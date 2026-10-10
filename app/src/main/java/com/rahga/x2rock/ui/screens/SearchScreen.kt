@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import coil.compose.AsyncImage
 import com.rahga.x2rock.ui.serviceLogo
-import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.BackHandler
@@ -60,7 +59,6 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.smapi.Item
-import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.RowStatus

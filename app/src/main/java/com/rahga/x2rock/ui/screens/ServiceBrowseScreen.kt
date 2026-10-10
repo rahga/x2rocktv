@@ -17,13 +17,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -34,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -48,14 +45,12 @@ import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
 import com.rahga.x2rock.ui.components.ItemMenu
 import com.rahga.x2rock.ui.components.MenuAction
 import com.rahga.x2rock.ui.components.MenuSection
-import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.store.isPrimary
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.withPrimariesFirst
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
-import com.rahga.x2rock.ui.components.ArtSlot
 import com.rahga.x2rock.ui.serviceLogo
 import com.rahga.x2rock.ui.components.SearchField
 import com.rahga.x2rock.ui.components.MediaRow
@@ -71,7 +66,6 @@ import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.viewmodel.WHOLE
 import androidx.tv.material3.Icon
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.viewmodel.ServiceBrowseViewModel
 
 /**
@@ -125,7 +119,7 @@ fun ServiceBrowseScreen(
                         onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic() },
                     )
                 } else {
-                    ServiceContent(viewModel, service, room, onPlayed)
+                    ServicePage(viewModel, service, room, onPlayed)
                 }
             }
             // Over the whole screen, not inside the column: there the list takes every pixel of
@@ -244,40 +238,24 @@ private sealed interface Entry {
     data class Service(val linked: LinkedService) : Entry { override val key get() = "s:${linked.key()}" }
 }
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+/** A service as a list row: Sonos's own logo for it in the art slot (see serviceLogo), its name, and [detail] under it. */
 @Composable
 internal fun ServiceRow(
     name: String,
     detail: String?,
     onClick: () -> Unit,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
     onMenu: (() -> Unit)? = null,
     /** The "opens" chevron: off where a press does something other than open the service. */
     opens: Boolean = true,
-) {
-    AppCard(
-        onClick = onClick,
-        onLongClick = onMenu,
-        modifier = modifier.fillMaxWidth().then(if (onMenu != null) Modifier.dpadMenuKey(onMenu) else Modifier),
-    ) {
-        Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // Sonos's own logo for it, in the slot every list row keeps; see serviceLogo.
-            ArtSlot(serviceLogo(name))
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(name, style = MaterialTheme.typography.titleMedium)
-                if (detail != null) {
-                    Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            if (opens) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
-        }
-    }
+) = MediaRow(title = name, subtitle = detail, artUrl = serviceLogo(name), onClick = onClick, modifier = modifier, onLongClick = onMenu) {
+    if (opens) Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
 }
 
+/** One service, opened: its library, or its page of shelves, with its search one press up. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedService, room: String, onPlayed: () -> Unit) {
+private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedService, room: String, onPlayed: () -> Unit) {
     val categories by viewModel.categories.collectAsState()
     val category by viewModel.category.collectAsState()
     val query by viewModel.query.collectAsState()
@@ -347,7 +325,7 @@ private fun ServiceContent(viewModel: ServiceBrowseViewModel, service: LinkedSer
     var menuFrom by remember { mutableStateOf<String?>(null) }
     val menuReturn = remember { FocusRequester() }
     LaunchedEffect(menuItem) {
-        if (menuItem != null) menuFrom = menuItem?.id
+        if (menuItem != null) menuFrom = menuItem.id
         else if (menuFrom != null) menuReturn.requestFocusRetrying()
     }
     val fromQueue by viewModel.menu.fromQueue.collectAsState()

@@ -3,14 +3,12 @@ package com.rahga.x2rock.ui.screens
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -32,19 +30,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
-import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.ItemMenu
+import com.rahga.x2rock.ui.components.MenuAction
+import com.rahga.x2rock.ui.components.MenuSection
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
@@ -205,14 +202,20 @@ private fun QueueList(
         val menuEntry = contextMenuEntry
         if (menuEntry != null) {
             val neighbours = neighbourSlots(entries, menuEntry.trackNumber)
-            QueueItemContextMenu(
-                item = menuEntry.item,
-                canMoveUp = neighbours.first != null,
-                canMoveDown = neighbours.second != null,
-                onRemove = { onRemoveItem(menuEntry.trackNumber); returnTo = menuEntry.trackNumber; contextMenuEntry = null },
-                onMoveUp = { onMoveUp(menuEntry.trackNumber); returnTo = neighbours.first; contextMenuEntry = null },
-                onMoveDown = { onMoveDown(menuEntry.trackNumber); returnTo = neighbours.second; contextMenuEntry = null },
-                onDismiss = { returnTo = menuEntry.trackNumber; contextMenuEntry = null }
+            val track = menuEntry.item.track
+            // An action names where focus returns to; the close that follows it keeps that, and
+            // a plain dismiss returns to the row the menu was opened on.
+            ItemMenu(
+                title = track?.name ?: "Unknown track",
+                subtitle = listOfNotNull(track?.artist?.name, track?.album?.name).joinToString(" · ").ifEmpty { null },
+                artUrl = track?.imageUrl,
+                sections = listOf(MenuSection(null, listOfNotNull(
+                    MenuAction("Remove from Queue") { onRemoveItem(menuEntry.trackNumber); returnTo = menuEntry.trackNumber },
+                    // Offered only where there is somewhere to move to, rather than disabled.
+                    neighbours.first?.let { up -> MenuAction("Move up") { onMoveUp(menuEntry.trackNumber); returnTo = up } },
+                    neighbours.second?.let { down -> MenuAction("Move down") { onMoveDown(menuEntry.trackNumber); returnTo = down } },
+                ))),
+                onDismiss = { if (returnTo == null) returnTo = menuEntry.trackNumber; contextMenuEntry = null },
             )
         }
     }
@@ -239,54 +242,5 @@ private fun QueueRow(
         modifier = modifier,
     ) {
         if (isCurrent) RowStatus("Now playing", highlighted = true)
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun QueueItemContextMenu(
-    item: QueueItem,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
-    onRemove: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onDismiss: () -> Unit
-) {
-    BackHandler { onDismiss() }
-    val firstFocus = rememberAutoFocusRequester()
-
-    Overlay(onDismiss) {
-        Column(
-            modifier = Modifier
-                .width(320.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = item.track?.name ?: "Track",
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(Modifier.height(4.dp))
-            AppButton(
-                onClick = onRemove,
-                modifier = Modifier.fillMaxWidth().focusRequester(firstFocus)
-            ) {
-                Text("Remove from Queue")
-            }
-            // Drawn only where there is somewhere to move to, rather than disabled.
-            if (canMoveUp) {
-                AppButton(onClick = onMoveUp, modifier = Modifier.fillMaxWidth()) { Text("Move up") }
-            }
-            if (canMoveDown) {
-                AppButton(onClick = onMoveDown, modifier = Modifier.fillMaxWidth()) { Text("Move down") }
-            }
-            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel")
-            }
-        }
     }
 }
