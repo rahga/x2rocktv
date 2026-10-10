@@ -348,6 +348,15 @@ what a room *on* its line-in reports is unknown: nothing recognises it, so there
 no third line, no "(current source)". **Any release notes must say Line-In is untested** until a
 real Port, Five or Amp has taken it (PUNCH P-14).
 
+SoCo (the Python library) corroborates the command, not the capability: a UPnP event it captured off
+a player on line-in (`tests/data/data_structures_entry_integration/source_linein.xml`, read
+2026-10-10) carries `AVTransportURI` `x-rincon-stream:<player>` with metadata titled **`loadLineIn`**,
+class `object.item.audioItem.linein` — that input was set through this same Control API command,
+presumably by the Sonos app. SoCo itself switches over UPnP instead, `SetAVTransportURI
+x-rincon-stream:<player whose input>` to the playing speaker — the TV input's pattern exactly, and the
+fallback if `loadLineIn` ever disappoints. It recognises line-in by `GetPositionInfo`'s `TrackURI`
+prefix, and checks no capability at all, so `LINE_IN` stays unconfirmed.
+
 ### The remote's volume keys are not ours to take
 
 **Never call `MediaSession.setPlaybackToRemote(VolumeProvider)`.** It is the one API that
