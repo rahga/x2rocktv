@@ -58,7 +58,16 @@ import kotlinx.coroutines.delay
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit, onFocused: (Boolean) -> Unit = {}) {
-    if (state.durationMillis <= 0) return
+    // Always laid out, blank where there is nothing to show: a station, a TV input or an empty
+    // room has no duration, and closing the slot up moved every row below it as the viewer
+    // walked the room list. The pane above the transport keeps one shape whatever a room plays.
+    val hasDuration = state.durationMillis > 0
+    // Seekable only where the player says so. `canSeek` is per content, not per service: an
+    // iHeartRadio artist station's track carries a duration and refuses a seek with
+    // ERROR_DISALLOWED_BY_POLICY, where the same service's on-demand tracks seek fine. The player
+    // reports it with every status, so a bar that cannot seek is a plain progress line — not a
+    // focus stop that answers a press with an error.
+    val seekable = hasDuration && state.actions.canSeek
 
     var displayPositionMillis by remember(state.positionUpdatedAt) {
         mutableLongStateOf(state.positionMillis)
@@ -73,7 +82,7 @@ internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekT
         }
     }
 
-    val progress = (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f)
+    val progress = if (hasDuration) (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f) else 0f
     var isFocused by remember { mutableStateOf(false) }
 
     // The running total of a burst of seek presses, shown under the bar and faded out once the
@@ -117,35 +126,37 @@ internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekT
     val tapAt by rememberUpdatedState(::seekToFraction)
     val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
 
-    Column {
+    // Before focusable(), not after: onFocusChanged sees focus on what follows it, and placed
+    // after it never saw the bar take focus — so the bar never changed colour and its hint never
+    // showed, and landing on it looked like landing on nothing.
+    // Touch and mouse, for anything that has them — the emulator, a tablet. A remote never sends
+    // a tap, so on a TV this is inert. The strip is taller than the bar drawn in it, or an 8dp
+    // line would be a hard thing to hit. Started once and reading the latest handler, as
+    // tapToClick does: the displayed position is a new state at every report, and a stale
+    // handler measured from an old one.
+    val seekControls = if (!seekable) Modifier else Modifier
+        .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
+        .focusable()
+        .pointerInput(Unit) {
+            detectTapGestures { offset -> tapAt(offset.x / size.width) }
+        }
+    val seekKeys = if (!seekable) Modifier else Modifier.onKeyEvent { event ->
+        if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+        when (event.key) {
+            Key.DirectionLeft -> { seek(-1); true }
+            Key.DirectionRight -> { seek(+1); true }
+            else -> false
+        }
+    }
+
+    Column(modifier = Modifier.alpha(if (hasDuration) 1f else 0f)) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                // Before focusable(), not after: onFocusChanged sees focus on what follows it,
-                // and placed after it never saw the bar take focus — so the bar never changed
-                // colour and its hint never showed, and landing on it looked like landing on
-                // nothing.
-                .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
-                .focusable()
-                // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
-                // never sends a tap, so on a TV this is inert. The strip is taller than the bar
-                // drawn in it, or an 8dp line would be a hard thing to hit.
-                // Started once and reading the latest handler, as tapToClick does: the displayed
-                // position is a new state at every report, and a stale handler measured from an
-                // old one.
-                .pointerInput(Unit) {
-                    detectTapGestures { offset -> tapAt(offset.x / size.width) }
-                }
+                .then(seekControls)
                 .padding(vertical = 12.dp)
                 .height(SEEK_KNOB)
-                .onKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    when (event.key) {
-                        Key.DirectionLeft -> { seek(-1); true }
-                        Key.DirectionRight -> { seek(+1); true }
-                        else -> false
-                    }
-                }
+                .then(seekKeys)
         ) {
             // An 8dp bar recolouring to the focus tint was too faint to find across a room — a
             // press up from the transport read as focus vanishing. Focused, the bar grows and a

@@ -6,6 +6,7 @@ import androidx.compose.runtime.snapshotFlow
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.viewmodel.trackLine
 import com.rahga.x2rock.ui.components.DotScanner
+import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.LocalArtColors
@@ -47,6 +48,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -220,8 +222,12 @@ fun PlayerPane(
             ) {
                 // A television input is a different source, not the music pane with pieces
                 // missing, so it gets its own header and its own controls.
+                // The pane keeps one shape down to and including the seek bar's slot, whatever the
+                // room plays — art tile or its blank, title, bar or its blank — so walking the room
+                // list moves nothing above the transport. Below it, each source has its own rows.
                 if (state.onTvInput) {
                     TvInfo(state, viewModel, sidebarFocusRequester, volumeEntry)
+                    ProgressBar(state, onSeekBy = {}, onSeekTo = {})
                     TvControls(
                         state = state,
                         viewModel = viewModel,
@@ -239,10 +245,10 @@ fun PlayerPane(
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
                     TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry, showService = volumeFocused.value || seekFocused)
+                    ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) }, onFocused = { seekFocused = it })
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
-                        onSeekFocused = { seekFocused = it },
                         playPauseFocusRequester = detailFocusRequester,
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenQueue = onOpenQueue,
@@ -259,6 +265,11 @@ fun PlayerPane(
                 }
             }
         }
+
+        // What did not work — "Couldn't seek: …" — floats over the foot of the pane for a few
+        // seconds, as the home screen's does over the room panel: a line among the rows used to
+        // push the places below it down and vanish again, and read as part of the pane.
+        state.notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
 
         if (showSetVolume) {
             SetVolumeOverlay(
@@ -338,7 +349,10 @@ private fun TrackInfo(
     Column {
         PaneHeader(state, viewModel, exitLeftFocusRequester, volumeEntry)
         Spacer(modifier = Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The tile's slot is always held, occupied or not, so every title starts at the same place
+        // and the row keeps its height — the room list's 56dp rule, at the pane's size. Blank for
+        // a room with nothing to show, as a grey square would assert something that is not there.
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = ART_SIZE)) {
             if (state.albumArtUrl != null) {
                 Box(Modifier.size(ART_SIZE).clip(RoundedCornerShape(8.dp))) {
                     AsyncImage(
@@ -367,6 +381,9 @@ private fun TrackInfo(
                 // this stands in where there is not. A stream loaded by its URL really does
                 // send `images: []`, so there is nothing to fetch and nothing to wait for.
                 GlyphTile(Icons.Default.Radio)
+                Spacer(modifier = Modifier.width(32.dp))
+            } else {
+                Spacer(modifier = Modifier.size(ART_SIZE))
                 Spacer(modifier = Modifier.width(32.dp))
             }
             Column {
@@ -467,8 +484,6 @@ private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = exitOnKey(Ke
 private fun PlaybackControls(
     state: PlayerUiState,
     viewModel: PlayerViewModel,
-    /** Whether the seek bar has focus; the art names its service while it does. */
-    onSeekFocused: (Boolean) -> Unit,
     playPauseFocusRequester: FocusRequester,
     exitLeftFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
@@ -498,9 +513,6 @@ private fun PlaybackControls(
     val hasContent = state.actions.canPlay
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) }, onFocused = onSeekFocused)
-        if (hasContent) Spacer(modifier = Modifier.height(24.dp))
-
         val transportExit = booleanArrayOf(false)
         if (hasContent) {
             Row(
@@ -595,11 +607,6 @@ private fun PlaybackControls(
             }
         }
 
-        if (state.notice != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(state.notice, style = MaterialTheme.typography.bodySmall)
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
         // Where to go from here. These used to share a row with shuffle and repeat as labelled
@@ -672,7 +679,7 @@ private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFoc
         Spacer(modifier = Modifier.height(16.dp))
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = ART_SIZE),
         ) {
             GlyphTile(Icons.Default.Tv)
             Spacer(modifier = Modifier.width(32.dp))

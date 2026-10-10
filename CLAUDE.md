@@ -512,6 +512,17 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   logo over the cover's bottom-left fifth, from the `service` every metadata event carries. Only
   square logos are published (Sonos's list has one tile per service, no wordmark), so it sits on
   the art, and only on those two controls, so it never covers the art otherwise.
+- **The pane keeps one shape down to and including the seek bar's slot** (2026-10-10): the tile's
+  slot is held blank where there is no art, and the bar's slot is laid out blank where there is no
+  duration — a station, a TV input, an empty room — so walking the room list moves nothing above
+  the transport. Below it each source has its own rows. Asked for after Bedroom, Dining Room and
+  Kitchen each put the controls at a different height.
+- **The seek bar seeks only where the player says `canSeek`**, which is per content, not per
+  service: an iHeartRadio artist station's track carries a duration and refuses a seek with
+  `ERROR_DISALLOWED_BY_POLICY`, where the same service's on-demand tracks seek fine. The player
+  reports it with every status, so there it is a plain progress line and not a focus stop. What
+  did not work floats over the foot of the pane as a `NoticeBanner`, as the home screen's does
+  over the room panel, rather than as a line among the rows.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
