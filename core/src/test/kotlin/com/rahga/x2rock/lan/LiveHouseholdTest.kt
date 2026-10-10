@@ -121,7 +121,7 @@ class LiveHouseholdTest {
             ?: error("$address served no household id at /status/zp")
 
     private fun fetch(address: InetAddress, path: String): String =
-        java.net.URL("http://${address.hostAddress}:${Upnp.PORT}$path")
+        java.net.URI("http://${address.hostAddress}:${Upnp.PORT}$path").toURL()
             .openConnection().apply { connectTimeout = 5_000; readTimeout = 5_000 }
             .getInputStream().use { it.readBytes().decodeToString() }
 

@@ -8,7 +8,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
-import java.net.URL
+import java.net.URI
 
 /**
  * Opt-in, against a real player: capture the household's `ThirdPartyMediaServersX` and decrypt
@@ -39,8 +39,7 @@ class StoredAccountsLiveTest {
      */
     @Test fun `every service answers search and browse`() = runBlocking {
         val ip = player!!
-        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
-            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000)) { "no account event" }
         val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
         val answer = soapListServices(ip)
@@ -79,8 +78,7 @@ class StoredAccountsLiveTest {
         val name = System.getProperty("x2rock.probe")
         assumeTrue("set -Dx2rock.probe=<service name> to probe one service", name != null)
         val term = System.getProperty("x2rock.term") ?: "Dune"
-        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
-            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
         val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
         val answer = soapListServices(ip)
@@ -148,8 +146,7 @@ class StoredAccountsLiveTest {
      */
     @Test fun `which services publish ratings`() = runBlocking {
         val ip = player!!
-        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
-            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
         val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
         val answer = soapListServices(ip)
@@ -208,8 +205,7 @@ class StoredAccountsLiveTest {
 
     @Test fun `the household's own tokens capture and decrypt`() = runBlocking {
         val ip = player!!
-        val statusZp = URL("http://$ip:1400/status/zp").readText()
-        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>").find(statusZp)!!.groupValues[1]
+        val longId = householdIdOf(ip)
         val shortId = longId.substringBefore('.')
 
         val envelope = AccountCapture.captureEnvelope(ip, timeoutMillis = 15_000)
@@ -233,8 +229,7 @@ class StoredAccountsLiveTest {
      */
     @Test fun `a household token searches its service end to end`() = runBlocking {
         val ip = player!!
-        val longId = Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
-            .find(URL("http://$ip:1400/status/zp").readText())!!.groupValues[1]
+        val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000)) { "no account event arrived" }
         val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
 
@@ -293,4 +288,9 @@ class StoredAccountsLiveTest {
             break
         }
     }
+
+    /** The long household id, as `/status/zp` names it: what the decrypt key is cut from. */
+    private fun householdIdOf(ip: String): String =
+        Regex("<HouseholdControlID>([^<]+)</HouseholdControlID>")
+            .find(URI("http://$ip:1400/status/zp").toURL().readText())!!.groupValues[1]
 }

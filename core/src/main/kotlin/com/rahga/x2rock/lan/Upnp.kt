@@ -15,6 +15,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.IOException
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
@@ -65,7 +66,7 @@ internal fun parseClock(clock: String): Long? {
  */
 internal fun formatClock(millis: Long): String {
     val total = (millis / 1_000).coerceAtLeast(0)
-    return "%02d:%02d:%02d".format(java.util.Locale.ROOT, total / 3_600, total / 60 % 60, total % 60)
+    return "%02d:%02d:%02d".format(Locale.ROOT, total / 3_600, total / 60 % 60, total % 60)
 }
 
 /** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
@@ -111,10 +112,7 @@ class Upnp(
      * queue's version the caller's list was read at — see [moveInQueue].
      */
     suspend fun removeFromQueue(hostname: String, trackNumber: Int, updateId: String): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "RemoveTrackFromQueue",
-            listOf("InstanceID" to "0", "ObjectID" to "Q:0/$trackNumber", "UpdateID" to updateId),
-        )
+        transport(hostname, "RemoveTrackFromQueue", "ObjectID" to "Q:0/$trackNumber", "UpdateID" to updateId)
     }
 
     /**
@@ -127,15 +125,12 @@ class Upnp(
      * meant the refusal could never happen: a fresh id always matches.
      */
     suspend fun moveInQueue(hostname: String, from: Int, to: Int, updateId: String): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "ReorderTracksInQueue",
-            listOf(
-                "InstanceID" to "0",
-                "StartingIndex" to from.toString(),
-                "NumberOfTracks" to "1",
-                "InsertBefore" to insertBefore(from, to).toString(),
-                "UpdateID" to updateId,
-            ),
+        transport(
+            hostname, "ReorderTracksInQueue",
+            "StartingIndex" to from.toString(),
+            "NumberOfTracks" to "1",
+            "InsertBefore" to insertBefore(from, to).toString(),
+            "UpdateID" to updateId,
         )
     }
 
@@ -148,15 +143,12 @@ class Upnp(
      * verified), so a caller wanting "play next" names the slot after the current track.
      */
     suspend fun addToQueue(hostname: String, uri: String, metadata: String, position: Int = 0): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "AddURIToQueue",
-            listOf(
-                "InstanceID" to "0",
-                "EnqueuedURI" to uri,
-                "EnqueuedURIMetaData" to metadata,
-                "DesiredFirstTrackNumberEnqueued" to position.toString(),
-                "EnqueueAsNext" to if (position > 0) "1" else "0",
-            ),
+        transport(
+            hostname, "AddURIToQueue",
+            "EnqueuedURI" to uri,
+            "EnqueuedURIMetaData" to metadata,
+            "DesiredFirstTrackNumberEnqueued" to position.toString(),
+            "EnqueueAsNext" to if (position > 0) "1" else "0",
         )
     }
 
@@ -165,13 +157,13 @@ class Upnp(
      * while the queue is the source: on a stream it reads 1 whatever the queue holds.
      */
     suspend fun currentTrackNumber(hostname: String): Int = withContext(Dispatchers.IO) {
-        parse(soap(hostname, Service.AV_TRANSPORT, "GetPositionInfo", listOf("InstanceID" to "0")))
+        parse(transport(hostname, "GetPositionInfo"))
             .text("Track")?.trim()?.toIntOrNull() ?: 0
     }
 
     /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */
     suspend fun clearQueue(hostname: String): Unit = withContext(Dispatchers.IO) {
-        soap(hostname, Service.AV_TRANSPORT, "RemoveAllTracksFromQueue", listOf("InstanceID" to "0"))
+        transport(hostname, "RemoveAllTracksFromQueue")
     }
 
     /**
@@ -179,9 +171,7 @@ class Upnp(
      * An empty `ObjectID` is what makes it new rather than overwriting one.
      */
     suspend fun saveQueue(hostname: String, title: String): String = withContext(Dispatchers.IO) {
-        val envelope = parse(
-            soap(hostname, Service.AV_TRANSPORT, "SaveQueue", listOf("InstanceID" to "0", "Title" to title, "ObjectID" to ""))
-        )
+        val envelope = parse(transport(hostname, "SaveQueue", "Title" to title, "ObjectID" to ""))
         envelope.text("AssignedObjectID").orEmpty()
     }
 
@@ -191,10 +181,7 @@ class Upnp(
     }
 
     suspend fun skipToQueueItem(hostname: String, trackNumber: Int): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "Seek",
-            listOf("InstanceID" to "0", "Unit" to "TRACK_NR", "Target" to trackNumber.toString()),
-        )
+        transport(hostname, "Seek", "Unit" to "TRACK_NR", "Target" to trackNumber.toString())
     }
 
     /**
@@ -232,7 +219,7 @@ class Upnp(
      * on the TV — and the metadata is what putting it back needs.
      */
     suspend fun mediaInfo(hostname: String): MediaInfo = withContext(Dispatchers.IO) {
-        val envelope = parse(soap(hostname, Service.AV_TRANSPORT, "GetMediaInfo", listOf("InstanceID" to "0")))
+        val envelope = parse(transport(hostname, "GetMediaInfo"))
         MediaInfo(
             currentUri = envelope.text("CurrentURI").orEmpty(),
             currentUriMetaData = envelope.text("CurrentURIMetaData").orEmpty(),
@@ -271,7 +258,7 @@ class Upnp(
      * state — expired and about to stop, for some seconds — so it reads as zero, not as none.
      */
     suspend fun sleepTimer(hostname: String): Long? = withContext(Dispatchers.IO) {
-        val envelope = parse(soap(hostname, Service.AV_TRANSPORT, "GetRemainingSleepTimerDuration", listOf("InstanceID" to "0")))
+        val envelope = parse(transport(hostname, "GetRemainingSleepTimerDuration"))
         envelope.text("RemainingSleepTimerDuration")?.takeIf { it.isNotBlank() }?.let(::parseClock)
     }
 
@@ -281,10 +268,7 @@ class Upnp(
      * it fires the room pauses and keeps its place.
      */
     suspend fun setSleepTimer(hostname: String, millis: Long?): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.AV_TRANSPORT, "ConfigureSleepTimer",
-            listOf("InstanceID" to "0", "NewSleepTimerDuration" to (millis?.let(::formatClock) ?: "")),
-        )
+        transport(hostname, "ConfigureSleepTimer", "NewSleepTimerDuration" to (millis?.let(::formatClock) ?: ""))
     }
 
     /**
@@ -296,7 +280,7 @@ class Upnp(
      */
     suspend fun runningAlarm(hostname: String): Int? = withContext(Dispatchers.IO) {
         val reply = try {
-            soap(hostname, Service.AV_TRANSPORT, "GetRunningAlarmProperties", listOf("InstanceID" to "0"))
+            transport(hostname, "GetRunningAlarmProperties")
         } catch (e: UpnpRefusedException) {
             if (e.upnpCode == NO_ALARM_RUNNING) return@withContext null
             throw e
@@ -310,16 +294,13 @@ class Upnp(
      * stopped, where `DestroyAlarm` would delete the alarm and not silence it.
      */
     suspend fun snoozeAlarm(hostname: String, millis: Long): Unit = withContext(Dispatchers.IO) {
-        soap(hostname, Service.AV_TRANSPORT, "SnoozeAlarm", listOf("InstanceID" to "0", "Duration" to formatClock(millis)))
+        transport(hostname, "SnoozeAlarm", "Duration" to formatClock(millis))
     }
 
     /** Set the transport's source. The coordinator is who is asked; see [useTvInput]. */
     suspend fun setTransportUri(hostname: String, uri: String, metadata: String = ""): Unit =
         withContext(Dispatchers.IO) {
-            soap(
-                hostname, Service.AV_TRANSPORT, "SetAVTransportURI",
-                listOf("InstanceID" to "0", "CurrentURI" to uri, "CurrentURIMetaData" to metadata),
-            )
+            transport(hostname, "SetAVTransportURI", "CurrentURI" to uri, "CurrentURIMetaData" to metadata)
         }
 
     /**
@@ -339,20 +320,13 @@ class Upnp(
      * socket answers UPnP 402, so callers gate on the TV-input capability first.
      */
     suspend fun setEq(hostname: String, eqType: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.RENDERING_CONTROL, "SetEQ",
-            listOf(
-                "InstanceID" to "0",
-                "EQType" to eqType,
-                "DesiredValue" to if (on) "1" else "0",
-            ),
-        )
+        rendering(hostname, "SetEQ", "EQType" to eqType, "DesiredValue" to if (on) "1" else "0")
     }
 
     /** Bass or treble, −10..10. The player answers an empty body; re-read to see it. */
     suspend fun setTone(hostname: String, which: Tone, level: Int): Unit = withContext(Dispatchers.IO) {
         require(level in TONE_RANGE) { "$level is outside the ${TONE_RANGE.first}..${TONE_RANGE.last} the player accepts" }
-        soap(hostname, Service.RENDERING_CONTROL, which.action, listOf("InstanceID" to "0", which.field to level.toString()))
+        rendering(hostname, which.action, which.field to level.toString())
     }
 
     /**
@@ -360,15 +334,12 @@ class Upnp(
      * answers 402, which reads like a bad value rather than a missing field (x2rock).
      */
     suspend fun setLoudness(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.RENDERING_CONTROL, "SetLoudness",
-            listOf("InstanceID" to "0", "Channel" to "Master", "DesiredLoudness" to if (on) "1" else "0"),
-        )
+        rendering(hostname, "SetLoudness", "Channel" to "Master", "DesiredLoudness" to if (on) "1" else "0")
     }
 
     /** TruePlay's state, captured off Kitchen's One SL: enabled and available as `1`/`0`. */
     suspend fun trueplay(hostname: String): TruePlay = withContext(Dispatchers.IO) {
-        val envelope = parse(soap(hostname, Service.RENDERING_CONTROL, "GetRoomCalibrationStatus", listOf("InstanceID" to "0")))
+        val envelope = parse(rendering(hostname, "GetRoomCalibrationStatus"))
         TruePlay(
             enabled = envelope.text("RoomCalibrationEnabled") == "1",
             available = envelope.text("RoomCalibrationAvailable") == "1",
@@ -377,10 +348,7 @@ class Upnp(
 
     /** Turn TruePlay's correction off or back on. Measuring a room is the Sonos app's. */
     suspend fun setTrueplay(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
-        soap(
-            hostname, Service.RENDERING_CONTROL, "SetRoomCalibrationStatus",
-            listOf("InstanceID" to "0", "RoomCalibrationEnabled" to if (on) "1" else "0"),
-        )
+        rendering(hostname, "SetRoomCalibrationStatus", "RoomCalibrationEnabled" to if (on) "1" else "0")
     }
 
     enum class Tone(val action: String, val field: String) {
@@ -420,6 +388,14 @@ class Upnp(
     )
 
     // ---------------------------------------------------------------- SOAP
+
+    /** An AVTransport action, on the coordinator; every one takes `InstanceID` 0 first. */
+    private suspend fun transport(hostname: String, action: String, vararg args: Pair<String, String>): String =
+        soap(hostname, Service.AV_TRANSPORT, action, listOf("InstanceID" to "0") + args)
+
+    /** A RenderingControl action, on one speaker; `InstanceID` 0 first, as above. */
+    private suspend fun rendering(hostname: String, action: String, vararg args: Pair<String, String>): String =
+        soap(hostname, Service.RENDERING_CONTROL, action, listOf("InstanceID" to "0") + args)
 
     private enum class Service(val path: String, val urn: String) {
         AV_TRANSPORT("/MediaRenderer/AVTransport/Control", "urn:schemas-upnp-org:service:AVTransport:1"),
@@ -534,7 +510,6 @@ class Upnp(
         const val MAX_ITEMS = 1000
         /** Bass and treble, as the player accepts them. */
         val TONE_RANGE = -10..10
-
 
         private val UPNP_ERRORS = mapOf(
             "701" to "no media loaded, or not available in this state",

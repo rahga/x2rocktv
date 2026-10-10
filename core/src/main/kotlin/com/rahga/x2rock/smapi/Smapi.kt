@@ -268,12 +268,12 @@ class SmapiClient(client: OkHttpClient) {
      */
     suspend fun extendedMetadata(service: Service, token: Token?, id: String): List<Pair<String, String>> =
         withContext(Dispatchers.IO) {
-            parseDynamicProperties(call(service, token, "getExtendedMetadata", "<id>${Xml.escape(id)}</id>"))
+            parseDynamicProperties(call(service, token, "getExtendedMetadata", id(id)))
         }
 
     /** `getExtendedMetadata`'s whole answer for [id], for what it says beyond the item itself. */
     suspend fun extendedMetadataBody(service: Service, token: Token?, id: String): String =
-        withContext(Dispatchers.IO) { call(service, token, "getExtendedMetadata", "<id>${Xml.escape(id)}</id>") }
+        withContext(Dispatchers.IO) { call(service, token, "getExtendedMetadata", id(id)) }
 
     /** [id]'s related artist, album, radio and favourite state — see [ItemDetails]. */
     suspend fun itemDetails(service: Service, token: Token?, id: String): ItemDetails =
@@ -298,8 +298,7 @@ class SmapiClient(client: OkHttpClient) {
     ): ItemPage = withContext(Dispatchers.IO) {
         val body = call(
             service, token, "search",
-            "<id>${Xml.escape(category)}</id><term>${Xml.escape(term)}</term>" +
-                "<index>$index</index><count>$count</count>",
+            id(category) + "<term>${Xml.escape(term)}</term><index>$index</index><count>$count</count>",
         )
         atMost(parseItems(body), count)
     }
@@ -314,7 +313,7 @@ class SmapiClient(client: OkHttpClient) {
     ): ItemPage = withContext(Dispatchers.IO) {
         val body = call(
             service, token, "getMetadata",
-            "<id>${Xml.escape(id)}</id><index>$index</index><count>$count</count>",
+            id(id) + "<index>$index</index><count>$count</count>",
         )
         atMost(parseItems(body), count)
     }
@@ -329,14 +328,14 @@ class SmapiClient(client: OkHttpClient) {
     suspend fun chapters(service: Service, token: Token?, bookId: String, count: Int = 1): Chapters = withContext(Dispatchers.IO) {
         val body = call(
             service, token, "getMetadata",
-            "<id>${Xml.escape(bookId)}</id><index>0</index><count>$count</count>",
+            id(bookId) + "<index>0</index><count>$count</count>",
         )
         Chapters(atMost(parseItems(body), count), parsePositionInformation(body))
     }
 
     /** `getMediaURI`: turn a playable hit's id into something a player can be handed. */
     suspend fun mediaUri(service: Service, token: Token?, id: String): String = withContext(Dispatchers.IO) {
-        val body = call(service, token, "getMediaURI", "<id>${Xml.escape(id)}</id>")
+        val body = call(service, token, "getMediaURI", id(id))
         Xml.parse(body).firstNamed("getMediaURIResult")?.textContent
             ?: throw SmapiException("${service.name} returned no media URI for $id")
     }
@@ -356,7 +355,7 @@ class SmapiClient(client: OkHttpClient) {
             parseRateResult(
                 call(
                     service, token, "rateItem",
-                    "<id>${Xml.escape(id)}</id><rating>${Xml.escape(rating)}</rating>",
+                    id(id) + "<rating>${Xml.escape(rating)}</rating>",
                 )
             )
         }
@@ -405,6 +404,8 @@ class SmapiClient(client: OkHttpClient) {
      * first request after a token ages pays for the refresh fault and its retry.
      */
     private val refreshed = java.util.concurrent.ConcurrentHashMap<String, Token>()
+
+    private fun id(value: String) = "<id>${Xml.escape(value)}</id>"
 
     /** One SMAPI call. A service that needs an account is refused here, not sent and rejected. */
     private suspend fun call(service: Service, stored: Token?, action: String, params: String, retried: Boolean = false): String {
