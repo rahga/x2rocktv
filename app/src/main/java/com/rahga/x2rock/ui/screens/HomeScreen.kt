@@ -118,6 +118,7 @@ fun HomeScreen(
     onOpenQueue: (groupId: String) -> Unit,
     onOpenFavorites: (groupId: String) -> Unit,
     onOpenSearch: (groupId: String) -> Unit,
+    onOpenNowPlaying: (groupId: String) -> Unit,
     onOpenPreferredServices: () -> Unit,
     // Never defaulted to hiltViewModel(): inside the NavHost that would mint a second
     // PlayerViewModel owned by the back-stack entry, which would attach its own controls to the
@@ -142,6 +143,7 @@ fun HomeScreen(
     val queueFocus = remember { FocusRequester() }
     val browseFocus = remember { FocusRequester() }
     val searchFocus = remember { FocusRequester() }
+    val nowPlayingFocus = remember { FocusRequester() }
     // The pane's Group button, and whether the open panel came from it: closing the panel goes
     // back to whatever opened it, the button or the room.
     val groupFocus = remember { FocusRequester() }
@@ -153,6 +155,7 @@ fun HomeScreen(
         Opener.QUEUE -> queueFocus
         Opener.BROWSE -> browseFocus
         Opener.SEARCH -> searchFocus
+        Opener.NOW_PLAYING -> nowPlayingFocus
         // Not the pane's: the Settings button is at the foot of the list; see the resume below.
         Opener.SETTINGS, null -> null
     }
@@ -319,11 +322,13 @@ fun HomeScreen(
                         queueFocusRequester = queueFocus,
                         browseFocusRequester = browseFocus,
                         searchFocusRequester = searchFocus,
+                        nowPlayingFocusRequester = nowPlayingFocus,
                         groupFocusRequester = groupFocus,
                         startFocusRequester = openerFocus(opener),
                         onOpenQueue = { opener = Opener.QUEUE; onOpenQueue(selectedGroupId!!) },
                         onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
                         onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
+                        onOpenNowPlaying = { opener = Opener.NOW_PLAYING; onOpenNowPlaying(selectedGroupId!!) },
                         onOpenGroup = {
                             groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelGroup = it }
                         },
@@ -875,4 +880,4 @@ private fun ThemeSelector(
 }
 
 /** The pane's buttons that open another screen, so Back can return focus to the one that did. */
-private enum class Opener { QUEUE, BROWSE, SEARCH, SETTINGS }
+private enum class Opener { QUEUE, BROWSE, SEARCH, NOW_PLAYING, SETTINGS }

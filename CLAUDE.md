@@ -537,6 +537,15 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   as a line under the transport, Up next pushed the places row past the safe area on a two-line
   title (Shield); the time row's middle costs no height, and showing each only on its button keeps
   the pane quieter, as the service logo shows only on volume and seek.
+- **Full screen is a place in the pane's row** (`NowPlayingScreen`, 2026-10-10): the art as tall as
+  the screen, the track, the room, the clock, a progress line, nothing to press. Any key but Back
+  closes it too, on the key's **release** — closing on the press left the release to click the
+  pane's button underneath. It has its own view model on `RoomTarget`: the pane's `PlayerViewModel`
+  is told its room by `HomeScreen`, which is not composed meanwhile, so it would not follow a
+  regroup. Kept awake only while the room plays; the content drifts a few dp a minute.
+- **A bar composed after the last report starts from `livePosition`**, the report plus the time
+  since it. From the report alone, the pane on the way back from any screen sat behind by however
+  long the player had been quiet — 0:26 against 1:30 on the Shield.
 - **The seek bar seeks only where the player says `canSeek`**, which is per content, not per
   service: an iHeartRadio artist station's track carries a duration and refuses a seek with
   `ERROR_DISALLOWED_BY_POLICY`, where the same service's on-demand tracks seek fine. The player

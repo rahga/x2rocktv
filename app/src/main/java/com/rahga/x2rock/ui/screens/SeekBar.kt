@@ -78,7 +78,7 @@ internal fun ProgressBar(
     val seekable = hasDuration && state.actions.canSeek
 
     var displayPositionMillis by remember(state.positionUpdatedAt) {
-        mutableLongStateOf(state.positionMillis)
+        mutableLongStateOf(livePosition(state.positionMillis, state.positionUpdatedAt, state.playbackState, state.durationMillis))
     }
 
     LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
@@ -241,6 +241,17 @@ internal fun Long.toSeekLabel(): String {
     val sign = if (this < 0) "−" else "+"
     val seconds = kotlin.math.abs(this) / 1_000
     return if (seconds < 60) "$sign${seconds}s" else sign + (seconds * 1_000).toTimeString()
+}
+
+/**
+ * Where a playing track is now: the last report plus the time since it. The report alone put a bar
+ * composed after it — the pane on the way back from any screen, the full-screen view — behind by
+ * however long ago the player last spoke, until it spoke again (Shield, 2026-10-10).
+ */
+internal fun livePosition(positionMillis: Long, updatedAt: Long, playbackState: String, durationMillis: Long): Long {
+    val since = if (playbackState.isPlaying() && updatedAt > 0) System.currentTimeMillis() - updatedAt else 0
+    val now = positionMillis + since.coerceAtLeast(0)
+    return if (durationMillis > 0) now.coerceAtMost(durationMillis) else now
 }
 
 internal fun Long.toTimeString(): String {

@@ -21,6 +21,7 @@ import com.rahga.x2rock.ui.screens.AppleMusicScreen
 import com.rahga.x2rock.ui.screens.ServiceBrowseScreen
 import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.screens.HomeScreen
+import com.rahga.x2rock.ui.screens.NowPlayingScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.PreferredServicesScreen
 import com.rahga.x2rock.ui.screens.RadioScreen
@@ -82,10 +83,20 @@ fun X2RockNavGraph() {
                 onOpenSearch = { groupId ->
                     navController.navigate("search?groupId=${Uri.encode(groupId)}")
                 },
+                onOpenNowPlaying = { groupId ->
+                    navController.navigate("nowPlaying?groupId=${Uri.encode(groupId)}")
+                },
                 onOpenPreferredServices = { navController.navigate("preferredServices") },
                 homeViewModel = homeViewModel,
                 playerViewModel = playerViewModel
             )
+        }
+
+        composable(
+            route = "nowPlaying?groupId={groupId}",
+            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
+        ) {
+            NowPlayingScreen(onBack = { navController.popBackStack() })
         }
 
         composable("preferredServices") {

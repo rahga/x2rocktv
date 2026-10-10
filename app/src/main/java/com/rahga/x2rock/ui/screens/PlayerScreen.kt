@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
 import com.rahga.x2rock.viewmodel.roomActivity
@@ -114,11 +115,14 @@ fun PlayerPane(
     queueFocusRequester: FocusRequester,
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
+    /** The Full screen button, for the same reason. */
+    nowPlayingFocusRequester: FocusRequester,
     /** The Group button, so closing the room panel it opened can return to it. */
     groupFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenNowPlaying: () -> Unit,
     /** Open the room panel: grouping, then the room's settings. */
     onOpenGroup: () -> Unit,
     /**
@@ -277,6 +281,8 @@ fun PlayerPane(
                         browseFocusRequester = browseFocusRequester,
                         searchFocusRequester = searchFocusRequester,
                         onOpenSearch = onOpenSearch,
+                        nowPlayingFocusRequester = nowPlayingFocusRequester,
+                        onOpenNowPlaying = onOpenNowPlaying,
                         groupFocusRequester = groupFocusRequester,
                         onOpenGroup = onOpenGroup,
                         onNextFocused = { nextFocused = it },
@@ -514,6 +520,8 @@ private fun PlaybackControls(
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
     onOpenSearch: () -> Unit,
+    nowPlayingFocusRequester: FocusRequester,
+    onOpenNowPlaying: () -> Unit,
     groupFocusRequester: FocusRequester,
     onOpenGroup: () -> Unit,
     onNextFocused: (Boolean) -> Unit,
@@ -686,6 +694,14 @@ private fun PlaybackControls(
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
                 SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
+            }
+            // The room's music on the whole screen, for an hour of listening; with nothing loaded
+            // there is nothing to show there.
+            if (hasContent) {
+                PlaceButton(
+                    Icons.Filled.Fullscreen, "Full screen", onOpenNowPlaying,
+                    Modifier.focusRequester(nowPlayingFocusRequester),
+                )
             }
         }
 

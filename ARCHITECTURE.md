@@ -136,6 +136,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
 │       ├── PlayerScreen.kt        the player pane (`PlayerPane`), in its music and TV forms
 │       ├── SeekBar.kt             the pane's progress bar, its knob and seek bursts, the time labels
+│       ├── NowPlayingScreen.kt    the room's music full screen: art, track, room, clock; any key closes
 │       ├── HeaderVolume.kt        the pane's header: room, volume wedge, the set-level overlay
 │       ├── SleepTimer.kt          the sleep timer's button, icon, countdown and picker
 │       ├── PaneButtons.kt         Named places, Group, the mode and rating buttons, the overhang
@@ -154,6 +155,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 └── viewmodel/
     ├── HomeViewModel.kt
     ├── PlayerViewModel.kt
+    ├── NowPlayingViewModel.kt      the full-screen view's room, its own so it follows a regroup
     ├── QueueViewModel.kt
     ├── FavoritesViewModel.kt
     ├── RadioViewModel.kt
