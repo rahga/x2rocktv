@@ -40,6 +40,19 @@ from the notes below:
 - An iHeart artist station's thumb up is accepted but reads back unrated; compare with the
   Sonos app before changing anything (Tier 5, Stage 2).
 
+**Review pass of 2026-10-09** (four area reviews, each claim checked against the code before
+acting; commits ab49d0f..f72834b). Findings looked at and left alone, so the next pass does not
+re-raise them: the `withContext(Dispatchers.IO)` wrappers in `Upnp` and `SmapiClient` are inert
+since `awaitReply` enqueues, but they keep DIDL/SOAP parsing off the caller's dispatcher and are not
+worth the churn; `SonosSocket.open`'s `resume` without an `onCancellation` is covered, since the
+`invokeOnCancellation` handler that cancels the WebSocket also runs on a cancel that lands after
+the resume; `AccountCapture.subscribe` returning null on a 403 reaches the UI as "fewer services",
+which `upnpOff` already explains; `PlayerScreen`'s `LinearProgressIndicator` is material3's and takes
+material3's light-baseline track colour since no material3 theme is set — passing tv-material3's
+`surfaceVariant` would change a look the ten-foot pass checked, so it wants one look on a device
+first; the two control rows' places (music and TV) are near-duplicates whose focus wiring differs
+enough that extracting one row was not clearly simpler.
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; a "Play URL"
 row; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; adding
 to a service's own playlist; picking an audiobook's chapter; Sonos Radio's "Browse Radio";

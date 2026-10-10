@@ -57,6 +57,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── PlayerNames.kt             RINCON id → sonos-<MAC>.local
 │   ├── LanHttp.kt                 the player-only OkHttp client + address book
 │   ├── SonosSocket.kt             one socket to one player
+│   ├── CallAwait.kt               an OkHttp call awaited, and cancelled with its caller, body included
 │   ├── Discovery.kt               SSDP: id, address and household in one reply
 │   ├── MulticastGate.kt           whatever the platform must hold for multicast
 │   ├── SeedStore.kt               the last reachable player (per network), for a warm start
@@ -75,19 +76,19 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
     ├── StoredAccounts.kt          decrypt the household's ThirdPartyMediaServersX tokens (SoCo #1010)
     ├── AccountCapture.kt          one-shot GENA capture of that encrypted token blob off a player
     ├── LinkedServices.kt          which services a stored token (or anonymity) actually unlocks
+    ├── ServiceContent.kt          what a service item is (opens, enqueues, streams), and its URI/DIDL
     ├── RatingsCatalogue.kt        a service's rating rules, fetched on a miss
     └── RatingsStore.kt            where those rules are remembered (seam)
 
 app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── X2RockApp.kt                   Hilt entry point; image loader on the LAN client
 ├── MainActivity.kt                Single activity; deep links; Compose content + theme
-│
-├── auth/                          (named for history; nothing here authenticates)
-│   ├── ThemeStore.kt              StateFlow-backed theme preference
-│   ├── RoomPreferencesStore.kt    the television's soundbar, as a player id
-│   └── PendingRoomDeepLink.kt     a room asked for by a channel tile, until it exists
+├── DebugSwitches.kt               debug-build switches set from the launch intent (mDNS only, …)
 │
 ├── store/Preferences.kt           the key-value seam every store sits on
+├── store/ThemeStore.kt            StateFlow-backed theme preference
+├── store/RoomPreferencesStore.kt  the television's soundbar, as a player id
+├── store/PendingRoomDeepLink.kt   a room asked for by a channel tile, until it exists
 ├── net/
 │   ├── ArtHttp.kt                 cover art: bounded, and players and CDNs on separate clients
 │   ├── NetworkMonitor.kt          ConnectivityManager → household.onNetworkChanged()
@@ -102,6 +103,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── media/NowPlayingPublisher.kt   the MediaSession, behind an interface
 ├── channel/
 │   ├── RoomsChannelSync.kt        rooms as tiles on the TV home screen channel
+│   ├── PosterArt.kt               a tile's poster as the launcher can fetch it: the player's address, not its name
 │   └── ChannelSyncReceiver.kt     INITIALIZE_PROGRAMS: connect, sync, within budget
 │
 ├── di/
@@ -125,10 +127,18 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   │   ├── ItemMenu.kt            an item's menu (hold or Menu): Sonos's actions, then the service's
 │   │   ├── ServiceItemMenuOverlay.kt  ServiceItemMenu drawn: play now/next, queue, radio, artist,
 │   │   │                          album, the account's favourites
+│   │   ├── NoticeBanner.kt        one line for a few seconds; never focusable
+│   │   ├── StepMark.kt            − and + beside a level, while it has focus or by touch
+│   │   ├── Touch.kt               a tap as a press, for the emulator and tablets; inert on a remote
+│   │   ├── DotEqualizer.kt        a playing room's mark, and DotScanner for loading
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
 │       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
 │       ├── PlayerScreen.kt        the player pane (`PlayerPane`), in its music and TV forms
+│       ├── SeekBar.kt             the pane's progress bar, its knob and seek bursts, the time labels
+│       ├── HeaderVolume.kt        the pane's header: room, volume wedge, the set-level overlay
+│       ├── SleepTimer.kt          the sleep timer's button, icon, countdown and picker
+│       ├── PaneButtons.kt         Named places, Group, the mode and rating buttons, the overhang
 │       ├── RoomPanel.kt           everything one room can be told to do
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
 │       ├── FavoritesScreen.kt     Browse: presets, favourites by kind, playlists, recently played;
@@ -152,6 +162,10 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
     ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
+    ├── StartGuard.kt               one thing starting at a time, marked for its row; every screen's start
+    ├── Notices.kt                  TransientNotice: one line of "that didn't work", and its wording
+    ├── RoomTarget.kt               the room a screen was opened for, followed across regroups
+    ├── MonotonicClock.kt           milliseconds that only go up (sleep timer ends), a test seam
     ├── FavoriteGroups.kt           favourites grouped and labelled, and which open on a page
     └── RoomActivity.kt             Playing / Paused / Stopped / Nothing playing — one rule for every screen
 ```
