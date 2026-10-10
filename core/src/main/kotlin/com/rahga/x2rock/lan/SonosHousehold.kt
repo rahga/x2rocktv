@@ -1260,6 +1260,13 @@ class SonosHousehold(
         else playServiceItem(groupId, linked, item)
 
     /**
+     * Where [book] resumes — the chapter its service has the listener in, and how far into it — or
+     * null where it keeps no place. One `getMetadata` of a single chapter: the place comes with it.
+     */
+    suspend fun bookResume(linked: LinkedService, book: Item): com.rahga.x2rock.smapi.ResumePoint? =
+        smapi.chapters(linked.service, linked.token, book.id).resume
+
+    /**
      * Resume an audiobook in [groupId] where it was left off. The book itself is not playable — it
      * is a container of chapters — so this reads its `positionInformation`, plays the chapter that
      * names, and seeks to the offset. With no saved position (never started), it plays the first

@@ -71,6 +71,7 @@ class ServiceBrowseViewModelTest {
                             "<id>dups</id><index>3</index>" in body -> pageOf(listOf(3), total = 4)
                             "<id>long</id><index>0</index>" in body -> page(0, 2, total = 3)
                             "<id>long</id><index>2</index>" in body -> page(2, 1, total = 3)
+                            "<id>$BOOK</id>" in body -> CHAPTERS
                             else -> CHILDREN
                         })
                     }
@@ -120,6 +121,40 @@ class ServiceBrowseViewModelTest {
         val ready = withTimeout(5_000) { viewModel.services.first { it is ServiceBrowseViewModel.Services.Ready } }
             as ServiceBrowseViewModel.Services.Ready
         org.junit.Assert.assertTrue(ready.appleMusic)
+    }
+
+    /** A book's chapters open on the one its service has the listener in, marked with the place. */
+    @Test fun `a book's chapters open on the chapter it resumes in`() = runBlocking<Unit> {
+        viewModel.open(ready().first { it.service.id == "31" })
+        found()
+        viewModel.openChapters(com.rahga.x2rock.smapi.Item(BOOK, "Dune", "audiobook", null, null, container = true))
+        val chapters = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.any { i -> i.id == RESUME_CHAPTER } == true }
+        } as ServiceBrowseViewModel.Results.Found
+        assertEquals(2, chapters.items.size)
+        assertEquals(RESUME_CHAPTER, viewModel.resume.value?.id)
+        assertEquals(689440L, viewModel.resume.value?.offsetMillis)
+        assertEquals("focus starts on it", RESUME_CHAPTER, viewModel.returnTo.value)
+    }
+
+    /** That chapter carries on from the place; it does not play the chapter from its start. */
+    @Test fun `pressing the resumed chapter carries on from its place`() = runBlocking<Unit> {
+        viewModel.open(ready().first { it.service.id == "31" })
+        found()
+        viewModel.openChapters(com.rahga.x2rock.smapi.Item(BOOK, "Dune", "audiobook", null, null, container = true))
+        val chapter = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.any { i -> i.id == RESUME_CHAPTER } == true }
+        }.let { (it as ServiceBrowseViewModel.Results.Found).items.first { i -> i.id == RESUME_CHAPTER } }
+        withTimeout(5_000) { viewModel.resume.first { it != null } }
+        viewModel.select(chapter) { }
+        // The chapter the place is in is loaded; the room then plays, as a player would say.
+        fake.awaitCommand(10_000) { it.get("command")?.asString == "loadContent" }
+        assertEquals(RESUME_CHAPTER, fake.lastCommandBody("loadContent")!!.getAsJsonObject("id").get("objectId").asString)
+        fake.pushPlaybackStatus(fake.groupId(household), "PLAYBACK_STATE_PLAYING")
+        // Then the seek to the place, which a plain play from the chapter's start lacks.
+        val seek = fake.awaitCommand(10_000) { it.get("command")?.asString == "seek" }
+        assertEquals("seek", seek.get("command").asString)
+        assertEquals(689440L, fake.lastCommandBody("seek")!!.get("positionMillis").asLong)
     }
 
     @Test fun `opening a service exposes its search categories`() = runBlocking {
@@ -323,6 +358,20 @@ class ServiceBrowseViewModelTest {
     }
 
     private companion object {
+        /**
+         * Audible's Dune as captured (2026-10-06): the book's id, two of its chapter ids and its
+         * place. The second chapter's title was not recorded, so it is named by the span its id
+         * gives in book time, 1:59–29:55, rather than invented.
+         */
+        const val BOOK = "reftitle:B002V1OF70_com"
+        const val RESUME_CHAPTER = "refchapter:B002V1OF70_119953071_com_119000_1795000"
+        const val CHAPTERS = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>
+            <getMetadataResponse><getMetadataResult><index>0</index><count>2</count><total>2</total>
+              <positionInformation><id>$RESUME_CHAPTER</id><index>0</index><offsetMillis>689440</offsetMillis></positionInformation>
+              <mediaMetadata><id>refchapter:B002V1OF70_119953071_com_0_61000</id><itemType>track</itemType><title>Opening Credits</title></mediaMetadata>
+              <mediaMetadata><id>$RESUME_CHAPTER</id><itemType>track</itemType><title>1:59–29:55</title></mediaMetadata>
+            </getMetadataResult></getMetadataResponse></soap:Body></soap:Envelope>"""
+
         const val MAP = """<Presentation><PresentationMap type="Search"><Match>
             <SearchCategories><Category id="tracks" mappedId="track"/></SearchCategories></Match></PresentationMap></Presentation>"""
         const val SEARCH_ALBUM =

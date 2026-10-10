@@ -266,6 +266,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
     val playsWhole by viewModel.playsWhole.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val returnTo by viewModel.returnTo.collectAsState()
+    val resume by viewModel.resume.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
     // The field takes focus, and with it the keyboard, only on stepping into the search — never on
@@ -337,6 +338,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
             menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
             here = here, onOpen = { viewModel.select(target.item, onPlayed) }, onOpenRelated = viewModel::openRelated,
             onPlayed = onPlayed,
+            onChapters = { viewModel.menu.close(); viewModel.openChapters(target.item) },
         )
     }
 
@@ -382,6 +384,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
                         ItemRow(
                             item = item,
                             isStarting = starting == item.id,
+                            resumesAt = resume?.takeIf { it.id == item.id }?.offsetMillis,
                             onClick = { viewModel.select(item, onPlayed) },
                             onMenu = { viewModel.openMenu(item) },
                             modifier = Modifier
@@ -415,7 +418,15 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
-private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onMenu: () -> Unit, modifier: Modifier = Modifier) {
+private fun ItemRow(
+    item: Item,
+    isStarting: Boolean,
+    onClick: () -> Unit,
+    onMenu: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** In a book's chapters, the place in this one its service has kept: pressing it carries on. */
+    resumesAt: Long? = null,
+) {
     // A press plays a track or opens a container; a hold or Menu opens everything else that can
     // be done with it — play next, add to the queue, the service's own actions.
     MediaRow(
@@ -428,6 +439,7 @@ private fun ItemRow(item: Item, isStarting: Boolean, onClick: () -> Unit, onMenu
     ) {
         when {
             isStarting -> RowStatus("Starting…")
+            resumesAt != null -> RowStatus("Resumes at ${resumesAt.toTimeString()}", highlighted = true)
             // A place to open reads as such at the row's edge; an audiobook is resumed on
             // press rather than opened, so it carries no chevron.
             ServiceContent.opens(item) ->

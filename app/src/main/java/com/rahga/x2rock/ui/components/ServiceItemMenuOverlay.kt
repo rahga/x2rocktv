@@ -22,6 +22,8 @@ fun ServiceItemMenuOverlay(
     onOpen: (() -> Unit)?,
     onOpenRelated: (id: String, title: String, album: Boolean) -> Unit,
     onPlayed: () -> Unit,
+    /** List an audiobook's chapters; null where the screen cannot, as Search's results. */
+    onChapters: (() -> Unit)? = null,
 ) {
     val service = (target as? ServiceItemMenu.Target.Service)
     ItemMenu(
@@ -29,7 +31,7 @@ fun ServiceItemMenuOverlay(
         subtitle = target.subtitle,
         artUrl = target.artUrl,
         sections = listOf(
-            MenuSection(null, playActions(menu, target, room, fromQueue, onOpen, onPlayed)),
+            MenuSection(null, playActions(menu, target, room, fromQueue, onOpen, onPlayed, onChapters)),
             MenuSection(
                 service?.linked?.service?.name,
                 if (service != null && details != null) serviceActions(menu, service, details, here, onOpenRelated, onPlayed) else emptyList(),
@@ -46,7 +48,7 @@ fun ServiceItemMenuOverlay(
  */
 private fun playActions(
     menu: ServiceItemMenu, target: ServiceItemMenu.Target, room: String, fromQueue: Boolean,
-    onOpen: (() -> Unit)?, onPlayed: () -> Unit,
+    onOpen: (() -> Unit)?, onPlayed: () -> Unit, onChapters: (() -> Unit)?,
 ): List<MenuAction> = buildList {
     val item = (target as? ServiceItemMenu.Target.Service)?.item
     val playable = target !is ServiceItemMenu.Target.Service || target.canPlay
@@ -57,6 +59,8 @@ private fun playActions(
     if (target.canQueue && fromQueue) add(MenuAction("Play next", room) { menu.queue(target, next = true) })
     if (target.canQueue) add(MenuAction("Add to end of queue", room) { menu.queue(target) })
     if (item != null && ServiceContent.opens(item) && onOpen != null) add(MenuAction("Open", onClick = onOpen))
+    // A book resumes on a press; picking a chapter is the hold's.
+    if (item != null && ServiceContent.isResumable(item) && onChapters != null) add(MenuAction("Chapters", onClick = onChapters))
 }
 
 /**

@@ -11,6 +11,7 @@ import com.rahga.x2rock.smapi.Category
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemPage
 import com.rahga.x2rock.smapi.LinkedService
+import com.rahga.x2rock.smapi.ResumePoint
 import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.smapi.Shelf
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -130,6 +131,9 @@ class ServiceBrowseViewModel @Inject constructor(
         var results: Results = Results.Idle
         /** The row last opened from this level, for Back to land on rather than the first. */
         var opened: String? = null
+        /** The audiobook this level lists the chapters of, and where its service has it resumed. */
+        var book: Item? = null
+        var resume: ResumePoint? = null
     }
 
     private val _services = MutableStateFlow<Services>(Services.Loading)
@@ -168,6 +172,10 @@ class ServiceBrowseViewModel @Inject constructor(
     val returnTo: StateFlow<String?> = _returnTo.asStateFlow()
 
     /** Whether the container showing can be played whole — an album, a playlist, a favourite. */
+    /** Where the book showing resumes, so its chapter row can say so; null for anything else. */
+    private val _resume = MutableStateFlow<ResumePoint?>(null)
+    val resume: StateFlow<ResumePoint?> = _resume.asStateFlow()
+
     private val _playsWhole = MutableStateFlow(false)
     val playsWhole: StateFlow<Boolean> = _playsWhole.asStateFlow()
 
@@ -385,6 +393,26 @@ class ServiceBrowseViewModel @Inject constructor(
     }
 
     /**
+     * A book's chapters, as a level of their own: the book is a container of them, listed as
+     * ordinary tracks (Audible, x2rock 2026-10-06). Its place is read first, so the list opens on
+     * the chapter it is in, marked; pressing the book itself still resumes it.
+     */
+    fun openChapters(book: Item) {
+        val service = _active.value ?: return
+        trail.lastOrNull()?.opened = book.id
+        viewModelScope.launch {
+            val resume = runCatching { household.bookResume(service, book) }.getOrNull()
+            browse(book.id, book.title, null)
+            trail.lastOrNull()?.takeIf { it.id == book.id }?.let { level ->
+                level.book = book
+                level.resume = resume
+                level.opened = resume?.id
+                show(level)
+            }
+        }
+    }
+
+    /**
      * Play the container showing from its start, or with [shuffle] on — the Sonos app's Play and
      * Shuffle at the head of an album. Shuffle is set first, so the load starts shuffled; Play
      * leaves the room's shuffle as it was.
@@ -408,6 +436,15 @@ class ServiceBrowseViewModel @Inject constructor(
      * [ServiceContent.isResumable].
      */
     fun select(item: Item, onPlayed: () -> Unit) {
+        // In a book's chapters, the chapter its place is in carries on from there; any other plays
+        // from its start, which is what picking a chapter asks for.
+        trail.lastOrNull()?.takeIf { it.resume?.id == item.id }?.book?.let { book ->
+            val service = _active.value ?: return
+            guard.start(item.id, "resume ${book.title}", { onPlayed() }) {
+                household.startServiceItem(room.current(), service, book)
+            }
+            return
+        }
         if (ServiceContent.opens(item)) {
             trail.lastOrNull()?.opened = item.id
             browse(item.id, item.title, if (ServiceContent.canEnqueue(item)) Whole.Container(item) else null)
@@ -457,6 +494,7 @@ class ServiceBrowseViewModel @Inject constructor(
         _returnTo.value = level.opened
         _here.value = level.id
         _playsWhole.value = level.whole != null
+        _resume.value = level.resume
         _results.value = level.results
     }
 
