@@ -1,25 +1,19 @@
 package com.rahga.x2rock.ui.screens
 
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.material.icons.filled.SpeakerGroup
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.viewmodel.trackLine
 import com.rahga.x2rock.ui.components.DotScanner
-import com.rahga.x2rock.ui.components.SearchField
-import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.LocalArtColors
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.animation.animateColorAsState
-import com.rahga.x2rock.ui.theme.IconAppButton
 import androidx.compose.ui.graphics.Brush
 import androidx.tv.material3.SurfaceDefaults
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -30,48 +24,21 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.platform.LocalContext
 import com.rahga.x2rock.viewmodel.roomActivity
-import com.rahga.x2rock.viewmodel.RoomActivity
 import com.rahga.x2rock.viewmodel.hasSource
-import android.os.SystemClock
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOn
 import androidx.compose.material.icons.filled.RepeatOneOn
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.ShuffleOn
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathFillType
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.vector.PathBuilder
-import androidx.compose.ui.graphics.vector.path
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Dp
 import com.rahga.x2rock.ui.serviceLogo
-import androidx.compose.runtime.MutableState
-import androidx.compose.ui.unit.offset
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusGroup
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,31 +49,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radio
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.ThumbDown
-import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Tv
-import androidx.compose.material.icons.outlined.Block
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.outlined.ThumbDown as ThumbDownOutlined
-import androidx.compose.material.icons.outlined.ThumbUp as ThumbUpOutlined
-import androidx.tv.material3.ClickableSurfaceDefaults
 import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -118,10 +72,7 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -133,22 +84,14 @@ import androidx.tv.material3.Text
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
-import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.handOffFocus
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
-import com.rahga.x2rock.ui.components.StepMark
-import com.rahga.x2rock.ui.components.VOLUME_STEP
-import com.rahga.x2rock.ui.components.mutedInk
-import com.rahga.x2rock.ui.components.stepMarksShown
-import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -390,7 +333,7 @@ private fun TrackInfo(
     exitLeftFocusRequester: FocusRequester,
     volumeEntry: VolumeEntry,
     /** Draw the service's logo in the art's corner. */
-    showService: Boolean = false,
+    showService: Boolean,
 ) {
     Column {
         PaneHeader(state, viewModel, exitLeftFocusRequester, volumeEntry)
@@ -495,150 +438,6 @@ private fun TrackInfo(
                     Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
                 }
             }
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit, onFocused: (Boolean) -> Unit = {}) {
-    if (state.durationMillis <= 0) return
-
-    var displayPositionMillis by remember(state.positionUpdatedAt) {
-        mutableLongStateOf(state.positionMillis)
-    }
-
-    LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
-        if (state.playbackState.isPlaying()) {
-            while (true) {
-                delay(1_000L)
-                displayPositionMillis = (displayPositionMillis + 1_000L).coerceAtMost(state.durationMillis)
-            }
-        }
-    }
-
-    val progress = (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f)
-    var isFocused by remember { mutableStateOf(false) }
-
-    // The running total of a burst of seek presses, shown under the bar and faded out once the
-    // presses stop, so a viewer holding left can see how far back they are going. Clamped to
-    // the track, as the seek itself is; a fresh burst starts from nothing.
-    var seekTotal by remember { mutableLongStateOf(0L) }
-    var seekFrom by remember { mutableLongStateOf(0L) }
-    var seekPresses by remember { mutableStateOf(0) }
-    var seekShown by remember { mutableStateOf(false) }
-    // Presses so far in this burst: the step climbs 10s, 20s, then 30s for as long as the presses
-    // keep coming, so a nudge stays a nudge and a long way back is still quick. A pause long enough
-    // for the total to fade starts the next burst at 10s again.
-    var burstSteps by remember { mutableStateOf(0) }
-    val seekAlpha by animateFloatAsState(if (seekShown) 1f else 0f, animationSpec = tween(400), label = "seekTotal")
-    LaunchedEffect(seekPresses) {
-        if (seekPresses == 0) return@LaunchedEffect
-        delay(SEEK_TOTAL_SHOWN_MILLIS)
-        seekShown = false
-        burstSteps = 0
-    }
-    // A burst of presses or taps is measured from where its first one began.
-    fun showSeek(total: (from: Long) -> Long) {
-        if (!seekShown) seekFrom = displayPositionMillis
-        seekTotal = total(seekFrom)
-        seekShown = true
-        seekPresses++
-    }
-    fun seek(direction: Int) {
-        val delta = direction * SEEK_STEPS_MILLIS[burstSteps.coerceAtMost(SEEK_STEPS_MILLIS.lastIndex)]
-        burstSteps++
-        showSeek { from -> ((if (seekShown) seekTotal else 0L) + delta).coerceIn(-from, state.durationMillis - from) }
-        onSeekBy(delta)
-    }
-    // A tap aims at a point rather than stepping, so it is sent as one; the total under the
-    // bar still says how far that is from where the tap began.
-    fun seekToFraction(fraction: Float) {
-        val target = (fraction.coerceIn(0f, 1f) * state.durationMillis).toLong()
-        showSeek { from -> target - from }
-        onSeekTo(target)
-    }
-    val tapAt by rememberUpdatedState(::seekToFraction)
-    val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
-
-    Column {
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Before focusable(), not after: onFocusChanged sees focus on what follows it,
-                // and placed after it never saw the bar take focus — so the bar never changed
-                // colour and its hint never showed, and landing on it looked like landing on
-                // nothing.
-                .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
-                .focusable()
-                // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
-                // never sends a tap, so on a TV this is inert. The strip is taller than the bar
-                // drawn in it, or an 8dp line would be a hard thing to hit.
-                // Started once and reading the latest handler, as tapToClick does: the displayed
-                // position is a new state at every report, and a stale handler measured from an
-                // old one.
-                .pointerInput(Unit) {
-                    detectTapGestures { offset -> tapAt(offset.x / size.width) }
-                }
-                .padding(vertical = 12.dp)
-                .height(SEEK_KNOB)
-                .onKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                    when (event.key) {
-                        Key.DirectionLeft -> { seek(-1); true }
-                        Key.DirectionRight -> { seek(+1); true }
-                        else -> false
-                    }
-                }
-        ) {
-            // An 8dp bar recolouring to the focus tint was too faint to find across a room — a
-            // press up from the transport read as focus vanishing. Focused, the bar grows and a
-            // knob sits at the playhead, so where focus is and where a seek starts are unmistakable.
-            // Both inside a strip already the knob's height, so taking focus moves nothing else on
-            // the pane: the strip used to grow by the knob and nudge every row.
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
-                color = barColor
-            )
-            if (isFocused) {
-                val knob = SEEK_KNOB
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = (maxWidth - knob) * progress)
-                        .size(knob)
-                        .clip(CircleShape)
-                        .background(barColor)
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
-            // The total's slot is always laid out, invisible when there is nothing to say: it is
-            // taller than the times beside it, and appearing only on a press made the row grow
-            // and nudged every row below it down the screen.
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    seekTotal.toSeekLabel(),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.alpha(seekAlpha),
-                )
-                if (seekAlpha == 0f && isFocused) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        val hint = MaterialTheme.colorScheme.secondary
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
-                        Text(" seek", style = MaterialTheme.typography.bodySmall, color = hint)
-                    }
-                }
-            }
-            Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -858,167 +657,6 @@ private fun PlaybackControls(
 }
 
 /**
- * The room's name, and opposite it the group's level — identical on the music pane and the
- * TV one, because volume is the one control that means the same thing whatever the room is
- * playing, and it has to sit in the same place and answer the same presses when the source
- * changes.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // The room, and what it is doing in the word the room list and panel use too: a paused
-        // stream and an idle room used to look the same here, and the panel called both "Idle".
-        Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Bottom) {
-            // The room's name is measured first and kept whole; the state word gives way when space is
-            // short. The other way round, "Media Room · Nothing playing" read "Media… · Nothing
-            // playing" (Streamer, 2026-10-07).
-            Text(
-                text = state.groupName,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            val activity = roomActivity(state.playbackState, state.hasSource)
-            // Not for an empty room: the pane's body already says "No Content", and the room list
-            // "Nothing playing" — a third telling of one fact.
-            if (activity != RoomActivity.EMPTY) {
-                Text(
-                    text = "  ·  " + if (state.onTvInput && activity.isPlaying) "TV" else activity.label,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (activity.isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-            }
-        }
-        HeaderVolume(
-            state,
-            onStep = { viewModel.adjustVolume(it) },
-            onToggleMute = { viewModel.toggleMute() },
-            onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
-            entry = volumeEntry,
-        )
-    }
-}
-
-/**
- * Speaker, wedge, level: one control. Select mutes; left and right step the level while it
- * has focus, with − and + drawn either side to say so; a hold or Menu sets an exact level. Deliberately small — the remote's own
- * volume keys are the television's (see CLAUDE.md), and the system draws its own display
- * for those, so this is for the room rather than a second volume screen.
- *
- * Left steps down rather than leaving for the room list, as the room panel's levels do; up
- * and down move on. The − and + keep their space when hidden, so focusing the control
- * does not shift the room name. By touch they are always shown, and are their own targets;
- * a tap anywhere else on the control mutes.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun HeaderVolume(
-    state: PlayerUiState,
-    onStep: (Int) -> Unit,
-    onToggleMute: () -> Unit,
-    onExitLeft: () -> Unit,
-    entry: VolumeEntry,
-) {
-    var focused by remember { mutableStateOf(false) }
-    // A fixed line-out has no level to step: the view model says so if a step is tried.
-    val showSteps = !state.volumeFixed && stepMarksShown(focused)
-    // A hold, or Menu, sets an exact level — where stepping there by fives would take a while.
-    // Not for a fixed line-out, which has no level to set.
-    val setExactly = entry.open.takeIf { !state.volumeFixed }
-    Surface(
-        onClick = onToggleMute,
-        onLongClick = setExactly,
-        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
-        // Focus shows in its colour; tv-material3's grow on focus pushed it past its own row.
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
-        modifier = Modifier
-            .focusRequester(entry.focus)
-            .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)
-            .onFocusChanged { focused = it.isFocused; entry.focused.value = it.isFocused }
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                when (event.key) {
-                    // A fixed line-out has no level to step, so left does what it does from any
-                    // row's leftmost control: back to the room list. Otherwise every press only
-                    // posted the "fixed" notice and the remote stayed put.
-                    Key.DirectionLeft -> { if (state.volumeFixed) onExitLeft() else onStep(-VOLUME_STEP); true }
-                    Key.DirectionRight -> { onStep(+VOLUME_STEP); true }
-                    else -> false
-                }
-            }
-            .tapToClick(onToggleMute),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            StepMark("\u2212", showSteps, MaterialTheme.typography.titleMedium) { onStep(-VOLUME_STEP) }
-            Icon(
-                imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
-                else Icons.AutoMirrored.Filled.VolumeUp,
-                contentDescription = if (state.isMuted) "Unmute" else "Mute",
-                modifier = Modifier.size(30.dp),
-            )
-            if (!state.volumeFixed) VolumeWedge(state.volume, state.isMuted)
-            // The size a level is read at across a room: the remote's own keys go to the
-            // television over CEC, so this is the one level on screen for the room itself.
-            val levelStyle = MaterialTheme.typography.headlineSmall
-            // Exactly as wide as "100", so the control does not change size as the level moves and
-            // "100" sits as close to + as − does to the speaker; a shorter level is centred in it.
-            // A fixed 52dp left "100" with space to spare before +.
-            val measurer = rememberTextMeasurer()
-            val density = LocalDensity.current
-            val levelWidth = remember(levelStyle, density) {
-                with(density) { measurer.measure("100", levelStyle).size.width.toDp() }
-            }
-            Text(
-                text = when {
-                    state.volumeFixed -> "Fixed"
-                    state.volume == null -> "\u2014"
-                    else -> state.volume.toString()
-                },
-                style = levelStyle,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(min = levelWidth),
-            )
-            StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+VOLUME_STEP) }
-        }
-    }
-}
-
-/**
- * The level as a wedge rising left to right, filled up to it — the shape Android's own volume
- * display uses. In the content colour, so it inverts with the focused container as the room
- * panel's bars do; dimmed while muted, keeping the level the speaker remembers.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun VolumeWedge(volume: Int?, muted: Boolean) {
-    val ink = mutedInk(muted)
-    Canvas(modifier = Modifier.size(width = 84.dp, height = 28.dp)) {
-        val wedge = Path().apply {
-            moveTo(0f, size.height)
-            lineTo(size.width, 0f)
-            lineTo(size.width, size.height)
-            close()
-        }
-        drawPath(wedge, ink.copy(alpha = ink.alpha * 0.25f))
-        if (volume != null && volume > 0) {
-            clipRect(right = size.width * volume / 100f) { drawPath(wedge, ink) }
-        }
-    }
-}
-
-
-/**
  * The header for a room on its television input, in place of [TrackInfo].
  *
  * There is no track to name and the player sends `images: []`, so the art slot carries a
@@ -1147,22 +785,6 @@ private fun TvControls(
 /** A setting and the value it currently holds, the way the Sonos app draws these two. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TwoLineButton(
-    title: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    AppButton(onClick = onClick, modifier = modifier.widthIn(min = 220.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(value, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 private fun PlayerVolumeRow(
     entry: PlayerVolumeEntry,
     viewModel: PlayerViewModel,
@@ -1219,123 +841,6 @@ private fun PlayerVolumeRow(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun SleepTimerPickerOverlay(
-    trapped: Boolean,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    BackHandler { onDismiss() }
-    val firstFocus = rememberAutoFocusRequester()
-
-    Overlay(onDismiss, trapped) {
-        Column(
-            modifier = Modifier
-                .width(440.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Sleep Timer", style = MaterialTheme.typography.titleLarge)
-            // Up to two hours, as the Sonos app offers: a film or an album outlasts sixty minutes.
-            // In pairs, so six choices fit the screen's height with Cancel still on it.
-            SLEEP_CHOICES.chunked(2).forEachIndexed { row, pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    pair.forEachIndexed { column, minutes ->
-                        AppButton(
-                            onClick = { onSelect(minutes) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(if (row == 0 && column == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                        ) {
-                            Text(sleepChoiceLabel(minutes), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-            }
-            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            }
-        }
-    }
-}
-
-private val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
-
-/** What the volume control needs to offer an exact level: how to open the entry, and its own focus. */
-private class VolumeEntry(
-    val open: () -> Unit,
-    val focus: FocusRequester,
-    /** Whether the header volume has focus; the art names its service while it does. */
-    val focused: MutableState<Boolean>,
-)
-
-/**
- * An exact level for the room, opened by a hold on its volume: a number typed or said on the
- * keyboard, which comes up for digits, or one of the levels most often wanted, picked with no
- * typing at all. Anything outside 0 to 100 is not sent, and says why.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SetVolumeOverlay(room: String, current: Int?, trapped: Boolean, onSet: (Int) -> Unit, onDismiss: () -> Unit) {
-    BackHandler { onDismiss() }
-    var text by remember { mutableStateOf("") }
-    var problem by remember { mutableStateOf<String?>(null) }
-    val fieldFocus = rememberAutoFocusRequester()
-    val submit = {
-        when (val level = text.trim().toIntOrNull()) {
-            null -> problem = "Type a level from 0 to 100"
-            !in 0..100 -> problem = "$level is past 100; a level goes from 0 to 100"
-            else -> onSet(level)
-        }
-    }
-    Overlay(onDismiss, trapped) {
-        Column(
-            modifier = Modifier
-                .width(520.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Volume in $room", style = MaterialTheme.typography.titleLarge)
-            current?.let { Text("Now $it", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                SearchField(
-                    value = text,
-                    placeholder = "0 to 100",
-                    onValueChange = { typed -> text = typed.filter { it.isDigit() }.take(3); problem = null },
-                    onSearch = submit,
-                    numeric = true,
-                    modifier = Modifier.weight(1f).focusRequester(fieldFocus),
-                )
-                Spacer(Modifier.width(12.dp))
-                AppButton(onClick = submit) { Text("Set") }
-            }
-            problem?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error) }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                QUICK_LEVELS.forEach { level ->
-                    AppButton(onClick = { onSet(level) }, modifier = Modifier.weight(1f)) {
-                        Text("$level", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** The levels a room is most often set to, as one press each: quiet to loud, short of loud. */
-private val QUICK_LEVELS = listOf(5, 10, 15, 20, 25, 30, 40)
-
-/** "15 minutes", "1 hour", "1½ hours", "2 hours". */
-internal fun sleepChoiceLabel(minutes: Int): String = when {
-    minutes < 60 -> "$minutes minutes"
-    minutes == 60 -> "1 hour"
-    minutes % 60 == 0 -> "${minutes / 60} hours"
-    else -> "${minutes / 60}\u00BD hours"
-}
-
-/** Each speaker's own level, for a group of more than one. Drawn under both panes' controls. */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
 private fun SpeakerRows(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester) {
     if (state.playerVolumes.isEmpty()) return
     Spacer(modifier = Modifier.height(24.dp))
@@ -1366,236 +871,6 @@ private fun GlyphTile(icon: ImageVector) {
     }
 }
 
-/**
- * The sleep timer's one button: what is left and a cancel while it runs, the picker otherwise.
- * Sonos's own timer, on AVTransport: with UPnP off there is none to set, and no button.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun SleepTimerButton(
-    state: PlayerUiState,
-    viewModel: PlayerViewModel,
-    onOpenSleepTimer: () -> Unit,
-    focusRequester: FocusRequester,
-) {
-    if (state.upnpOff) return
-    val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
-    val context = LocalContext.current
-    Named(if (sleepLeft != null) "Cancel sleep timer" else "Sleep timer") { named ->
-        IconAppButton(
-            onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
-            modifier = Modifier.focusRequester(focusRequester).then(named),
-        ) {
-            Icon(
-                imageVector = SleepIcon,
-                contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
-                else "Sleep timer",
-                modifier = Modifier.size(30.dp),
-            )
-            if (sleepLeft != null) {
-                Spacer(modifier = Modifier.width(8.dp))
-                // The clock time it ends, which is what someone going to bed is asking — in the device's
-                // own 12- or 24-hour form. One short line: "14:34 · ends 8:58 PM" wrapped to four lines
-                // in the pane's button row at 1080p (Streamer, 2026-10-06). What is left stays in the
-                // description, and the time it ends does not tick.
-                val endsAt = remember(state.sleepTimerEndsAt) {
-                    android.text.format.DateFormat.getTimeFormat(context)
-                        .format(java.util.Date(System.currentTimeMillis() + sleepLeft))
-                }
-                Text(endsAt, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
-            }
-        }
-    }
-}
-
-/**
- * The sleep timer as "Zzz", drawn: Material has nothing that means sleep and nothing else.
- * The moon is Night Sound's — the Sonos app's symbol for it, and on the TV pane the two sit a
- * row apart — and Snooze's alarm clock is already the ringing alarm's Snooze button.
- */
-private val SleepIcon: ImageVector =
-    ImageVector.Builder(
-        name = "Sleep", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
-    ).apply {
-        // Three Zs, each smaller and higher than the last, with clear space between them —
-        // touching, they read as a staircase. The strokes thin with them so the smallest is
-        // still a Z at three metres rather than a blot.
-        zee(left = 1.5f, top = 16f, right = 7.5f, bottom = 22f, weight = 1.7f)
-        zee(left = 11f, top = 9f, right = 15f, bottom = 13f, weight = 1.4f)
-        zee(left = 18f, top = 2.5f, right = 21f, bottom = 5.5f, weight = 1.2f)
-    }.build()
-
-private fun ImageVector.Builder.zee(left: Float, top: Float, right: Float, bottom: Float, weight: Float) {
-    path(stroke = SolidColor(Color.Black), strokeLineWidth = weight, strokeLineJoin = StrokeJoin.Miter) {
-        moveTo(left, top)
-        lineTo(right, top)
-        lineTo(left, bottom)
-        lineTo(right, bottom)
-    }
-}
-
-/**
- * What is left on the sleep timer, ticking once a second here: the view model holds the moment
- * it ends and no clock. Null for no timer, or one that has run out — the speaker stops the room
- * then, and the view model re-reads on that event. On the monotonic clock the view model used,
- * so an NTP step after boot cannot make a running timer read as expired.
- */
-@Composable
-private fun rememberSleepCountdown(endsAt: Long?): Long? {
-    var left by remember(endsAt) { mutableStateOf(endsAt?.let { it - SystemClock.elapsedRealtime() }?.takeIf { it > 0 }) }
-    LaunchedEffect(endsAt) {
-        if (endsAt == null) return@LaunchedEffect
-        while (true) {
-            val remaining = endsAt - SystemClock.elapsedRealtime()
-            left = remaining.takeIf { it > 0 }
-            if (remaining <= 0) break
-            delay(1_000L)
-        }
-    }
-    return left
-}
-
-/** How long a seek burst's total stays up after the last press, before it fades. */
-private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
-
-/** The seek bar's knob, and the height its strip always keeps. */
-private val SEEK_KNOB = 20.dp
-
-/** The step of each press in a burst of seeks, the last repeating: see the seek bar's burstSteps. */
-private val SEEK_STEPS_MILLIS = longArrayOf(10_000L, 20_000L, 30_000L)
-
-/** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
 private val ART_SIZE = 168.dp
 
 /** A seek total as a viewer reads it: −30s, +1:00, −1:30. */
-internal fun Long.toSeekLabel(): String {
-    val sign = if (this < 0) "−" else "+"
-    val seconds = kotlin.math.abs(this) / 1_000
-    return if (seconds < 60) "$sign${seconds}s" else sign + (seconds * 1_000).toTimeString()
-}
-
-internal fun Long.toTimeString(): String {
-    val totalSeconds = (this / 1_000).coerceAtLeast(0)
-    val hours = totalSeconds / 3_600
-    val minutes = (totalSeconds % 3_600) / 60
-    val seconds = totalSeconds % 60
-    return if (hours > 0) "%d:%02d:%02d".format(java.util.Locale.ROOT, hours, minutes, seconds)
-           else "%d:%02d".format(java.util.Locale.ROOT, minutes, seconds)
-}
-
-/**
- * The room panel, from the pane: who is playing together, and the room's settings below. Select
- * on a room enters this pane, as every list on a TV does, so the panel needed a way in a viewer
- * can see; a long press on the room still opens it too.
- */
-@Composable
-private fun GroupButton(onClick: () -> Unit, focusRequester: FocusRequester) =
-    PlaceButton(Icons.Filled.SpeakerGroup, "Group", onClick, Modifier.focusRequester(focusRequester))
-
-/** How far a [Named] name may reach past either end of its row: "Cancel sleep timer" needs most. */
-private val LABEL_OVERHANG = 48.dp
-
-/**
- * Measure [by] wider on each side than offered and sit that much further left, so whatever this
- * draws — and clips — reaches past both edges of its slot equally while the layout around it is
- * unchanged.
- */
-private fun Modifier.overhang(by: Dp): Modifier = layout { measurable, constraints ->
-    val extra = by.roundToPx()
-    val placeable = measurable.measure(constraints.offset(horizontal = 2 * extra))
-    layout((placeable.width - 2 * extra).coerceAtLeast(0), placeable.height) { placeable.place(-extra, 0) }
-}
-
-/** A place to go from the pane, as an icon: [Named] says which while it has focus. */
-@Composable
-private fun PlaceButton(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) =
-    Named(label) { named ->
-        IconAppButton(onClick = onClick, modifier = modifier.then(named)) {
-            Icon(icon, contentDescription = label, modifier = Modifier.size(30.dp))
-        }
-    }
-
-/**
- * A button with its name under it, shown only while it has focus — the way a TV's player
- * controls name their icons. The name takes no room of its own, either way: no width, so a long
- * one never spreads the row, and no height, so the row is its buttons' height and the pane fits
- * the screen. Reserving its height made the pane a little taller than the screen, and it then
- * scrolled whenever focus reached the seek bar or the volume. It is drawn in the gap below the
- * row, which the pane's spacing (20dp) and padding (32dp) already leave.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun Named(label: String, button: @Composable (Modifier) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(contentAlignment = Alignment.BottomCenter) {
-        button(Modifier.onFocusChanged { focused = it.hasFocus })
-        if (focused) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                softWrap = false,
-                modifier = Modifier.layout { measurable, _ ->
-                    val text = measurable.measure(Constraints())
-                    layout(0, 0) { text.place(-text.width / 2, 0) }
-                },
-            )
-        }
-    }
-}
-
-
-/**
- * A play mode as an icon. Its state is in the glyph's shape — Material's "on" forms sit in a
- * filled square — rather than in colour alone, which a focused button's own colour would hide.
- */
-@Composable
-private fun ModeButton(icon: ImageVector, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    IconAppButton(onClick = onClick, modifier = modifier) {
-        // Larger than the default 24dp: at three metres the "on" forms' filled square was all
-        // that read, not the glyph inside it.
-        Icon(imageVector = icon, contentDescription = description, modifier = Modifier.size(30.dp))
-    }
-}
-
-/** A thumb, filled once the track is already rated that way and outlined otherwise. */
-@Composable
-private fun HeartButton(favorite: Boolean, onClick: () -> Unit) {
-    IconAppButton(onClick = onClick) {
-        Icon(
-            imageVector = if (favorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-            contentDescription = if (favorite) "A favourite — remove it" else "Add to favourites",
-            modifier = Modifier.size(30.dp),
-        )
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun BanButton(onClick: () -> Unit) {
-    IconAppButton(onClick = onClick) {
-        Icon(Icons.Outlined.Block, contentDescription = "Don't play this again", modifier = Modifier.size(30.dp))
-    }
-}
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {
-    IconAppButton(onClick = onClick) {
-        Icon(
-            imageVector = when {
-                up && selected -> Icons.Filled.ThumbUp
-                up -> Icons.Outlined.ThumbUpOutlined
-                selected -> Icons.Filled.ThumbDown
-                else -> Icons.Outlined.ThumbDownOutlined
-            },
-            contentDescription = when {
-                up && selected -> "Rated up"
-                up -> "Rate up"
-                selected -> "Rated down"
-                else -> "Rate down"
-            },
-            modifier = Modifier.size(30.dp),
-        )
-    }
-}

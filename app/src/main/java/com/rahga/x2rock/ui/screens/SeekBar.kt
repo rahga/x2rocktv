@@ -1,0 +1,224 @@
+package com.rahga.x2rock.ui.screens
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.unit.offset
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.unit.dp
+import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.Icon
+import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.Text
+import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.ui.components.tapToClick
+import com.rahga.x2rock.viewmodel.PlayerUiState
+import kotlinx.coroutines.delay
+
+// The pane's seek bar: the progress line, the knob and the burst of steps a held key makes, and
+// the time labels under it. Split from PlayerScreen.kt, where PlaybackControls draws it.
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit, onFocused: (Boolean) -> Unit = {}) {
+    if (state.durationMillis <= 0) return
+
+    var displayPositionMillis by remember(state.positionUpdatedAt) {
+        mutableLongStateOf(state.positionMillis)
+    }
+
+    LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
+        if (state.playbackState.isPlaying()) {
+            while (true) {
+                delay(1_000L)
+                displayPositionMillis = (displayPositionMillis + 1_000L).coerceAtMost(state.durationMillis)
+            }
+        }
+    }
+
+    val progress = (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f)
+    var isFocused by remember { mutableStateOf(false) }
+
+    // The running total of a burst of seek presses, shown under the bar and faded out once the
+    // presses stop, so a viewer holding left can see how far back they are going. Clamped to
+    // the track, as the seek itself is; a fresh burst starts from nothing.
+    var seekTotal by remember { mutableLongStateOf(0L) }
+    var seekFrom by remember { mutableLongStateOf(0L) }
+    var seekPresses by remember { mutableIntStateOf(0) }
+    var seekShown by remember { mutableStateOf(false) }
+    // Presses so far in this burst: the step climbs 10s, 20s, then 30s for as long as the presses
+    // keep coming, so a nudge stays a nudge and a long way back is still quick. A pause long enough
+    // for the total to fade starts the next burst at 10s again.
+    var burstSteps by remember { mutableIntStateOf(0) }
+    val seekAlpha by animateFloatAsState(if (seekShown) 1f else 0f, animationSpec = tween(400), label = "seekTotal")
+    LaunchedEffect(seekPresses) {
+        if (seekPresses == 0) return@LaunchedEffect
+        delay(SEEK_TOTAL_SHOWN_MILLIS)
+        seekShown = false
+        burstSteps = 0
+    }
+    // A burst of presses or taps is measured from where its first one began.
+    fun showSeek(total: (from: Long) -> Long) {
+        if (!seekShown) seekFrom = displayPositionMillis
+        seekTotal = total(seekFrom)
+        seekShown = true
+        seekPresses++
+    }
+    fun seek(direction: Int) {
+        val delta = direction * SEEK_STEPS_MILLIS[burstSteps.coerceAtMost(SEEK_STEPS_MILLIS.lastIndex)]
+        burstSteps++
+        showSeek { from -> ((if (seekShown) seekTotal else 0L) + delta).coerceIn(-from, state.durationMillis - from) }
+        onSeekBy(delta)
+    }
+    // A tap aims at a point rather than stepping, so it is sent as one; the total under the
+    // bar still says how far that is from where the tap began.
+    fun seekToFraction(fraction: Float) {
+        val target = (fraction.coerceIn(0f, 1f) * state.durationMillis).toLong()
+        showSeek { from -> target - from }
+        onSeekTo(target)
+    }
+    val tapAt by rememberUpdatedState(::seekToFraction)
+    val barColor = if (isFocused) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+
+    Column {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                // Before focusable(), not after: onFocusChanged sees focus on what follows it,
+                // and placed after it never saw the bar take focus — so the bar never changed
+                // colour and its hint never showed, and landing on it looked like landing on
+                // nothing.
+                .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
+                .focusable()
+                // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
+                // never sends a tap, so on a TV this is inert. The strip is taller than the bar
+                // drawn in it, or an 8dp line would be a hard thing to hit.
+                // Started once and reading the latest handler, as tapToClick does: the displayed
+                // position is a new state at every report, and a stale handler measured from an
+                // old one.
+                .pointerInput(Unit) {
+                    detectTapGestures { offset -> tapAt(offset.x / size.width) }
+                }
+                .padding(vertical = 12.dp)
+                .height(SEEK_KNOB)
+                .onKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                    when (event.key) {
+                        Key.DirectionLeft -> { seek(-1); true }
+                        Key.DirectionRight -> { seek(+1); true }
+                        else -> false
+                    }
+                }
+        ) {
+            // An 8dp bar recolouring to the focus tint was too faint to find across a room — a
+            // press up from the transport read as focus vanishing. Focused, the bar grows and a
+            // knob sits at the playhead, so where focus is and where a seek starts are unmistakable.
+            // Both inside a strip already the knob's height, so taking focus moves nothing else on
+            // the pane: the strip used to grow by the knob and nudge every row.
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
+                color = barColor
+            )
+            if (isFocused) {
+                val knob = SEEK_KNOB
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .offset(x = (maxWidth - knob) * progress)
+                        .size(knob)
+                        .clip(CircleShape)
+                        .background(barColor)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(displayPositionMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
+            // The total's slot is always laid out, invisible when there is nothing to say: it is
+            // taller than the times beside it, and appearing only on a press made the row grow
+            // and nudged every row below it down the screen.
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    seekTotal.toSeekLabel(),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.alpha(seekAlpha),
+                )
+                if (seekAlpha == 0f && isFocused) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val hint = MaterialTheme.colorScheme.secondary
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
+                        Text(" seek", style = MaterialTheme.typography.bodySmall, color = hint)
+                    }
+                }
+            }
+            Text(state.durationMillis.toTimeString(), style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
+
+/** The seek bar's knob, and the height its strip always keeps. */
+private val SEEK_KNOB = 20.dp
+
+/** The step of each press in a burst of seeks, the last repeating: see the seek bar's burstSteps. */
+private val SEEK_STEPS_MILLIS = longArrayOf(10_000L, 20_000L, 30_000L)
+
+/** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
+internal fun Long.toSeekLabel(): String {
+    val sign = if (this < 0) "−" else "+"
+    val seconds = kotlin.math.abs(this) / 1_000
+    return if (seconds < 60) "$sign${seconds}s" else sign + (seconds * 1_000).toTimeString()
+}
+
+internal fun Long.toTimeString(): String {
+    val totalSeconds = (this / 1_000).coerceAtLeast(0)
+    val hours = totalSeconds / 3_600
+    val minutes = (totalSeconds % 3_600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) "%d:%02d:%02d".format(java.util.Locale.ROOT, hours, minutes, seconds)
+           else "%d:%02d".format(java.util.Locale.ROOT, minutes, seconds)
+}
