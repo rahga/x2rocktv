@@ -508,6 +508,10 @@ checked on the Streamer. What it settled, so it is not undone by accident:
 - **The pane's places are icons, each named under it while focused** (`Named`, 2026-10-09):
   Queue, Browse, Search, Group and the sleep timer, as a TV's player controls name theirs. As
   labelled buttons the row overran the pane and scrolled, leaving "Queue" cut in half at its edge.
+- **The art names its service while the volume or seek bar has focus** (2026-10-09): the service's
+  logo over the cover's bottom-left fifth, from the `service` every metadata event carries. Only
+  square logos are published (Sonos's list has one tile per service, no wordmark), so it sits on
+  the art, and only on those two controls, so it never covers the art otherwise.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
