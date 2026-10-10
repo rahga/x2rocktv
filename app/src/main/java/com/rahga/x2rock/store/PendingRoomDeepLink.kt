@@ -1,4 +1,4 @@
-package com.rahga.x2rock.auth
+package com.rahga.x2rock.store
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow

@@ -16,7 +16,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import com.rahga.x2rock.auth.PendingRoomDeepLink
+import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import kotlinx.coroutines.delay
@@ -55,9 +55,10 @@ class FavoritesViewModel @Inject constructor(
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    val loadingFavoriteId = MutableStateFlow<String?>(null)
-
     private val _notice = TransientNotice(viewModelScope)
+    private val guard = StartGuard(viewModelScope, _notice)
+    /** What is being started — a favourite's id, or a [playlistKey], [recentKey] or [presetKey]. */
+    val loadingFavoriteId: StateFlow<String?> = guard.starting
 
     /** Why the last favourite did not load, for a few seconds. */
     val notice: StateFlow<String?> = _notice.text
@@ -122,7 +123,6 @@ class FavoritesViewModel @Inject constructor(
             _deleteArmed.value = null
         }
     }
-
     private var disarm: Job? = null
 
     fun reload() = load()
@@ -147,22 +147,8 @@ class FavoritesViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Start one thing playing, marked by [key] while it loads. One at a time: the rows are
-     * never disabled — a disabled tv-material3 row keeps focus and loses its highlight — so
-     * this is where a second press is turned away. Back to the room only once it worked; on
-     * failure the list stays, so the reason is said where the viewer is and another choice is
-     * one press away.
-     */
-    private fun startOne(key: String, what: String, onDone: () -> Unit, block: suspend () -> Unit) {
-        if (loadingFavoriteId.value != null) return
-        viewModelScope.launch {
-            loadingFavoriteId.value = key
-            val started = runCatching { block() }
-            loadingFavoriteId.value = null
-            started.onSuccess { onDone() }.onFailure { _notice.failure(what, it) }
-        }
-    }
+    private fun startOne(key: String, what: String, onDone: () -> Unit, block: suspend () -> Unit) =
+        guard.start(key, what, { onDone() }, block)
 
     private fun load() {
         viewModelScope.launch {

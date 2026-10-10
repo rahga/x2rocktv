@@ -1,4 +1,4 @@
-package com.rahga.x2rock.auth
+package com.rahga.x2rock.store
 
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.store.Preferences

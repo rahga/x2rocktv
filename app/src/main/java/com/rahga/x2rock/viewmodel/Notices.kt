@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
  * was that a failure came back as nothing at all — a press that did not happen, with no word
  * why. On a remote, at three metres, that reads as the app ignoring you.
  */
-class TransientNotice(private val scope: CoroutineScope, private val millis: Long = NOTICE_MILLIS) {
+class TransientNotice(private val scope: CoroutineScope) {
     private val _text = MutableStateFlow<String?>(null)
     val text: StateFlow<String?> = _text.asStateFlow()
     private var clearing: Job? = null
@@ -33,7 +33,7 @@ class TransientNotice(private val scope: CoroutineScope, private val millis: Lon
         // A newer message restarts the clock, so it is never cut short by an older one's.
         clearing?.cancel()
         clearing = scope.launch {
-            delay(millis)
+            delay(NOTICE_MILLIS)
             _text.value = null
         }
     }

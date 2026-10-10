@@ -170,10 +170,10 @@ class ServiceBrowseViewModel @Inject constructor(
     private val _playsWhole = MutableStateFlow(false)
     val playsWhole: StateFlow<Boolean> = _playsWhole.asStateFlow()
 
-    private val _starting = MutableStateFlow<String?>(null)
-    val starting: StateFlow<String?> = _starting.asStateFlow()
-
     private val _notice = TransientNotice(viewModelScope)
+    private val guard = StartGuard(viewModelScope, _notice)
+    /** The item being started — or [WHOLE] — so its row can say so. */
+    val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
     private val trail = ArrayDeque<Level>()
@@ -366,7 +366,7 @@ class ServiceBrowseViewModel @Inject constructor(
     }
 
     /** The menu a hold or Menu on a row opens. */
-    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, _starting) {
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard) {
         (it as ServiceItemMenu.Target.Service).item.id
     }
 
@@ -391,18 +391,12 @@ class ServiceBrowseViewModel @Inject constructor(
     fun playWhole(shuffle: Boolean, onPlayed: () -> Unit) {
         val whole = trail.lastOrNull()?.whole ?: return
         val service = _active.value ?: return
-        if (_starting.value != null) return
-        viewModelScope.launch {
-            _starting.value = WHOLE
-            val started = runCatching {
-                if (shuffle) household.setShuffle(room.current(), true)
-                when (whole) {
-                    is Whole.Favorite -> household.loadFavorite(room.current(), whole.id)
-                    is Whole.Container -> household.playServiceItem(room.current(), service, whole.item)
-                }
+        guard.start(WHOLE, "play ${trail.lastOrNull()?.title}", { onPlayed() }) {
+            if (shuffle) household.setShuffle(room.current(), true)
+            when (whole) {
+                is Whole.Favorite -> household.loadFavorite(room.current(), whole.id)
+                is Whole.Container -> household.playServiceItem(room.current(), service, whole.item)
             }
-            _starting.value = null
-            started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${trail.lastOrNull()?.title}", it) }
         }
     }
 
@@ -418,14 +412,8 @@ class ServiceBrowseViewModel @Inject constructor(
             browse(item.id, item.title, if (ServiceContent.canEnqueue(item)) Whole.Container(item) else null)
             return
         }
-        if (_starting.value != null) return
         val service = _active.value ?: return
-        viewModelScope.launch {
-            _starting.value = item.id
-            val started = runCatching { household.startServiceItem(room.current(), service, item) }
-            _starting.value = null
-            started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${item.title}", it) }
-        }
+        guard.start(item.id, "play ${item.title}", { onPlayed() }) { household.startServiceItem(room.current(), service, item) }
     }
 
     /**

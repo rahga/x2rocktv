@@ -2,12 +2,11 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.rahga.x2rock.auth.PendingRoomDeepLink
-import com.rahga.x2rock.auth.RoomPreferencesStore
-import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.store.PendingRoomDeepLink
+import com.rahga.x2rock.store.RoomPreferencesStore
+import com.rahga.x2rock.store.ThemeStore
 import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomTile
-import com.rahga.x2rock.lan.GroupState
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
@@ -34,6 +33,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import com.rahga.x2rock.model.TruePlay
 import kotlinx.coroutines.sync.withLock
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
@@ -193,7 +194,6 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
-    val tvPlayerId: StateFlow<String?> = roomPrefsStore.tvPlayerId
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
@@ -213,12 +213,14 @@ class HomeViewModel @Inject constructor(
             pendingRoomDeepLink.roomId.collectLatest { roomId ->
                 if (roomId == null) return@collectLatest
                 val groups = household.state.map { it.groups }.first { it.isNotEmpty() }
-                pendingRoomDeepLink.clear()
                 val group = groups.firstOrNull { it.id == roomId } ?: TvSoundbar.groupOf(roomId, groups)
-                    ?: return@collectLatest
-                lastSelectedPlayers = group.playerIds.toSet()
-                _selectedGroupId.value = group.id
-                _navigateToRoom.value = true
+                if (group != null) {
+                    lastSelectedPlayers = group.playerIds.toSet()
+                    _selectedGroupId.value = group.id
+                    _navigateToRoom.value = true
+                }
+                // Last: clearing emits null, which cancels this block once it next suspends.
+                pendingRoomDeepLink.clear()
             }
         }
         // Keep a room selected, including through regroupings this app did not perform.
@@ -256,9 +258,6 @@ class HomeViewModel @Inject constructor(
         // makes the signal ambiguous rather than wrong.
         viewModelScope.launch {
             combine(household.state, household.groupStates) { state, groupStates ->
-                TvSoundbar.detect(state, groupStates)
-            }.collect { detected ->
-                if (detected == null || roomPrefsStore.tvPlayerId.value != null) return@collect
                 // Not while the household is still arriving. Subscription snapshots land one
                 // group at a time, so in the instant after the first soundbar's metadata and
                 // before the second's, `detect` sees exactly one room on a TV input and
@@ -268,10 +267,11 @@ class HomeViewModel @Inject constructor(
                 // Keyed on metadata specifically, not on having *an* entry: any of the three
                 // subscriptions creates one, and `onTvInput` comes from metadata alone — so a
                 // group holding only its playback snapshot would satisfy a weaker guard while
-                // still reporting "not on a TV input".
-                val state = household.state.value
-                val groupStates = household.groupStates.value
-                if (state.groups.any { groupStates[it.id]?.metadataSeen != true }) return@collect
+                // still reporting "not on a TV input". Judged on the snapshot `detect` saw.
+                if (state.groups.any { groupStates[it.id]?.metadataSeen != true }) null
+                else TvSoundbar.detect(state, groupStates)
+            }.collect { detected ->
+                if (detected == null || roomPrefsStore.tvPlayerId.value != null) return@collect
                 roomPrefsStore.setTvPlayer(detected)
 
                 // On a first run the room was picked before this was known, so move to the
@@ -353,14 +353,12 @@ class HomeViewModel @Inject constructor(
      * Every other room joins [hostGroupId] and plays what it plays.
      *
      * The host is named rather than chosen, because party mode hinges on a source: the room
-     * whose panel this was opened from is the one the house follows. Passing nothing keeps
-     * the old behaviour of hosting from the top of the list.
+     * whose panel this was opened from is the one the house follows.
      */
-    fun partyMode(hostGroupId: String? = null) {
+    fun partyMode(hostGroupId: String) {
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
-        val host = hostGroupId?.let { id -> groups.firstOrNull { it.id == id } }
-            ?: sortGroups(groups).first()
+        val host = groups.firstOrNull { it.id == hostGroupId } ?: return
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
         viewModelScope.launch {
@@ -466,12 +464,6 @@ class HomeViewModel @Inject constructor(
     val notice: StateFlow<String?> = _notice.text
 
 
-    /**
-     * Every speaker in [groupId] set to the group's own level — the desktop widget's
-     * *Normalize*, and x2rock's `vol normalize`. `playerVolume:1 setVolume` per member: Sonos
-     * then moves the group's level to their average, which is already the level each was set
-     * to, so the group stays where it was. Fixed line-outs are left alone.
-     */
     /** Turn crossfade over in [groupId], keeping its shuffle and repeat as they are. */
     fun toggleCrossfade(groupId: String) {
         val mode = household.groupState(groupId).playMode
@@ -481,6 +473,12 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Every speaker in [groupId] set to the group's own level — the desktop widget's
+     * *Normalize*, and x2rock's `vol normalize`. `playerVolume:1 setVolume` per member: Sonos
+     * then moves the group's level to their average, which is already the level each was set
+     * to, so the group stays where it was. Fixed line-outs are left alone.
+     */
     fun normalizeGroup(groupId: String) {
         val group = findGroup(groupId) ?: return
         val level = household.groupState(groupId).volume?.volume ?: return
@@ -508,16 +506,16 @@ class HomeViewModel @Inject constructor(
         val treble: Int,
         val loudness: Boolean,
         /** `null` when the speaker would not say; the row is then not offered. */
-        val trueplay: com.rahga.x2rock.model.TruePlay?,
+        val trueplay: TruePlay?,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
     val tone: StateFlow<ToneUi?> = _tone.asStateFlow()
-    private var toneJob: kotlinx.coroutines.Job? = null
+    private var toneJob: Job? = null
     /** One pending write per control, so a burst of presses sends its total once. */
     private val toneWrites = mutableMapOf<String, Job>()
     /** Writes go one at a time, in order: two in flight could land in either order. */
-    private val toneSends = kotlinx.coroutines.sync.Mutex()
+    private val toneSends = Mutex()
     /** Moves on every press, so a read that started before one is known to be stale. */
     private var toneEdits = 0
 
@@ -606,7 +604,7 @@ class HomeViewModel @Inject constructor(
         val group = findGroup(groupId) ?: return
         viewModelScope.launch {
             runCatching {
-                val players = playerNamesForGroup(group).map { it.first }
+                val players = group.playerIds.sortedByDescending { it == group.coordinatorId }
                 val levels = household.playerVolumes.value
                 val volumes = players.mapNotNull { id -> levels[id]?.takeIf { !it.fixed }?.volume?.let { id to it } }.toMap()
                 val container = household.groupState(groupId).container?.name

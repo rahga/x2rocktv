@@ -1,4 +1,4 @@
-package com.rahga.x2rock.auth
+package com.rahga.x2rock.store
 
 import com.rahga.x2rock.store.Preferences
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,10 +9,6 @@ import javax.inject.Singleton
 
 @Singleton
 class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
-
-
-
-
     /**
      * The soundbar this television is plugged into, remembered as a *player* id.
      *
@@ -26,7 +22,6 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
         prefs.putString(KEY_TV_PLAYER, playerId)
         _tvPlayerId.value = playerId
     }
-
 
     private companion object {
         const val KEY_TV_PLAYER = "tv_player_id"

@@ -20,7 +20,8 @@ import kotlinx.coroutines.launch
  * what the service itself says about the item — its artist, its album, a radio built from it, and
  * the account's favourites.
  *
- * [starting] is the screen's own "Starting…" marker, set to [keyOf] the item while it starts.
+ * [guard] is the screen's own, so a menu's press and a row's turn each other away alike; it marks
+ * the item starting by [keyOf].
  */
 class ServiceItemMenu(
     private val household: SonosHousehold,
@@ -28,7 +29,7 @@ class ServiceItemMenu(
     private val groupId: () -> String,
     private val scope: CoroutineScope,
     private val notice: TransientNotice,
-    private val starting: MutableStateFlow<String?>,
+    private val guard: StartGuard,
     private val keyOf: (Target) -> String,
 ) {
     /** What a menu is for: a service's item, or an Apple Music search result. */
@@ -93,22 +94,15 @@ class ServiceItemMenu(
     }
 
     /** Play [target] now, in place of what the room plays — a track, or a whole album or playlist. */
-    fun playNow(target: Target, onPlayed: () -> Unit) {
-        if (starting.value != null) return
-        scope.launch {
-            starting.value = keyOf(target)
-            val started = runCatching {
-                when (target) {
-                    is Target.Apple -> household.playAppleMusic(groupId(), target.item, appleAccount())
-                    is Target.Service ->
-                        if (ServiceContent.opens(target.item)) household.playServiceItem(groupId(), target.linked, target.item)
-                        else household.startServiceItem(groupId(), target.linked, target.item)
-                }
+    fun playNow(target: Target, onPlayed: () -> Unit) =
+        guard.start(keyOf(target), "play ${target.title}", { onPlayed() }) {
+            when (target) {
+                is Target.Apple -> household.playAppleMusic(groupId(), target.item, appleAccount())
+                is Target.Service ->
+                    if (ServiceContent.opens(target.item)) household.playServiceItem(groupId(), target.linked, target.item)
+                    else household.startServiceItem(groupId(), target.linked, target.item)
             }
-            starting.value = null
-            started.onSuccess { onPlayed() }.onFailure { notice.failure("play ${target.title}", it) }
         }
-    }
 
     /**
      * Add [target] to the queue — at its end, or with [next] after the track playing — leaving what

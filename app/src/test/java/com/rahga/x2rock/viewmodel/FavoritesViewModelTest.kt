@@ -14,7 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import com.rahga.x2rock.auth.PendingRoomDeepLink
+import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import org.junit.After

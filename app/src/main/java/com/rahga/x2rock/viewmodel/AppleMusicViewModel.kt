@@ -44,11 +44,10 @@ class AppleMusicViewModel @Inject constructor(
     private val _results = MutableStateFlow<Results>(Results.Idle)
     val results: StateFlow<Results> = _results.asStateFlow()
 
-    /** The item being started, so its row can say so and a second press is turned away. */
-    private val _starting = MutableStateFlow<String?>(null)
-    val starting: StateFlow<String?> = _starting.asStateFlow()
-
     private val _notice = TransientNotice(viewModelScope)
+    private val guard = StartGuard(viewModelScope, _notice)
+    /** The item being started, so its row can say so. */
+    val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
     /** The storefront: the TV's own country, which is the listener's far more often than not. */
@@ -82,13 +81,11 @@ class AppleMusicViewModel @Inject constructor(
 
     /** Play [item] in place of the queue. Back to the room once it plays; said here if not. */
     fun play(item: AppleMusicItem, onDone: () -> Unit) {
-        if (_starting.value != null) return
         viewModelScope.launch {
             val account = account() ?: return@launch _notice.post(NO_ACCOUNT)
-            _starting.value = item.objectId
-            val started = runCatching { household.playAppleMusic(room.current(), item, account) }
-            _starting.value = null
-            started.onSuccess { onDone() }.onFailure { _notice.failure("play ${item.title}", it) }
+            guard.start(item.objectId, "play ${item.title}", { onDone() }) {
+                household.playAppleMusic(room.current(), item, account)
+            }
         }
     }
 

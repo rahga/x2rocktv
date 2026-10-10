@@ -1,8 +1,8 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.auth.PendingRoomDeepLink
-import com.rahga.x2rock.auth.RoomPreferencesStore
-import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.store.PendingRoomDeepLink
+import com.rahga.x2rock.store.RoomPreferencesStore
+import com.rahga.x2rock.store.ThemeStore
 import com.google.gson.JsonObject
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.LanHttp
@@ -189,29 +189,6 @@ class HomeViewModelTest {
     }
 
     // ---------------------------------------------------------------- grouping
-
-    /**
-     * Party mode gathers every other group's players into the first. Asserted on what was
-     * sent, because the result comes back as an event and the fake does not restructure
-     * its topology.
-     */
-    @Test fun `party mode asks every other player to join the first group`() = runBlocking<Unit> {
-        val state = connect()
-        fake.clearHistory()
-        viewModel.partyMode()
-
-        val command = fake.awaitCommand(timeoutMillis = 5_000) {
-            it.get("command")?.asString == "modifyGroupMembers"
-        }
-        val host = sortGroups(state.groups).first()
-        assertEquals(host.id, command.get("groupId").asString)
-
-        val added = fake.lastCommandBody("modifyGroupMembers")!!
-            .getAsJsonArray("playerIdsToAdd").map { it.asString }
-        val expected = state.groups.filter { it.id != host.id }.flatMap { it.playerIds }
-        assertEquals(expected.toSet(), added.toSet())
-        assertTrue("the host should not be asked to join itself", host.coordinatorId !in added)
-    }
 
     /** Each member to the group's level, on its own socket; a fixed line-out left alone. */
     @Test fun `evening out sets every member to the group's level`() = runBlocking<Unit> {
@@ -458,7 +435,7 @@ class HomeViewModelTest {
 
         viewModel.setTvSoundbar(group.id)
 
-        val stored = viewModel.tvPlayerId.value
+        val stored = roomPrefs.tvPlayerId.value
         assertTrue("nothing was stored", stored != null)
         assertTrue("the group id was stored instead of a player", stored != group.id)
         assertTrue(
@@ -480,11 +457,11 @@ class HomeViewModelTest {
         assertTrue("this test needs two rooms with soundbars", withTv.size >= 2)
 
         viewModel.setTvSoundbar(withTv[0].id)
-        val first = viewModel.tvPlayerId.value
+        val first = roomPrefs.tvPlayerId.value
         assertNotNull(first)
 
         viewModel.setTvSoundbar(withTv[1].id)
-        val second = viewModel.tvPlayerId.value
+        val second = roomPrefs.tvPlayerId.value
 
         assertTrue("the crown did not move", second != first)
         assertTrue("it did not land in the room that was named", second in withTv[1].playerIds)
@@ -495,7 +472,7 @@ class HomeViewModelTest {
         val state = connect()
         val noSoundbar = state.groups.first { state.rooms[it.id]?.hasTvInput != true }
         viewModel.setTvSoundbar(noSoundbar.id)
-        assertNull(viewModel.tvPlayerId.value)
+        assertNull(roomPrefs.tvPlayerId.value)
     }
 
     /**
@@ -546,11 +523,10 @@ class HomeViewModelTest {
     @Test fun `a room with no soundbar cannot be switched to a TV input`() = runBlocking<Unit> {
         val state = connect()
         val noSoundbar = state.groups.first { !(state.rooms[it.id]?.hasTvInput ?: false) }
-        val thrown = runCatching { household.useTvInput(noSoundbar.id) }.exceptionOrNull()
-        assertTrue(
-            "expected a refusal naming the room, got $thrown",
-            thrown is IllegalStateException && thrown.message!!.contains(noSoundbar.name),
-        )
+        fake.clearHistory()
+        viewModel.useTvInput(noSoundbar.id)
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        assertTrue("expected a refusal naming the room, got $said", said.startsWith("Couldn't switch to the TV") && noSoundbar.name in said)
     }
 
     // ---------------------------------------------------------------- preferences

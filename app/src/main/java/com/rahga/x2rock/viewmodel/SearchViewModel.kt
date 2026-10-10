@@ -114,10 +114,10 @@ class SearchViewModel @Inject constructor(
     private val _results = MutableStateFlow(Results())
     val results: StateFlow<Results> = _results.asStateFlow()
 
-    private val _starting = MutableStateFlow<String?>(null)
-    val starting: StateFlow<String?> = _starting.asStateFlow()
-
     private val _notice = TransientNotice(viewModelScope)
+    private val guard = StartGuard(viewModelScope, _notice)
+    /** The hit being started, so its row can say so. */
+    val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
     private val country = Locale.getDefault().country.ifEmpty { "US" }
@@ -207,22 +207,16 @@ class SearchViewModel @Inject constructor(
         if (hit is Hit.Service && ServiceContent.opens(hit.item)) {
             return onOpen(hit.linked, hit.item)
         }
-        if (_starting.value != null) return
-        viewModelScope.launch {
-            _starting.value = hit.key
-            val started = runCatching {
-                when (hit) {
-                    is Hit.Apple -> household.playAppleMusic(room.current(), hit.item, appleAccount())
-                    is Hit.Service -> household.startServiceItem(room.current(), hit.linked, hit.item)
-                }
+        guard.start(hit.key, "play ${hit.title}", { onPlayed() }) {
+            when (hit) {
+                is Hit.Apple -> household.playAppleMusic(room.current(), hit.item, appleAccount())
+                is Hit.Service -> household.startServiceItem(room.current(), hit.linked, hit.item)
             }
-            _starting.value = null
-            started.onSuccess { onPlayed() }.onFailure { _notice.failure("play ${hit.title}", it) }
         }
     }
 
     /** The menu a hold or Menu on a hit opens: play now or next, queue, and the service's own. */
-    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, _starting) { target ->
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard) { target ->
         when (target) {
             is ServiceItemMenu.Target.Service -> Hit.Service(target.linked, target.item).key
             is ServiceItemMenu.Target.Apple -> Hit.Apple(target.item).key

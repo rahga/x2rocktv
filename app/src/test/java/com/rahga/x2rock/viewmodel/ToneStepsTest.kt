@@ -1,8 +1,8 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.auth.PendingRoomDeepLink
-import com.rahga.x2rock.auth.RoomPreferencesStore
-import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.store.PendingRoomDeepLink
+import com.rahga.x2rock.store.RoomPreferencesStore
+import com.rahga.x2rock.store.ThemeStore
 import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.soapAction

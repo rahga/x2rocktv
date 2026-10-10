@@ -10,8 +10,8 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.collectAsState
-import com.rahga.x2rock.auth.PendingRoomDeepLink
-import com.rahga.x2rock.auth.ThemeStore
+import com.rahga.x2rock.store.PendingRoomDeepLink
+import com.rahga.x2rock.store.ThemeStore
 import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.ui.X2RockNavGraph
 import com.rahga.x2rock.ui.theme.X2RockTheme

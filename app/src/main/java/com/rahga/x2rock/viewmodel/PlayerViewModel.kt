@@ -21,8 +21,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -267,12 +265,9 @@ class PlayerViewModel @Inject constructor(
         override fun pause() = this@PlayerViewModel.pause()
         override fun next() = skipToNextTrack()
         override fun previous() = skipToPreviousTrack()
-        override fun seekTo(positionMillis: Long) {
-            val state = uiState.value
-            val elapsed = if (state.playbackState.isPlaying())
-                System.currentTimeMillis() - state.positionUpdatedAt else 0L
-            seekBy(positionMillis - state.positionMillis - elapsed)
-        }
+        // Absolute, as asked: turned into a delta against the pushed position, it landed wrong
+        // whenever a seek was pending, since seekBy aims from that pending target instead.
+        override fun seekTo(positionMillis: Long) = this@PlayerViewModel.seekTo(positionMillis)
     }
 
     init {
@@ -534,20 +529,6 @@ class PlayerViewModel @Inject constructor(
         command(if (muted) "mute" else "unmute") { household.setGroupMute(it, muted) }
     }
 
-    /** Debounced: a held D-pad key would otherwise send one command per repeat. */
-    /**
-     * A step, accumulated across presses and sent as one relative change after the debounce.
-     *
-     * Relative because a button says "louder", not a level (Sonos's rule for stateless
-     * controls), and because it needs no baseline: the old absolute target was computed from
-     * the last pushed level, so the buttons had to be disabled until one arrived and while
-     * muted — and a disabled tv-material3 button still takes focus and draws nothing. A step
-     * on a muted room unmutes it, as the player does for either setter.
-     *
-     * The total is taken and zeroed just before it is sent, so a newer press — which cancels
-     * this job, possibly with the command already in flight — starts a new total rather than
-     * resending this one or losing its own.
-     */
     /**
      * What the room being left still owes: its volume steps and a seek waiting out the debounce,
      * sent to it now, and the pending state cleared. They used to stay with the view model, and
@@ -586,6 +567,20 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * A step, accumulated across presses and sent as one relative change after the debounce —
+     * a held D-pad key would otherwise send one command per repeat.
+     *
+     * Relative because a button says "louder", not a level (Sonos's rule for stateless
+     * controls), and because it needs no baseline: the old absolute target was computed from
+     * the last pushed level, so the buttons had to be disabled until one arrived and while
+     * muted — and a disabled tv-material3 button still takes focus and draws nothing. A step
+     * on a muted room unmutes it, as the player does for either setter.
+     *
+     * The total is taken and zeroed just before it is sent, so a newer press — which cancels
+     * this job, possibly with the command already in flight — starts a new total rather than
+     * resending this one or losing its own.
+     */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
         // The player refuses a level it does not control; say so instead of asking it.

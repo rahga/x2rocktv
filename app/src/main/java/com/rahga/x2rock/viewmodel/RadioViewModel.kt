@@ -46,11 +46,10 @@ class RadioViewModel @Inject constructor(
     private val _stations = MutableStateFlow<Stations>(Stations.Loading)
     val stations: StateFlow<Stations> = _stations.asStateFlow()
 
-    /** The station being started, so its row can say so and a second press is turned away. */
-    private val _starting = MutableStateFlow<String?>(null)
-    val starting: StateFlow<String?> = _starting.asStateFlow()
-
     private val _notice = TransientNotice(viewModelScope)
+    private val guard = StartGuard(viewModelScope, _notice)
+    /** The station being started, so its row can say so. */
+    val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
     private var loadJob: Job? = null
@@ -81,20 +80,10 @@ class RadioViewModel @Inject constructor(
      * stream is not a broken one. A station the room would not play stays on this list, said,
      * with another one press away: the directory's liveness check is days old.
      */
-    fun play(station: Station, onDone: () -> Unit) {
-        if (_starting.value != null) return
-        viewModelScope.launch {
-            _starting.value = station.url
-            val outcome = runCatching { household.playStream(room.current(), station.url, station.name) }
-            _starting.value = null
-            outcome
-                .onSuccess { started ->
-                    if (started == StreamStart.SILENT) _notice.post(silentNotice(station))
-                    else onDone()
-                }
-                .onFailure { _notice.failure("play ${station.name}", it) }
-        }
-    }
+    fun play(station: Station, onDone: () -> Unit) =
+        guard.start(station.url, "play ${station.name}", onDone = { started ->
+            if (started == StreamStart.SILENT) _notice.post(silentNotice(station)) else onDone()
+        }) { household.playStream(room.current(), station.url, station.name) }
 }
 
 internal fun silentNotice(station: Station) = "${station.name} didn't play. Try another station."
