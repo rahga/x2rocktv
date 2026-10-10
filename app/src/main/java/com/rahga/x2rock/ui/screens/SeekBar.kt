@@ -43,6 +43,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -57,7 +58,14 @@ import kotlinx.coroutines.delay
 // the time labels under it. Split from PlayerScreen.kt, where PlaybackControls draws it.
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit, onFocused: (Boolean) -> Unit = {}) {
+internal fun ProgressBar(
+    state: PlayerUiState,
+    onSeekBy: (Long) -> Unit,
+    onSeekTo: (Long) -> Unit,
+    onFocused: (Boolean) -> Unit = {},
+    /** "Up next · …", drawn between the times while it is set: see PlayerPane's nextFocused. */
+    upNext: String? = null,
+) {
     // Always laid out, blank where there is nothing to show: a station, a TV input or an empty
     // room has no duration, and closing the slot up moved every row below it as the viewer
     // walked the room list. The pane above the transport keeps one shape whatever a room plays.
@@ -189,7 +197,17 @@ internal fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekT
             // The total's slot is always laid out, invisible when there is nothing to say: it is
             // taller than the times beside it, and appearing only on a press made the row grow
             // and nudged every row below it down the screen.
-            Box(contentAlignment = Alignment.Center) {
+            // Weighted, so a long "Up next" ellipsizes between the times rather than over them.
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                if (seekAlpha == 0f && !isFocused && upNext != null) {
+                    Text(
+                        upNext,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 Text(
                     seekTotal.toSeekLabel(),
                     style = MaterialTheme.typography.titleMedium,

@@ -149,6 +149,10 @@ fun PlayerPane(
     // viewer stops on while the music plays, rather than passes through.
     val volumeFocused = remember { mutableStateOf(false) }
     var seekFocused by remember { mutableStateOf(false) }
+    // What follows is named between the seek bar's times while Next has focus: the one moment it
+    // answers a question, and less on screen otherwise. Under the transport, a line of its own
+    // pushed the places row past the safe area on a two-line title (Shield, 2026-10-10).
+    var nextFocused by remember { mutableStateOf(false) }
     val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester, focused = volumeFocused)
     var paneHasFocus by remember { mutableStateOf(false) }
 
@@ -246,7 +250,13 @@ fun PlayerPane(
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
                     TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry, showService = volumeFocused.value || seekFocused)
-                    ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) }, onFocused = { seekFocused = it })
+                    ProgressBar(
+                        state,
+                        onSeekBy = { viewModel.seekBy(it) },
+                        onSeekTo = { viewModel.seekTo(it) },
+                        onFocused = { seekFocused = it },
+                        upNext = state.upNextLine()?.takeIf { nextFocused && state.actions.canSkip },
+                    )
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
@@ -262,6 +272,7 @@ fun PlayerPane(
                         onOpenSearch = onOpenSearch,
                         groupFocusRequester = groupFocusRequester,
                         onOpenGroup = onOpenGroup,
+                        onNextFocused = { nextFocused = it },
                     )
                 }
             }
@@ -497,6 +508,7 @@ private fun PlaybackControls(
     onOpenSearch: () -> Unit,
     groupFocusRequester: FocusRequester,
     onOpenGroup: () -> Unit,
+    onNextFocused: (Boolean) -> Unit,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -576,7 +588,12 @@ private fun PlaybackControls(
                     }
                 }
                 if (state.actions.canSkip) {
-                    ModeButton(icon = Icons.Filled.SkipNext, description = "Next", onClick = { viewModel.skipToNextTrack() })
+                    ModeButton(
+                        icon = Icons.Filled.SkipNext,
+                        description = "Next",
+                        onClick = { viewModel.skipToNextTrack() },
+                        modifier = Modifier.onFocusChanged { onNextFocused(it.isFocused) },
+                    )
                 }
                 if (state.actions.canRepeat) {
                     ModeButton(
@@ -610,18 +627,6 @@ private fun PlaybackControls(
             }
         }
 
-        // What follows, under the transport, where a television has the room to say it. Only when
-        // the player names it: a station names nothing, and a line saying so would be noise.
-        if (hasContent) state.upNextLine()?.let { line ->
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = line,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

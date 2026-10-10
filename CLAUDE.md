@@ -527,6 +527,11 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   duration — a station, a TV input, an empty room — so walking the room list moves nothing above
   the transport. Below it each source has its own rows. Asked for after Bedroom, Dining Room and
   Kitchen each put the controls at a different height.
+- **Up next is named between the seek bar's times, and only while Next has focus** (2026-10-10):
+  `metadataStatus.nextItem`, where the player names one — a queue does, a station does not, and
+  nothing is drawn then. First drawn as a line under the transport, it pushed the places row past
+  the safe area on a two-line title (Shield); the time row's middle costs no height, and showing it
+  on Next alone keeps the pane quieter, as the service logo shows only on volume and seek.
 - **The seek bar seeks only where the player says `canSeek`**, which is per content, not per
   service: an iHeartRadio artist station's track carries a duration and refuses a seek with
   `ERROR_DISALLOWED_BY_POLICY`, where the same service's on-demand tracks seek fine. The player
