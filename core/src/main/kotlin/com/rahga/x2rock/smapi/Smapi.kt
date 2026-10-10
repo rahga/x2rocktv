@@ -89,6 +89,14 @@ data class Item(
      * Plex answers a tracks search with and whose id does play.
      */
     val container: Boolean,
+    /**
+     * The account's own content — `userContent="true"` on a collection. With [readOnly] false it is
+     * a place that can be added to: Deezer marks "My Playlists" so, and each playlist in it
+     * read-only false (captured 2026-10-10).
+     */
+    val userContent: Boolean = false,
+    /** `readOnly`, true unless the service says otherwise: nothing is written where it is not offered. */
+    val readOnly: Boolean = true,
 )
 
 /** A searchable category, from a service's presentation map. */
@@ -285,6 +293,19 @@ class SmapiClient(client: OkHttpClient) {
      */
     suspend fun setFavorite(service: Service, token: Token?, id: String, favorite: Boolean): Unit = withContext(Dispatchers.IO) {
         call(service, token, if (favorite) "createItem" else "deleteItem", "<favorite>${Xml.escape(id)}</favorite>")
+    }
+
+    /**
+     * Put [id] into the account's playlist [playlistId] at [index] — SMAPI's `addToContainer`. The
+     * playlist's own count appends; the id is the one its listing gives (Deezer's
+     * `playlist_spotify:playlist-…`), which works though `createContainer` names it without the
+     * prefix (all three captured off Deezer with a scratch playlist, 2026-10-10).
+     */
+    suspend fun addToContainer(service: Service, token: Token?, id: String, playlistId: String, index: Int): Unit = withContext(Dispatchers.IO) {
+        call(
+            service, token, "addToContainer",
+            "<id>${Xml.escape(id)}</id><parentId>${Xml.escape(playlistId)}</parentId><index>$index</index><updateId></updateId>",
+        )
     }
 
     /**
@@ -509,6 +530,23 @@ fun parseServices(descriptorList: String, typeList: String = ""): List<Service> 
  * `mediaMetadata` for something to play, and services mix them freely in either call. Read in
  * document order so a mixed page keeps the service's own ordering.
  */
+/**
+ * The playlists [browse] shows that can be added to. They live in the collection marked the
+ * account's own and not read-only — at the root, or one level into another of the account's own
+ * (Deezer: My Music, read-only, holds My Playlists, writable) — and each playlist in it says for
+ * itself whether it may be written. Empty where the service offers no such place.
+ */
+suspend fun writablePlaylists(browse: suspend (id: String) -> List<Item>): List<Item> {
+    fun place(items: List<Item>) = items.firstOrNull { it.container && it.userContent && !it.readOnly }
+    val root = browse("root")
+    val home = place(root)
+        ?: root.filter { it.container && it.userContent }.firstNotNullOfOrNull { mine ->
+            runCatching { place(browse(mine.id)) }.getOrNull()
+        }
+        ?: return emptyList()
+    return browse(home.id).filter { it.container && !it.readOnly }
+}
+
 fun parseItems(body: String): ItemPage {
     val root = Xml.parse(body)
     val total = root.firstNamed("total")?.textContent?.trim()?.toIntOrNull() ?: 0
@@ -537,6 +575,8 @@ fun parseItems(body: String): ItemPage {
                 artUrl = child("albumArtURI") ?: nested("trackMetadata", "albumArtURI")
                     ?: nested("streamMetadata", "logo"),
                 container = container,
+                userContent = (node as? org.w3c.dom.Element)?.getAttribute("userContent") == "true",
+                readOnly = (node as? org.w3c.dom.Element)?.getAttribute("readOnly") != "false",
             )
         }
     return ItemPage(items, total)

@@ -45,6 +45,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.rahga.x2rock.ui.components.PlaylistPicker
 import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import androidx.compose.ui.Alignment
@@ -247,6 +248,7 @@ fun SearchScreen(
                     onPlayed = onPlayed,
                 )
             }
+            PlaylistPicker(viewModel.menu)
             notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }

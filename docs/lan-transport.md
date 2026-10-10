@@ -419,6 +419,20 @@ against real services, Media Room playing.
 
 ---
 
+**Adding to an account's own playlist** (Deezer, home, 2026-10-10, owner-approved, with a scratch
+playlist made and deleted three times; the account's one real playlist untouched). Nothing on a
+track says it can be added to a playlist — `getExtendedMetadata` has no such field — so it is the
+*containers* that say where: a `mediaCollection` carries `userContent="true"` when it is the
+account's own and `readOnly="false"` when it may be written. Deezer's root has **My Music**
+(`mylibrary`, own, read-only), which holds **My Playlists** (`playlists`, own, **writable**), whose
+playlists are each `readOnly="false"`. `addToContainer(id, parentId, index, updateId)` puts a track
+in; Deezer leaves `updateId` empty in every reply and takes an empty one; **an index equal to the
+playlist's count appends** (a second track at 1 followed the first at 0). `createContainer` answers
+the bare `playlist-…` id while listings name the same playlist `playlist_spotify:playlist-…`, and
+`addToContainer` takes the listed form. `removeFromContainer(id, indices, updateId)` and
+`deleteContainer(id)` cleaned up. **YouTube Music refused every SMAPI call from outside a player**
+(403, "unregistered callers"), so it was not probed; Qobuz is not linked at home.
+
 ## Recorded by x2rock, and relied on here
 
 The sibling project measured these on its own household's hardware between 2026-09-04 and

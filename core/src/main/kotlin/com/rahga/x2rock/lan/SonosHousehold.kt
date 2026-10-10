@@ -1185,6 +1185,21 @@ class SonosHousehold(
         else smapi.setFavorite(linked.service, linked.token, item.id, favorite)
     }
 
+    /**
+     * The account's playlists in [linked] that can be added to, or none where it offers none. The
+     * place they live is the collection marked the account's own and not read-only — at the root, or
+     * one level into another of the account's own (Deezer's My Music → My Playlists) — and within it
+     * each playlist says for itself whether it may be written.
+     */
+    suspend fun writablePlaylists(linked: LinkedService): List<Item> =
+        com.rahga.x2rock.smapi.writablePlaylists { id -> browseService(linked, id).items }
+
+    /** Add [item] to the end of [playlist], one of [writablePlaylists]: its count is where the end is. */
+    suspend fun addToServicePlaylist(linked: LinkedService, item: Item, playlist: Item) {
+        val end = browseService(linked, playlist.id, count = 1).total
+        smapi.addToContainer(linked.service, linked.token, item.id, playlist.id, end)
+    }
+
     /** Browse into a container of [linked] — `root` for its top level. */
     suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage =
         smapi.metadata(linked.service, linked.token, id, index, count)

@@ -623,6 +623,14 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   saved from the room panel and played from Browse. Players, not groups, for the reason the TV
   room stores a player. Applying one sets levels **before** it starts the music, so nothing starts
   loud. Music that is not a favourite is not kept, and saving says so.
+- **A book's chapters and a service's playlists are the item menu's** (2026-10-10). On a book,
+  **Chapters** lists them as a Browse level, opening on the chapter its service has the listener
+  in, marked "Resumes at"; that one carries on from the place, any other plays from its start, and
+  pressing the book still resumes. On a track, **Add to playlist…** lists the account's playlists
+  that may be written — found by the collections' own `userContent`/`readOnly`, never by guessing at
+  titles — and adds at the end. Shown only where the account has such a place (Deezer does; YouTube
+  Music's SMAPI refuses outside callers). Making or deleting a service playlist is not offered: like
+  a Sonos favourite, creating content belongs to the service's own app.
 - **Removing a favourite is deliberately absent.** The Control API cannot, and the sibling
   project probed and declined UPnP `DestroyObject` on the rule that creating or destroying
   content belongs to the Sonos app. Same rule here. That is a *Sonos* favourite. A *service's*

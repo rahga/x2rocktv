@@ -41,6 +41,7 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.ServiceContent
+import com.rahga.x2rock.ui.components.PlaylistPicker
 import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
 import com.rahga.x2rock.ui.components.ItemMenu
 import com.rahga.x2rock.ui.components.MenuAction
@@ -341,6 +342,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
             onChapters = { viewModel.menu.close(); viewModel.openChapters(target.item) },
         )
     }
+    PlaylistPicker(viewModel.menu)
 
     when (val r = results) {
         ServiceBrowseViewModel.Results.Idle -> Text(

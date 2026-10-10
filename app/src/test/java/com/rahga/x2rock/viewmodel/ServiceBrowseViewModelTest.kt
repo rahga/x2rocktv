@@ -49,6 +49,9 @@ class ServiceBrowseViewModelTest {
     /** Whether the service's manifest names a browse endpoint, as Sonos Radio's does. */
     @Volatile private var shelvesOn = false
 
+    /** Every SMAPI request body, in order. */
+    private val smapiCalls = java.util.concurrent.CopyOnWriteArrayList<String>()
+
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         service = MockWebServer().apply {
@@ -62,7 +65,10 @@ class ServiceBrowseViewModelTest {
                     "/map" -> MockResponse().setBody(MAP)
                     "/smapi" -> {
                         val body = request.body.readUtf8()
+                        smapiCalls += body
                         MockResponse().setBody(when {
+                            "<addToContainer" in body -> FakePlayer.fixtureText("smapi.deezer.addToContainer.xml")
+                            "<id>$PLAYLIST</id>" in body -> FakePlayer.fixtureText("smapi.deezer.playlist.oneTrack.xml")
                             "<getMetadata" !in body -> SEARCH_ALBUM
                             "<id>root</id>" in body && emptyRoot -> EMPTY
                             // A page naming one item twice, as radio directories do: t1 at 1 and 2.
@@ -121,6 +127,24 @@ class ServiceBrowseViewModelTest {
         val ready = withTimeout(5_000) { viewModel.services.first { it is ServiceBrowseViewModel.Services.Ready } }
             as ServiceBrowseViewModel.Services.Ready
         org.junit.Assert.assertTrue(ready.appleMusic)
+    }
+
+    /**
+     * A track goes in at the playlist's end: its count, read first, is the index. Deezer's own
+     * replies, captured with a scratch playlist; one track already in it, so the end is 1.
+     */
+    @Test fun `a track is added at the end of the playlist chosen`() = runBlocking<Unit> {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        val track = found().first { !it.container }
+        val playlist = com.rahga.x2rock.smapi.Item(PLAYLIST, "Favorite tracks", "playlist", null, null, container = true, userContent = false, readOnly = false)
+        smapiCalls.clear()
+        viewModel.menu.addToPlaylist(ServiceItemMenu.Target.Service(qobuz, track), playlist)
+        assertEquals("Added \"${track.title}\" to Favorite tracks", withTimeout(5_000) { viewModel.notice.first { it != null } })
+        val add = smapiCalls.single { "<addToContainer" in it }
+        assertTrue(add, "<parentId>$PLAYLIST</parentId>" in add)
+        assertTrue(add, "<index>1</index>" in add)
+        assertTrue(add, "<id>${track.id}</id>" in add)
     }
 
     /** A book's chapters open on the one its service has the listener in, marked with the place. */
@@ -363,6 +387,9 @@ class ServiceBrowseViewModelTest {
          * place. The second chapter's title was not recorded, so it is named by the span its id
          * gives in book time, 1:59–29:55, rather than invented.
          */
+        /** Deezer's one playlist as its listing names it (number redacted), and the track added. */
+        const val PLAYLIST = "playlist_spotify:playlist-10000000001"
+
         const val BOOK = "reftitle:B002V1OF70_com"
         const val RESUME_CHAPTER = "refchapter:B002V1OF70_119953071_com_119000_1795000"
         const val CHAPTERS = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>

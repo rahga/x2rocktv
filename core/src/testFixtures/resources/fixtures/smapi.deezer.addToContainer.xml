@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SOAP-ENV:Envelope xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ns1="http://www.sonos.com/Services/1.1"><SOAP-ENV:Body><ns1:addToContainerResponse><ns1:addToContainerResult><ns1:updateId></ns1:updateId></ns1:addToContainerResult></ns1:addToContainerResponse></SOAP-ENV:Body></SOAP-ENV:Envelope>

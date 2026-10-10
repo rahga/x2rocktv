@@ -1,6 +1,8 @@
 package com.rahga.x2rock.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.smapi.ItemDetails
 import com.rahga.x2rock.smapi.LinkedService
 import com.rahga.x2rock.smapi.ServiceContent
@@ -26,6 +28,7 @@ fun ServiceItemMenuOverlay(
     onChapters: (() -> Unit)? = null,
 ) {
     val service = (target as? ServiceItemMenu.Target.Service)
+    val playlists by menu.playlists.collectAsState()
     ItemMenu(
         title = target.title,
         subtitle = target.subtitle,
@@ -34,7 +37,14 @@ fun ServiceItemMenuOverlay(
             MenuSection(null, playActions(menu, target, room, fromQueue, onOpen, onPlayed, onChapters)),
             MenuSection(
                 service?.linked?.service?.name,
-                if (service != null && details != null) serviceActions(menu, service, details, here, onOpenRelated, onPlayed) else emptyList(),
+                if (service != null && details != null) {
+                    serviceActions(menu, service, details, here, onOpenRelated, onPlayed) +
+                        // A track, into one of the account's own playlists, where it has any to add to.
+                        listOfNotNull(
+                            MenuAction("Add to playlist…") { menu.pickPlaylist(service) }
+                                .takeIf { playlists.isNotEmpty() && !service.item.container }
+                        )
+                } else emptyList(),
             ),
         ),
         onDismiss = menu::close,
@@ -85,4 +95,27 @@ private fun serviceActions(
         if (details.favorite != true) add(MenuAction("Add to your $name favourites") { menu.setFavorite(linked, target.item, true) })
         if (details.favorite != false) add(MenuAction("Remove from your $name favourites") { menu.setFavorite(linked, target.item, false) })
     }
+}
+
+/**
+ * The account's playlists, after "Add to playlist…": one press puts the track at the end of one.
+ * Its own overlay rather than a page of the item menu, which closes on any action as it is sent.
+ * Composed by every screen that hosts [ServiceItemMenuOverlay].
+ */
+@Composable
+fun PlaylistPicker(menu: ServiceItemMenu) {
+    val picker by menu.picker.collectAsState()
+    val open = picker ?: return
+    ItemMenu(
+        title = "Add to playlist",
+        subtitle = open.target.item.title,
+        artUrl = open.target.item.artUrl,
+        sections = listOf(
+            MenuSection(
+                open.target.linked.service.name,
+                open.playlists.map { playlist -> MenuAction(playlist.title) { menu.addToPlaylist(open.target, playlist) } },
+            ),
+        ),
+        onDismiss = menu::closePicker,
+    )
 }

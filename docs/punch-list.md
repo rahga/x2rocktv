@@ -72,10 +72,10 @@ builder for the thirty-one test preambles (the two that could reach real SSDP ar
 `REPLY_TIMEOUT_MILLIS` as a constructor seam so ReplayTest's two 5.5s waits go; `disconnect()`
 clearing the session outside the mutex `teardown()` takes.
 
-**Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; adding
-to a service's own playlist; picking an audiobook's chapter; Sonos Radio's "Browse Radio";
+**Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; Sonos Radio's "Browse Radio";
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
-2026-10-10, T-06: Radio's "Play a URL".)
+2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an
+audiobook's chapter, T-07.)
 
 ---
 

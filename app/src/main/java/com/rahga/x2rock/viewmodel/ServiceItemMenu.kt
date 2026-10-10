@@ -72,8 +72,31 @@ class ServiceItemMenu(
     val details: StateFlow<ItemDetails?> = _details.asStateFlow()
     private var detailsJob: Job? = null
 
+    /**
+     * The account's playlists a track could go in, for "Add to playlist…" — read as a menu opens on
+     * one, and kept per service for the screen's life: finding them is up to three `getMetadata`.
+     * Empty where the service has nowhere to add, which leaves the action out.
+     */
+    private val _playlists = MutableStateFlow<List<Item>>(emptyList())
+    val playlists: StateFlow<List<Item>> = _playlists.asStateFlow()
+    private val playlistsByService = mutableMapOf<String, List<Item>>()
+
+    /** The picker, while open: the track, and the playlists it can go in. */
+    data class Picker(val target: Target.Service, val playlists: List<Item>)
+    private val _picker = MutableStateFlow<Picker?>(null)
+    val picker: StateFlow<Picker?> = _picker.asStateFlow()
+
     fun show(target: Target) {
         _open.value = target
+        _playlists.value = emptyList()
+        (target as? Target.Service)?.takeIf { !it.item.container }?.let { service ->
+            val key = service.linked.key()
+            playlistsByService[key]?.let { _playlists.value = it } ?: scope.launch {
+                val found = runCatching { household.writablePlaylists(service.linked) }.getOrDefault(emptyList())
+                playlistsByService[key] = found
+                if (_open.value == target) _playlists.value = found
+            }
+        }
         _fromQueue.value = false
         _details.value = null
         scope.launch {
@@ -133,6 +156,23 @@ class ServiceItemMenu(
             runCatching { household.setServiceFavorite(linked, item, favorite) }
                 .onSuccess { notice.post(if (favorite) "Added to your $name favourites" else "Removed from your $name favourites") }
                 .onFailure { notice.failure(if (favorite) "add to $name favourites" else "remove from $name favourites", it) }
+        }
+    }
+
+    /** Open the picker of [target]'s account's playlists; the menu closes as it does on any action. */
+    fun pickPlaylist(target: Target.Service) {
+        _picker.value = Picker(target, _playlists.value)
+    }
+
+    fun closePicker() { _picker.value = null }
+
+    /** Add the track to the end of [playlist], in its service — SMAPI's `addToContainer`. */
+    fun addToPlaylist(target: Target.Service, playlist: Item) {
+        _picker.value = null
+        scope.launch {
+            runCatching { household.addToServicePlaylist(target.linked, target.item, playlist) }
+                .onSuccess { notice.post("Added \"${target.item.title}\" to ${playlist.title}") }
+                .onFailure { notice.failure("add ${target.item.title} to ${playlist.title}", it) }
         }
     }
 
