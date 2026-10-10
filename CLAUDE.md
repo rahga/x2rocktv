@@ -523,6 +523,11 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   reports it with every status, so there it is a plain progress line and not a focus stop. What
   did not work floats over the foot of the pane as a `NoticeBanner`, as the home screen's does
   over the room panel, rather than as a line among the rows.
+- **A control the pane does not draw is not acted on from anywhere** (2026-10-10). The remote's
+  media keys and the media session's controls come through the same `PlayerViewModel` functions
+  as the pane's buttons, and each checks the player's `availablePlaybackActions` first: Next on a
+  station used to send the skip and answer "Couldn't skip: ERROR_DISALLOWED_BY_POLICY", a press
+  on a button that was not there. Play with nothing loaded is the same; idle with content is not.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.

@@ -403,14 +403,21 @@ class PlayerViewModel @Inject constructor(
     //
     // Fire and forget. The player answers with an event, and the flows above pick it up.
 
-    fun togglePlayPause() = command("play or pause") { household.togglePlayPause(it) }
+    // With nothing loaded at all — `canPlay` false, the one case it is — the pane draws no
+    // transport, so the remote's keys do nothing here either. Idle with content is not that
+    // case: a Play there is exactly worth acting on.
+    fun togglePlayPause() {
+        if (!uiState.value.actions.canPlay) return
+        command("play or pause") { household.togglePlayPause(it) }
+    }
 
     /**
      * An explicit Play — the remote's own Play key, a voice "resume" — which a playing room ignores
      * rather than toggling into a pause.
      */
     fun play() {
-        if (uiState.value.playbackState.isPlaying()) return
+        val state = uiState.value
+        if (state.playbackState.isPlaying() || !state.actions.canPlay) return
         command("play") { household.play(it) }
     }
 
@@ -429,16 +436,27 @@ class PlayerViewModel @Inject constructor(
 
     /** End the ringing alarm. Pausing is what does that; deleting the alarm would not. */
     fun stopAlarm() = command("stop the alarm") { household.pause(it) }
-    fun skipToNextTrack() = command("skip") { household.skipToNextTrack(it) }
+    /**
+     * A control the pane does not draw is not acted on from anywhere: the remote's media keys
+     * and the system's own controls come through here as the pane's buttons do, so all three
+     * agree. Where the player says a source cannot skip, Next used to send the skip anyway and
+     * answer "Couldn't skip: ERROR_DISALLOWED_BY_POLICY" — a press on a button that is not there.
+     */
+    fun skipToNextTrack() {
+        if (!uiState.value.actions.canSkip) return
+        command("skip") { household.skipToNextTrack(it) }
+    }
+
     /**
      * Back a track, or back to the start of this one where the player has no previous track
-     * to go to — see [PlaybackActions.canGoBack]. The remote's media key and the system's own
-     * controls come through here too, so all three agree.
+     * to go to — see [PlaybackActions.canGoBack]. Nothing where neither is offered.
      */
     fun skipToPreviousTrack() {
         val actions = uiState.value.actions
-        if (!actions.canSkipToPrevious && actions.canSeek) seekTo(0)
-        else command("go back") { household.skipToPreviousTrack(it) }
+        when {
+            actions.canSkipToPrevious -> command("go back") { household.skipToPreviousTrack(it) }
+            actions.canSeek -> seekTo(0)
+        }
     }
 
     // ------------------------------------------------------------ ratings
@@ -480,6 +498,7 @@ class PlayerViewModel @Inject constructor(
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
         val state = uiState.value
+        if (!state.actions.canSeek) return
         val now = System.currentTimeMillis()
         val playing = state.playbackState.isPlaying()
         val pending = pendingSeekMillis
@@ -503,6 +522,7 @@ class PlayerViewModel @Inject constructor(
     fun seekTo(positionMillis: Long) {
         val groupId = _groupId.value ?: return
         val state = uiState.value
+        if (!state.actions.canSeek) return
         val target = positionMillis
             .coerceIn(0, state.durationMillis.takeIf { it > 0 } ?: Long.MAX_VALUE)
         pendingSeekMillis = target

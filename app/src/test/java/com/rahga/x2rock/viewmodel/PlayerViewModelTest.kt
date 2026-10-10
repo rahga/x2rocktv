@@ -186,6 +186,29 @@ class PlayerViewModelTest {
     // ---------------------------------------------------------------- going back
 
     /**
+     * The captured station status refuses skip, seek and going back. The remote's keys and the
+     * system's controls come through the same functions as the pane's buttons, which are not
+     * drawn there — so nothing is sent, and nothing said: the player used to be asked and to
+     * answer ERROR_DISALLOWED_BY_POLICY.
+     */
+    @Test fun `a skip or seek the source forbids is ignored, not sent`() = runBlocking<Unit> {
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { !it.actions.canSkip && !it.actions.canSeek } }
+        fake.clearHistory()
+
+        viewModel.skipToNextTrack()
+        viewModel.skipToPreviousTrack()
+        viewModel.seekBy(10_000)
+        viewModel.seekTo(0)
+        delay(600)
+
+        assertEquals(0, fake.commandsNamed("skipToNextTrack"))
+        assertEquals(0, fake.commandsNamed("skipToPreviousTrack"))
+        assertEquals(0, fake.commandsNamed("seek"))
+        assertNull("a control that is not drawn must not answer either", viewModel.uiState.value.notice)
+    }
+
+    /**
      * The captured status is a queue's first track: `canSkipToPrevious` false, `canSeek` true —
      * what shuffle reports on every track. Prev there goes back to the start of the track, as
      * the Sonos app's does, rather than asking for a previous track the player says is not
@@ -270,9 +293,11 @@ class PlayerViewModelTest {
 
     @Test fun `metadata reaches the system when a track arrives`() = runBlocking<Unit> {
         fake.pushFixture("metadataStatus", groupId)
-        withTimeout(5_000) { viewModel.uiState.first { it.trackName != null } }
-        assertTrue("nothing was published", publisher.metadata.isNotEmpty())
-        assertEquals(viewModel.uiState.value.trackName, publisher.metadata.last().title)
+        val track = withTimeout(5_000) { viewModel.uiState.first { it.trackName != null } }.trackName
+        // The publisher is fed by its own collector, a moment after the UI state: read the
+        // instant the state showed the track, its last entry was still the idle one.
+        withTimeout(5_000) { while (publisher.metadata.lastOrNull()?.title != track) delay(20) }
+        assertEquals(track, publisher.metadata.last().title)
         // And its cover, for the home screen's media card, which drew a blank without one.
         assertNotNull(viewModel.uiState.value.albumArtUrl)
         assertEquals(viewModel.uiState.value.albumArtUrl, publisher.metadata.last().artUrl)
