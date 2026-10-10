@@ -120,6 +120,7 @@ fun HomeScreen(
     onOpenSearch: (groupId: String) -> Unit,
     onOpenNowPlaying: (groupId: String) -> Unit,
     onOpenPreferredServices: () -> Unit,
+    onOpenAlarms: () -> Unit,
     // Never defaulted to hiltViewModel(): inside the NavHost that would mint a second
     // PlayerViewModel owned by the back-stack entry, which would attach its own controls to the
     // publisher and never be told the room. NavGraph passes the activity's.
@@ -360,6 +361,11 @@ fun HomeScreen(
                     opener = Opener.SETTINGS
                     showSettings = false
                     onOpenPreferredServices()
+                },
+                onOpenAlarms = {
+                    opener = Opener.SETTINGS
+                    showSettings = false
+                    onOpenAlarms()
                 },
                 onThemeSelected = { homeViewModel.setTheme(it) }
             )
@@ -776,6 +782,7 @@ private fun SettingsPanel(
     /** False for the frames closing spends handing focus back to the Settings button. */
     trapped: Boolean,
     onOpenPreferredServices: () -> Unit,
+    onOpenAlarms: () -> Unit,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
     Box(
@@ -808,6 +815,13 @@ private fun SettingsPanel(
             // a list needs more room than this panel has.
             AppButton(onClick = onOpenPreferredServices, modifier = Modifier.fillMaxWidth()) {
                 Text("Preferred services")
+            }
+            Spacer(Modifier.height(32.dp))
+            Text("Household", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            // Every room's alarms in one list: they are the household's, not one room's.
+            AppButton(onClick = onOpenAlarms, modifier = Modifier.fillMaxWidth()) {
+                Text("Alarms")
             }
         }
     }

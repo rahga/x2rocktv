@@ -298,6 +298,18 @@ back **when the alarm's duration ran out**, 178s after the snooze — the durati
 the scheduled time (x2rock) and seems to end a snooze early too. Alarms set 40–50s ahead fired
 on the second here, where x2rock's firmware fired one set 82s ahead two minutes late.
 
+**The alarms themselves are `AlarmClock:1`, household-wide** (captured off Kitchen 2026-10-10 with
+disarmed alarms made for it, then removed). Any player answers for every alarm, and each names its
+room by a *player* id. `ListAlarms` carries its `<Alarms>` document as escaped **text**, so it is
+parsed twice. `UpdateAlarm` takes all ten fields or answers **402** and leaves the alarm as it was,
+so a toggle is read, copy, write back whole — read fresh, or an older record undoes another
+controller's edit. `CreateAlarm` answers `AssignedID`, and **801 when that room already has an
+alarm at that start time, whatever the recurrence** (DAILY against an existing WEEKDAYS at 06:45
+was refused too); a refused create still uses up an id. `ON_135` was accepted and read back.
+An alarm's program is a favourite's `res` and `r:resMD`, which only `Browse FV:2` gives — the
+Control API's `favorites:1` carries ids. The clock is `GetTimeNow` (`CurrentLocalTime`) and
+`GetTimeZone` (`Index`, -1 for unset); this household is index 9, so local time is Central.
+
 **Android's XML parser takes no Xerces features.** `DocumentBuilderFactory.setFeature` for
 `disallow-doctype-decl` throws `ParserConfigurationException` on the Shield (Android 11), so
 there no UPnP reply parsed and every fault read as a bare HTTP 500 — unseen because the JVM's

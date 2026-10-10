@@ -62,7 +62,8 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── MulticastGate.kt           whatever the platform must hold for multicast
 │   ├── SeedStore.kt               the last reachable player (per network), for a warm start
 │   ├── SonosHousehold.kt          state flows, commands, subscriptions, reconnection
-│   ├── Upnp.kt                    cleartext 1400: queue, TV input, EQ, service list
+│   ├── Upnp.kt                    cleartext 1400: queue, TV input, EQ, service list, alarms
+│   ├── Alarms.kt                  an alarm, the household clock, favourites as alarm programs
 │   ├── Xml.kt                     the one parser for UPnP and SMAPI replies, DOCTYPE refused by hand
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into
 │   └── PlayModes.kt               repeat flags ↔ the app's enum
@@ -146,6 +147,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       │                          Radio and Music Services one press up
 │       ├── SearchScreen.kt        one search across every service and Apple Music, by section
 │       ├── PreferredServicesScreen.kt  Settings' sorter: mark services preferred, carry them into order
+│       ├── AlarmsScreen.kt        Settings' alarms: every room's, armed on Select; a new one step by step
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       ├── ServiceBrowseScreen.kt the household's own services — each opens on its library (or its
@@ -162,6 +164,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── AppleMusicViewModel.kt
     ├── ServiceBrowseViewModel.kt   browse/search the household's own services, a level at a time
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
+    ├── AlarmsViewModel.kt          the household's alarms, the clock they are on, and the new-alarm steps
     ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
     ├── StartGuard.kt               one thing starting at a time, marked for its row; every screen's start
@@ -304,7 +307,7 @@ developed, and it is worth keeping that way.
 | `MulticastGate.kt` | the seam for Android's `MulticastLock`; nothing to hold on Ethernet or a desktop JVM |
 | `SeedStore.kt` | one remembered player (per network, where the store is keyed), probed first so a warm start skips discovery |
 | `SonosHousehold.kt` | the live view: connections, subscriptions, state flows, commands, reconnection, ratings |
-| `Upnp.kt` | cleartext port 1400 — the queue, the TV input switch, `SetEQ`, and the music-service list |
+| `Upnp.kt` | cleartext port 1400 — the queue, the TV input switch, `SetEQ`, the music-service list, and `AlarmClock` |
 | `TvSoundbar.kt` | among the rooms with an HDMI input, the one currently on it |
 | `PlayModes.kt` | Sonos's two repeat booleans ↔ the app's three-way enum |
 

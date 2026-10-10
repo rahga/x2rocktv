@@ -562,6 +562,16 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   loaded", `ERROR_ACCOUNT_INVALID_ID` "it isn't available from this system's accounts". Any other
   code stays as the player sent it: a code nobody has seen cannot be worded truthfully, so add one
   here only with the case that produced it.
+- **Alarms are the household's, so they live in Settings** (`AlarmsScreen`, 2026-10-10), every
+  room's in one list: "06:45 · Kitchen", days, sound, volume, On/Off; Select arms or disarms. Times
+  are the household's clock, said at the top with its time now, and **never converted** — with no
+  timezone set it runs UTC, and the screen says so. A new alarm is one step to a screen (room, time,
+  how often, chime or a favourite, then volume) and is made armed. Nothing pushes alarms, so the list
+  is read on opening and after each change made here. Editing and removing are not offered.
+- **A screen that loads fast asks for first focus once it is resumed**, not before: during the
+  navigation's fade the home screen is still composed and its Settings panel hands focus back to
+  its button, and when it left, focus fell to Back (Alarms on the Shield). Lists that load slowly
+  were spared by timing alone.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
