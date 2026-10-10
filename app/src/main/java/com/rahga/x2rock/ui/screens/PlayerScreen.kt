@@ -94,6 +94,7 @@ import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
+import com.rahga.x2rock.viewmodel.upNextLine
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -607,6 +608,19 @@ private fun PlaybackControls(
                     }
                 }
             }
+        }
+
+        // What follows, under the transport, where a television has the room to say it. Only when
+        // the player names it: a station names nothing, and a line saying so would be noise.
+        if (hasContent) state.upNextLine()?.let { line ->
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))

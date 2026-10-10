@@ -303,6 +303,17 @@ class PlayerViewModelTest {
         assertEquals(viewModel.uiState.value.albumArtUrl, publisher.metadata.last().artUrl)
     }
 
+    /** The captured album names its next track; the pane's "Up next" line is read from it. */
+    @Test fun `the next track reaches the pane`() = runBlocking<Unit> {
+        fake.pushFixture("metadataStatus", groupId)
+        val state = withTimeout(5_000) { viewModel.uiState.first { it.trackName != null } }
+        assertEquals("Up next · I’ll Be Missing You — Diddy feat. 112 & Faith Evans", state.upNextLine())
+
+        fake.pushFixture("stationMetadataStatus", groupId)
+        val station = withTimeout(5_000) { viewModel.uiState.first { it.isRadio } }
+        assertNull("a station names nothing to follow", station.upNextLine())
+    }
+
     /** Media keys and voice transport arrive here; they must reach the speaker. */
     @Test fun `a transport control from the system reaches the player`() = runBlocking<Unit> {
         assertNotNull("nothing attached to the publisher", publisher.controls)

@@ -126,6 +126,7 @@ class SonosHouseholdTest {
         assertEquals("Shania Twain", station.track?.artist?.name)
         assertNotNull("a service station has a logo to draw", station.container?.imageUrl)
         assertNull("and says nothing in streamInfo", station.streamInfo)
+        assertNull("nor what comes next", station.nextTrack)
 
         fake.pushFixture("radioMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.streamInfo != null } }
@@ -143,10 +144,14 @@ class SonosHouseholdTest {
         fake.pushFixture("metadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.track != null } }
         assertFalse("an album is not radio", household.groupState(groupId).isRadio)
+        // A queue names what follows; the captured album does.
+        assertEquals("I’ll Be Missing You", household.groupState(groupId).nextTrack?.name)
+        assertEquals("Diddy feat. 112 & Faith Evans", household.groupState(groupId).nextTrack?.artist?.name)
 
         fake.pushFixture("radioMetadataStatus", groupId)
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.isRadio == true } }
         assertTrue(household.groupState(groupId).isRadio)
+        assertNull("a stream's metadata replaces the album's next item", household.groupState(groupId).nextTrack)
     }
 
     /**

@@ -80,6 +80,8 @@ data class GroupState(
     val positionUpdatedAt: Long = 0,
     val durationMillis: Long = 0,
     val track: Track? = null,
+    /** See [PlaybackMetadata.nextItem]: what follows [track], or null where nothing is named. */
+    val nextTrack: Track? = null,
     val container: ContainerMetadata? = null,
     /** See [PlaybackMetadata.streamInfo]: the now-playing of a stream that has no track. */
     val streamInfo: String? = null,
@@ -2128,6 +2130,7 @@ class SonosHousehold(
                     it.copy(
                         lastError = it.lastError.takeUnless { sourceChanged },
                         track = track,
+                        nextTrack = meta.nextItem?.track,
                         container = container,
                         // Blank is absent: a station between titles sends an empty string,
                         // and an empty headline renders worse than the room's own state.

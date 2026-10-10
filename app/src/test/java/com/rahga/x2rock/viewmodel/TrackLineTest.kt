@@ -1,6 +1,7 @@
 package com.rahga.x2rock.viewmodel
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 /** [trackLine]: the line under a track's title in the pane. */
@@ -20,5 +21,20 @@ class TrackLineTest {
     @Test fun `a station named as its album is not said twice`() {
         val state = PlayerUiState(trackName = "x", artistName = "A", albumName = "Hit List", sourceName = "Hit List", isRadio = true)
         assertEquals("A • Hit List", state.trackLine())
+    }
+
+    @Test fun `up next names the title and its artist`() {
+        val state = PlayerUiState(nextTrackName = "I’ll Be Missing You", nextArtistName = "Diddy")
+        assertEquals("Up next · I’ll Be Missing You — Diddy", state.upNextLine())
+    }
+
+    @Test fun `up next without an artist is the title alone`() {
+        assertEquals("Up next · Intro", PlayerUiState(nextTrackName = "Intro", nextArtistName = " ").upNextLine())
+    }
+
+    /** No "Up next: —": where the player names nothing, there is no line at all. */
+    @Test fun `nothing named is no line`() {
+        assertNull(PlayerUiState(nextArtistName = "Diddy").upNextLine())
+        assertNull(PlayerUiState(nextTrackName = "").upNextLine())
     }
 }

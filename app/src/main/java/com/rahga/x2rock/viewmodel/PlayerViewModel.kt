@@ -41,6 +41,9 @@ data class PlayerUiState(
     val artistName: String? = null,
     val albumName: String? = null,
     val albumArtUrl: String? = null,
+    /** What plays after this track, where the player names it; see [upNextLine]. */
+    val nextTrackName: String? = null,
+    val nextArtistName: String? = null,
     /** The service the room is playing from, as the player names it — for its logo on the art. */
     val serviceName: String? = null,
     /** On a soundbar's HDMI input, which carries no track at all. */
@@ -128,6 +131,16 @@ fun PlayerUiState.trackLine(): String {
     return listOfNotNull(artistName, albumName, station).joinToString(" • ")
 }
 
+/**
+ * "Up next · I'll Be Missing You — Diddy", or null where the player names nothing to follow — a
+ * station, the end of a queue — so the pane draws no line rather than "Up next: —".
+ */
+fun PlayerUiState.upNextLine(): String? {
+    val title = nextTrackName?.takeIf { it.isNotBlank() } ?: return null
+    val artist = nextArtistName?.takeIf { it.isNotBlank() }
+    return if (artist == null) "Up next · $title" else "Up next · $title — $artist"
+}
+
 /** What one read of `settings:1` yielded, with the speaker it came from. */
 data class HomeTheaterUi(
     val soundbarId: String,
@@ -208,6 +221,8 @@ class PlayerViewModel @Inject constructor(
                     artistName = state.track?.artist?.name,
                     albumName = state.track?.album?.name,
                     albumArtUrl = state.artUrl,
+                    nextTrackName = state.nextTrack?.name,
+                    nextArtistName = state.nextTrack?.artist?.name,
                     serviceName = state.track?.service?.name ?: state.container?.service?.name,
                     onTvInput = state.onTvInput,
                     inputFormat = state.inputFormat,

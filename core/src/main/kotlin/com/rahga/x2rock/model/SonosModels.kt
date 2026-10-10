@@ -244,6 +244,11 @@ data class PlaybackActions(
 
 data class PlaybackMetadata(
     val currentItem: CurrentItem? = null,
+    /**
+     * What plays after [currentItem], when the player knows: a queue names it, a station does
+     * not (neither captured station carries the field at all).
+     */
+    val nextItem: CurrentItem? = null,
     val container: ContainerMetadata? = null,
     /**
      * What the station says is on right now — and the only now-playing a service-less stream
