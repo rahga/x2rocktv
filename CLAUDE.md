@@ -10,6 +10,16 @@ because the separate Rust project `rahga/x2rock` (cloned alongside as `../x2rock
 the same job better on the desktop: local-first, no account, event-driven. Do not
 reintroduce a CLI here without deciding what it does that `x2rock` does not.
 
+## The work queue is local: `.local-work/`
+
+Since 2026-10-10 the work on this app is split between agents on this machine, and the queue lives
+in `.local-work/` at the repo root — **untracked** (`.gitignore`), so it is not on GitHub. Read
+`.local-work/README.md` before picking anything up: it has the protocol (claim an item, one agent
+per item, both suites green and a release build before done, log the hand-off), the device and
+room rules of the day, and the conventions. `TODO.md` is the backlog (`T-nn`), `PUNCH.md` the
+defects, checks owed on hardware and decisions already taken (`P-nn`), `LOG.md` the hand-offs.
+If the directory is missing on a fresh clone, there is no queue here; ask the owner.
+
 ## Language & Platform
 - Kotlin only — no Java
 - `:app` — Google TV / Android TV (Jetpack Compose for TV), min SDK 23, compile/target SDK 35

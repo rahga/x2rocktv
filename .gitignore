@@ -1,6 +1,10 @@
 # Secrets / local config
 local.properties
 
+# The local work queue for the agents splitting the work on this machine: to-do, punch list, log.
+# Deliberately untracked; its pointer is in CLAUDE.md.
+.local-work/
+
 # Gradle
 .gradle/
 .kotlin/
