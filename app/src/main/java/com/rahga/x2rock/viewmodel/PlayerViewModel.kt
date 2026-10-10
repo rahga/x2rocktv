@@ -42,6 +42,8 @@ data class PlayerUiState(
     val artistName: String? = null,
     val albumName: String? = null,
     val albumArtUrl: String? = null,
+    /** The service the room is playing from, as the player names it — for its logo on the art. */
+    val serviceName: String? = null,
     /** On a soundbar's HDMI input, which carries no track at all. */
     val onTvInput: Boolean = false,
     /** e.g. "Dolby Digital 5.1"; empty unless on a TV input with a signal. */
@@ -210,6 +212,7 @@ class PlayerViewModel @Inject constructor(
                     // a listener recognises — so fall back to the container rather than
                     // showing an empty pane.
                     albumArtUrl = state.track?.imageUrl ?: state.container?.imageUrl,
+                    serviceName = state.track?.service?.name ?: state.container?.service?.name,
                     onTvInput = state.onTvInput,
                     inputFormat = state.inputFormat,
                     streamInfo = state.streamInfo,

@@ -71,7 +71,15 @@ data class Track(
     val images: List<SonosImage> = emptyList(),
     /** See [MusicObjectId] — what `rateItem` needs, and absent wherever it cannot be sent. */
     val id: MusicObjectId? = null,
+    /** The service this track is playing from, as the player names it: `Deezer`, `Plex`. */
+    val service: ServiceRef? = null,
 )
+
+/**
+ * A music service as a track or container names it, `{"name": "Plex", "id": "212"}` in every
+ * captured `playbackMetadata` event. Its `images` came empty in every capture, so they are not read.
+ */
+data class ServiceRef(val name: String? = null, val id: String? = null)
 data class CurrentItem(val track: Track?)
 data class SonosImage(val url: String? = null)
 
@@ -177,6 +185,8 @@ data class ContainerMetadata(
     val images: List<SonosImage> = emptyList(),
     /** Present only while a soundbar is on its TV input — its presence *is* the signal. */
     val htInputFormat: HomeTheaterFormat? = null,
+    /** The container's service — what a station is played from, whose track names none. */
+    val service: ServiceRef? = null,
 )
 /**
  * A `playback:1` event saying the room could not play something, rather than what state it is

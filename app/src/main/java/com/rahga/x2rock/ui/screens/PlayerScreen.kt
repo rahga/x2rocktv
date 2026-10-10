@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.platform.LocalContext
 import com.rahga.x2rock.viewmodel.roomActivity
 import com.rahga.x2rock.viewmodel.RoomActivity
@@ -60,6 +62,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import com.rahga.x2rock.ui.serviceLogo
+import androidx.compose.runtime.MutableState
 import androidx.compose.ui.unit.offset
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
@@ -195,7 +199,11 @@ fun PlayerPane(
     fun closeOverlay(close: () -> Unit, vararg targets: FocusRequester) {
         closeScope.launch { handOffFocus({ overlayReleasing = it }, close, *targets) }
     }
-    val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester)
+    // The art names its service while the volume or the seek bar has focus: the two controls a
+    // viewer stops on while the music plays, rather than passes through.
+    val volumeFocused = remember { mutableStateOf(false) }
+    var seekFocused by remember { mutableStateOf(false) }
+    val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester, focused = volumeFocused)
     var paneHasFocus by remember { mutableStateOf(false) }
 
     // Where focus starts, once, for the life of this pane.
@@ -287,10 +295,11 @@ fun PlayerPane(
                     )
                 } else {
                     if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
-                    TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry)
+                    TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry, showService = volumeFocused.value || seekFocused)
                     PlaybackControls(
                         state = state,
                         viewModel = viewModel,
+                        onSeekFocused = { seekFocused = it },
                         playPauseFocusRequester = detailFocusRequester,
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenQueue = onOpenQueue,
@@ -375,20 +384,40 @@ private fun AlarmControls(
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
+private fun TrackInfo(
+    state: PlayerUiState,
+    viewModel: PlayerViewModel,
+    exitLeftFocusRequester: FocusRequester,
+    volumeEntry: VolumeEntry,
+    /** Draw the service's logo in the art's corner. */
+    showService: Boolean = false,
+) {
     Column {
         PaneHeader(state, viewModel, exitLeftFocusRequester, volumeEntry)
         Spacer(modifier = Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (state.albumArtUrl != null) {
-                AsyncImage(
-                    model = state.albumArtUrl,
-                    contentDescription = "Album art",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(ART_SIZE)
-                        .clip(RoundedCornerShape(8.dp))
-                )
+                Box(Modifier.size(ART_SIZE).clip(RoundedCornerShape(8.dp))) {
+                    AsyncImage(
+                        model = state.albumArtUrl,
+                        contentDescription = "Album art",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    // Which service this is playing from, in the art's bottom-left fifth: only
+                    // squares are published (Sonos's own list, see serviceLogo), so it sits on the
+                    // art rather than beside the text. Shown while the volume or the seek bar has
+                    // focus, so it never sits over the cover otherwise.
+                    val logo = state.serviceName?.let(::serviceLogo)
+                    if (showService && logo != null) {
+                        AsyncImage(
+                            model = logo,
+                            contentDescription = "Playing from ${state.serviceName}",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.align(Alignment.BottomStart).fillMaxSize(0.2f),
+                        )
+                    }
+                }
                 Spacer(modifier = Modifier.width(32.dp))
             } else if (state.isRadio) {
                 // A station logo is shown where there is one — many services carry it — and
@@ -472,7 +501,7 @@ private fun TrackInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeft
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit) {
+private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo: (Long) -> Unit, onFocused: (Boolean) -> Unit = {}) {
     if (state.durationMillis <= 0) return
 
     var displayPositionMillis by remember(state.positionUpdatedAt) {
@@ -498,11 +527,16 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
     var seekFrom by remember { mutableLongStateOf(0L) }
     var seekPresses by remember { mutableStateOf(0) }
     var seekShown by remember { mutableStateOf(false) }
+    // Presses so far in this burst: the step climbs 10s, 20s, then 30s for as long as the presses
+    // keep coming, so a nudge stays a nudge and a long way back is still quick. A pause long enough
+    // for the total to fade starts the next burst at 10s again.
+    var burstSteps by remember { mutableStateOf(0) }
     val seekAlpha by animateFloatAsState(if (seekShown) 1f else 0f, animationSpec = tween(400), label = "seekTotal")
     LaunchedEffect(seekPresses) {
         if (seekPresses == 0) return@LaunchedEffect
         delay(SEEK_TOTAL_SHOWN_MILLIS)
         seekShown = false
+        burstSteps = 0
     }
     // A burst of presses or taps is measured from where its first one began.
     fun showSeek(total: (from: Long) -> Long) {
@@ -511,7 +545,9 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
         seekShown = true
         seekPresses++
     }
-    fun seek(delta: Long) {
+    fun seek(direction: Int) {
+        val delta = direction * SEEK_STEPS_MILLIS[burstSteps.coerceAtMost(SEEK_STEPS_MILLIS.lastIndex)]
+        burstSteps++
         showSeek { from -> ((if (seekShown) seekTotal else 0L) + delta).coerceIn(-from, state.durationMillis - from) }
         onSeekBy(delta)
     }
@@ -533,7 +569,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                 // and placed after it never saw the bar take focus — so the bar never changed
                 // colour and its hint never showed, and landing on it looked like landing on
                 // nothing.
-                .onFocusChanged { isFocused = it.isFocused }
+                .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
                 .focusable()
                 // Touch and mouse, for anything that has them — the emulator, a tablet. A remote
                 // never sends a tap, so on a TV this is inert. The strip is taller than the bar
@@ -545,11 +581,12 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                     detectTapGestures { offset -> tapAt(offset.x / size.width) }
                 }
                 .padding(vertical = 12.dp)
+                .height(SEEK_KNOB)
                 .onKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                     when (event.key) {
-                        Key.DirectionLeft -> { seek(-30_000L); true }
-                        Key.DirectionRight -> { seek(+30_000L); true }
+                        Key.DirectionLeft -> { seek(-1); true }
+                        Key.DirectionRight -> { seek(+1); true }
                         else -> false
                     }
                 }
@@ -557,13 +594,15 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
             // An 8dp bar recolouring to the focus tint was too faint to find across a room — a
             // press up from the transport read as focus vanishing. Focused, the bar grows and a
             // knob sits at the playhead, so where focus is and where a seek starts are unmistakable.
+            // Both inside a strip already the knob's height, so taking focus moves nothing else on
+            // the pane: the strip used to grow by the knob and nudge every row.
             LinearProgressIndicator(
                 progress = { progress },
-                modifier = Modifier.fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
                 color = barColor
             )
             if (isFocused) {
-                val knob = 20.dp
+                val knob = SEEK_KNOB
                 Box(
                     modifier = Modifier
                         .align(Alignment.CenterStart)
@@ -595,7 +634,7 @@ private fun ProgressBar(state: PlayerUiState, onSeekBy: (Long) -> Unit, onSeekTo
                         val hint = MaterialTheme.colorScheme.secondary
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
                         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = hint, modifier = Modifier.size(20.dp))
-                        Text(" seek 30s", style = MaterialTheme.typography.bodySmall, color = hint)
+                        Text(" seek", style = MaterialTheme.typography.bodySmall, color = hint)
                     }
                 }
             }
@@ -629,6 +668,8 @@ private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = exitOnKey(Ke
 private fun PlaybackControls(
     state: PlayerUiState,
     viewModel: PlayerViewModel,
+    /** Whether the seek bar has focus; the art names its service while it does. */
+    onSeekFocused: (Boolean) -> Unit,
     playPauseFocusRequester: FocusRequester,
     exitLeftFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
@@ -658,7 +699,7 @@ private fun PlaybackControls(
     val hasContent = state.actions.canPlay
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) })
+        ProgressBar(state, onSeekBy = { viewModel.seekBy(it) }, onSeekTo = { viewModel.seekTo(it) }, onFocused = onSeekFocused)
         if (hasContent) Spacer(modifier = Modifier.height(24.dp))
 
         val transportExit = booleanArrayOf(false)
@@ -895,10 +936,12 @@ private fun HeaderVolume(
         onClick = onToggleMute,
         onLongClick = setExactly,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
+        // Focus shows in its colour; tv-material3's grow on focus pushed it past its own row.
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         modifier = Modifier
             .focusRequester(entry.focus)
             .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)
-            .onFocusChanged { focused = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; entry.focused.value = it.isFocused }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
@@ -925,17 +968,26 @@ private fun HeaderVolume(
                 modifier = Modifier.size(30.dp),
             )
             if (!state.volumeFixed) VolumeWedge(state.volume, state.isMuted)
+            // The size a level is read at across a room: the remote's own keys go to the
+            // television over CEC, so this is the one level on screen for the room itself.
+            val levelStyle = MaterialTheme.typography.headlineSmall
+            // Exactly as wide as "100", so the control does not change size as the level moves and
+            // "100" sits as close to + as − does to the speaker; a shorter level is centred in it.
+            // A fixed 52dp left "100" with space to spare before +.
+            val measurer = rememberTextMeasurer()
+            val density = LocalDensity.current
+            val levelWidth = remember(levelStyle, density) {
+                with(density) { measurer.measure("100", levelStyle).size.width.toDp() }
+            }
             Text(
                 text = when {
                     state.volumeFixed -> "Fixed"
                     state.volume == null -> "\u2014"
                     else -> state.volume.toString()
                 },
-                // The size a level is read at across a room: the remote's own keys go to the
-                // television over CEC, so this is the one level on screen for the room itself.
-                style = MaterialTheme.typography.headlineSmall,
-                // Wide enough for "100", so the control does not change size as the level moves.
-                modifier = Modifier.widthIn(min = 52.dp),
+                style = levelStyle,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.widthIn(min = levelWidth),
             )
             StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+VOLUME_STEP) }
         }
@@ -1210,7 +1262,12 @@ private fun SleepTimerPickerOverlay(
 private val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
 
 /** What the volume control needs to offer an exact level: how to open the entry, and its own focus. */
-private class VolumeEntry(val open: () -> Unit, val focus: FocusRequester)
+private class VolumeEntry(
+    val open: () -> Unit,
+    val focus: FocusRequester,
+    /** Whether the header volume has focus; the art names its service while it does. */
+    val focused: MutableState<Boolean>,
+)
 
 /**
  * An exact level for the room, opened by a hold on its volume: a number typed or said on the
@@ -1401,6 +1458,12 @@ private fun rememberSleepCountdown(endsAt: Long?): Long? {
 /** How long a seek burst's total stays up after the last press, before it fades. */
 private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
 
+/** The seek bar's knob, and the height its strip always keeps. */
+private val SEEK_KNOB = 20.dp
+
+/** The step of each press in a burst of seeks, the last repeating: see the seek bar's burstSteps. */
+private val SEEK_STEPS_MILLIS = longArrayOf(10_000L, 20_000L, 30_000L)
+
 /** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
 private val ART_SIZE = 168.dp
 
@@ -1454,28 +1517,30 @@ private fun PlaceButton(icon: ImageVector, label: String, onClick: () -> Unit, m
 
 /**
  * A button with its name under it, shown only while it has focus — the way a TV's player
- * controls name their icons. The name takes no width of its own, so a long one never spreads
- * the row; its height is always kept, so the row does not jump as focus moves along it.
+ * controls name their icons. The name takes no room of its own, either way: no width, so a long
+ * one never spreads the row, and no height, so the row is its buttons' height and the pane fits
+ * the screen. Reserving its height made the pane a little taller than the screen, and it then
+ * scrolled whenever focus reached the seek bar or the volume. It is drawn in the gap below the
+ * row, which the pane's spacing (20dp) and padding (32dp) already leave.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun Named(label: String, button: @Composable (Modifier) -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(contentAlignment = Alignment.BottomCenter) {
         button(Modifier.onFocusChanged { focused = it.hasFocus })
-        Spacer(Modifier.height(6.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            maxLines = 1,
-            softWrap = false,
-            modifier = Modifier
-                .alpha(if (focused) 1f else 0f)
-                .layout { measurable, _ ->
+        if (focused) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.layout { measurable, _ ->
                     val text = measurable.measure(Constraints())
-                    layout(0, text.height) { text.place(-text.width / 2, 0) }
+                    layout(0, 0) { text.place(-text.width / 2, 0) }
                 },
-        )
+            )
+        }
     }
 }
 
