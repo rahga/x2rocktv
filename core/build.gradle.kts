@@ -36,7 +36,6 @@ dependencies {
     api(libs.kotlinx.coroutines.core)
     api(libs.okhttp)
     implementation(libs.gson)
-    implementation(libs.javax.inject)
 
     testFixturesImplementation(libs.mockwebserver)
     testFixturesImplementation(libs.okhttp.tls)

@@ -228,9 +228,6 @@ class FakePlayer(
         groups = topology
     }
 
-    /** Answer nothing to the malformed "what household am I?" frame, as a real One SL did. */
-    @Volatile var ignoreHouseholdProbe = false
-
     /**
      * The `eq` the settings reply carries, over the captured one's. A tone write goes over UPnP,
      * which this fake does not serve, so a test that writes sets this to what the player would
@@ -369,10 +366,15 @@ class FakePlayer(
             groupId?.let { addProperty("groupId", it) }
             playerId?.let { addProperty("playerId", it) }
         }
-        // Any live connection will do: the household routes events by their header, not by
-        // which socket carried them. The fake's own player is preferred, as the seed.
-        val ws = sockets[hostname.lowercase()] ?: socket ?: sockets.values.firstOrNull()
-            ?: error("nothing connected to the fake player")
+        // On the socket a real player would send it on: a group's events come from its
+        // coordinator, so a household that subscribed a group on some other socket hears nothing
+        // here either. A household-scoped event — the topology, the zones — comes from the seed.
+        val ws = if (groupId != null) {
+            val host = coordinatorHostOf(groupId) ?: error("no group $groupId in the topology this fake serves")
+            sockets[host] ?: error("no connection open to $groupId's coordinator, $host")
+        } else {
+            sockets[hostname.lowercase()] ?: socket ?: sockets.values.firstOrNull() ?: error("nothing connected to the fake player")
+        }
         ws.send(JsonArray(2).apply { add(header); add(body) }.toString())
     }
 
@@ -396,7 +398,8 @@ class FakePlayer(
 
     private fun awaitRelease(command: String?) {
         if (command == null || command != heldCommand.get()) return
-        // Bounded, so a test that forgets to release fails rather than hanging the suite.
+        // Bounded: a test that forgets to release costs ten seconds and then gets its reply,
+        // rather than hanging the suite.
         releaseLatch.get().await(10, TimeUnit.SECONDS)
     }
 
@@ -447,23 +450,15 @@ class FakePlayer(
             }
             received += header
             awaitRelease(header.get("command")?.asString)
-            reply(webSocket, header)
+            reply(webSocket, header, host)
         }
     })
 
-    private fun reply(webSocket: WebSocket, request: JsonObject) {
+    private fun reply(webSocket: WebSocket, request: JsonObject, host: String) {
         val namespace = request.get("namespace")?.asString
         val command = request.get("command")?.asString
         val cmdId = request.get("cmdId")?.asString
 
-        // No namespace is the "what household am I?" probe: it fails by design, and the
-        // answer rides in the header rather than the body.
-        if (namespace == null) {
-            // A One SL on p20.96.1 sent nothing back at all; [ignoreHouseholdProbe] does the same.
-            if (ignoreHouseholdProbe) return
-            respond(webSocket, cmdId, null, "none", success = false, body = JsonObject())
-            return
-        }
         // Refusals are keyed by command, or by "namespace/command" for one namespace's — "subscribe"
         // alone would refuse every subscription in the house.
         (refused["$namespace/$command"] ?: refused[command ?: ""])?.let { errorCode ->
@@ -512,13 +507,16 @@ class FakePlayer(
         // fake said yes to everything and any test of a refusal passed vacuously.
         val playerId = request.get("playerId")?.asString
         if (playerId != null && playerId !in knownPlayerIds()) {
-            respond(
-                webSocket, cmdId, namespace, "globalError", success = false,
-                body = JsonObject().apply {
-                    addProperty("errorCode", "ERROR_INVALID_OBJECT_ID")
-                    addProperty("reason", "Incorrect playerId")
-                },
-            )
+            refuseObject(webSocket, cmdId, namespace, "Incorrect playerId")
+            return
+        }
+        // And the scope rule CLAUDE.md calls load-bearing: a group-scoped command is answered
+        // only by that group's coordinator, on its own socket. Sent anywhere else, a real player
+        // answers ERROR_INVALID_OBJECT_ID — and so does this one, so a household that put a
+        // group's subscriptions on the wrong socket can no longer pass here.
+        val groupId = request.get("groupId")?.asString
+        if (groupId != null && coordinatorHostOf(groupId) != host) {
+            refuseObject(webSocket, cmdId, namespace, "Incorrect groupId")
             return
         }
         // Captured off a real Beam, so it carries the whole object — spatial audio, the
@@ -546,6 +544,22 @@ class FakePlayer(
         }
         respond(webSocket, cmdId, namespace, "none", success = true, body = JsonObject())
     }
+
+    private fun refuseObject(webSocket: WebSocket, cmdId: String?, namespace: String?, reason: String) =
+        respond(
+            webSocket, cmdId, namespace, "globalError", success = false,
+            body = JsonObject().apply {
+                addProperty("errorCode", "ERROR_INVALID_OBJECT_ID")
+                addProperty("reason", reason)
+            },
+        )
+
+    /** The `.local` name of [groupId]'s coordinator in the served topology, or null for no such group. */
+    private fun coordinatorHostOf(groupId: String): String? =
+        groups.getAsJsonArray("groups").map { it.asJsonObject }
+            .firstOrNull { it.get("id").asString == groupId }
+            ?.get("coordinatorId")?.asString
+            ?.let { PlayerNames.localHostname(it) }?.lowercase()
 
     private fun respond(
         webSocket: WebSocket,

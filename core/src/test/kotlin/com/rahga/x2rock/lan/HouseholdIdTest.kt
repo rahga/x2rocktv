@@ -33,7 +33,6 @@ class HouseholdIdTest {
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
-        fake.ignoreHouseholdProbe = true
         val zp = FakePlayer.fixtureText("status.zp.xml")
         status = MockWebServer().apply {
             dispatcher = object : Dispatcher() {

@@ -37,8 +37,7 @@ class ToneTest {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
                     val action = soapAction(request)
-                    val fields = Regex("<(\\w+)>([^<]*)</\\1>").findAll(request.body.readUtf8())
-                        .associate { it.groupValues[1] to it.groupValues[2] }
+                    val fields = soapFields(request.body.readUtf8())
                     requests += action to fields
                     return if (action == "GetRoomCalibrationStatus") {
                         MockResponse().setBody(FakePlayer.fixtureText("GetRoomCalibrationStatus.reply.xml"))

@@ -7,6 +7,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.junit.Assume.assumeTrue
 import org.junit.Before
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.net.URI
 
@@ -66,6 +67,7 @@ class StoredAccountsLiveTest {
             println("  %-28s | %-42s | %s".format(name.take(28), search.take(42), browse))
         }
         println("searched ok: $searched, browsed ok: $browsed, of ${linked.size}")
+        assertTrue("no service answered a search", searched > 0)
         assert(linked.isNotEmpty())
     }
 

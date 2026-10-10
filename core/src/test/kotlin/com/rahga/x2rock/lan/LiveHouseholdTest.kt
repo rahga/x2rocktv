@@ -89,12 +89,10 @@ class LiveHouseholdTest {
         return Discovery.DiscoveredPlayer(
             id = describe(address),
             address = address,
-            // Asked for here rather than left null. `SonosSocket.householdId()` is the
-            // fallback when a seed carries none, and it does not work everywhere: it sends a
-            // deliberately malformed frame and reads the household out of the error reply,
-            // and one One SL on p20.96.1 simply ignored the frame — no reply at all, so the
-            // connect hung its timeout and failed. That path is never reached at home
-            // because SSDP always supplies the household, which is why it went unnoticed.
+            // Asked for here rather than left null, as SSDP would supply it. A seed without one
+            // reads it from /status/zp (Upnp.householdId); the old way, a deliberately malformed
+            // frame answered by an error naming the household, got no reply at all from a One
+            // SL on p20.96.1, and is gone.
             householdId = household(address),
         )
     }
@@ -141,11 +139,6 @@ class LiveHouseholdTest {
     }
 
     /**
-     * The load-bearing one. This connects by the `.local` name with OkHttp's default
-     * hostname verifier, so it passing means the certificate really does carry that name —
-     * the assumption the whole trust design rests on, checked against a real speaker.
-     */
-    /**
      * Read-only. A seed with no household — what any non-SSDP way of finding a player gives —
      * must still connect: the household reads `/status/zp` for the long id. The old way, a
      * malformed frame, got no answer at all from a One SL on p20.96.1.
@@ -156,6 +149,11 @@ class LiveHouseholdTest {
         assertTrue("not the long form: ${state.householdId}", state.householdId!!.matches(Regex("Sonos_[^.]+\\..+")))
     }
 
+    /**
+     * The load-bearing one. This connects by the `.local` name with OkHttp's default
+     * hostname verifier, so it passing means the certificate really does carry that name —
+     * the assumption the whole trust design rests on, checked against a real speaker.
+     */
     @Test fun `a real player answers on its certificate hostname`() {
         val state = connected()
         assertNotNull(state.householdId)

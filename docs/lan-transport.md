@@ -119,12 +119,13 @@ over cleartext 1400, with no multicast involved at all.
 
 ### Asking a player for its household does not always work
 
-`SonosSocket.householdId()` sends a frame with no namespace and reads the household out of
-the resulting error reply — "the cheapest question is a deliberately invalid one". A Sonos
-One SL on firmware `p20.96.1-79270` **ignored it entirely**: no reply, no error, the socket
-otherwise healthy and answering a properly-scoped `getGroups` on the same connection a
-moment later. Do not rely on it. It is only reached when a seed carries no household, which
-SSDP always supplies — which is why the weakness went unnoticed.
+The first fallback for a seed with no household, `SonosSocket.householdId()`, sent a frame
+with no namespace and read the household out of the resulting error reply — "the cheapest
+question is a deliberately invalid one". A Sonos One SL on firmware `p20.96.1-79270`
+**ignored it entirely**: no reply, no error, the socket otherwise healthy and answering a
+properly-scoped `getGroups` on the same connection a moment later. It was only reached when a
+seed carried no household, which SSDP always supplies — which is why the weakness went
+unnoticed. It is gone: `Upnp.householdId` reads `/status/zp` instead (see the table above).
 
 ### Discovery: SSDP is not guaranteed
 

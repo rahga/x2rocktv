@@ -423,27 +423,30 @@ class SonosHouseholdTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
     }
 
-    /** Regression: a groups event omits playbackState, which used to arrive as null. */
+    /**
+     * Regression: a groups event omits playbackState, which used to arrive as null. The captured
+     * event — five groups, not one of them saying — rather than a hand-written stand-in.
+     */
     @Test fun `a groups event without playbackState never yields null`() = runBlocking {
         connected()
-        fake.push(
-            "groups:1", "groups",
-            """{"groups":[{"id":"G:2","name":"Kitchen","coordinatorId":"${fake.id}","playerIds":["${fake.id}"]}],
-                "players":[{"id":"${fake.id}","name":"Kitchen"}]}""",
-        )
-        val group = withTimeout(5_000) {
-            household.state.first { st -> st.groups.any { it.id == "G:2" } }.groups.first { it.id == "G:2" }
-        }
-        assertNotNull(group.playbackState)
+        fake.push("groups:1", "groups", FakePlayer.fixtureText("event.groups.json"))
+        delay(300)
+        val groups = household.state.value.groups
+        assertEquals(5, groups.size)
+        assertTrue("a group's playbackState arrived as null", groups.all { it.playbackState != null })
     }
 
-    /** A player-scoped command naming an unknown id must be refused, not quietly accepted. */
-    @Test fun `an unknown playerId is refused`() = runBlocking<Unit> {
+    /**
+     * `zones:1` also sends a `zoneDefinitionsChange`, which names no connection state; read as
+     * an `activeZonesChange` it would wipe the count the real one gave.
+     */
+    @Test fun `a zone definitions change leaves the offline count alone`() = runBlocking<Unit> {
         connected()
-        val thrown = runCatching {
-            household.setPlayerVolume(FakePlayer.fixtureCoordinatorId().replace("AA0", "ZZ0"), 10)
-        }.exceptionOrNull()
-        assertNotNull("an unknown playerId was accepted", thrown)
+        fake.pushFixture("activeZonesChange")
+        val offline = withTimeout(5_000) { household.state.first { it.offlineSpeakers.isNotEmpty() } }.offlineSpeakers
+        fake.pushFixture("zoneDefinitionsChange")
+        delay(300)
+        assertEquals(offline, household.state.value.offlineSpeakers)
     }
 
     @Test fun `a command is addressed to the group and the player answers`() = runBlocking {

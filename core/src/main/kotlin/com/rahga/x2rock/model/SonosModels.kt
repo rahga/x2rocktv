@@ -263,6 +263,16 @@ data class GroupVolume(
     val fixed: Boolean
 )
 
+/**
+ * The group that is the same room as one that had [coordinatorId] and [playerIds], after a
+ * regroup minted new ids: the one holding the coordinator first, else any that holds one of its
+ * speakers. The coordinator before any member because, if something else on the network splits
+ * the group, matching any shared player would pick whichever fragment comes first in household
+ * order — the selection, a screen's room and the room panel all follow by this one rule.
+ */
+fun List<Group>.followingRoom(coordinatorId: String, playerIds: Collection<String>): Group? =
+    firstOrNull { coordinatorId in it.playerIds } ?: firstOrNull { g -> g.playerIds.any { it in playerIds } }
+
 data class PlayModeState(
     val repeat: String = RepeatModes.NONE,
     val shuffle: Boolean = false,

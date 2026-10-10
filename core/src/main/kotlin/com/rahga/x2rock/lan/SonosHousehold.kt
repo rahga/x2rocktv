@@ -398,13 +398,24 @@ class SonosHousehold(
      * is enough, because `getGroups` then reports where all the others are.
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
-        if (_state.value.connected || reconnectJob?.isActive == true) return
+        if (_state.value.connected || reconnectJob?.isActive == true || connecting) return
         // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
         // boots and starts this app before the LAN is up, and without this the network
         // coming back would be ignored and the user left on the error screen.
         wantConnection = true
-        establish(seed)
+        // One at a time: the home screen and the channel receiver both ask on start, and
+        // `connected` is not set until getGroups has answered, so two set-ups used to run
+        // side by side, subscribing the seed twice over.
+        connecting = true
+        try {
+            establish(seed)
+        } finally {
+            connecting = false
+        }
     }
+
+    /** A [connect] is setting up; see there. */
+    @Volatile private var connecting = false
 
     /**
      * Connect to the household the viewer picked from [HouseholdState.householdChoices]. Its
@@ -439,7 +450,7 @@ class SonosHousehold(
         rediscover: Boolean = false,
         /** A speaker's hostname known to have just gone; neither remembered nor discovered is it tried. */
         avoid: String? = null,
-    ): Discovery.DiscoveredPlayer {
+    ): Pair<Discovery.DiscoveredPlayer, Boolean> {
         // After a network change the remembered address is not merely unverified, it is
         // probably wrong — and trying it first would burn the connect timeout before
         // discovery ever runs.
@@ -458,7 +469,7 @@ class SonosHousehold(
                 val reachable = runCatching {
                     withTimeout(PROBE_TIMEOUT_MILLIS) { socketForHostname(hostname) }
                 }.isSuccess
-                if (reachable) return remembered
+                if (reachable) return remembered to true
                 addressBook.forget(hostname)
             }
         }
@@ -484,7 +495,7 @@ class SonosHousehold(
             _state.update { it.copy(householdChoices = choices) }
             throw HouseholdChoiceNeeded(choices.size)
         }
-        return found.firstOrNull() ?: error("no Sonos players answered on this network")
+        return (found.firstOrNull() ?: error("no Sonos players answered on this network")) to false
     }
 
     private suspend fun establish(
@@ -492,11 +503,15 @@ class SonosHousehold(
         rediscover: Boolean = false,
         avoid: String? = null,
     ) {
+        // The session this attempt is building. A loss-driven reconnect that starts under it
+        // (see [handleLoss]) tears this one down and owns the state from then on; this attempt
+        // then only fails, quietly, rather than tearing down the pool the new one is filling
+        // and writing its error over the new one's progress.
+        val session = generation
+        var ownTeardown = false
         var fromMemory = false
         try {
-            val entry = seed ?: findEntryPoint(rediscover, avoid).also {
-                fromMemory = (!rediscover || seeds.keyedByNetwork) && it.id == seeds.load()?.id
-            }
+            val entry = seed ?: findEntryPoint(rediscover, avoid).let { (found, remembered) -> fromMemory = remembered; found }
 
             // Discovery reports the player's id and address together, so even the very
             // first connection is made to the name on the certificate. There is no point
@@ -568,15 +583,26 @@ class SonosHousehold(
             }
 
             // Still standing? The seed can die during the best-effort setup above, whose failures
-            // are swallowed, and its loss is not acted on while this reconnect runs — the guard
-            // that stops a second reconnect starting. Finishing anyway left a session marked
-            // connected with no groups:1 subscription, deaf to every regroup (outside review,
-            // 2026-10-08). So this attempt fails, cleanly, and the reconnect tries again.
+            // are swallowed. Under a reconnect its loss is not acted on — the guard that stops a
+            // second reconnect starting — and finishing anyway left a session marked connected
+            // with no groups:1 subscription, deaf to every regroup (outside review, 2026-10-08).
+            // So this attempt fails, cleanly, and the reconnect tries again. Under a first
+            // connect() the loss *is* acted on, by a reconnect of its own: then the pool is that
+            // reconnect's, and this attempt leaves it alone.
             if (sockets[hostname] !== seedSocket) {
-                teardown()
+                if (generation == session) {
+                    ownTeardown = true
+                    teardown()
+                }
                 throw IOException("$hostname went away while the connection was being set up")
             }
+        } catch (e: CancellationException) {
+            // A cancelled attempt — a newer reconnect, a disconnect, the caller leaving — is not
+            // a failure to report: written as one, "StandaloneCoroutine was cancelled" stood on
+            // screen in place of "reconnecting", and after a disconnect it stuck.
+            throw e
         } catch (e: Exception) {
+            if (generation != session && !ownTeardown) throw e
             // With Authentication on, every Control API command is refused with
             // ERROR_NO_PERMISSION, getGroups first, while UPnP keeps answering (x2rock, verified
             // 2026-09-26). The player is right and reachable; only the switch is in the way. So
@@ -654,21 +680,25 @@ class SonosHousehold(
      */
     private fun handleLoss(socket: SonosSocket, cause: Throwable) {
         if (!sockets.remove(socket.hostname, socket)) return
-        if (carriesSession(socket.hostname)) {
-            if (reconnectJob?.isActive == true) return
-            // Said as reconnecting, not as [cause]: a speaker unplugged is ordinary, and the
-            // error is for a reconnect that fails. Tried at once, past the speaker that went —
-            // other speakers are very likely there, and the backoff is for when they are not.
-            _state.update { it.copy(connected = false, reconnecting = true) }
-            reconnect(immediate = true, avoid = socket.hostname)
-            return
-        }
-        val players = playersOn(socket.hostname)
-        _playerVolumes.update { it - players.toSet() }
-        subscribedPlayers.removeAll(players.toSet())
-        // Its watchers too, this one among them: the next command to the speaker opens a fresh
-        // socket with fresh watchers, and these would otherwise wait on the dead one forever.
+        val carried = carriesSession(socket.hostname)
+        // Whatever it carried, nothing may go on believing a subscription stands over it: a
+        // coordinator lost while a reconnect was already running used to keep its group marked
+        // subscribed, so the next attempt skipped the group and the room sat frozen until a
+        // topology change. Its watchers too, this one among them: the next command to the
+        // speaker opens a fresh socket with fresh watchers, and these would otherwise wait on
+        // the dead one forever. The speaker's level is withdrawn rather than left showing a
+        // value nothing will update.
+        val players = playersOn(socket.hostname).toSet()
         takeJobs(socket).forEach { it.cancel() }
+        subscribedPlayers.removeAll(players)
+        subscribedGroups.entries.removeIf { it.value in players }
+        _playerVolumes.update { it - players }
+        if (!carried || reconnectJob?.isActive == true) return
+        // Said as reconnecting, not as [cause]: a speaker unplugged is ordinary, and the
+        // error is for a reconnect that fails. Tried at once, past the speaker that went —
+        // other speakers are very likely there, and the backoff is for when they are not.
+        _state.update { it.copy(connected = false, reconnecting = true) }
+        reconnect(immediate = true, avoid = socket.hostname)
     }
 
     /** Whether [hostname] is the seed or any group's coordinator, by the topology as it is now. */
@@ -848,6 +878,11 @@ class SonosHousehold(
      * Nothing polls to find out. The switch arrives as a `playbackMetadata:1` event
      * carrying `htInputFormat`, which is what [GroupState.onTvInput] reads. With no reply,
      * this waits for that event, and fails if it never comes, rather than say nothing.
+     *
+     * One limit, recorded rather than fixed: re-selecting the input a room is already on — the
+     * obvious press when TV audio drops out — is confirmed by the format already present, since
+     * the format's presence is the signal and it does not change. A lost reply then reads as
+     * done without evidence the switch was applied; the player ordinarily answers that case.
      */
     suspend fun useTvInput(groupId: String, preferSoundbar: String? = null) {
         val group = group(groupId)
@@ -900,8 +935,8 @@ class SonosHousehold(
     suspend fun appendPlaylist(groupId: String, playlistId: String) = loadPlaylist(groupId, playlistId, "APPEND", play = false)
 
     private suspend fun loadPlaylist(groupId: String, playlistId: String, action: String, play: Boolean) {
-        coordinator(groupId).command(
-            Frames.onGroup("playlists:1", "loadPlaylist", groupId),
+        groupCommand(
+            groupId, "playlists:1", "loadPlaylist",
             JsonObject().apply {
                 addProperty("playlistId", playlistId)
                 addProperty("playOnCompletion", play)
@@ -989,7 +1024,7 @@ class SonosHousehold(
         // The session this list is for: a reconnect while it loads clears the cache, and this
         // load must not fill it again with the old session's answer.
         val session = generation
-        val household = _state.value.householdId ?: error("not connected")
+        val household = householdId()
         val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
         val hostname = hostnameOf(coordinator)
         val answer = upnp.listAvailableServices(hostname)
@@ -1068,9 +1103,10 @@ class SonosHousehold(
      * Play a service [item] in [groupId], in place of the queue, through the household's own
      * account — the same `loadContent` path as Recently Played, which carries the item's own
      * `itemType` as the load type (`track`, `album`, `playlist`). Only for a playable item, not
-     * a container to descend into.
+     * a container to descend into. Answers how a station or program got on, as [playStream]
+     * does; anything loaded through `loadContent` either plays or throws.
      */
-    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item) {
+    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item): StreamStart =
         when {
             // A radio station is not queue content: it has no universalMusicObjectId to load, and
             // the service resolves it to a stream URL instead, which plays through `playbackSession`
@@ -1084,9 +1120,11 @@ class SonosHousehold(
             // `getMediaURI` for it (Radio Paradise's channels). Verified on Radio Paradise by x2rock.
             ServiceContent.isRadioProgram(item) -> playServiceProgram(groupId, linked, item)
             // Everything else — a track, an album — rides `loadContent`.
-            else -> replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
+            else -> {
+                replay(groupId, HistoryItem(item.title, item.itemType, MusicObjectId(item.id, linked.service.id, linked.accountId)))
+                StreamStart.PLAYING
+            }
         }
-    }
 
     /**
      * Play a radio [item] (a `program`) in [groupId] as the room's own source — `SetAVTransportURI`
@@ -1100,7 +1138,7 @@ class SonosHousehold(
      * without one then fails with its own answer. Only a refusal falls through — a player that did
      * not answer may yet have taken the source, and streaming over it would play the wrong thing.
      */
-    private suspend fun playServiceProgram(groupId: String, linked: LinkedService, item: Item) {
+    private suspend fun playServiceProgram(groupId: String, linked: LinkedService, item: Item): StreamStart {
         val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
         val hostname = coordinatorHostname(groupId)
         val startsBefore = _groupStates.value[groupId]?.playStarts ?: 0
@@ -1114,16 +1152,12 @@ class SonosHousehold(
         } catch (_: UpnpRefusedException) {
             false
         }
-        if (!set) {
-            playStream(groupId, smapi.mediaUri(linked.service, linked.token, item.id), item.title)
-            return
-        }
+        if (!set) return playStream(groupId, smapi.mediaUri(linked.service, linked.token, item.id), item.title)
         play(groupId)
-        // Best-effort confirmation it took, as a stream's start is confirmed; a program can take a
-        // moment to buffer, so a slow start is not treated as a failure.
-        withTimeoutOrNull(STREAM_START_MILLIS) {
-            _groupStates.first { (it[groupId]?.playStarts ?: 0) > startsBefore && it[groupId]?.playbackState?.isPlaying() == true }
-        }
+        // Confirmed as a stream's start is: a program can take a moment to buffer, so a slow
+        // start is STARTING, not a failure — and a room left idle is SILENT, said so rather than
+        // waited out for nothing, which this used to do.
+        return awaitPlayStart(groupId, startsBefore, STREAM_START_MILLIS)
     }
 
     /**
@@ -1131,8 +1165,8 @@ class SonosHousehold(
      * play anything else in place of the queue. The service browser and the search across services
      * both press through here, so the choice lives once.
      */
-    suspend fun startServiceItem(groupId: String, linked: LinkedService, item: Item) =
-        if (ServiceContent.isResumable(item)) resumeAudiobook(groupId, linked, item)
+    suspend fun startServiceItem(groupId: String, linked: LinkedService, item: Item): StreamStart =
+        if (ServiceContent.isResumable(item)) { resumeAudiobook(groupId, linked, item); StreamStart.PLAYING }
         else playServiceItem(groupId, linked, item)
 
     /**
@@ -1146,7 +1180,7 @@ class SonosHousehold(
      * yet been run on hardware — it makes sound, and the timing of a seek onto a freshly loaded
      * service chapter wants one look on a real device.
      */
-    suspend fun resumeAudiobook(groupId: String, linked: LinkedService, book: Item) {
+    private suspend fun resumeAudiobook(groupId: String, linked: LinkedService, book: Item) {
         val chapters = smapi.chapters(linked.service, linked.token, book.id)
         val chapterId = chapters.resume?.id
             ?: chapters.chapters.items.firstOrNull { !it.container }?.id
@@ -1211,8 +1245,8 @@ class SonosHousehold(
         val before = _groupStates.value[groupId]?.let { it.track?.id to it.container?.name }
         var loadLost = false
         try {
-            coordinator(groupId).command(
-                Frames.onGroup("playback:1", "loadContent", groupId),
+            groupCommand(
+                groupId, "playback:1", "loadContent",
                 JsonObject().apply {
                     add("id", JsonObject().apply {
                         addProperty("_objectType", "universalMusicObjectId")
@@ -1393,8 +1427,8 @@ class SonosHousehold(
 
     /** Companion to [metadataStatusBody], for capturing what a source says it permits. */
     internal suspend fun playbackStatusBody(groupId: String): JsonElement =
-        coordinator(groupId).command(
-            Frames.onGroup("playback:1", "getPlaybackStatus", groupId),
+        groupCommand(
+            groupId, "playback:1", "getPlaybackStatus",
         )
 
     /**
@@ -1404,8 +1438,8 @@ class SonosHousehold(
      * can capture a shape rather than have someone write down what they assume it to be.
      */
     internal suspend fun metadataStatusBody(groupId: String): JsonElement =
-        coordinator(groupId).command(
-            Frames.onGroup("playbackMetadata:1", "getMetadataStatus", groupId),
+        groupCommand(
+            groupId, "playbackMetadata:1", "getMetadataStatus",
         )
 
     /**
@@ -1427,8 +1461,8 @@ class SonosHousehold(
      * verbatim rather than someone writing down what they assume the shape to be.
      */
     internal suspend fun playerSettingsBody(playerId: String): JsonElement =
-        socketForPlayer(playerId).command(
-            Frames.onPlayer("settings:1", "getPlayerSettings", playerId),
+        playerCommand(
+            playerId, "settings:1", "getPlayerSettings",
         )
 
     /** Night Sound, as the Sonos app names it. Leaves the Control API — see [Upnp.setEq]. */
@@ -1479,15 +1513,15 @@ class SonosHousehold(
     suspend fun skipToPreviousTrack(groupId: String) = onGroup(groupId, "skipToPreviousTrack")
 
     suspend fun seek(groupId: String, positionMillis: Long) {
-        coordinator(groupId).command(
-            Frames.onGroup("playback:1", "seek", groupId),
+        groupCommand(
+            groupId, "playback:1", "seek",
             JsonObject().apply { addProperty("positionMillis", positionMillis) },
         )
     }
 
     suspend fun setPlayMode(groupId: String, mode: PlayModeState) {
-        coordinator(groupId).command(
-            Frames.onGroup("playback:1", "setPlayModes", groupId),
+        groupCommand(
+            groupId, "playback:1", "setPlayModes",
             PlayModes.toBody(mode),
         )
     }
@@ -1497,8 +1531,8 @@ class SonosHousehold(
         setPlayMode(groupId, groupState(groupId).playMode.copy(shuffle = on))
 
     suspend fun setGroupVolume(groupId: String, volume: Int) {
-        coordinator(groupId).command(
-            Frames.onGroup("groupVolume:1", "setVolume", groupId),
+        groupCommand(
+            groupId, "groupVolume:1", "setVolume",
             JsonObject().apply { addProperty("volume", volume.coerceIn(0, 100)) },
         )
     }
@@ -1511,38 +1545,38 @@ class SonosHousehold(
      * effect, as both setters do. Clamping to 0..100 is the player's.
      */
     suspend fun adjustGroupVolume(groupId: String, delta: Int) {
-        coordinator(groupId).command(
-            Frames.onGroup("groupVolume:1", "setRelativeVolume", groupId),
+        groupCommand(
+            groupId, "groupVolume:1", "setRelativeVolume",
             JsonObject().apply { addProperty("volumeDelta", delta.coerceIn(-100, 100)) },
         )
     }
 
     suspend fun setGroupMute(groupId: String, muted: Boolean) {
-        coordinator(groupId).command(
-            Frames.onGroup("groupVolume:1", "setMute", groupId),
+        groupCommand(
+            groupId, "groupVolume:1", "setMute",
             JsonObject().apply { addProperty("muted", muted) },
         )
     }
 
     /** Player-scoped: this must go to the player's own socket, not its coordinator's. */
     suspend fun setPlayerVolume(playerId: String, volume: Int) {
-        socketForPlayer(playerId).command(
-            Frames.onPlayer("playerVolume:1", "setVolume", playerId),
+        playerCommand(
+            playerId, "playerVolume:1", "setVolume",
             JsonObject().apply { addProperty("volume", volume.coerceIn(0, 100)) },
         )
     }
 
     /** One speaker's level by [delta], on its own socket. See [adjustGroupVolume]. */
     suspend fun adjustPlayerVolume(playerId: String, delta: Int) {
-        socketForPlayer(playerId).command(
-            Frames.onPlayer("playerVolume:1", "setRelativeVolume", playerId),
+        playerCommand(
+            playerId, "playerVolume:1", "setRelativeVolume",
             JsonObject().apply { addProperty("volumeDelta", delta.coerceIn(-100, 100)) },
         )
     }
 
     suspend fun setPlayerMute(playerId: String, muted: Boolean) {
-        socketForPlayer(playerId).command(
-            Frames.onPlayer("playerVolume:1", "setMute", playerId),
+        playerCommand(
+            playerId, "playerVolume:1", "setMute",
             JsonObject().apply { addProperty("muted", muted) },
         )
     }
@@ -1555,12 +1589,12 @@ class SonosHousehold(
      * five tracks, and pressing it again nine (office, 2026-10-08). x2rock's note that
      * `loadFavorite` replaces without being asked held for what it was tried on, not for this.
      */
-    suspend fun loadFavorite(groupId: String, favoriteId: String, playOnCompletion: Boolean = true) {
-        coordinator(groupId).command(
-            Frames.onGroup("favorites:1", "loadFavorite", groupId),
+    suspend fun loadFavorite(groupId: String, favoriteId: String) {
+        groupCommand(
+            groupId, "favorites:1", "loadFavorite",
             JsonObject().apply {
                 addProperty("favoriteId", favoriteId)
-                addProperty("playOnCompletion", playOnCompletion)
+                addProperty("playOnCompletion", true)
                 addProperty("action", "REPLACE")
             },
         )
@@ -1611,15 +1645,23 @@ class SonosHousehold(
                 })
             },
         )
-        val playing = withTimeoutOrNull(startMillis) {
+        return awaitPlayStart(groupId, startsBefore, startMillis)
+    }
+
+    /**
+     * Whether [groupId] started playing afresh — [GroupState.playStarts] past [startsBefore] —
+     * within [millis], or, if not, how it was left. Decided on the last state rather than the
+     * first: a room is briefly IDLE between taking a URL and buffering it, so an early look would
+     * condemn every stream. The Control API has no STOPPED, which is UPnP's word: a stream that
+     * will not play is IDLE.
+     */
+    private suspend fun awaitPlayStart(groupId: String, startsBefore: Int, millis: Long): StreamStart {
+        val playing = withTimeoutOrNull(millis) {
             _groupStates.first { all ->
                 all[groupId]?.let { it.playStarts > startsBefore && it.playbackState.isPlaying() } == true
             }
         }
         if (playing != null) return StreamStart.PLAYING
-        // Decided on the last state rather than the first: a room is briefly IDLE between
-        // taking the URL and buffering it, so an early look would condemn every stream.
-        // The Control API has no STOPPED, which is UPnP's word: a stream that will not play is IDLE.
         return if (_groupStates.value[groupId]?.playbackState == PlaybackStates.IDLE) StreamStart.SILENT
             else StreamStart.STARTING
     }
@@ -1639,8 +1681,8 @@ class SonosHousehold(
     suspend fun modifyGroupMembers(groupId: String, add: List<String>, remove: List<String>) {
         val group = group(groupId)
         try {
-            coordinator(groupId).command(
-                Frames.onGroup("groups:1", "modifyGroupMembers", groupId),
+            groupCommand(
+                groupId, "groups:1", "modifyGroupMembers",
                 JsonObject().apply {
                     add("playerIdsToAdd", gson.toJsonTree(add))
                     add("playerIdsToRemove", gson.toJsonTree(remove))
@@ -1651,7 +1693,7 @@ class SonosHousehold(
                 val now = groups.firstOrNull { it.coordinatorId == group.coordinatorId } ?: return false
                 return add.all { it in now.playerIds } && remove.none { it in now.playerIds }
             }
-            if (withTimeoutOrNull(settleMillis) { _state.first { landed(it.groups) } } != null) return
+            if (groupsWhen { landed(it) } != null) return
             val fresh = runCatching { freshGroups() }.getOrNull()
             if (fresh != null && landed(fresh)) return
             throw IOException("${group.name} did not answer, and the change has not appeared", e)
@@ -1693,10 +1735,13 @@ class SonosHousehold(
         return awaitGroups("the rooms to come together") { gathered(it) != null }.let { gathered(it)!!.id }
     }
 
-    /** The topology once [done] holds of it, within [settleMillis]; [what] names the wait in its failure. */
-    private suspend fun awaitGroups(what: String, done: (List<Group>) -> Boolean): List<Group> =
+    /** The topology once [done] holds of it, or `null` if it does not within [settleMillis]. */
+    private suspend fun groupsWhen(done: (List<Group>) -> Boolean): List<Group>? =
         withTimeoutOrNull(settleMillis) { _state.map { it.groups }.first(done) }
-            ?: throw IOException("Timed out waiting for $what")
+
+    /** [groupsWhen], failing instead; [what] names the wait in its failure. */
+    private suspend fun awaitGroups(what: String, done: (List<Group>) -> Boolean): List<Group> =
+        groupsWhen(done) ?: throw IOException("Timed out waiting for $what")
 
     /**
      * The household's UPnP switch, as the seed applies it: `effectiveSettings:1
@@ -1705,8 +1750,8 @@ class SonosHousehold(
      */
     private suspend fun readUpnpSwitch() {
         val playerId = seedPlayerId ?: return
-        val body = socketForPlayer(playerId).command(
-            Frames.onPlayer("effectiveSettings:1", "getSettingsGroup", playerId),
+        val body = playerCommand(
+            playerId, "effectiveSettings:1", "getSettingsGroup",
             JsonObject().apply { addProperty("groupName", "security") },
         ).asJsonObject
         val allowed = body.getAsJsonObject("attributes")?.get("allowInsecureUPnP")
@@ -1717,22 +1762,27 @@ class SonosHousehold(
     }
 
     /** The topology as the seed reports it now, for a check the pushed copy could not settle. */
-    private suspend fun freshGroups(): List<Group> {
-        val household = _state.value.householdId ?: error("not connected")
-        val seed = seedHostname ?: error("not connected")
-        val body = socketForHostname(seed).command(Frames.onHousehold("groups:1", "getGroups", household))
-        return gson.fromJson(body, GroupsResponse::class.java)?.groups.orEmpty()
-    }
+    private suspend fun freshGroups(): List<Group> =
+        gson.fromJson(householdCommand("groups:1", "getGroups"), GroupsResponse::class.java)?.groups.orEmpty()
 
-    /** A household-scoped command. Any player's socket answers for the household, so the first will do. */
-    private suspend fun householdCommand(namespace: String, command: String): JsonElement {
-        val household = _state.value.householdId ?: error("not connected")
-        val socket = sockets.values.firstOrNull() ?: error("not connected")
-        return socket.command(Frames.onHousehold(namespace, command, household))
-    }
+    /** A household-scoped command, on the seed: any player answers for the household, and that one is open. */
+    private suspend fun householdCommand(namespace: String, command: String): JsonElement =
+        seedSocket().command(Frames.onHousehold(namespace, command, householdId()))
+
+    private fun householdId(): String = _state.value.householdId ?: error("not connected")
+
+    private suspend fun seedSocket(): SonosSocket = socketForHostname(seedHostname ?: error("not connected"))
+
+    /** A group-scoped command, on the group's coordinator: the only socket that answers it. */
+    private suspend fun groupCommand(groupId: String, namespace: String, command: String, body: JsonObject = JsonObject()): JsonElement =
+        coordinator(groupId).command(Frames.onGroup(namespace, command, groupId), body)
+
+    /** A player-scoped command, on that player's own socket, never its coordinator's. */
+    private suspend fun playerCommand(playerId: String, namespace: String, command: String, body: JsonObject = JsonObject()): JsonElement =
+        socketForPlayer(playerId).command(Frames.onPlayer(namespace, command, playerId), body)
 
     private suspend fun onGroup(groupId: String, command: String) {
-        coordinator(groupId).command(Frames.onGroup("playback:1", command, groupId))
+        groupCommand(groupId, "playback:1", command)
     }
 
     // ---------------------------------------------------------------- sockets
@@ -1781,12 +1831,8 @@ class SonosHousehold(
     }
 
     /**
-     * Empties the job list under its own lock and hands back a snapshot.
-     *
-     * `Collections.synchronizedList` synchronises each *operation*, not iteration — a bare
-     * `forEach` over it throws `ConcurrentModificationException` when the reconnect loop
-     * appends a watch job at the same moment, which is exactly what `disconnect()` used to
-     * do. Taking a copy first means the cancelling happens outside the lock, too.
+     * Every socket's watchers, taken out of the map under its lock as one snapshot, so the
+     * cancelling happens outside the lock — and never while the reconnect loop is adding to it.
      */
     private fun takeJobs(): List<Job> = synchronized(socketJobs) {
         socketJobs.values.flatten().also { socketJobs.clear() }
@@ -1957,8 +2003,9 @@ class SonosHousehold(
                 registerAddresses(groups)
                 _state.update { it.copy(groups = fillPlaybackState(groups.groups), players = groups.players) }
                 // Someone regrouped. Catch up rather than sit on subscriptions for groups
-                // that no longer exist.
-                scope.launch { runCatching { resubscribe() } }
+                // that no longer exist — unless the session that heard it is gone by then.
+                val session = generation
+                scope.launch { if (generation == session) runCatching { resubscribe() } }
             }
 
             "playback:1" -> {
