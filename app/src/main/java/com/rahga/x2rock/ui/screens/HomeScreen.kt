@@ -436,6 +436,8 @@ fun HomeScreen(
                     onStepTreble = homeViewModel::stepTreble,
                     onToggleLoudness = homeViewModel::toggleLoudness,
                     onToggleTrueplay = homeViewModel::toggleTrueplay,
+                    onToggleStatusLight = homeViewModel::toggleStatusLight,
+                    onToggleTouchControls = homeViewModel::toggleTouchControls,
                     onToggleCrossfade = { homeViewModel.toggleCrossfade(liveGroup.id) },
                     onSavePreset = { homeViewModel.savePreset(liveGroup.id) },
                 )

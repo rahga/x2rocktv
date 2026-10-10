@@ -133,6 +133,8 @@ fun RoomPanel(
     onStepTreble: (Int) -> Unit,
     onToggleLoudness: () -> Unit,
     onToggleTrueplay: () -> Unit,
+    onToggleStatusLight: () -> Unit,
+    onToggleTouchControls: () -> Unit,
     onToggleCrossfade: () -> Unit,
     /** Keep this room's speakers, levels and favourite as a preset in Browse. */
     onSavePreset: () -> Unit,
@@ -306,11 +308,26 @@ fun RoomPanel(
             }
         }
 
+        // The room's own speaker's switches, as the Sonos app keeps them under its settings. UPnP,
+        // so with it off they go with the Sound rows; read with them, so absent until read.
+        val light = shownTone?.statusLight
+        val locked = shownTone?.buttonsLocked
+        if (light != null || locked != null || info.hasTvInput) PanelSection("Room settings")
+        light?.let { on ->
+            AppButton(onClick = onToggleStatusLight, modifier = Modifier.fillMaxWidth()) {
+                Text(if (on) "Status light   On" else "Status light   Off")
+            }
+        }
+        // Worded as the Sonos app's Button Control: "On" means the buttons work, which is unlocked.
+        locked?.let { isLocked ->
+            AppButton(onClick = onToggleTouchControls, modifier = Modifier.fillMaxWidth()) {
+                Text(if (isLocked) "Touch controls   Off" else "Touch controls   On")
+            }
+        }
         if (info.hasTvInput) {
             // Detection fills this in on its own but has been seen to answer wrongly and
             // then keep the answer, so it has to be correctable by hand. There is no
             // un-naming: the crown simply moves to whichever room is named next.
-            PanelSection("Room settings")
             AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
                 Text("This is my TV")
             }

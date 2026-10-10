@@ -1603,6 +1603,10 @@ class SonosHousehold(
     suspend fun setBass(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.BASS, level)
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
+    suspend fun statusLight(playerId: String): Boolean = upnp.statusLight(hostnameOf(playerId))
+    suspend fun setStatusLight(playerId: String, on: Boolean) = upnp.setStatusLight(hostnameOf(playerId), on)
+    suspend fun buttonsLocked(playerId: String): Boolean = upnp.buttonsLocked(hostnameOf(playerId))
+    suspend fun setButtonsLocked(playerId: String, locked: Boolean) = upnp.setButtonsLocked(hostnameOf(playerId), locked)
     suspend fun trueplay(playerId: String): TruePlay = upnp.trueplay(hostnameOf(playerId))
     suspend fun setTrueplay(playerId: String, on: Boolean) = upnp.setTrueplay(hostnameOf(playerId), on)
 

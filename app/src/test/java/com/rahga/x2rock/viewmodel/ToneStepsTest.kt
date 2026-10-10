@@ -65,7 +65,14 @@ class ToneStepsTest {
                     }
                     // The read after a write asks TruePlay too; slow, so a press can land inside it.
                     if (action == "GetRoomCalibrationStatus") Thread.sleep(400)
-                    return MockResponse().setBody(EMPTY_SOAP)
+                    if (action == "SetLEDState") lights += Regex("<DesiredLEDState>(\\w+)<").find(request.body.readUtf8())!!.groupValues[1]
+                    return MockResponse().setBody(when (action) {
+                        // Kitchen's, 2026-10-10: light off, controls unlocked.
+                        "GetLEDState" -> FakePlayer.fixtureText("GetLEDState.xml")
+                        "GetButtonLockState" -> FakePlayer.fixtureText("GetButtonLockState.xml")
+                        "SetLEDState" -> FakePlayer.fixtureText("SetLEDState.xml")
+                        else -> EMPTY_SOAP
+                    })
                 }
             }
             start(InetAddress.getByName("127.0.0.1"), 0)
@@ -90,6 +97,9 @@ class ToneStepsTest {
             withTimeout(10_000) { viewModel.uiState.first { it is HomeViewModel.UiState.Success } }
         }
     }
+
+    /** Every `DesiredLEDState` written, in order. */
+    private val lights = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     @After fun tearDown() {
         household.disconnect()
@@ -129,5 +139,17 @@ class ToneStepsTest {
         delay(1_500)
         assertEquals(3, basses.last())
         assertEquals(3, viewModel.tone.value?.bass)
+    }
+
+    /** The panel's Room settings read the speaker's own switches with its tone, and write them. */
+    @Test fun `the status light is read with the tone and switched from the panel`() = runBlocking<Unit> {
+        openKitchen()
+        val read = withTimeout(5_000) { viewModel.tone.first { it?.statusLight != null } }!!
+        assertEquals(false, read.statusLight)
+        assertEquals(false, read.buttonsLocked)
+        viewModel.toggleStatusLight()
+        assertEquals("shown at once", true, viewModel.tone.value?.statusLight)
+        withTimeout(5_000) { while (lights.isEmpty()) delay(20) }
+        assertEquals(listOf("On"), lights.toList())
     }
 }

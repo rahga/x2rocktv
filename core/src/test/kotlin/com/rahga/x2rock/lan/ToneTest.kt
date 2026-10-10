@@ -39,9 +39,14 @@ class ToneTest {
                     val action = soapAction(request)
                     val fields = soapFields(request.body.readUtf8())
                     requests += action to fields
-                    return if (action == "GetRoomCalibrationStatus") {
-                        MockResponse().setBody(FakePlayer.fixtureText("GetRoomCalibrationStatus.reply.xml"))
-                    } else MockResponse().setBody(EMPTY_SOAP)
+                    return when (action) {
+                        "GetRoomCalibrationStatus" -> MockResponse().setBody(FakePlayer.fixtureText("GetRoomCalibrationStatus.reply.xml"))
+                        // Kitchen's, 2026-10-10: light off, controls unlocked, and the empty write reply.
+                        "GetLEDState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDState.xml"))
+                        "GetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("GetButtonLockState.xml"))
+                        "SetLEDState", "SetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("SetLEDState.xml"))
+                        else -> MockResponse().setBody(EMPTY_SOAP)
+                    }
                 }
             }
             start(InetAddress.getByName("127.0.0.1"), 0)
@@ -90,5 +95,21 @@ class ToneTest {
         assertEquals(TruePlay(enabled = true, available = true), household.trueplay(player))
         household.setTrueplay(player, false)
         assertEquals("0", requests.last { it.first == "SetRoomCalibrationStatus" }.second["RoomCalibrationEnabled"])
+    }
+
+    // ---------------------------------------------------------------- the speaker's own switches
+
+    @Test fun `the status light and the touch controls are read off the speaker`() = runBlocking<Unit> {
+        assertEquals(false, household.statusLight(fake.id))
+        assertEquals("unlocked: Kitchen's controls work", false, household.buttonsLocked(fake.id))
+        assertEquals(listOf("GetLEDState", "GetButtonLockState"), requests.map { it.first }.filter { it.startsWith("Get") && it != "GetRoomCalibrationStatus" })
+    }
+
+    /** Only the two words are sent: the player lights the light for anything but `Off`. */
+    @Test fun `the switches are written as On and Off`() = runBlocking<Unit> {
+        household.setStatusLight(fake.id, true)
+        household.setButtonsLocked(fake.id, false)
+        assertEquals("On", requests.first { it.first == "SetLEDState" }.second["DesiredLEDState"])
+        assertEquals("Off", requests.first { it.first == "SetButtonLockState" }.second["DesiredButtonLockState"])
     }
 }

@@ -337,6 +337,36 @@ class Upnp(
         rendering(hostname, "SetLoudness", "Channel" to "Master", "DesiredLoudness" to if (on) "1" else "0")
     }
 
+    /**
+     * Whether a speaker's status light is lit. Per speaker, like tone: a room of bonded speakers has
+     * a light on each, and this answers for the one asked. Captured off Kitchen, 2026-10-10.
+     */
+    suspend fun statusLight(hostname: String): Boolean = withContext(Dispatchers.IO) {
+        parse(soap(hostname, Service.DEVICE_PROPERTIES, "GetLEDState", emptyList())).text("CurrentLEDState").equals("On", ignoreCase = true)
+    }
+
+    /**
+     * Light it or not. **The player validates nothing here**: anything but exactly `Off` lights it
+     * (x2rock: `Maybe` was accepted, and lit the light), so only these two words are ever sent.
+     */
+    suspend fun setStatusLight(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.DEVICE_PROPERTIES, "SetLEDState", listOf("DesiredLEDState" to if (on) "On" else "Off"))
+    }
+
+    /**
+     * Whether a speaker's touch controls are locked — `On` means they do nothing, the Sonos app's
+     * "Button Control" switch the other way round. Captured off Kitchen, 2026-10-10.
+     */
+    suspend fun buttonsLocked(hostname: String): Boolean = withContext(Dispatchers.IO) {
+        parse(soap(hostname, Service.DEVICE_PROPERTIES, "GetButtonLockState", emptyList()))
+            .text("CurrentButtonLockState").equals("On", ignoreCase = true)
+    }
+
+    /** Lock or unlock them; unvalidated by the player as the light is, and sent the same two words. */
+    suspend fun setButtonsLocked(hostname: String, locked: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.DEVICE_PROPERTIES, "SetButtonLockState", listOf("DesiredButtonLockState" to if (locked) "On" else "Off"))
+    }
+
     /** TruePlay's state, captured off Kitchen's One SL: enabled and available as `1`/`0`. */
     suspend fun trueplay(hostname: String): TruePlay = withContext(Dispatchers.IO) {
         val envelope = parse(rendering(hostname, "GetRoomCalibrationStatus"))
@@ -464,6 +494,7 @@ class Upnp(
         RENDERING_CONTROL("/MediaRenderer/RenderingControl/Control", "urn:schemas-upnp-org:service:RenderingControl:1"),
         MUSIC_SERVICES("/MusicServices/Control", "urn:schemas-upnp-org:service:MusicServices:1"),
         ALARM_CLOCK("/AlarmClock/Control", "urn:schemas-upnp-org:service:AlarmClock:1"),
+        DEVICE_PROPERTIES("/DeviceProperties/Control", "urn:schemas-upnp-org:service:DeviceProperties:1"),
     }
 
     /**

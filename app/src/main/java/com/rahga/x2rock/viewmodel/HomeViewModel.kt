@@ -529,6 +529,9 @@ class HomeViewModel @Inject constructor(
         val loudness: Boolean,
         /** `null` when the speaker would not say; the row is then not offered. */
         val trueplay: TruePlay?,
+        /** The speaker's status light, and whether its touch controls are locked; `null` unread. */
+        val statusLight: Boolean? = null,
+        val buttonsLocked: Boolean? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -558,13 +561,17 @@ class HomeViewModel @Inject constructor(
         val edits = toneEdits
         // Two reads of the same speaker, one over its socket and one over UPnP, neither
         // needing the other: together, so the Sound rows wait for one latency, not two.
-        val (eq, trueplay) = coroutineScope {
+        // The light and the lock are the speaker's own switches, read with its tone for the same panel.
+        val read = coroutineScope {
             val eq = async { runCatching { household.playerSettings(playerId).eq }.getOrNull() }
             val trueplay = async { runCatching { household.trueplay(playerId) }.getOrNull() }
-            eq.await() to trueplay.await()
+            val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
+            val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
+            val eqNow = eq.await() ?: return@coroutineScope null
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await())
         }
-        if (eq == null || edits != toneEdits) return
-        _tone.value = ToneUi(playerId, eq.bass, eq.treble, eq.loudness, trueplay)
+        if (read == null || edits != toneEdits) return
+        _tone.value = read
     }
 
     /**
@@ -604,6 +611,19 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val on = !tone.loudness
         editTone("loudness", "change Loudness", tone.copy(loudness = on)) { household.setLoudness(it, on) }
+    }
+
+    fun toggleStatusLight() {
+        val tone = _tone.value ?: return
+        val on = !(tone.statusLight ?: return)
+        editTone("light", "change the status light", tone.copy(statusLight = on)) { household.setStatusLight(it, on) }
+    }
+
+    /** Touch controls on or off, as the Sonos app's Button Control says it: off is locked. */
+    fun toggleTouchControls() {
+        val tone = _tone.value ?: return
+        val locked = !(tone.buttonsLocked ?: return)
+        editTone("buttons", "change the touch controls", tone.copy(buttonsLocked = locked)) { household.setButtonsLocked(it, locked) }
     }
 
     fun toggleTrueplay() {
