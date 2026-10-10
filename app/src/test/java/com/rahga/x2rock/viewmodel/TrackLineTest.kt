@@ -37,4 +37,10 @@ class TrackLineTest {
         assertNull(PlayerUiState(nextArtistName = "Diddy").upNextLine())
         assertNull(PlayerUiState(nextTrackName = "").upNextLine())
     }
+
+    @Test fun `previous names the title and its artist`() {
+        val state = PlayerUiState(previousTrackName = "Early Summer", previousArtistName = "Ryo Fukui")
+        assertEquals("Previous · Early Summer — Ryo Fukui", state.previousLine())
+        assertNull(PlayerUiState().previousLine())
+    }
 }

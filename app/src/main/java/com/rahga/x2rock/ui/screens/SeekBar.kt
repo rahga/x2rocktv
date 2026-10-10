@@ -63,8 +63,8 @@ internal fun ProgressBar(
     onSeekBy: (Long) -> Unit,
     onSeekTo: (Long) -> Unit,
     onFocused: (Boolean) -> Unit = {},
-    /** "Up next · …", drawn between the times while it is set: see PlayerPane's nextFocused. */
-    upNext: String? = null,
+    /** "Up next · …" or "Previous · …", drawn between the times while set: see PlayerPane's nextFocused. */
+    caption: String? = null,
 ) {
     // Always laid out, blank where there is nothing to show: a station, a TV input or an empty
     // room has no duration, and closing the slot up moved every row below it as the viewer
@@ -197,11 +197,11 @@ internal fun ProgressBar(
             // The total's slot is always laid out, invisible when there is nothing to say: it is
             // taller than the times beside it, and appearing only on a press made the row grow
             // and nudged every row below it down the screen.
-            // Weighted, so a long "Up next" ellipsizes between the times rather than over them.
+            // Weighted, so a long caption ellipsizes between the times rather than over them.
             Box(contentAlignment = Alignment.Center, modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-                if (seekAlpha == 0f && !isFocused && upNext != null) {
+                if (seekAlpha == 0f && !isFocused && caption != null) {
                     Text(
-                        upNext,
+                        caption,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,

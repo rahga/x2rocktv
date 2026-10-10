@@ -855,6 +855,23 @@ class SonosHousehold(
     suspend fun playingFromQueue(groupId: String): Boolean =
         upnp.mediaInfo(coordinatorHostname(groupId)).playingFromQueue
 
+    /**
+     * The track before this one in [groupId]'s queue: where Prev goes, which on this firmware is
+     * the previous track even well into the current one (Dining Room, 11s in, 2026-10-10).
+     *
+     * Asked, because the player never names it. `metadataStatus` has a `nextItem` and no previous
+     * one, and `playbackStatus.previousItemId` is history — what played before, an opaque id, set
+     * even on a queue's first track. Null unless the queue is the source and a slot precedes this.
+     */
+    suspend fun previousInQueue(groupId: String): Track? {
+        val hostname = coordinatorHostname(groupId)
+        if (!upnp.mediaInfo(hostname).playingFromQueue) return null
+        val slot = upnp.currentTrackNumber(hostname)
+        if (slot <= 1) return null
+        // Slots are 1-based and a browse's index 0-based, so the slot before is index slot - 2.
+        return upnp.browseQueue(hostname, start = slot - 2, count = 1).items.firstOrNull()?.track
+    }
+
     /** For the live suite, which must put a room's source back as it found it. */
     internal suspend fun mediaInfo(groupId: String): MediaInfo = upnp.mediaInfo(coordinatorHostname(groupId))
 

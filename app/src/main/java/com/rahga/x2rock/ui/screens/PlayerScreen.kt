@@ -95,6 +95,7 @@ import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerVolumeEntry
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.upNextLine
+import com.rahga.x2rock.viewmodel.previousLine
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -149,10 +150,12 @@ fun PlayerPane(
     // viewer stops on while the music plays, rather than passes through.
     val volumeFocused = remember { mutableStateOf(false) }
     var seekFocused by remember { mutableStateOf(false) }
-    // What follows is named between the seek bar's times while Next has focus: the one moment it
-    // answers a question, and less on screen otherwise. Under the transport, a line of its own
-    // pushed the places row past the safe area on a two-line title (Shield, 2026-10-10).
+    // What Next or Prev goes to is named between the seek bar's times while that button has focus:
+    // the one moment it answers a question, and less on screen otherwise. Under the transport, a
+    // line of its own pushed the places row past the safe area on a two-line title (Shield,
+    // 2026-10-10).
     var nextFocused by remember { mutableStateOf(false) }
+    var previousFocused by remember { mutableStateOf(false) }
     val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester, focused = volumeFocused)
     var paneHasFocus by remember { mutableStateOf(false) }
 
@@ -255,7 +258,11 @@ fun PlayerPane(
                         onSeekBy = { viewModel.seekBy(it) },
                         onSeekTo = { viewModel.seekTo(it) },
                         onFocused = { seekFocused = it },
-                        upNext = state.upNextLine()?.takeIf { nextFocused && state.actions.canSkip },
+                        caption = when {
+                            nextFocused && state.actions.canSkip -> state.upNextLine()
+                            previousFocused && state.actions.canSkipToPrevious -> state.previousLine()
+                            else -> null
+                        },
                     )
                     PlaybackControls(
                         state = state,
@@ -273,6 +280,7 @@ fun PlayerPane(
                         groupFocusRequester = groupFocusRequester,
                         onOpenGroup = onOpenGroup,
                         onNextFocused = { nextFocused = it },
+                        onPreviousFocused = { previousFocused = it },
                     )
                 }
             }
@@ -509,6 +517,7 @@ private fun PlaybackControls(
     groupFocusRequester: FocusRequester,
     onOpenGroup: () -> Unit,
     onNextFocused: (Boolean) -> Unit,
+    onPreviousFocused: (Boolean) -> Unit,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -560,7 +569,7 @@ private fun PlaybackControls(
                         icon = Icons.Filled.SkipPrevious,
                         description = "Previous",
                         onClick = { viewModel.skipToPreviousTrack() },
-                        modifier = Modifier.claimExit(transportExit),
+                        modifier = Modifier.claimExit(transportExit).onFocusChanged { onPreviousFocused(it.isFocused) },
                     )
                 }
                 AppButton(

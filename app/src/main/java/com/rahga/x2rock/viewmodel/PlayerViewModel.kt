@@ -9,6 +9,7 @@ import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlayModeState
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.RepeatModes
+import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +45,9 @@ data class PlayerUiState(
     /** What plays after this track, where the player names it; see [upNextLine]. */
     val nextTrackName: String? = null,
     val nextArtistName: String? = null,
+    /** Where Prev goes, read from the queue since the player never names it; see [previousLine]. */
+    val previousTrackName: String? = null,
+    val previousArtistName: String? = null,
     /** The service the room is playing from, as the player names it — for its logo on the art. */
     val serviceName: String? = null,
     /** On a soundbar's HDMI input, which carries no track at all. */
@@ -135,10 +139,15 @@ fun PlayerUiState.trackLine(): String {
  * "Up next · I'll Be Missing You — Diddy", or null where the player names nothing to follow — a
  * station, the end of a queue — so the pane draws no line rather than "Up next: —".
  */
-fun PlayerUiState.upNextLine(): String? {
-    val title = nextTrackName?.takeIf { it.isNotBlank() } ?: return null
-    val artist = nextArtistName?.takeIf { it.isNotBlank() }
-    return if (artist == null) "Up next · $title" else "Up next · $title — $artist"
+fun PlayerUiState.upNextLine(): String? = trackCaption("Up next", nextTrackName, nextArtistName)
+
+/** "Previous · Early Summer — Ryo Fukui": the same, for the track Prev goes back to. */
+fun PlayerUiState.previousLine(): String? = trackCaption("Previous", previousTrackName, previousArtistName)
+
+private fun trackCaption(label: String, title: String?, artist: String?): String? {
+    val name = title?.takeIf { it.isNotBlank() } ?: return null
+    val by = artist?.takeIf { it.isNotBlank() }
+    return if (by == null) "$label · $name" else "$label · $name — $by"
 }
 
 /** What one read of `settings:1` yielded, with the speaker it came from. */
@@ -162,6 +171,8 @@ class PlayerViewModel @Inject constructor(
     private val notice = TransientNotice(viewModelScope)
     /** The last [SonosHousehold.ratingState] answer, with the room it answered for. */
     private val _rating = MutableStateFlow<Pair<String, SonosHousehold.RatingState>?>(null)
+    /** The track Prev goes to, keyed to the room it was read for, as [_rating] is. */
+    private val _previous = MutableStateFlow<Pair<String, Track>?>(null)
 
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
@@ -268,6 +279,9 @@ class PlayerViewModel @Inject constructor(
         }.combine(_rating) { state, rating ->
             // Keyed to the room it was read for, so a switch never shows the last room's.
             state.copy(rating = rating?.takeIf { it.first == _groupId.value }?.second)
+        }.combine(_previous) { state, previous ->
+            val track = previous?.takeIf { it.first == _groupId.value }?.second
+            state.copy(previousTrackName = track?.name, previousArtistName = track?.artist?.name)
         }.combine(notice.text) { state, text ->
             state.copy(notice = text)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, PlayerUiState())
@@ -303,6 +317,25 @@ class PlayerViewModel @Inject constructor(
             }.distinctUntilChanged().collectLatest { (id, trackId) ->
                 _rating.value = null
                 if (id != null && trackId != null) loadRating(id)
+            }
+        }
+    }
+
+    /**
+     * The previous track is not pushed either: asked once per room, track and queue version, and
+     * only where Prev goes to a track at all — with shuffle on, or on a queue's first track, the
+     * player says no, and Prev restarts this one instead.
+     */
+    init {
+        viewModelScope.launch {
+            combine(_groupId, household.groupStates) { id, states ->
+                val state = id?.let { states[it] }
+                listOf(id, state?.track?.id, state?.track?.name, state?.queueVersion, state?.actions?.canSkipToPrevious)
+            }.distinctUntilChanged().collectLatest { (id, _, _, _, canGoBack) ->
+                _previous.value = null
+                if (id is String && canGoBack == true) {
+                    runCatching { household.previousInQueue(id) }.getOrNull()?.let { _previous.value = id to it }
+                }
             }
         }
     }
