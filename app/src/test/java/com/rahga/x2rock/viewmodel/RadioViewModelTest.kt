@@ -21,6 +21,7 @@ import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -130,5 +131,38 @@ class RadioViewModelTest {
         } as RadioViewModel.Stations.Loaded
         assertEquals(stations.size(), loaded.stations.size)
         assertEquals(loaded.stations.size, loaded.stations.map { it.url }.toSet().size)
+    }
+
+    // ---------------------------------------------------------------- a stream by its address
+
+    @Test fun `an address is http or https, and taken as http without a scheme`() {
+        assertEquals("http://ice1.somafm.com/groovesalad-128-mp3", streamUrl("  ice1.somafm.com/groovesalad-128-mp3 "))
+        assertEquals("https://stream.example.org/live", streamUrl("https://stream.example.org/live"))
+        assertNull("the speaker fetches it over HTTP", streamUrl("ftp://files.example.org/a.mp3"))
+        assertNull(streamUrl(""))
+        assertNull("not an address at all", streamUrl("jazz radio"))
+    }
+
+    /** x2rock's rule: the host names the station, the path is a bitrate slug. Port and all. */
+    @Test fun `a stream is named by its host`() {
+        assertEquals("ice1.somafm.com", streamName("http://ice1.somafm.com/groovesalad-128-mp3"))
+        assertEquals("radio.example.org:8000", streamName("http://radio.example.org:8000/stream"))
+    }
+
+    @Test fun `a typed address plays under its host's name and goes back to the room`() = runBlocking<Unit> {
+        var done = false
+        viewModel.playUrl("ice1.somafm.com/groovesalad-128-mp3") { done = true }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
+        val body = fake.lastCommandBody("loadStreamUrl")!!
+        assertEquals("http://ice1.somafm.com/groovesalad-128-mp3", body.get("streamUrl").asString)
+        assertEquals("ice1.somafm.com", body.getAsJsonObject("stationMetadata").get("name").asString)
+        fake.pushPlaybackStatus(kitchen.id, "PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { while (!done) delay(20) }
+    }
+
+    @Test fun `something that is not an address is said, and nothing is sent`() = runBlocking<Unit> {
+        viewModel.playUrl("jazz radio") { }
+        assertEquals(NOT_A_STREAM_URL, withTimeout(5_000) { viewModel.notice.first { it != null } })
+        assertNull(fake.lastCommandBody("loadStreamUrl"))
     }
 }

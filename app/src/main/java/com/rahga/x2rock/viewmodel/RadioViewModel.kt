@@ -54,11 +54,18 @@ class RadioViewModel @Inject constructor(
 
     private var loadJob: Job? = null
 
+    /** Whether the right side is the address field rather than a category's stations. */
+    private val _byUrl = MutableStateFlow(false)
+    val byUrl: StateFlow<Boolean> = _byUrl.asStateFlow()
+
+    fun openUrl() { _byUrl.value = true }
+
     init {
         select(categories.first())
     }
 
     fun select(category: Category) {
+        _byUrl.value = false
         _selected.value = category
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -84,7 +91,38 @@ class RadioViewModel @Inject constructor(
         guard.start(station.url, "play ${station.name}", onDone = { started ->
             if (started == StreamStart.SILENT) _notice.post(silentNotice(station)) else onDone()
         }) { household.playStream(room.current(), station.url, station.name) }
+
+    /**
+     * Play a stream by its address, named by its host as x2rock names one: a stream's path is
+     * usually a bitrate slug, and the host names the station. The same start and the same three
+     * outcomes as a directory station; a silent one stays here, to be corrected.
+     */
+    fun playUrl(input: String, onDone: () -> Unit) {
+        val url = streamUrl(input) ?: return _notice.post(NOT_A_STREAM_URL)
+        val name = streamName(url)
+        guard.start(url, "play $name", onDone = { started ->
+            if (started == StreamStart.SILENT) _notice.post("$name didn't play. Check the address.") else onDone()
+        }) { household.playStream(room.current(), url, name) }
+    }
 }
+
+internal const val NOT_A_STREAM_URL = "That isn't an address a speaker can play: it starts http:// or https://."
+
+/**
+ * What was typed, as a URL a speaker can fetch, or null. Only http and https, as x2rock's
+ * `play-url`: the speaker fetches the stream itself. Typed without a scheme it is taken as http —
+ * typing "https://" on a television keyboard is a chore, and most stream servers answer http.
+ */
+internal fun streamUrl(input: String): String? {
+    val typed = input.trim().takeIf { it.isNotEmpty() } ?: return null
+    val url = if ("://" in typed) typed else "http://$typed"
+    val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+    if (uri.scheme?.lowercase() !in setOf("http", "https") || uri.host.isNullOrBlank()) return null
+    return url
+}
+
+/** The host, port and all, as x2rock's `stream_display_name` takes it. */
+internal fun streamName(url: String): String = url.substringAfter("://").substringBefore('/').ifEmpty { url }
 
 internal fun silentNotice(station: Station) = "${station.name} didn't play. Try another station."
 

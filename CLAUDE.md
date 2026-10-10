@@ -590,6 +590,12 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   navigation's fade the home screen is still composed and its Settings panel hands focus back to
   its button, and when it left, focus fell to Back (Alarms on the Shield). Lists that load slowly
   were spared by timing alone.
+- **A stream by its address is Radio's "Play a URL"** (2026-10-10), one press up from Popular, which
+  keeps first focus: the directory is the cheap path on a remote and typing the exception. It plays
+  as a directory station does, named by its **host** (x2rock's rule: the path is a bitrate slug), and
+  takes http and https only, since the speaker fetches it; typed without a scheme it is taken as
+  http. The keyboard is the URL one; with it up, its GO key sends — the remote's keys are the
+  keyboard's then, so a scripted Enter does nothing.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.

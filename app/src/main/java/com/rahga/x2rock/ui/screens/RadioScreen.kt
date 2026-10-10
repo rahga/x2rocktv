@@ -1,6 +1,11 @@
 package com.rahga.x2rock.ui.screens
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import com.rahga.x2rock.ui.components.SearchField
+import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -61,6 +66,11 @@ fun RadioScreen(
     val stations by viewModel.stations.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val notice by viewModel.notice.collectAsState()
+    val byUrl by viewModel.byUrl.collectAsState()
+    var address by rememberSaveable { mutableStateOf("") }
+    val addressFocus = remember { FocusRequester() }
+    // The field takes focus as it opens, which brings the keyboard up: opening it is asking to type.
+    LaunchedEffect(byUrl) { if (byUrl) addressFocus.requestFocusRetrying() }
     val firstFocus = remember { FocusRequester() }
     BackHandler { onBack() }
     LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
@@ -76,8 +86,21 @@ fun RadioScreen(
                         contentPadding = PaddingValues(bottom = 48.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        // A stream's own address, one press up from Popular, where focus starts: the
+                        // directory is the cheap path on a remote, and typing the exception.
+                        item(key = "url") {
+                            AppButton(
+                                onClick = { viewModel.openUrl() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(
+                                        if (byUrl) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                        else Modifier
+                                    ),
+                            ) { Text("Play a URL", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        }
                         itemsIndexed(viewModel.categories) { index, category ->
-                            val isSelected = category == selected
+                            val isSelected = category == selected && !byUrl
                             AppButton(
                                 onClick = { viewModel.select(category) },
                                 modifier = Modifier
@@ -92,7 +115,24 @@ fun RadioScreen(
                     }
                     Spacer(Modifier.width(32.dp))
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        when (val s = stations) {
+                        if (byUrl) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text("A stream's address", style = MaterialTheme.typography.titleMedium)
+                            SearchField(
+                                value = address,
+                                placeholder = "http://…",
+                                onValueChange = { address = it },
+                                onSearch = { viewModel.playUrl(address, onDone = onPlayed) },
+                                url = true,
+                                modifier = Modifier.fillMaxWidth().focusRequester(addressFocus),
+                            )
+                            Text(
+                                "The speaker fetches it itself, so it has to be reachable from the speaker. " +
+                                    "It plays under its host's name.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (starting != null) Text("Starting…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        } else when (val s = stations) {
                             is RadioViewModel.Stations.Loading ->
                                 DotScanner(description = "Loading stations")
                             is RadioViewModel.Stations.Failed -> Column {

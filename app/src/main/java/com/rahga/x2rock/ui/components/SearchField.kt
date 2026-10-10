@@ -43,6 +43,8 @@ fun SearchField(
     modifier: Modifier = Modifier,
     /** A number rather than words: the keyboard comes up as digits, and its key says Done. */
     numeric: Boolean = false,
+    /** A web address: the keyboard comes up with `/` and `.com` to hand, and its key says Go. */
+    url: Boolean = false,
 ) {
     var focused by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
@@ -58,9 +60,12 @@ fun SearchField(
         singleLine = true,
         textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface),
         cursorBrush = SolidColor(colors.primary),
-        keyboardOptions = if (numeric) KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
-        else KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { search() }, onDone = { search() }),
+        keyboardOptions = when {
+            numeric -> KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done)
+            url -> KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go, autoCorrectEnabled = false)
+            else -> KeyboardOptions(imeAction = ImeAction.Search)
+        },
+        keyboardActions = KeyboardActions(onSearch = { search() }, onDone = { search() }, onGo = { search() }),
         // A real keyboard's Enter, too — the emulator's, a tablet's. Only the on-screen keyboard
         // sends the search action; a key is a key.
         modifier = modifier
