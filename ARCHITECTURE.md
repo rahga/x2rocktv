@@ -38,8 +38,8 @@ everything that talks to Sonos. `:app` is the Android TV application and depends
 A third module `:cli` (a Linux command line plus an MPRIS daemon) was removed in 2026-09;
 the Rust project `rahga/x2rock` covers that ground on the desktop.
 
-`:core` carries `javax.inject` annotations (`@Inject`, `@Singleton`, `@Qualifier`) so Hilt in
-`:app` can construct its classes directly; a non-Hilt frontend just calls the constructors.
+`:core` carries no DI annotations: `:app`'s Hilt modules construct its classes, and any other
+frontend just calls the constructors.
 `:core` also publishes `FakePlayer` and the captured fixtures as **test fixtures**, so `:app`'s
 view models are tested against the same fake household over a real socket.
 

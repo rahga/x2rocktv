@@ -1,6 +1,6 @@
-# Gson reads the speakers' JSON into this project's own classes by reflection, across
-# :core's lan, model and radio packages and :app's smapi, so their field names are the wire
-# format and must survive shrinking. Kept wholesale rather than per class: a class missed
+# Gson reads the speakers' JSON into this project's own classes by reflection — :core's apple,
+# lan, model, radio and smapi packages, :app's smapi and store — so their field names are the
+# wire format and must survive shrinking. Kept wholesale rather than per class: a class missed
 # here does not fail, it parses to nulls, which is far harder to find than a crash.
 -keep class com.rahga.x2rock.** { <fields>; <init>(...); }
 

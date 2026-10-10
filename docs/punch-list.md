@@ -53,6 +53,25 @@ material3's light-baseline track colour since no material3 theme is set — pass
 first; the two control rows' places (music and TV) are near-duplicates whose focus wiring differs
 enough that extracting one row was not clearly simpler.
 
+**Second review pass, same day** (household core, tests and fixtures, view models, screens and
+build; commits from be58907). Its first finding was a regression of the first pass: the modal-close
+effect read a plain local inside `snapshotFlow`, so it never fired — the room panel now hands focus
+off as Settings does. Looked at and left alone: one `DebouncedLevels` for the four copies of
+debounce-and-pending (two absolute, two relative; a real simplification, but it moves the pane's
+and the panel's rows onto one behaviour and wants a device look); Browse scrolling an off-screen
+row into view before Back returns focus to it (needs the list's keys computed outside the
+`LazyColumn`; ServiceBrowse does it, Browse does not yet); the Compose BOM (2024.05) against
+navigation 2.8.0-beta02, which pulls `ui` and `foundation` to 1.7.0-beta02 — moving to a BOM that
+carries 1.7 and tv-material 1.0.0 is the honest fix and changes the runtime the ten-foot pass was
+checked on; `Theme.Leanback` as the manifest theme's parent, the only reason the leanback
+dependency exists; narrowing the Gson keep from `-keep class` to `-keepclassmembers`, which R8
+would then shrink past (the first release crashed until the keep was wholesale); `handleIntent`
+on every `onCreate`, which replays a deep link after process death; the live suite's silent
+restores and its eleven copies of the named-room preamble, untestable here; a shared fake-household
+builder for the thirty-one test preambles (the two that could reach real SSDP are seeded now);
+`REPLY_TIMEOUT_MILLIS` as a constructor seam so ReplayTest's two 5.5s waits go; `disconnect()`
+clearing the session outside the mutex `teardown()` takes.
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; a "Play URL"
 row; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; adding
 to a service's own playlist; picking an audiobook's chapter; Sonos Radio's "Browse Radio";
