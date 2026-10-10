@@ -64,6 +64,9 @@ internal fun failureNotice(what: String, e: Throwable): String? {
     return "Couldn't $what: $why"
 }
 
+/** A station or program the player accepted and then sat idle on: see `StreamStart.SILENT`. */
+internal fun didNotPlay(title: String) = "\"$title\" didn't play. Try another."
+
 /** A level the speaker does not control: a Port or an Amp with a fixed line-out. */
 internal const val FIXED_VOLUME = "This speaker's volume is fixed. Change it on the amplifier it feeds."
 

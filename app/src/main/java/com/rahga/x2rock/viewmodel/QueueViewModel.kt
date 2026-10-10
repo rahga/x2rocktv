@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -73,11 +74,11 @@ class QueueViewModel @Inject constructor(
     val notice: StateFlow<String?> = _notice.text
 
     init {
-        // The version the list is read at. Taken before the read, so an edit landing between the
-        // two only costs a second read. Null when the room has not said yet, early in a session:
-        // the first version to arrive is then a change, because nothing says the list has it.
-        // The room's group and its version, as read now. A regroup moves the room to another group,
-        // whose queue is another queue: the pair changing reads that one, as a version does.
+        // The room's group and its version, as read now — taken before the read, so an edit
+        // landing between the two only costs a second read. A null version is a room that has
+        // not said yet, early in a session: the first to arrive is then a change, because nothing
+        // says the list has it. A regroup moves the room to another group, whose queue is another
+        // queue: the pair changing reads that one, as a version does.
         fun where(states: Map<String, GroupState>): Pair<String?, String?> =
             room.currentOrNull().let { id -> id to id?.let { states[it]?.queueVersion } }
         val openedAt = where(household.groupStates.value)
@@ -85,9 +86,11 @@ class QueueViewModel @Inject constructor(
         // Kept current while this screen is open, which is this view model's whole life, by the
         // room's `queueVersion`. Verified at home on 2026-10-01: each edit moved it (26, 27, 28
         // for a move and its undo) and each arrived as a playback event, on an idle room too.
-        // So nothing is browsed on a timer or per event; the version moving is the signal.
+        // So nothing is browsed on a timer or per event; the version moving is the signal. The
+        // topology is combined in, since a regroup is what moves the room: judged off group
+        // states alone it was noticed only when one happened to arrive after.
         viewModelScope.launch {
-            household.groupStates.map { where(it) }
+            combine(household.state, household.groupStates) { _, states -> where(states) }
                 .filter { (id, version) -> id != null && version != null }
                 .distinctUntilChanged()
                 .filter { it != openedAt }
@@ -106,10 +109,7 @@ class QueueViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`), and
-     * the queue has no event to tell us it changed, so it is re-read after.
-     */
+    /** Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`). */
     fun removeItem(trackNumber: Int) = edit("remove that track", trackNumber) {
         household.removeFromQueue(room.current(), trackNumber, updateId)
     }

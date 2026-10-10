@@ -11,6 +11,7 @@ import com.rahga.x2rock.media.NowPlayingPublisher
 import com.rahga.x2rock.model.PlaybackActions
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.store.Preferences
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * The main dispatcher every view model launches on: set once for the whole test run, and never
@@ -67,8 +68,9 @@ class RecordingNowPlaying : NowPlayingPublisher {
         val actions: PlaybackActions = PlaybackActions(),
     )
 
-    val metadata = mutableListOf<Metadata>()
-    val states = mutableListOf<State>()
+    // Appended from the socket's thread and read by the test's.
+    val metadata = CopyOnWriteArrayList<Metadata>()
+    val states = CopyOnWriteArrayList<State>()
     var controls: NowPlayingPublisher.Controls? = null
         private set
     var detached = false

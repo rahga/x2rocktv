@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.apple.ITunesSearch
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.StreamStart
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.store.preferredRank
@@ -207,9 +208,9 @@ class SearchViewModel @Inject constructor(
         if (hit is Hit.Service && ServiceContent.opens(hit.item)) {
             return onOpen(hit.linked, hit.item)
         }
-        guard.start(hit.key, "play ${hit.title}", { onPlayed() }) {
+        guard.start(hit.key, "play ${hit.title}", { started -> if (started == StreamStart.SILENT) _notice.post(didNotPlay(hit.title)) else onPlayed() }) {
             when (hit) {
-                is Hit.Apple -> household.playAppleMusic(room.current(), hit.item, appleAccount())
+                is Hit.Apple -> { household.playAppleMusic(room.current(), hit.item, appleAccount()); StreamStart.PLAYING }
                 is Hit.Service -> household.startServiceItem(room.current(), hit.linked, hit.item)
             }
         }

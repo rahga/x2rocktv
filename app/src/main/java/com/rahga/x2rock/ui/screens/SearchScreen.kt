@@ -133,7 +133,8 @@ fun SearchScreen(
                         value = query,
                         placeholder = "Songs, albums, artists, stations",
                         onValueChange = viewModel::setQuery,
-                        onSearch = viewModel::search,
+                        // A fresh search is not a return from an album: the old row key would hold focus in the field.
+                        onSearch = { openedFrom = null; viewModel.search() },
                         modifier = Modifier.weight(1f).focusRequester(fieldFocus),
                     )
                     Spacer(Modifier.width(16.dp))

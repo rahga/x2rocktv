@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.StreamStart
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemDetails
 import com.rahga.x2rock.smapi.LinkedService
@@ -95,9 +96,9 @@ class ServiceItemMenu(
 
     /** Play [target] now, in place of what the room plays — a track, or a whole album or playlist. */
     fun playNow(target: Target, onPlayed: () -> Unit) =
-        guard.start(keyOf(target), "play ${target.title}", { onPlayed() }) {
+        guard.start(keyOf(target), "play ${target.title}", { started -> if (started == StreamStart.SILENT) notice.post(didNotPlay(target.title)) else onPlayed() }) {
             when (target) {
-                is Target.Apple -> household.playAppleMusic(groupId(), target.item, appleAccount())
+                is Target.Apple -> { household.playAppleMusic(groupId(), target.item, appleAccount()); StreamStart.PLAYING }
                 is Target.Service ->
                     if (ServiceContent.opens(target.item)) household.playServiceItem(groupId(), target.linked, target.item)
                     else household.startServiceItem(groupId(), target.linked, target.item)

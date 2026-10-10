@@ -36,7 +36,7 @@ class RoomsChannelSync @Inject constructor(
     @ApplicationContext private val context: Context,
     private val addresses: PlayerAddressBook,
 ) : ChannelSync {
-    @Volatile private var channelId = NO_ID
+    private var channelId = NO_ID
 
     /**
      * Whether there is a home screen to publish to. A phone or tablet has no TV provider, and

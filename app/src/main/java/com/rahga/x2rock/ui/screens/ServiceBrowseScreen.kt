@@ -90,7 +90,8 @@ fun ServiceBrowseScreen(
     val primaries by viewModel.primaries.collectAsState()
     val preferred by viewModel.preferred.collectAsState()
     val serviceMenu by viewModel.serviceMenu.collectAsState()
-    BackHandler { if (!viewModel.back()) onBack() }
+    val back = { if (!viewModel.back()) onBack() }
+    BackHandler(onBack = back)
     // The row a service was opened from, so Back lands on it rather than on the first row. Saved,
     // because Apple Music is a screen of its own and this one is rebuilt on the way back.
     var opened by rememberSaveable { mutableStateOf<String?>(null) }
@@ -102,7 +103,7 @@ fun ServiceBrowseScreen(
                 ScreenHeader(
                     title = active?.title(ready?.services.orEmpty()) ?: "Music Services",
                     room = room,
-                    onBack = { if (!viewModel.back()) onBack() },
+                    onBack = back,
                 )
                 Spacer(Modifier.height(20.dp))
 

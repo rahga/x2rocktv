@@ -62,6 +62,9 @@ class HomeViewModelTest {
             client = LanHttp.client(book),
             seeds = SeedStore.None,
             port = fake.port,
+            // Never real SSDP: a dropped connection reconnects through discovery, which would
+            // otherwise find the actual house this JVM is on.
+            ssdp = { emptyList() },
         )
         prefs = FakePreferences()
         roomPrefs = RoomPreferencesStore(prefs)
@@ -146,8 +149,29 @@ class HomeViewModelTest {
     @Test fun `a room is selected on arrival`() = runBlocking<Unit> {
         connect()
         val selected = withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } }
-        assertNotNull(selected)
-        assertTrue(household.state.value.groups.any { it.id == selected })
+        assertEquals(sortGroups(household.state.value.groups).first().id, selected)
+    }
+
+    /**
+     * A split follows the coordinator, not any shared speaker: Guest TV lists before Kitchen in
+     * the captured household, so "any speaker" sent the selection to Guest TV's fragment.
+     */
+    @Test fun `a selection follows its coordinator when the group splits`() = runBlocking<Unit> {
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val grouped = withTimeout(5_000) {
+            viewModel.uiState.first { it is HomeViewModel.UiState.Success && it.groups.size == 4 } as HomeViewModel.UiState.Success
+        }.groups.first { it.name == "Kitchen" }
+        viewModel.selectGroup(grouped.id)
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == grouped.id } }
+
+        fake.pushTopology(FakePlayer.reachableTopology())
+        val split = withTimeout(5_000) {
+            viewModel.uiState.first { it is HomeViewModel.UiState.Success && it.groups.size == 5 } as HomeViewModel.UiState.Success
+        }
+        val kitchen = split.groups.first { it.name == "Kitchen" }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it != grouped.id } }
+        assertEquals(kitchen.id, viewModel.selectedGroupId.value)
     }
 
     @Test fun `now playing follows the pushed metadata`() = runBlocking<Unit> {

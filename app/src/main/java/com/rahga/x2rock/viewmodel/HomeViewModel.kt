@@ -17,6 +17,8 @@ import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import com.rahga.x2rock.model.followingRoom
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -199,8 +201,8 @@ class HomeViewModel @Inject constructor(
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
 
 
-    /** The speakers of the last selection, so it can be found again after a regroup. */
-    @Volatile private var lastSelectedPlayers: Set<String> = emptySet()
+    /** The last selection as a group, so its room can be found again after a regroup. */
+    private var lastSelected: Group? = null
 
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
@@ -215,7 +217,7 @@ class HomeViewModel @Inject constructor(
                 val groups = household.state.map { it.groups }.first { it.isNotEmpty() }
                 val group = groups.firstOrNull { it.id == roomId } ?: TvSoundbar.groupOf(roomId, groups)
                 if (group != null) {
-                    lastSelectedPlayers = group.playerIds.toSet()
+                    lastSelected = group
                     _selectedGroupId.value = group.id
                     _navigateToRoom.value = true
                 }
@@ -233,10 +235,11 @@ class HomeViewModel @Inject constructor(
                 // A regroup mints new group ids, so the selected one can simply cease to
                 // exist — anything else on the network can do that at any moment. Follow
                 // the speakers rather than the id: whichever group now holds them is the
-                // same room to a listener, even though it is a different group.
-                val followed = lastSelectedPlayers
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { players -> groups.firstOrNull { g -> g.playerIds.any { it in players } } }
+                // same room to a listener, even though it is a different group. By the one
+                // rule every screen follows a room by, which puts the coordinator first: any
+                // shared speaker used to do, and a split sent the selection to whichever
+                // fragment the household listed first.
+                val followed = lastSelected?.let { groups.followingRoom(it.coordinatorId, it.playerIds) }
 
                 _selectedGroupId.value = (
                     followed
@@ -248,14 +251,12 @@ class HomeViewModel @Inject constructor(
 
         // Remembered so a vanished selection can be followed to wherever its speakers went.
         viewModelScope.launch {
-            combine(household.state, _selectedGroupId) { state, id ->
-                state.groups.firstOrNull { it.id == id }?.playerIds.orEmpty()
-            }.collect { players -> if (players.isNotEmpty()) lastSelectedPlayers = players.toSet() }
+            combine(household.state, _selectedGroupId) { state, id -> state.groups.firstOrNull { it.id == id } }
+                .collect { group -> if (group != null) lastSelected = group }
         }
         // Which soundbar this television feeds, learned once and then remembered. Only
         // detectable while that room is on its TV input, so this watches rather than asking
-        // at startup — and never overwrites an answer, because a second television coming on
-        // makes the signal ambiguous rather than wrong.
+        // at startup — and only fills in an empty answer: a stated one wins, see [setTvSoundbar].
         viewModelScope.launch {
             combine(household.state, household.groupStates) { state, groupStates ->
                 // Not while the household is still arriving. Subscription snapshots land one
@@ -287,10 +288,14 @@ class HomeViewModel @Inject constructor(
             }
         }
 
-        // The TV home-screen channels follow whatever the household last said.
+        // The TV home-screen channels follow whatever the household last said: the rooms in the
+        // list's order, each with its tile. Without its playback state, which every play or pause
+        // anywhere moved and so rewrote every tile — a tile changes for its subtitle and art only.
         viewModelScope.launch(Dispatchers.IO) {
             uiState.collect { state ->
-                if (state is UiState.Success) channelSync.sync(state.groups, state.tiles)
+                if (state is UiState.Success) {
+                    channelSync.sync(sortGroups(state.groups).map { it.copy(playbackState = null) }, state.tiles)
+                }
             }
         }
     }
@@ -419,8 +424,10 @@ class HomeViewModel @Inject constructor(
         groupVolumeJobs[groupId]?.cancel()
         groupVolumeJobs[groupId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setGroupVolume(groupId, target) }.onFailure { _notice.failure("change the volume", it) }
+            if (groupVolumeJobs[groupId] === coroutineContext[Job]) groupVolumeJobs.remove(groupId)
+            val sent = runCatching { household.setGroupVolume(groupId, target) }.onFailure { _notice.failure("change the volume", it) }
             // Only if it is still ours — see [setPlayerVolume].
+            if (sent.exceptionOrNull() is CancellationException) return@launch
             _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
         }
     }
@@ -440,13 +447,17 @@ class HomeViewModel @Inject constructor(
         playerVolumeJobs[playerId]?.cancel()
         playerVolumeJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
-            runCatching { household.setPlayerVolume(playerId, target) }
+            // Past the debounce the send is this job's alone: a newer press starts its own rather
+            // than cancelling a frame already written, or one waiting on the socket lock.
+            if (playerVolumeJobs[playerId] === coroutineContext[Job]) playerVolumeJobs.remove(playerId)
+            val sent = runCatching { household.setPlayerVolume(playerId, target) }
                 .onFailure { _notice.failure("change that speaker's volume", it) }
             // Only if it is still ours. `runCatching` catches the CancellationException a
-            // newer press throws in here, and this line is not a suspension point, so
-            // clearing unconditionally would delete the target that press just wrote —
-            // leaving the row on the stale pushed level and the press after it aiming from
-            // there, which is the very accumulation this exists to prevent.
+            // newer press throws in here, and that press has already written its own target —
+            // the same one, possibly — so clearing unconditionally would delete it, leaving
+            // the row on the stale pushed level and the press after it aiming from there,
+            // which is the very accumulation this exists to prevent.
+            if (sent.exceptionOrNull() is CancellationException) return@launch
             _pendingPlayerVolumes.update { if (it[playerId] == target) it - playerId else it }
         }
     }
@@ -633,8 +644,7 @@ class HomeViewModel @Inject constructor(
     /** What the app would choose with nothing else to go on. */
     private fun defaultSelection(groups: List<Group>): Group? = sortGroups(groups).firstOrNull()
 
-    private fun findGroup(id: String): Group? =
-        (uiState.value as? UiState.Success)?.groups?.find { it.id == id }
+    private fun findGroup(id: String): Group? = household.state.value.groups.find { it.id == id }
 
     private companion object {
         /** The same window the player pane uses, so a held key behaves the same in both. */

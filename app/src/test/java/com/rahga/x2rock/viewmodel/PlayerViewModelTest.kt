@@ -55,6 +55,9 @@ class PlayerViewModelTest {
             client = LanHttp.client(book),
             seeds = SeedStore.None,
             port = fake.port,
+            // Never real SSDP: a dropped connection reconnects through discovery, which would
+            // otherwise find the actual house this JVM is on.
+            ssdp = { emptyList() },
         )
         publisher = RecordingNowPlaying()
         viewModel = PlayerViewModel(household, publisher, testClock)

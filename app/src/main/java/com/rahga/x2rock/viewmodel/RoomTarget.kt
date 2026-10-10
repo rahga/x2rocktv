@@ -1,6 +1,7 @@
 package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.model.followingRoom
 
 /**
  * The room a screen was opened for, followed across regroups.
@@ -15,13 +16,12 @@ import com.rahga.x2rock.lan.SonosHousehold
 class RoomTarget(private val household: SonosHousehold, private val openedOn: String) {
 
     private val opened = household.state.value.groups.firstOrNull { it.id == openedOn }
-    private val anchor: String? = opened?.coordinatorId
 
     /** The room's group now, or `null` when it is no longer in the household at all. */
     fun currentOrNull(): String? {
         val groups = household.state.value.groups
         if (groups.any { it.id == openedOn }) return openedOn
-        return anchor?.let { speaker -> groups.firstOrNull { speaker in it.playerIds }?.id }
+        return opened?.let { groups.followingRoom(it.coordinatorId, it.playerIds) }?.id
     }
 
     /** The room's group now; fails, saying so by name, when the room has left the household. */

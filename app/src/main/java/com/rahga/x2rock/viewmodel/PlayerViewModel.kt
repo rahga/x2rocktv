@@ -12,6 +12,7 @@ import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -206,10 +207,7 @@ class PlayerViewModel @Inject constructor(
                     trackName = state.track?.name,
                     artistName = state.track?.artist?.name,
                     albumName = state.track?.album?.name,
-                    // Radio has no per-track art but the station has a logo, which is what
-                    // a listener recognises — so fall back to the container rather than
-                    // showing an empty pane.
-                    albumArtUrl = state.track?.imageUrl ?: state.container?.imageUrl,
+                    albumArtUrl = state.artUrl,
                     serviceName = state.track?.service?.name ?: state.container?.service?.name,
                     onTvInput = state.onTvInput,
                     inputFormat = state.inputFormat,
@@ -513,10 +511,12 @@ class PlayerViewModel @Inject constructor(
         seekDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
             val sent = runCatching { household.seek(groupId, target) }.onFailure { notice.failure("seek", it) }
-            // Only if it is still ours. `runCatching` catches the CancellationException a newer
-            // press throws in here, and this is not a suspension point, so touching it
-            // unconditionally would overwrite the target that press just wrote. Sent, it waits
-            // for the speaker's next position; refused, there is nothing to wait for.
+            // Cancelled by a newer press, this send is no longer anyone's: `runCatching` catches
+            // that CancellationException, and the press has already written its own target —
+            // the same one, when Previous is pressed twice on a track that cannot skip back —
+            // which clearing here would delete. Otherwise, sent, it waits for the speaker's next
+            // position; refused, there is nothing to wait for.
+            if (sent.exceptionOrNull() is CancellationException) return@launch
             if (pendingSeekMillis == target) {
                 if (sent.isSuccess) pendingSentAt = System.currentTimeMillis() else pendingSeekMillis = null
             }
@@ -534,7 +534,7 @@ class PlayerViewModel @Inject constructor(
      * sent to it now, and the pending state cleared. They used to stay with the view model, and
      * the next press in the newly selected room sent them there — +5 in one room then +1 in the
      * next arrived as +6, and a pending seek became the next room's baseline (outside review,
-     * 2026-10-08). A seek already sent keeps nothing pending past here: its room has it.
+     * 2026-10-08). A seek the speaker has answered keeps nothing pending past here: its room has it.
      */
     private fun settlePending(leaving: String) {
         volumeDebounceJob?.cancel()
@@ -589,6 +589,11 @@ class PlayerViewModel @Inject constructor(
         volumeDebounceJob?.cancel()
         volumeDebounceJob = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
+            // Past the debounce the send is this job's alone: a newer press starts its own rather
+            // than cancelling one — pointless once the frame is written, and lossy before it,
+            // where the send waits on the socket lock through a reconnect and the cancel
+            // dropped the step.
+            if (volumeDebounceJob === coroutineContext[Job]) volumeDebounceJob = null
             val step = pendingVolumeDelta
             pendingVolumeDelta = 0
             if (step == 0) return@launch
@@ -628,6 +633,7 @@ class PlayerViewModel @Inject constructor(
         playerVolumeDebounceJobs[playerId]?.cancel()
         playerVolumeDebounceJobs[playerId] = viewModelScope.launch {
             delay(VOLUME_DEBOUNCE_MILLIS)
+            if (playerVolumeDebounceJobs[playerId] === coroutineContext[Job]) playerVolumeDebounceJobs.remove(playerId)
             val step = pendingPlayerDeltas.remove(playerId) ?: return@launch
             if (step == 0) return@launch
             runCatching { household.adjustPlayerVolume(playerId, step) }

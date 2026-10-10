@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.StreamStart
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.smapi.Category
@@ -413,7 +414,9 @@ class ServiceBrowseViewModel @Inject constructor(
             return
         }
         val service = _active.value ?: return
-        guard.start(item.id, "play ${item.title}", { onPlayed() }) { household.startServiceItem(room.current(), service, item) }
+        guard.start(item.id, "play ${item.title}", { started -> if (started == StreamStart.SILENT) _notice.post(didNotPlay(item.title)) else onPlayed() }) {
+            household.startServiceItem(room.current(), service, item)
+        }
     }
 
     /**

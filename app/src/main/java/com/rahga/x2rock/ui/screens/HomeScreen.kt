@@ -62,8 +62,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.drop
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -96,6 +94,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.rahga.x2rock.model.Group
+import com.rahga.x2rock.model.followingRoom
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
@@ -120,8 +119,11 @@ fun HomeScreen(
     onOpenFavorites: (groupId: String) -> Unit,
     onOpenSearch: (groupId: String) -> Unit,
     onOpenPreferredServices: () -> Unit,
-    homeViewModel: HomeViewModel = hiltViewModel(),
-    playerViewModel: PlayerViewModel = hiltViewModel()
+    // Never defaulted to hiltViewModel(): inside the NavHost that would mint a second
+    // PlayerViewModel owned by the back-stack entry, which would attach its own controls to the
+    // publisher and never be told the room. NavGraph passes the activity's.
+    homeViewModel: HomeViewModel,
+    playerViewModel: PlayerViewModel,
 ) {
     val state by homeViewModel.uiState.collectAsState()
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
@@ -145,7 +147,6 @@ fun HomeScreen(
     val groupFocus = remember { FocusRequester() }
     var panelFromPane by remember { mutableStateOf(false) }
     // Settings opens from its own button at the foot of the list, and closing it goes back there.
-    var fromSettings by remember { mutableStateOf(false) }
     val settingsButtonFocus = remember { FocusRequester() }
     var opener by rememberSaveable { mutableStateOf<Opener?>(null) }
     fun openerFocus(opener: Opener?): FocusRequester? = when (opener) {
@@ -210,32 +211,27 @@ fun HomeScreen(
         closeScope.launch { handOffFocus({ settingsReleasing = it }, { showSettings = false }, settingsButtonFocus) }
     }
     BackHandler(enabled = showSettings) { closeSettings() }
-    BackHandler(enabled = panelGroup != null) { panelGroup = null }
+    // The room panel likewise: closed first and focus requested after, there was a frame with
+    // focus nowhere, which the platform filled with the first room row — whose focus selects
+    // that room (Streamer). So it hands focus to what opened it before it goes.
+    var panelReleasing by remember { mutableStateOf(false) }
+    fun closePanel() {
+        closeScope.launch {
+            handOffFocus({ panelReleasing = it }, { panelGroup = null }, if (panelFromPane) groupFocus else sidebarFocusRequester)
+        }
+    }
+    BackHandler(enabled = panelGroup != null) { closePanel() }
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
         if (showSettings) settingsFocus.requestFocusSafely()
     }
 
-    // Modals trap focus, so closing one has to hand it back explicitly — otherwise focus is left
-    // on a node that just left the composition and the remote goes dead until a direction press.
-    // On closes only: run on the first composition, it placed focus before the resume handler
-    // above had waited out the frames a deep link's selection takes.
+    // Both modals hand focus back as they close, above; nothing is left to place afterwards.
     val modalVisible = showSettings || panelGroup != null
-    LaunchedEffect(Unit) {
-        snapshotFlow { modalVisible }.drop(1).collect { visible ->
-            if (!visible) place(
-                when {
-                    fromSettings -> settingsButtonFocus
-                    panelFromPane -> groupFocus
-                    else -> sidebarFocusRequester
-                }
-            )
-        }
-    }
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
-    // losing it all left focus on the settings gear, the first thing Compose finds: a cold
+    // losing it all left focus on the first thing Compose finds — the first room's row: a cold
     // start, where the rooms arrive after the resume request above has found no row; a regroup,
     // which mints new group ids so the focused row simply leaves (the selection follows the
     // speakers to the new one); and a reconnect, which withdraws the list while it runs. Keyed
@@ -273,8 +269,8 @@ fun HomeScreen(
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
                 onFocused = { if (focusPlaced) homeViewModel.selectGroup(it.id) },
-                onOpenPanel = { panelFromPane = false; fromSettings = false; panelGroup = it },
-                onSettingsClick = { fromSettings = true; showSettings = true },
+                onOpenPanel = { panelFromPane = false; panelGroup = it },
+                onSettingsClick = { showSettings = true },
                 settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
                 onChooseHousehold = { homeViewModel.chooseHousehold(it) },
@@ -329,7 +325,7 @@ fun HomeScreen(
                         onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
                         onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
                         onOpenGroup = {
-                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; fromSettings = false; panelGroup = it }
+                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelGroup = it }
                         },
                     )
                 }
@@ -368,14 +364,11 @@ fun HomeScreen(
         // Re-read from the live list rather than the captured group: a regroup mints new
         // ids, and this panel is the surface most likely to be open while one happens —
         // including one performed from it. Following the speakers keeps it on the room.
+        // By the one rule every screen follows a room by: the coordinator before any member,
+        // or a split would take the panel — its title unchanged, `onRemovePlayer` and
+        // `onUseTvInput` acting on a different room — to whichever fragment came first.
         val liveGroup = panel?.let { captured ->
-            groups.firstOrNull { it.id == captured.id }
-                // The coordinator before any member: if something else on the network splits
-                // this group, matching any shared player would take the panel to whichever
-                // fragment happens to come first in household order. It would keep its title
-                // while `onRemovePlayer` and `onUseTvInput` acted on a different room.
-                ?: groups.firstOrNull { captured.coordinatorId in it.playerIds }
-                ?: groups.firstOrNull { g -> g.playerIds.any { it in captured.playerIds } }
+            groups.firstOrNull { it.id == captured.id } ?: groups.followingRoom(captured.coordinatorId, captured.playerIds)
         }
         if (panel != null && liveGroup == null) {
             // Its speakers went somewhere this can no longer name.
@@ -388,7 +381,7 @@ fun HomeScreen(
             val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
             val tone by homeViewModel.tone.collectAsState()
             LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }
-            Overlay(onDismiss = { panelGroup = null }) {
+            Overlay(onDismiss = ::closePanel, trapped = !panelReleasing) {
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
@@ -403,11 +396,11 @@ fun HomeScreen(
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
                         homeViewModel.partyMode(liveGroup.id)
-                        panelGroup = null
+                        closePanel()
                     },
                     onStopParty = {
                         homeViewModel.soloGroup(liveGroup.id)
-                        panelGroup = null
+                        closePanel()
                     },
                     // Grouping stays open: building a group is several presses, and closing
                     // after each one would mean reopening the panel to make the next.
@@ -420,7 +413,7 @@ fun HomeScreen(
                     onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {
                         homeViewModel.useTvInput(liveGroup.id)
-                        panelGroup = null
+                        closePanel()
                     },
                     upnpOff = upnpOff,
                     tone = tone?.takeIf { it.playerId == liveGroup.coordinatorId },
@@ -456,9 +449,9 @@ private fun RoomSidebar(
     onRetry: () -> Unit,
     onChooseHousehold: (HouseholdChoice) -> Unit,
     /** The household's UPnP switch is off: said here once, at the foot of the list. */
-    upnpOff: Boolean = false,
+    upnpOff: Boolean,
     /** Whether a room row holds focus, as opposed to the gear or nothing. */
-    onListFocusChanged: (Boolean) -> Unit = {},
+    onListFocusChanged: (Boolean) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
