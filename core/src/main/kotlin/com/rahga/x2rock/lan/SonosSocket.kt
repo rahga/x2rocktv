@@ -16,6 +16,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -36,7 +37,7 @@ class SonosSocket private constructor(
     private val pending: ConcurrentHashMap<String, CompletableDeferred<SonosReply>>,
     private val _events: MutableSharedFlow<SonosEvent>,
     private val _failures: MutableSharedFlow<Throwable>,
-    private val closedByUs: java.util.concurrent.atomic.AtomicBoolean,
+    private val closedByUs: AtomicBoolean,
     val hostname: String,
 ) {
 
@@ -67,32 +68,14 @@ class SonosSocket private constructor(
      * rather than retry on it.
      */
     suspend fun command(header: JsonObject, body: JsonObject = JsonObject()): JsonElement {
-        val reply = send(header, body)
-        if (!reply.isSuccess) {
-            throw SonosCommandException(
-                header.get("command")?.asString ?: "command",
-                reply.errorOrNull() ?: "refused",
-            )
-        }
-        return reply.body
-    }
-
-    /**
-     * Like [command] but hands back a refusal instead of throwing.
-     *
-     * Needed because a refusal is sometimes the point: there is no command for "what
-     * household am I?", and the cheapest way to ask is to send something invalid and read
-     * `householdId` off the reply header.
-     */
-    private suspend fun send(header: JsonObject, body: JsonObject = JsonObject()): SonosReply {
         val id = nextId.getAndIncrement().toString()
         val waiter = CompletableDeferred<SonosReply>()
         pending[id] = waiter
-        try {
+        val reply = try {
             if (!socket.send(Frames.encode(header, body, id))) {
                 throw IOException("socket to $hostname is closed")
             }
-            return try {
+            try {
                 withTimeout(REPLY_TIMEOUT_MILLIS) { waiter.await() }
             } catch (e: TimeoutCancellationException) {
                 throw ReplyTimeoutException(hostname, REPLY_TIMEOUT_MILLIS, e)
@@ -100,6 +83,10 @@ class SonosSocket private constructor(
         } finally {
             pending.remove(id)
         }
+        if (!reply.isSuccess) {
+            throw SonosCommandException(header.get("command")?.asString ?: "command", reply.errorOrNull() ?: "refused")
+        }
+        return reply.body
     }
 
     /** `subscribe` answers with the current state, then pushes changes as [events]. */
@@ -157,7 +144,7 @@ class SonosSocket private constructor(
             val failures = MutableSharedFlow<Throwable>(replay = 1, extraBufferCapacity = 1)
             // Shared with the listener so a close we asked for can be told apart from one
             // that happened to us; only the latter is worth reconnecting over.
-            val closedByUs = java.util.concurrent.atomic.AtomicBoolean(false)
+            val closedByUs = AtomicBoolean(false)
             // Replay 0, but buffer generously: events arrive on OkHttp's reader thread and
             // must never block it, so emission is non-suspending and a slow collector
             // drops rather than stalls the socket.
@@ -188,7 +175,8 @@ class SonosSocket private constructor(
                             t,
                         )
                         pending.failAll(cause)
-                        if (cont.isActive) cont.resumeWithException(cause) else failures.tryEmit(cause)
+                        // A cancel we asked for lands here too, and is no more a failure than a close.
+                        if (cont.isActive) cont.resumeWithException(cause) else if (!closedByUs.get()) failures.tryEmit(cause)
                     }
 
                     /**

@@ -18,11 +18,9 @@ import com.google.gson.JsonParser
  */
 data class SonosHeader(
     val namespace: String? = null,
-    val householdId: String? = null,
     val groupId: String? = null,
     val playerId: String? = null,
     val cmdId: String? = null,
-    val response: String? = null,
     val success: Boolean? = null,
     /** `groups`, `playbackStatus`, `metadataStatus`, `groupVolume`, … */
     val type: String? = null,

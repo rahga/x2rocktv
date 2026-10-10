@@ -100,7 +100,13 @@ object Discovery {
             )
 
             val deadline = System.currentTimeMillis() + timeoutMillis
-            while (System.currentTimeMillis() < deadline) {
+            while (true) {
+                // The window's remainder, not the whole window again: with one timeout set
+                // once, each reply bought the next receive the full window, so a 3s sweep
+                // took ~4s and a late answer nearly 6s — on every cold start.
+                val left = deadline - System.currentTimeMillis()
+                if (left <= 0) break
+                socket.soTimeout = left.toInt()
                 val buffer = ByteArray(2048)
                 val packet = DatagramPacket(buffer, buffer.size)
                 try {

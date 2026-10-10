@@ -99,21 +99,6 @@ class StoredAccountsTest {
         assertEquals("something-else", StoredAccounts.accountKeyIn("something-else"))
     }
 
-    @Test fun `the raw view keeps attributes nothing models`() {
-        val odd = """<ThirdPartyMediaServers>
-            <MediaServer UDN="SA_RINCON7943_X" SerialNum0="14" Token0="t" Key0="k"
-              Md0="" Flags0="4" Whatever0="new-in-some-firmware"/>
-            <NotAnAccount Name="no UDN, not a record"/>
-        </ThirdPartyMediaServers>"""
-        val raw = StoredAccounts.decryptElements(seal(odd, HH, ByteArray(16) { 9 }), HH)
-        assertEquals("only elements carrying a UDN are records", 1, raw.size)
-        assertEquals("MediaServer", raw[0].tag)
-        val attrs = raw[0].attributes.toMap()
-        assertEquals("4", attrs["Flags0"])
-        assertEquals("", attrs["Md0"])
-        assertEquals("new-in-some-firmware", attrs["Whatever0"])
-    }
-
     @Test fun `the wrong household id fails the integrity check not silently`() {
         val envelope = seal(XML, HH, ByteArray(16) { 3 })
         val err = runCatching { StoredAccounts.decryptAccounts(envelope, "Sonos_ADifferentHousehold000000") }

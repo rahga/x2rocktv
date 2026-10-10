@@ -37,7 +37,7 @@ class RadioDirectoryTest {
         assertEquals("votes", query.queryParameter("order"))
         assertEquals("true", query.queryParameter("reverse"))
         assertNull(query.queryParameter("countrycode"))
-        assertEquals(RadioDirectory.USER_AGENT, request.getHeader("User-Agent"))
+        assertEquals(com.rahga.x2rock.smapi.USER_AGENT, request.getHeader("User-Agent"))
     }
 
     @Test fun `a station plays its resolved URL, never its registered one`() = runBlocking<Unit> {

@@ -37,3 +37,23 @@ internal object Xml {
         .replace("&", "&amp;").replace("<", "&lt;")
         .replace(">", "&gt;").replace("\"", "&quot;")
 }
+
+/** The tag without whatever namespace prefix the server chose for it. */
+internal val Element.localTag: String get() = tagName.substringAfter(':')
+
+/** Every element below this one, in document order. */
+internal fun Element.descendants(): List<Element> {
+    val all = getElementsByTagName("*")
+    return (0 until all.length).mapNotNull { all.item(it) as? Element }
+}
+
+/** Every descendant named [tag], ignoring whatever namespace prefix the server used for it. */
+internal fun Element.allNamed(tag: String): List<Element> = descendants().filter { it.localTag == tag }
+
+internal fun Element.firstNamed(tag: String): Element? = allNamed(tag).firstOrNull()
+
+/** A direct child named [tag] — unlike [allNamed], not every descendant. */
+internal fun Element.firstChildNamed(tag: String): Element? =
+    (0 until childNodes.length)
+        .mapNotNull { childNodes.item(it) as? Element }
+        .firstOrNull { it.localTag == tag }

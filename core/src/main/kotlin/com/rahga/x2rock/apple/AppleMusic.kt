@@ -4,6 +4,7 @@ import com.rahga.x2rock.lan.Xml
 import com.rahga.x2rock.model.HistoryItem
 import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.smapi.ServiceContent
 
 /**
  * A song or an album from Apple Music's catalogue, as the iTunes Search API names it.
@@ -50,7 +51,8 @@ object AppleMusic {
      * the `-0-` account selector resolves to the household's account; without a cdudn the player
      * takes the item and then has nothing to show, for the whole queue (x2rock).
      */
-    private const val CDUDN = "SA_RINCON52231_X_#Svc52231-0-Token"
+    private val CDUDN = ServiceContent.cdudn(SERVICE_TYPE, "")!!
+    private const val SERVICE_TYPE = 52231L
 
     /**
      * The household's Apple Music account (`sn_28`), from anything it has played: Recently Played
@@ -81,14 +83,11 @@ object AppleMusic {
             AppleMusicItem.Kind.ALBUM -> Triple("1004206c$id", "0", "object.container.album.musicAlbum")
         }
         val creator = item.artist?.let { "<dc:creator>${Xml.escape(it)}</dc:creator>" }.orEmpty()
-        return """<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" """ +
-            """xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" """ +
-            """xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" """ +
-            """xmlns="urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/">""" +
-            """<item id="${Xml.escape(itemId)}" parentID="$parent" restricted="true">""" +
-            "<dc:title>${Xml.escape(item.title)}</dc:title>$creator<upnp:class>$upnpClass</upnp:class>" +
-            """<desc id="cdudn" nameSpace="urn:schemas-rinconnetworks-com:metadata-1-0/">${Xml.escape(CDUDN)}</desc>""" +
-            "</item></DIDL-Lite>"
+        return ServiceContent.didl(
+            itemId = itemId, parent = parent,
+            inner = "<dc:title>${Xml.escape(item.title)}</dc:title>$creator<upnp:class>$upnpClass</upnp:class>",
+            cdudn = CDUDN,
+        )
     }
 
     /** `song:123` as the player writes it into a URI: the colon percent-encoded, lowercase. */

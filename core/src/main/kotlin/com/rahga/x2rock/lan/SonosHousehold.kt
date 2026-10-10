@@ -44,6 +44,7 @@ import com.rahga.x2rock.smapi.Thumb
 import com.rahga.x2rock.smapi.Token
 import com.rahga.x2rock.smapi.linkedServices
 import com.rahga.x2rock.smapi.parseServices
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -190,12 +191,6 @@ data class HouseholdState(
      */
     val reconnecting: Boolean = false,
     /**
-     * The speakers answered and refused: the household has Authentication switched on in the
-     * Sonos app's Connection Security, and this app cannot sign in. [error] then says so,
-     * naming the switch. Cleared by the next session that stands up — turning the switch off
-     * is the fix, and a retry is all it takes.
-     */
-    /**
      * The household has UPnP switched off in the Sonos app's Connection Security, so every
      * SOAP call on port 1400 answers 403: the queue, the TV input and the Night Sound and
      * Speech Enhancement writes. True only once a player has said so; unknown reads as on,
@@ -222,7 +217,12 @@ data class HouseholdState(
      */
     val householdChoices: List<HouseholdChoice> = emptyList(),
 ) {
-    /** Every Control API command is refused: the Sonos app's Authentication switch is on. */
+    /**
+     * The speakers answered and refused: the household has Authentication switched on in the
+     * Sonos app's Connection Security, and this app cannot sign in. [error] then says so,
+     * naming the switch. Cleared by the next session that stands up — turning the switch off
+     * is the fix, and a retry is all it takes.
+     */
     val authenticationRequired: Boolean get() = error == AUTHENTICATION_REQUIRED
 
     /**
@@ -332,7 +332,7 @@ class SonosHousehold(
     private val smapi = SmapiClient(internetClient)
     private val ratingsCatalogue = RatingsCatalogue(smapi, ratingsStore)
 
-    private val sockets = java.util.concurrent.ConcurrentHashMap<String, SonosSocket>()
+    private val sockets = ConcurrentHashMap<String, SonosSocket>()
     /**
      * Each open socket's two watchers, by socket, so one lost on its own can have its own stopped.
      * They collect `SharedFlow`s, which never complete: a lost member's watchers used to stay
@@ -357,9 +357,9 @@ class SonosHousehold(
      * id while coordination moves to a different player, and the old socket would then be
      * the wrong one to have subscribed on.
      */
-    private val subscribedGroups = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val subscribedGroups = ConcurrentHashMap<String, String>()
     /** Players whose own subscriptions stand: see [subscribePlayer]. */
-    private val subscribedPlayers: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+    private val subscribedPlayers: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val resubscribeLock = Mutex()
 
     /**
@@ -550,14 +550,14 @@ class SonosHousehold(
             }
             if (unsubscribedGroupsRemain()) catchUpLater()
 
-            // The UPnP switch: read once, then followed. A `settingsChanged` event names the
-            // version each settings group is at, so a flip in the Sonos app is heard without
-            // asking again (x2rock verified both directions on the office One SL, 2026-09-28).
-            // Best-effort: a firmware without the namespace leaves the switch unknown, read as on.
             // Bonded speakers that have fallen off the network, which nothing else reports.
             // Household-scoped; the subscription's first event is the current state.
             runCatching { seedSocket.subscribe(Frames.onHousehold("zones:1", "subscribe", householdId)) }
 
+            // The UPnP switch: read once, then followed. A `settingsChanged` event names the
+            // version each settings group is at, so a flip in the Sonos app is heard without
+            // asking again (x2rock verified both directions on the office One SL, 2026-09-28).
+            // Best-effort: a firmware without the namespace leaves the switch unknown, read as on.
             seedPlayerId = entry.id
             runCatching { readUpnpSwitch() }
             runCatching { seedSocket.subscribe(Frames.onPlayer("effectiveSettings:1", "subscribe", entry.id)) }
@@ -574,7 +574,7 @@ class SonosHousehold(
             // 2026-10-08). So this attempt fails, cleanly, and the reconnect tries again.
             if (sockets[hostname] !== seedSocket) {
                 teardown()
-                throw java.io.IOException("$hostname went away while the connection was being set up")
+                throw IOException("$hostname went away while the connection was being set up")
             }
         } catch (e: Exception) {
             // With Authentication on, every Control API command is refused with
@@ -756,7 +756,7 @@ class SonosHousehold(
             }
             if (consistent) return QueueResponse(items = items, totalItems = first.totalItems, updateId = first.updateId)
         }
-        throw java.io.IOException("the queue kept changing while it was read")
+        throw IOException("the queue kept changing while it was read")
     }
 
 
@@ -790,8 +790,11 @@ class SonosHousehold(
         play(groupId)
     }
 
-    /** [groupId]'s own sleep timer, or `null` with none set. See [Upnp.sleepTimer]. */
-    suspend fun sleepTimer(groupId: String): Long? = upnp.sleepTimer(coordinatorHostname(groupId))
+    /**
+     * [groupId]'s sleep timer as UPnP reports it, or `null` with none set. For the live suite's
+     * read-back; the app reads the pushed `sleepTimer:1` state. See [Upnp.sleepTimer].
+     */
+    internal suspend fun sleepTimer(groupId: String): Long? = upnp.sleepTimer(coordinatorHostname(groupId))
 
     /** Arm [groupId]'s sleep timer for [minutes], or cancel it with `null`. */
     suspend fun setSleepTimer(groupId: String, minutes: Int?) =
@@ -997,7 +1000,7 @@ class SonosHousehold(
                 // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
                 ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
                 ?: emptyList()
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             // A caller that left is not a capture that failed: it says nothing about which
             // accounts the household has. Degrading here cached anonymous services for the whole
             // session, as a first search replaced by another did (outside review, 2026-10-08).
@@ -1038,10 +1041,6 @@ class SonosHousehold(
 
     /** The shelves of [linked]'s own page, where its SMAPI root has none — see [SmapiClient.shelves]. */
     suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service)
-
-    /** [item]'s `getExtendedMetadata` answer from [linked], unparsed. */
-    suspend fun serviceItemDetailsBody(linked: LinkedService, item: Item): String =
-        smapi.extendedMetadataBody(linked.service, linked.token, item.id)
 
     /** What [linked] says about [item] beyond itself: its artist, album, radio, favourite state. */
     suspend fun serviceItemDetails(linked: LinkedService, item: Item): ItemDetails =
@@ -1344,7 +1343,7 @@ class SonosHousehold(
         if (!groupState(groupId).hasTrackId) return null
         val rateable = try {
             rateable(groupId)
-        } catch (e: kotlinx.coroutines.CancellationException) {
+        } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return null
@@ -1769,7 +1768,7 @@ class SonosHousehold(
             // dead session; adopting it would resurrect it into a just-cleared map.
             if (opened != generation) {
                 socket.cancel()
-                throw java.io.IOException("connection torn down while opening $hostname")
+                throw IOException("connection torn down while opening $hostname")
             }
             sockets[hostname]?.let { winner ->
                 socket.close()
@@ -1894,7 +1893,6 @@ class SonosHousehold(
         }
     }
 
-    /** A soundbar's HDMI port, on its own socket: player-scoped. Best-effort, like its volume. */
     /**
      * A player's own subscriptions, once: its level and, for a soundbar, its HDMI port. Done
      * once rather than on every topology change, as this used to: a regroup already costs
@@ -1912,7 +1910,10 @@ class SonosHousehold(
         if (!subscribed) subscribedPlayers.remove(player.id)
     }
 
-    /** True once a soundbar's port is subscribed — or at once for a player that has none. */
+    /**
+     * A soundbar's HDMI port, on its own socket: player-scoped, best-effort like its volume.
+     * True once subscribed — or at once for a player that has no port.
+     */
     private suspend fun subscribeHdmi(player: Player): Boolean {
         if (HT_PLAYBACK !in player.capabilities.orEmpty()) return true
         return runCatching { socketForPlayer(player.id).subscribe(Frames.onPlayer("hdmi:1", "subscribe", player.id)) }.isSuccess
@@ -1975,7 +1976,8 @@ class SonosHousehold(
                 // Keep the groups list in step. It carries its own playbackState, which only
                 // a groups:1 event would otherwise refresh — leaving a room list showing
                 // "Playing" for something that stopped seconds ago.
-                body.string("playbackState")?.let { pushed ->
+                val pushedState = body.string("playbackState")
+                pushedState?.let { pushed ->
                     _state.update { state ->
                         state.copy(
                             groups = state.groups.map {
@@ -1987,7 +1989,7 @@ class SonosHousehold(
                 val position = body.long("positionMillis")
                 val wasPlaying = _groupStates.value[groupId]?.playbackState?.isPlaying() == true
                 update(groupId) {
-                    val playbackState = body.string("playbackState") ?: it.playbackState
+                    val playbackState = pushedState ?: it.playbackState
                     it.copy(
                         playbackState = playbackState,
                         ringingAlarm = it.ringingAlarm.takeIf { playbackState.isPlaying() },

@@ -1,7 +1,7 @@
 package com.rahga.x2rock.smapi
 
 import com.rahga.x2rock.lan.Xml
-import org.w3c.dom.Element
+import com.rahga.x2rock.lan.descendants
 import java.security.MessageDigest
 import java.util.Base64
 import javax.crypto.Cipher
@@ -52,26 +52,6 @@ object StoredAccounts {
      */
     fun decryptAccounts(encoded: String, householdId: String): List<StoredAccount> =
         parseAccounts(decryptPayload(encoded, householdId))
-
-    /**
-     * Every element of the decrypted payload, as its tag and raw attributes — for *looking*
-     * at a household's records, including attributes nothing models yet. Secrets come back
-     * intact: the caller that prints them decides what a terminal may see.
-     */
-    fun decryptElements(encoded: String, householdId: String): List<StoredRecord> {
-        val doc = Xml.parse(String(decryptPayload(encoded, householdId), Charsets.UTF_8))
-        return doc.descendants()
-            .filter { it.hasAttribute("UDN") }
-            .map { node ->
-                StoredRecord(
-                    tag = node.tagName.substringAfter(':'),
-                    attributes = (0 until node.attributes.length).map {
-                        val a = node.attributes.item(it)
-                        a.nodeName to a.nodeValue
-                    },
-                )
-            }
-    }
 
     /**
      * The `2:`-prefixed, base64'd `iv + AES-128-CBC(ciphertext)` envelope, decoded and
@@ -142,9 +122,7 @@ object StoredAccounts {
                     token = at("Token").orEmpty(),
                     key = at("Key").orEmpty(),
                     nickname = at("Nickname").orEmpty(),
-                    tier = at("Tier").orEmpty(),
                     accountKey = at("Username")?.let(::accountKeyIn).orEmpty(),
-                    flags = at("Flags").orEmpty(),
                 )
                 i++
             }
@@ -183,12 +161,8 @@ data class StoredAccount(
     val key: String,
     /** `Nickname<i>`, what the person or app named the account. Often empty. */
     val nickname: String,
-    /** `Tier<i>`, a service-specific tier marker. Kept only for display. */
-    val tier: String,
     /** The account's own key, out of `Username<i>` — an account selector, not a secret. */
     val accountKey: String,
-    /** `Flags<i>`, unparsed. `4` where `Username<i>` carries a real key, `0` otherwise. */
-    val flags: String,
 ) {
     /**
      * Whether this record actually carries a credential. An account can be listed with an
@@ -196,13 +170,4 @@ data class StoredAccount(
      * is real but useless to inject.
      */
     val hasToken: Boolean get() = token.isNotEmpty()
-}
-
-/** One element of the decrypted payload, as its tag and its attributes in order. */
-data class StoredRecord(val tag: String, val attributes: List<Pair<String, String>>)
-
-/** Every element descendant of this one, in document order. */
-private fun Element.descendants(): List<Element> {
-    val all = getElementsByTagName("*")
-    return (0 until all.length).mapNotNull { all.item(it) as? Element }
 }

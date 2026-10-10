@@ -15,28 +15,26 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import java.util.Locale
+import java.util.Date
+import java.text.SimpleDateFormat
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import javax.inject.Inject
 
 /**
- * A queue row paired with its position in the *unfiltered* queue. The API's seek command takes a
- * 1-based track number over the whole queue, so it can't be derived from the displayed list —
- * deleted tombstones are hidden but still occupy their slot.
+ * A queue row with its 1-based slot, which is what `Seek TRACK_NR` and the queue edits take.
  */
 data class QueueEntry(val trackNumber: Int, val item: QueueItem)
 
-/** Numbers every item by its slot in the full queue, then hides the tombstones. */
+/** Numbers every item by its slot in the queue. */
 fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
-    items.mapIndexedNotNull { index, item -> QueueEntry(trackNumber = index + 1, item = item).takeIf { !item.deleted } }
+    items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
 
-/**
- * The slots of the entries shown either side of [trackNumber]; null where there is none. Not
- * `trackNumber ± 1`: a tombstone keeps its slot, so the neighbour on screen can be slots away,
- * and a move by one landed on the tombstone and looked like nothing happened.
- */
+/** The slots of the entries shown either side of [trackNumber]; null where there is none. */
 fun neighbourSlots(entries: List<QueueEntry>, trackNumber: Int): Pair<Int?, Int?> {
     val index = entries.indexOfFirst { it.trackNumber == trackNumber }
     if (index < 0) return null to null
@@ -137,14 +135,14 @@ class QueueViewModel @Inject constructor(
      * a queue cannot be got back.
      */
     val clearArmed: StateFlow<Boolean> = _clearArmed.asStateFlow()
-    private var disarm: kotlinx.coroutines.Job? = null
+    private var disarm: Job? = null
 
     fun clearQueue() {
         if (!_clearArmed.value) {
             _clearArmed.value = true
             disarm?.cancel()
             disarm = viewModelScope.launch {
-                kotlinx.coroutines.delay(CLEAR_CONFIRM_MILLIS)
+                delay(CLEAR_CONFIRM_MILLIS)
                 _clearArmed.value = false
             }
             return
@@ -160,7 +158,7 @@ class QueueViewModel @Inject constructor(
      */
     fun saveAsPlaylist() {
         val roomName = household.state.value.groups.firstOrNull { it.id == room.forNavigation() }?.name ?: "Queue"
-        val name = "$roomName, ${java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(java.util.Date())}"
+        val name = "$roomName, ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date())}"
         viewModelScope.launch {
             runCatching { household.saveQueue(room.current(), name) }
                 .onSuccess { _notice.post("Saved as \"$name\"") }

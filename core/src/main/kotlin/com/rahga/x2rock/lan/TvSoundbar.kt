@@ -54,13 +54,11 @@ object TvSoundbar {
      * the answer when it is the only one.
      */
     fun soundbarOf(group: Group, state: HouseholdState): String? {
-        val byId = state.players.associateBy { it.id }
-        fun hasHdmi(id: String) = HT_PLAYBACK in (byId[id]?.capabilities ?: emptyList())
-        fun hasTv(id: String) = hasHdmi(id) && state.hdmiConnection[id] != NO_HDMI_CONNECTION
+        fun hasTv(id: String) = hasHdmi(id, state) && state.hdmiConnection[id] != NO_HDMI_CONNECTION
         return group.coordinatorId.takeIf { hasTv(it) }
             ?: group.playerIds.firstOrNull { hasTv(it) }
-            ?: group.coordinatorId.takeIf { hasHdmi(it) }
-            ?: group.playerIds.firstOrNull { hasHdmi(it) }
+            ?: group.coordinatorId.takeIf { hasHdmi(it, state) }
+            ?: group.playerIds.firstOrNull { hasHdmi(it, state) }
     }
 
     /** Whether this particular player is the one holding an HDMI socket. */

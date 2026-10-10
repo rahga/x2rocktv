@@ -16,7 +16,7 @@ class LinkedServicesTest {
         Service(id = id, name = "Svc$id", uri = "https://$id/smapi", auth = auth, manifestUri = null)
 
     private fun account(serviceId: Long, serial: Int, token: String, nickname: String = "") =
-        StoredAccount(serviceId, serial, token, key = "k", nickname = nickname, tier = "0", accountKey = "", flags = "4")
+        StoredAccount(serviceId, serial, token, key = "k", nickname = nickname, accountKey = "")
 
     @Test fun `a device-link service with a stored token is usable, carrying it`() {
         val services = listOf(service("31", Auth.APP_LINK)) // Qobuz: app-link by policy, token from store

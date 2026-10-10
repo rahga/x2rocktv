@@ -1,11 +1,11 @@
 package com.rahga.x2rock.smapi
 
+import com.rahga.x2rock.lan.allNamed
 import com.rahga.x2rock.lan.awaitReply
-import kotlin.coroutines.resumeWithException
-import okhttp3.Response
-import okhttp3.Callback
-import okhttp3.Call
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.rahga.x2rock.lan.descendants
+import com.rahga.x2rock.lan.firstChildNamed
+import com.rahga.x2rock.lan.firstNamed
+import com.rahga.x2rock.lan.localTag
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -42,7 +42,7 @@ private const val NS = "http://www.sonos.com/Services/1.1"
  * this the hard way, `sonos/http.rs`), which reads like a broken endpoint rather than a missing
  * header. Any value satisfies them; this names the client honestly.
  */
-private const val USER_AGENT = "x2rock-tv/1.0"
+internal const val USER_AGENT = "x2rock-tv/1.0"
 
 /** Short: a rate call is a UI button press, not a background job. */
 private const val TIMEOUT_SECONDS = 8L
@@ -511,10 +511,9 @@ fun parseServices(descriptorList: String, typeList: String = ""): List<Service> 
 fun parseItems(body: String): ItemPage {
     val root = Xml.parse(body)
     val total = root.firstNamed("total")?.textContent?.trim()?.toIntOrNull() ?: 0
-    val all = root.getElementsByTagName("*")
-    val items = (0 until all.length).mapNotNull { all.item(it) as? Element }
+    val items = root.descendants()
         .mapNotNull { node ->
-            val tag = node.tagName.substringAfter(':')
+            val tag = node.localTag
             if (tag != "mediaMetadata" && tag != "mediaCollection") return@mapNotNull null
             fun child(name: String) = node.firstChildNamed(name)?.textContent
             fun nested(parent: String, name: String) =
@@ -559,11 +558,9 @@ fun parseSearchCategories(body: String): List<Category> {
     val names = mutableListOf<String>()
     val sent = mutableListOf<String>()
     val out = mutableListOf<Category>()
-    val all = within.getElementsByTagName("*")
-    val categories = (0 until all.length).mapNotNull { all.item(it) as? Element }
-        .filter { it.tagName.substringAfter(':').let { t -> t == "Category" || t == "CustomCategory" } }
+    val categories = within.descendants().filter { it.localTag == "Category" || it.localTag == "CustomCategory" }
     for (node in categories) {
-        val isCustom = node.tagName.substringAfter(':') == "CustomCategory"
+        val isCustom = node.localTag == "CustomCategory"
         val id: String
         val mapped: String
         if (isCustom) {
@@ -686,17 +683,4 @@ private fun faultMessage(root: Element): String? {
     return listOfNotNull(code, message).joinToString(": ").ifEmpty { "a fault with no message" }
 }
 
-/** Every descendant named [tag], ignoring whatever namespace prefix the server used for it. */
-private fun Element.allNamed(tag: String): List<Element> {
-    val all = getElementsByTagName("*")
-    return (0 until all.length).mapNotNull { i -> (all.item(i) as? Element)?.takeIf { it.tagName.substringAfter(':') == tag } }
-}
-
-private fun Element.firstNamed(tag: String): Element? = allNamed(tag).firstOrNull()
-
-/** A direct child named [tag] — unlike [allNamed], not every descendant. */
-private fun Element.firstChildNamed(tag: String): Element? =
-    (0 until childNodes.length)
-        .mapNotNull { childNodes.item(it) as? Element }
-        .firstOrNull { it.tagName.substringAfter(':') == tag }
 

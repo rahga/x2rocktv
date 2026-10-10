@@ -404,11 +404,6 @@ class Upnp(
         )
     }
 
-    /**
-     * A removal is rejected with UPnP 1028 if the queue moved since the version we quote,
-     * which is exactly what should happen when someone else is editing it — so the id is
-     * read immediately before use rather than cached.
-     */
     /** `ContentDirectory Browse` of the queue, `Q:0`, from [start] for up to [count] items. */
     private suspend fun browse(hostname: String, start: Int, count: Int): Element = parse(
         soap(
@@ -462,7 +457,8 @@ class Upnp(
             val body = response.body
             if (response.isSuccessful) return body
             if (response.code == 403) throw UpnpRefusedException(switchedOffMessage(hostname))
-            throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(body)}", errorCode(body))
+            val code = errorCode(body)
+            throw UpnpRefusedException("$action failed: HTTP ${response.code} ${describe(code)}", code)
         }
     }
 
@@ -472,10 +468,8 @@ class Upnp(
         "$hostname refused UPnP (403). Turn UPnP on in the Sonos app: Account > Privacy and Security > Connection Security"
 
     /** UPnP's own error code, when the fault body carries one. */
-    private fun describe(body: String): String =
-        errorCode(body)
-            ?.let { code -> "(UPnP $code${UPNP_ERRORS[code]?.let { ": $it" } ?: ""})" }
-            ?: ""
+    private fun describe(code: String?): String =
+        code?.let { "(UPnP $it${UPNP_ERRORS[it]?.let { name -> ": $name" } ?: ""})" } ?: ""
 
     // ---------------------------------------------------------------- XML
 
@@ -523,14 +517,14 @@ class Upnp(
      * resolve the name nor the platform's blessing to fetch it in the clear.
      */
     private fun absolute(uri: String, hostname: String): String =
-        if (uri.startsWith("http")) uri else "http://$hostname:$PORT$uri"
+        if (uri.startsWith("http")) uri else "http://$hostname:$port$uri"
 
     companion object {
         /**
          * A soundbar's own HDMI stream, which is a URI rather than a mode: `spdif` is what
          * Sonos calls the input on every model, optical and ARC alike.
          */
-        fun tvStreamUri(soundbarId: String) = "x-sonos-htastream:$soundbarId:spdif"
+        private fun tvStreamUri(soundbarId: String) = "x-sonos-htastream:$soundbarId:spdif"
 
         private const val READ_TIMEOUT = 10L
 

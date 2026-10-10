@@ -1,6 +1,7 @@
 package com.rahga.x2rock.radio
 
 import com.rahga.x2rock.lan.awaitReply
+import com.rahga.x2rock.smapi.USER_AGENT
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -94,7 +95,6 @@ class RadioDirectory(
 
     companion object {
         const val TIMEOUT_SECONDS = 10L
-        const val USER_AGENT = "x2rock-tv"
 
         /**
          * What a remote browses by. The directory's own most-used tags include `music` and

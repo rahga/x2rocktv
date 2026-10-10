@@ -163,7 +163,7 @@ object ServiceContent {
      * are lists of tracks; an artist is a list of sub-containers, which a player refuses with UPnP
      * 804. The conservative default is false — an unknown kind is not offered.
      */
-    fun containerHoldsTracks(itemType: String): Boolean =
+    private fun containerHoldsTracks(itemType: String): Boolean =
         itemType.lowercase() in setOf("album", "playlist", "tracklist", "artisttracklist", "audiobook")
 
     private fun containerClass(itemType: String): String = when (itemType.lowercase()) {
@@ -176,7 +176,7 @@ object ServiceContent {
     private fun nativeScheme(serviceId: String): String =
         if (serviceId == SPOTIFY_SERVICE_ID) "x-sonos-spotify" else "x-sonosapi-hls-static"
 
-    private fun didl(itemId: String, parent: String, inner: String, cdudn: String): String =
+    internal fun didl(itemId: String, parent: String, inner: String, cdudn: String): String =
         """<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" """ +
             """xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/" """ +
             """xmlns:r="urn:schemas-rinconnetworks-com:metadata-1-0/" """ +

@@ -1,7 +1,9 @@
 package com.rahga.x2rock.smapi
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -45,6 +47,10 @@ object AccountCapture {
         withContext(Dispatchers.IO) {
             ServerSocket().use { server ->
                 server.bind(InetSocketAddress(0))
+                // `accept` cannot be interrupted by cancellation, only by closing what it
+                // waits on: a caller that left — a search replaced by another — otherwise held
+                // this thread, and the service lock above it, for the whole deadline.
+                val letGo = coroutineContext.job.invokeOnCompletion { runCatching { server.close() } }
                 val localIp = localIpToward(playerIp)
                 val callback = "<http://$localIp:${server.localPort}/notify>"
                 val sid = subscribe(playerIp, playerPort, callback) ?: return@withContext null
@@ -77,6 +83,7 @@ object AccountCapture {
                         found
                     }
                 } finally {
+                    letGo.dispose()
                     runCatching { unsubscribe(playerIp, playerPort, sid) }
                 }
             }
@@ -85,7 +92,7 @@ object AccountCapture {
     /** SUBSCRIBE to ZoneGroupTopology, returning the subscription id to cancel with. */
     private fun subscribe(playerIp: String, playerPort: Int, callback: String): String? {
         val request = "SUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
-            "HOST: $playerIp:1400\r\n" +
+            "HOST: $playerIp:$playerPort\r\n" +
             "CALLBACK: $callback\r\n" +
             "NT: upnp:event\r\n" +
             "TIMEOUT: Second-60\r\n" +
@@ -102,7 +109,7 @@ object AccountCapture {
     /** Best-effort UNSUBSCRIBE. A lost one costs nothing: the subscription expires in a minute. */
     private fun unsubscribe(playerIp: String, playerPort: Int, sid: String) {
         val request = "UNSUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
-            "HOST: $playerIp:1400\r\n" +
+            "HOST: $playerIp:$playerPort\r\n" +
             "SID: $sid\r\n" +
             "Connection: close\r\n\r\n"
         runCatching {

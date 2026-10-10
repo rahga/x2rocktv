@@ -33,7 +33,6 @@ class HomeTheaterFormatTest {
         val format = container.htInputFormat!!
         // The exact string the widget shows for this room.
         assertEquals("Silence 2.0", format.summary())
-        assertFalse(format.isSurround)
     }
 
     /**
@@ -51,7 +50,6 @@ class HomeTheaterFormatTest {
         assertEquals(5, format.numGroundChannels)
         assertEquals(1, format.numLfeChannels)
         assertEquals("5.1", format.channels)
-        assertTrue(format.isSurround)
         assertFalse(format.isSilent)
         // Exactly what the Rust CLI prints for the same stream.
         assertEquals("Dolby Digital Surround 5.1", format.summary())
@@ -82,7 +80,6 @@ class HomeTheaterFormatTest {
         )
         assertEquals(1, format.numLfeChannels)
         assertEquals("Dolby Digital 5.1", format.summary())
-        assertTrue(format.isSurround)
     }
 
     @Test fun `height channels appear as a third number`() {

@@ -15,12 +15,20 @@ import org.junit.Test
  */
 class AccountCaptureTest {
 
-    @Test fun `a doubly escaped property value is recovered`() {
-        // The player escapes the property once; some paths escape the outer document again,
-        // so &amp;lt; must resolve to <.
+    @Test fun `an escaped property value is recovered`() {
+        // The player entity-escapes the value inside the property set. The test used to hand
+        // in the tags unescaped, so the unescape it names was never exercised.
         val body = "<e:propertyset><e:property>" +
-            "<ThirdPartyMediaServersX>2:AAAA</ThirdPartyMediaServersX>" +
+            "&lt;ThirdPartyMediaServersX&gt;2:AAAA&lt;/ThirdPartyMediaServersX&gt;" +
             "</e:property></e:propertyset>"
+        assertEquals("2:AAAA", AccountCapture.extractVariable(body, "ThirdPartyMediaServersX"))
+    }
+
+    @Test fun `a doubly escaped property value is recovered`() {
+        // Some paths escape the outer document again, so &amp;lt; must resolve to <.
+        val body = "&lt;e:propertyset&gt;&lt;e:property&gt;" +
+            "&amp;lt;ThirdPartyMediaServersX&amp;gt;2:AAAA&amp;lt;/ThirdPartyMediaServersX&amp;gt;" +
+            "&lt;/e:property&gt;&lt;/e:propertyset&gt;"
         assertEquals("2:AAAA", AccountCapture.extractVariable(body, "ThirdPartyMediaServersX"))
     }
 

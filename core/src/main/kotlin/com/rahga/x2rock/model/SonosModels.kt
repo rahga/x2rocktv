@@ -26,8 +26,7 @@ data class Player(
      */
     val capabilities: List<String> = emptyList(),
     /**
-     * `wss://<ip>:1443/websocket/api`, and so the only place a player's address is
-     * reported. Present over the LAN transport, absent (null) over the cloud one.
+     * `wss://<ip>:1443/websocket/api`, and so the only place a player's address is reported.
      */
     val websocketUrl: String? = null
 )
@@ -106,9 +105,6 @@ data class HomeTheaterFormat(
     /** True when nothing is arriving at all — the television off, or between sources. */
     val isSilent: Boolean
         get() = numGroundChannels == 0 && numLfeChannels == 0 && numHeightChannels == 0
-
-    val isSurround: Boolean
-        get() = numGroundChannels > 2 || numLfeChannels > 0 || numHeightChannels > 0
 
     /**
      * Codec and layout together — the pair that shows a source has fallen back, "Dolby
@@ -275,7 +271,6 @@ data class PlayModeState(
 data class QueueItem(
     val id: String = "",
     val track: Track? = null,
-    val deleted: Boolean = false
 )
 data class QueueResponse(
     val items: List<QueueItem> = emptyList(),
