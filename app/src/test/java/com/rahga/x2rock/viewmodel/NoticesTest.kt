@@ -31,4 +31,25 @@ class NoticesTest {
     @Test fun `cancellation is nothing to say`() {
         assertNull(failureNotice("change the volume", CancellationException("newer press")))
     }
+
+    /** The codes met on hardware read as words; the code itself is not shown. */
+    @Test fun `a refusal seen on hardware is said in words`() {
+        assertEquals("Couldn't skip: this source doesn't allow it",
+            failureNotice("skip", SonosCommandException("skipToNextTrack", "ERROR_DISALLOWED_BY_POLICY")))
+        assertEquals("Couldn't play: nothing is loaded",
+            failureNotice("play", SonosCommandException("play", "ERROR_PLAYBACK_NO_CONTENT")))
+        assertEquals("Couldn't play that again: it isn't available from this system's accounts",
+            failureNotice("play that again", SonosCommandException("loadContent", "ERROR_ACCOUNT_INVALID_ID")))
+    }
+
+    /** With the player's reason after it, as `errorOrNull` joins them. */
+    @Test fun `a mapped code is worded whatever reason follows it`() {
+        assertEquals("Couldn't seek: this source doesn't allow it",
+            failureNotice("seek", SonosCommandException("seek", "ERROR_DISALLOWED_BY_POLICY: History is disabled")))
+    }
+
+    @Test fun `a code nobody has met stays as the player sent it`() {
+        assertEquals("Couldn't add Guest TV: ERROR_COMMAND_FAILED: busy",
+            failureNotice("add Guest TV", SonosCommandException("modifyGroupMembers", "ERROR_COMMAND_FAILED: busy")))
+    }
 }

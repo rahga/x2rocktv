@@ -57,11 +57,27 @@ internal fun failureNotice(what: String, e: Throwable): String? {
         // Every Control API command is refused this way with Authentication switched on in the
         // Sonos app, and this app cannot sign in on a TV. See `isPermissionRefusal` for the one
         // command that says it otherwise, which this app never sends.
-        is SonosCommandException -> if (e.isPermissionRefusal) AUTHENTICATION_ON else e.detail
+        is SonosCommandException -> if (e.isPermissionRefusal) AUTHENTICATION_ON else plainRefusal(e.detail)
         is ReplyTimeoutException -> "the speaker did not answer"
         else -> e.message ?: e.toString()
     }
     return "Couldn't $what: $why"
+}
+
+/**
+ * A refusal in words, for the codes seen on hardware; any other stays as the player sent it, code
+ * and reason, since a code nobody has met cannot be worded truthfully. [detail] is `CODE` or
+ * `CODE: reason`.
+ */
+internal fun plainRefusal(detail: String): String = when (detail.substringBefore(':').trim()) {
+    // A station refuses skip and seek, and an iHeartRadio artist station's track refuses a seek
+    // though it carries a duration (CLAUDE.md, the seek bar).
+    "ERROR_DISALLOWED_BY_POLICY" -> "this source doesn't allow it"
+    // Play with nothing loaded, seen on the Streamer from the remote's play key.
+    "ERROR_PLAYBACK_NO_CONTENT" -> "nothing is loaded"
+    // An anonymous service's item, or a deleted playlist, replayed (x2rock, 2026-09-26).
+    "ERROR_ACCOUNT_INVALID_ID" -> "it isn't available from this system's accounts"
+    else -> detail
 }
 
 /** A station or program the player accepted and then sat idle on: see `StreamStart.SILENT`. */

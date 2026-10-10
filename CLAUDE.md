@@ -557,6 +557,11 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   as the pane's buttons, and each checks the player's `availablePlaybackActions` first: Next on a
   station used to send the skip and answer "Couldn't skip: ERROR_DISALLOWED_BY_POLICY", a press
   on a button that was not there. Play with nothing loaded is the same; idle with content is not.
+- **A refusal is said in words where the code has been met** (`plainRefusal`, 2026-10-10):
+  `ERROR_DISALLOWED_BY_POLICY` "this source doesn't allow it", `ERROR_PLAYBACK_NO_CONTENT` "nothing is
+  loaded", `ERROR_ACCOUNT_INVALID_ID` "it isn't available from this system's accounts". Any other
+  code stays as the player sent it: a code nobody has seen cannot be worded truthfully, so add one
+  here only with the case that produced it.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
