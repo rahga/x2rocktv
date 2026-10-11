@@ -72,6 +72,24 @@ builder for the thirty-one test preambles (the two that could reach real SSDP ar
 `REPLY_TIMEOUT_MILLIS` as a constructor seam so ReplayTest's two 5.5s waits go; `disconnect()`
 clearing the session outside the mutex `teardown()` takes.
 
+**Review pass of 2026-10-11** (7de55c6..0384d58: T-01 to T-13; four area reviews, each claim checked
+before acting). Fixed: a chapters list pushed over whatever the browser had moved to while the
+book's place was read; a write's own tone read landing in the next room's panel, aiming its switches
+at the first room; Full screen popping the home screen too on a second key inside the fade; a
+doubled "Make this alarm" refused as a duplicate of itself; failed playlist and favourite reads
+cached as "none"; tests that could not fail for the status light, an armed alarm, a read-only
+playlist and the SYMFONISK offer (its fixture a byte copy of Kitchen's, now deleted). Looked at and
+left alone: `writablePlaylists` reads one page of 100 — an account with more is rare and the item
+menu is no place for paging; `aboutSystem`'s `hostnameOf` outside its `runCatching`, since every
+topology player is a `RINCON_` id that names a host; `readTone` dropping the light, lock and remote
+when `getPlayerSettings` fails, as it always dropped the tone — the panel shows nothing it could not
+read whole; a `requestFocusWhenResumed` helper for the two screens that wait for RESUMED (wanted at a
+third); `GlyphTile` sized for Full screen, whose tile is a fraction of the screen, not 168dp; a
+toggle pressed twice before the list re-reads sends the same direction twice, which the household
+answers by writing nothing; `addToServicePlaylist` appending at a `total` a service might omit
+(Deezer sends it; no other writable service is known); line-in's coordinator-first order, untested
+like the rest of line-in (P-14).
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`;
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
 2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an

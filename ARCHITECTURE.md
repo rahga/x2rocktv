@@ -184,12 +184,17 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ```
 home  ───────────────────────────────────────────────── start, always
   ├─→ queue?groupId={id}
+  ├─→ nowPlaying?groupId={id}          Full screen: the art, the track, the clock
   ├─→ search?groupId={id}              every service at once
   │     └─→ services?…&service=&container=   an album or artist, opened in its service's browser
-  └─→ favorites?groupId={id}           "Browse"
-        ├─→ radio?groupId={id}
-        └─→ services?groupId={id}      pick a service, search or browse, play in the room
-              └─→ applemusic?groupId={id}
+  ├─→ favorites?groupId={id}           "Browse"
+  │     ├─→ radio?groupId={id}
+  │     └─→ services?groupId={id}      pick a service, search or browse, play in the room
+  │           └─→ applemusic?groupId={id}
+  └─→ Settings, at the foot of the room list
+        ├─→ preferredServices
+        ├─→ alarms                     every room's, made a step at a time
+        └─→ about                      About this system: each speaker and its update state
 ```
 
 There is no login route. `x2rock://room/{playerId}` deep-links from the TV home-screen channel
@@ -427,6 +432,12 @@ Two suites; `CLAUDE.md` explains why both exist and how to run the live one.
   `MockWebServer`s for UPnP and the service. `LiveHouseholdTest` runs against real speakers
   when `-Dx2rock.live` is set and is skipped otherwise.
 - **`:app`** view models against the same `FakePlayer`, through the seams above.
+- Both build their household with `fakeHousehold` (`TestHousehold.kt` in `:core`'s test
+  fixtures): no multicast, no real SSDP, mDNS or account capture. Name only what a test changes.
+- **On the device**, `app/src/androidTest`: `FocusChoreographyTest` drives the home screen's focus
+  paths with Compose UI tests over the same in-process `FakePlayer`, view models built by hand.
+  `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest`, on the emulator only:
+  the task installs and uninstalls on every attached device, so `adb disconnect` the TVs first.
 
 ---
 
