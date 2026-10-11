@@ -199,4 +199,15 @@ class SmapiSearchTest {
         assertEquals(7943L, services["31"]!!.serviceType)
         assertEquals("not in the type list", null, services["999"]!!.serviceType)
     }
+
+    /**
+     * Amazon Music ends its library's albums with a row that is nothing at all: id `unauthorized`,
+     * no type, "Content Unavailable", neither playable nor openable (captured off the home account,
+     * 2026-10-11). Listed, it would be an album to press that opens on nothing.
+     */
+    @Test fun `a row that can neither play nor open is left out`() {
+        val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("getMetadata.amazon.libraryAlbums.xml"))
+        assertEquals(listOf("An Awesome Wave", "Higher", "love (Deluxe Edition)", "Nobody but Me"), page.items.map { it.title })
+        assertTrue("the albums themselves are still containers", page.items.all { it.container })
+    }
 }

@@ -569,6 +569,11 @@ fun parseItems(body: String): ItemPage {
             val tag = node.localTag
             if (tag != "mediaMetadata" && tag != "mediaCollection") return@mapNotNull null
             fun child(name: String) = node.firstChildNamed(name)?.textContent
+            // A row that says it can be neither played nor opened is nothing to offer: Amazon ends
+            // its library's albums with one, id `unauthorized`, "Content Unavailable" (2026-10-11).
+            // Only both, and only said: a Pandora station plays and does not open, and most
+            // services send neither flag.
+            if (child("canPlay") == "false" && child("canEnumerate") == "false") return@mapNotNull null
             fun nested(parent: String, name: String) =
                 node.firstChildNamed(parent)?.firstChildNamed(name)?.textContent
             val id = child("id") ?: return@mapNotNull null
