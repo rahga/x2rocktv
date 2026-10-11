@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.tv.material3.Icon
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
@@ -100,8 +102,17 @@ fun FavoritesScreen(
     fun tracked(key: String): Modifier = Modifier
         .onFocusChanged { if (it.hasFocus) focusKey = key }
         .then(if (key == focusKey) Modifier.focusRequester(keyFocus) else Modifier)
+    // The list's own state, so the row Back returns to can be scrolled to first: one beyond the
+    // first screen is not composed, and a request for its focus failed every time, leaving focus
+    // on the first row — the regression the key was added to fix (PUNCH P-02).
+    val listState = rememberLazyListState()
     LaunchedEffect(firstSection, state::class) {
-        if (focusKey != null && firstSection != null && keyFocus.requestFocusRetrying()) return@LaunchedEffect
+        val success = state as? FavoritesViewModel.UiState.Success
+        if (focusKey != null && firstSection != null && success != null) {
+            val index = browseKeys(presets, success).indexOf(focusKey)
+            if (index >= 0) listState.scrollToItem(index)
+            if (keyFocus.requestFocusRetrying()) return@LaunchedEffect
+        }
         (if (firstSection != null) rowFocus else backFocus).requestFocusRetrying()
     }
     // A deleted preset takes focus with it; its neighbour gets it, as in any list a row leaves.
@@ -141,6 +152,7 @@ fun FavoritesScreen(
                             AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
                         }
                         is FavoritesViewModel.UiState.Success -> BrowseList(
+                            listState = listState,
                             firstSection = firstSection,
                             rowFocus = rowFocus,
                             tracked = ::tracked,
@@ -176,6 +188,7 @@ fun FavoritesScreen(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun BrowseList(
+    listState: LazyListState,
     /** Which section's first row takes focus, or `null` when there is nothing listed. */
     firstSection: String?,
     rowFocus: FocusRequester,
@@ -208,7 +221,8 @@ private fun BrowseList(
     fun LazyListScope.section(title: String, key: String) =
         item(key = "section:$title") { SectionTitle(title, first = key == firstSection) }
 
-    LazyColumn(contentPadding = PaddingValues(bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Keyed as [browseKeys] lists them, which is how a row is found to scroll to.
+    LazyColumn(state = listState, contentPadding = PaddingValues(bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (presets.isNotEmpty()) {
             section("Presets", "presets")
             val presetFocus = claim("presets")
@@ -274,7 +288,7 @@ private fun BrowseList(
         // The Sonos app's "Recently played": named by service ids rather than favourites, so it
         // can name something gone; a refusal says so when pressed.
         if (state.recent.isNotEmpty() || state.recentNote != null) section("Recently played", "recent")
-        state.recentNote?.let { note -> item { Text(note, style = MaterialTheme.typography.bodyMedium) } }
+        state.recentNote?.let { note -> item(key = "recent:note") { Text(note, style = MaterialTheme.typography.bodyMedium) } }
         if (state.recent.isNotEmpty()) {
             val recentFocus = claim("recent")
             itemsIndexed(state.recent, key = { i, e -> "recent:$i:${e.id.objectId}" }) { index, entry ->
@@ -290,6 +304,28 @@ private fun BrowseList(
             }
         }
     }
+}
+
+/**
+ * Every item's key in [BrowseList]'s order, headings included: where a row is, by its key, so the
+ * list can be scrolled to it before it is asked to take focus. Kept beside the list it mirrors.
+ */
+internal fun browseKeys(presets: List<Preset>, state: FavoritesViewModel.UiState.Success): List<String> = buildList {
+    if (presets.isNotEmpty()) {
+        add("section:Presets")
+        presets.forEach { add("preset:${it.id}") }
+    }
+    if (state.items.isNotEmpty()) favoriteGroups(state.items).forEach { (title, favorites) ->
+        add("section:$title")
+        favorites.forEach { add("fav:${it.id}") }
+    }
+    if (state.playlists.isNotEmpty()) {
+        add("section:Playlists")
+        state.playlists.forEach { add("playlist:${it.id}") }
+    }
+    if (state.recent.isNotEmpty() || state.recentNote != null) add("section:Recently played")
+    if (state.recentNote != null) add("recent:note")
+    state.recent.forEachIndexed { i, e -> add("recent:$i:${e.id.objectId}") }
 }
 
 /** The first section with rows — where focus starts — or `null` when Browse lists nothing. */
