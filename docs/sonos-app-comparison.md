@@ -36,7 +36,7 @@ the x2rock CLI, whose playback goes through the same player paths.
 | Bandcamp | same, empty: x2rocktv falls to its search, the app says "No content items available" | x2rocktv: "1 service didn't answer" (`Client.LoginInvalid`); the app leaves it out | — | The household's own token is refused, by the app too. Relink in the Sonos app; nothing to fix here |
 | Deezer | **differs**: SMAPI root (Flow, Popular, Explore, Picked for you, My Music, …) vs the app's page — Favorites (Tracks, Playlists, Albums, Artists), Recently played, Flow moods, Made for you, Recommended playlists, Music by genre, Recommended releases, Music by mood, Charts | both answer | x2rocktv queued a track, home, 2026-10-07 | Page from the manifest `browse` endpoint; answers a bearer token (x2rock) |
 | iHeartRadio | same: For You, My Stations, Nearby Stations, Live Radio, Artist Radio, Podcasts | both answer | x2rocktv, office, 2026-10-07 (custom stations) | Two household accounts: two rows here, an account switcher in the app's service header |
-| Mixcloud | **x2rocktv only** | x2rocktv answers (mixes, and user names) | x2rock, 2026-09-08 | The household still stores a Mixcloud account (`sid 181`); the app lists it nowhere. Why is unknown |
+| Mixcloud | **x2rocktv only** | x2rocktv answers (mixes, and user names) | **✗ x2rocktv's play restarts the player** (below); through the queue ✓, Dining Room, 2026-10-11 | The household still stores a Mixcloud account (`sid 181`); the app lists it nowhere |
 | Pandora | same: My Stations | both answer, every hit a station | x2rock, 2026-10-11 | A station is `canPlay`/not `canEnumerate`; x2rocktv already plays a `program` as a leaf |
 | Qobuz | same: Playlists, Purchases, Favorites, Discover, Qobuz Playlists | both answer | x2rock, office, 2026-09-23 | |
 | Radio Paradise | same: 128k, 320k, FLAC | no search categories in either | x2rock, 2026-09-30 (office) | |
@@ -49,6 +49,34 @@ the x2rock CLI, whose playback goes through the same player paths.
 | TuneIn (New) | **differs**: SMAPI root (iHeartRadio, Holiday Stations, TuneIn Recommends, Music, News & Talk, …) vs 13 shelves — Recents, Exclusive Music Stations, Most Popular, Top Calm Radio, Featured Collections, … | both answer | x2rock, 2026-10-11 | `browse` endpoint answered 403 (Cloudflare 1010) to a Python client; untried from OkHttp |
 | YouTube Music | **app only** (Home, Library, My Supermix) | the app answers; x2rocktv leaves it out | x2rocktv, favourites only | Google's project gate: HTTP 403 `SERVICE_DISABLED` on every SMAPI call, the household's own token included. Not attainable. Saved favourites still play |
 | More radio (Hype Machine, myTuner, NRK, Radio France, …) | x2rocktv only | x2rocktv only | — | Anonymous services the app does not show as "yours" |
+
+## Plays, Dining Room, 2026-10-11 (afternoon)
+
+One item per service, and an album where the service has them, started through the same
+`SonosHousehold` calls the app's buttons use (`startServiceItem`, `playAppleMusic`, `loadFavorite`),
+from a scratch JVM test at volume 1; the room was put back afterwards. Times are from the call to
+the room reporting PLAYING with the new content.
+
+| service | what | result |
+|---|---|---|
+| Amazon Music | station "Miles Davis"; album Kind Of Blue | ✓ 8.3s; ✓ 3.9s |
+| Apple Music | song and album, from iTunes | ✓ 4.2s each |
+| Audible | "The Body" | ✓ 5.1s — **the resume path's first run on hardware**: it started chapter 14, where the account's place was. Whether it also sought into the chapter was not checked |
+| Bandcamp | — | nothing to play: the household's token is refused |
+| Deezer | track; album | ✓ 3.3s; ✓ 2.3s. Titles carry a literal `&amp;` (P-22) |
+| iHeartRadio, both accounts | live station | ✓ 1.4s, 1.5s. Its first hit for "miles davis" is a live station, not the artist station |
+| **Mixcloud** | any mix | **✗ the player hangs and restarts** (P-21). `loadContent` leaves it BUFFERING, it stops answering within 5s and is back ~2.5 min later. Reproduced three times, twice with nothing else sent. The same mix through the queue plays |
+| Pandora | search station | ✓ 2.4s; playing a search hit adds it to My Stations, as the app does |
+| Qobuz | track; album | ✓ 2.9s; ✓ 2.2s |
+| Radio Paradise | The Main Mix | ✓ 3.9s |
+| Saavn | track | ✓ 4.5s (it stalled once, in a run that ended in a restart; alone, it played and the player stayed up) |
+| SiriusXM | artist station | ✓ 2.9s |
+| Sonos Radio | station | ✓ 1.5s |
+| SoundCloud | track; album | ✓ 4.8s; **✗ the album "loaded but did not start"** — the room kept playing the track before it (P-23) |
+| Spotify | track; album | ✓ 4.2s; ✓ 2.4s |
+| TIDAL | track; album | ✓ 5.1s; ✓ 2.3s |
+| TuneIn (New) | stream | ✓ 2.2s |
+| YouTube Music | favourites | album ✓ (through the CLI); both *song* favourites `ERROR_PLAYBACK_NO_CONTENT`, from x2rocktv and the CLI alike — the favourites, not the app |
 
 ## Search
 
