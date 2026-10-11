@@ -180,9 +180,10 @@ class ToneStepsTest {
         assertEquals(listOf("Off"), feedbacks.toList())
     }
 
-    /** Kitchen has no soundbar: no remote settings to read or show. */
+    /** Kitchen has no soundbar, and runs on mains: no remote settings and no battery. */
     @Test fun `a room without a soundbar has no remote settings`() = runBlocking<Unit> {
         openKitchen()
         assertEquals(null, viewModel.tone.value?.remote)
+        assertEquals(null, viewModel.tone.value?.battery)
     }
 }

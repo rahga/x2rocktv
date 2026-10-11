@@ -83,6 +83,30 @@ data class RemoteSettings(val feedback: Boolean, val irRepeater: String) {
     }
 }
 
+/**
+ * What a portable says about its pack. Every field may be absent or a word nobody has seen, and is
+ * passed on as said rather than flattened: a battery reporting trouble is the case worth showing.
+ */
+data class Battery(val level: Int? = null, val health: String? = null, val temperature: String? = null, val powerSource: String? = null) {
+    /** Charging unless running off the pack itself; null where it does not say. */
+    val charging: Boolean? get() = powerSource?.let { !it.equals("BATTERY", ignoreCase = true) }
+}
+
+/**
+ * The `<Data name="…">` rows of a `LocalBatteryStatus` block, or null where there is none. **The
+ * populated shape is x2rock's, not a capture**: no household this was built against has a portable,
+ * so a Roam or Move's real reply is owed (PUNCH P-16) — and release notes say battery is untested.
+ */
+internal fun parseBattery(body: String): Battery? {
+    val root = runCatching { Xml.parse(body) }.getOrNull() ?: return null
+    val block = root.getElementsByTagName("LocalBatteryStatus").item(0) as? Element ?: return null
+    val rows = block.getElementsByTagName("Data")
+    val data = (0 until rows.length).map { rows.item(it) as Element }
+        .associate { it.getAttribute("name") to it.textContent.trim() }
+        .filterValues { it.isNotEmpty() }
+    return Battery(data["Level"]?.toIntOrNull(), data["Health"], data["Temperature"], data["PowerSource"])
+}
+
 /** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
 data class MediaInfo(val currentUri: String, val currentUriMetaData: String = "") {
     val playingFromQueue: Boolean get() = currentUri.startsWith("x-rincon-queue:")
@@ -255,12 +279,22 @@ class Upnp(
     suspend fun zoneName(hostname: String): String? =
         statusZp(hostname)?.let { Regex("<ZoneName>([^<]+)</ZoneName>").find(it)?.groupValues?.get(1) }
 
-    private suspend fun statusZp(hostname: String): String? = withContext(Dispatchers.IO) {
+    private suspend fun statusZp(hostname: String): String? = statusPage(hostname, "zp")
+
+    /** One of the player's own support pages, `/status/<page>`; null for anything but a 200. */
+    private suspend fun statusPage(hostname: String, page: String): String? = withContext(Dispatchers.IO) {
         require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
-        client.newCall(Request.Builder().url("http://$hostname:$port/status/zp").build()).awaitReply().let { response ->
+        client.newCall(Request.Builder().url("http://$hostname:$port/status/$page").build()).awaitReply().let { response ->
             if (!response.isSuccessful) null else response.body
         }
     }
+
+    /**
+     * A portable's battery, or null from a speaker on mains — which answers 200 with an empty
+     * `<ZPSupportInfo>` (Kitchen, 2026-10-10; a Beam for x2rock): the absent block is the answer.
+     * **Untested against a portable**: see [parseBattery].
+     */
+    suspend fun battery(hostname: String): Battery? = statusPage(hostname, "batterystatus")?.let(::parseBattery)
 
     /**
      * The group's own sleep timer: how long until it stops, or `null` with none set.

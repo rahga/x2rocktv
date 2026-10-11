@@ -9,6 +9,7 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.Battery
 import com.rahga.x2rock.lan.RemoteSettings
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.lan.Upnp
@@ -542,6 +543,8 @@ class HomeViewModel @Inject constructor(
         /** The room's soundbar, when it has one, and its TV-remote settings: see `RemoteSettings`. */
         val soundbarId: String? = null,
         val remote: RemoteSettings? = null,
+        /** A portable's pack, or `null` on mains. Untested against a portable: see `parseBattery`. */
+        val battery: Battery? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -581,10 +584,11 @@ class HomeViewModel @Inject constructor(
             val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
             val remote = async { soundbar?.let { runCatching { household.remoteSettings(it) }.getOrNull() } }
+            val battery = async { runCatching { household.battery(playerId) }.getOrNull() }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null
             val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
-            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await())
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await())
         }
         if (read == null || edits != toneEdits) return
         _tone.value = read
