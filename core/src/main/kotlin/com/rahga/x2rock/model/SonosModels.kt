@@ -166,7 +166,9 @@ data class PlayerSettings(
     /**
      * The speaker's volume limit, 0.0–1.0 — the Sonos app's Volume Limit; absent is none. **It
      * scales, it does not clamp**: the level keeps 0–100 and reads back as set, and the speaker
-     * plays it scaled, so under 0.5 a level of 100 sounds as 50 did (x2rock).
+     * plays it scaled, so under 0.5 a level of 100 sounds as 50 did (x2rock). **Read only here**:
+     * `setPlayerSettings` with it is refused `ERROR_NO_PERMISSION` to this unsigned connection
+     * (Kitchen, from the emulator, 2026-10-10), where x2rock — signed in — sets it.
      */
     val volumeScalingFactor: Double? = null,
 )

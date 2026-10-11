@@ -310,6 +310,14 @@ An alarm's program is a favourite's `res` and `r:resMD`, which only `Browse FV:2
 Control API's `favorites:1` carries ids. The clock is `GetTimeNow` (`CurrentLocalTime`) and
 `GetTimeZone` (`Index`, -1 for unset); this household is index 9, so local time is Central.
 
+**A speaker's volume limit is readable here and not writable** (Kitchen, from the emulator,
+2026-10-10). `settings:1 getPlayerSettings` carries `volumeScalingFactor` (0.0–1.0, 1.0 none) to
+anyone; `setPlayerSettings` with it was refused **`ERROR_NO_PERMISSION`** to this app's unsigned
+connection, while x2rock set and lifted the same speaker's limit seconds later. x2rock was signed in
+to a Sonos account and sends `authorization: Bearer …` in every command header, so its note that the
+write is "accepted" holds for a signed-in caller only; this app has no account, so it shows the limit
+and does not offer to change it.
+
 **Android's XML parser takes no Xerces features.** `DocumentBuilderFactory.setFeature` for
 `disallow-doctype-decl` throws `ParserConfigurationException` on the Shield (Android 11), so
 there no UPnP reply parsed and every fault read as a bare HTTP 500 — unseen because the JVM's

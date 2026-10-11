@@ -533,7 +533,10 @@ class HomeViewModel @Inject constructor(
         /** The speaker's status light, and whether its touch controls are locked; `null` unread. */
         val statusLight: Boolean? = null,
         val buttonsLocked: Boolean? = null,
-        /** The speaker's volume limit as a percent, 100 being none; `null` where it says nothing. */
+        /**
+         * The speaker's volume limit as a percent, 100 being none; `null` where it says nothing. Shown,
+         * not set: the write is refused to an unsigned connection (see `PlayerSettings`).
+         */
         val volumeLimit: Int? = null,
     )
 
@@ -616,19 +619,6 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val on = !tone.loudness
         editTone("loudness", "change Loudness", tone.copy(loudness = on)) { household.setLoudness(it, on) }
-    }
-
-    /**
-     * The volume limit, in fives from 5% to 100% (none). A limit scales the level rather than
-     * capping it, so nothing else on screen changes; only how loud each level sounds.
-     */
-    fun stepVolumeLimit(delta: Int) {
-        val tone = _tone.value ?: return
-        val now = tone.volumeLimit ?: return
-        val target = (now + delta * LIMIT_STEP).coerceIn(LIMIT_STEP, 100)
-        if (target != now) editTone("limit", "change the volume limit", tone.copy(volumeLimit = target)) {
-            household.setVolumeLimit(it, target / 100.0)
-        }
     }
 
     fun toggleStatusLight() {
@@ -728,6 +718,3 @@ fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<Stri
     // playing" beside it (Streamer, 2026-10-07).
     else -> listOf(roomActivity(playbackState, info.hasSource).label)
 }
-
-/** The volume limit's step, in percent. */
-private const val LIMIT_STEP = 5

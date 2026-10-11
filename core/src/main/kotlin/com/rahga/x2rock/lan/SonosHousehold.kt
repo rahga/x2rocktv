@@ -1577,17 +1577,6 @@ class SonosHousehold(
             playerId, "settings:1", "getPlayerSettings",
         )
 
-    /**
-     * Set a speaker's volume limit, [factor] 0.0–1.0 — see [PlayerSettings.volumeScalingFactor].
-     * The one `setPlayerSettings` write this connection is let make: tone and the home-theatre
-     * switches are refused `ERROR_NO_PERMISSION` there, this is accepted and reads back as written
-     * (x2rock, build 97180312, 2026-10-08).
-     */
-    suspend fun setVolumeLimit(playerId: String, factor: Double) {
-        require(factor in 0.0..1.0) { "a volume limit is 0 to 1, not $factor" }
-        playerCommand(playerId, "settings:1", "setPlayerSettings", JsonObject().apply { addProperty("volumeScalingFactor", factor) })
-    }
-
     /** Night Sound, as the Sonos app names it. Leaves the Control API — see [Upnp.setEq]. */
     suspend fun setNightMode(playerId: String, on: Boolean) = setEq(playerId, "NightMode", on)
 

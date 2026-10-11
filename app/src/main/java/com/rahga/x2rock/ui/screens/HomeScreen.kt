@@ -433,7 +433,6 @@ fun HomeScreen(
                     upnpOff = upnpOff,
                     tone = tone?.takeIf { it.playerId == liveGroup.coordinatorId },
                     onStepBass = homeViewModel::stepBass,
-                    onStepVolumeLimit = homeViewModel::stepVolumeLimit,
                     onStepTreble = homeViewModel::stepTreble,
                     onToggleLoudness = homeViewModel::toggleLoudness,
                     onToggleTrueplay = homeViewModel::toggleTrueplay,
