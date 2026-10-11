@@ -130,6 +130,7 @@ fun RoomPanel(
     /** This room's tone, or `null` while it is read. */
     tone: HomeViewModel.ToneUi?,
     onStepBass: (Int) -> Unit,
+    onStepVolumeLimit: (Int) -> Unit,
     onStepTreble: (Int) -> Unit,
     onToggleLoudness: () -> Unit,
     onToggleTrueplay: () -> Unit,
@@ -312,7 +313,11 @@ fun RoomPanel(
         // so with it off they go with the Sound rows; read with them, so absent until read.
         val light = shownTone?.statusLight
         val locked = shownTone?.buttonsLocked
-        if (light != null || locked != null || info.hasTvInput) PanelSection("Room settings")
+        if (light != null || locked != null || shownTone?.volumeLimit != null || info.hasTvInput) PanelSection("Room settings")
+        // A limit scales what every level sounds like, so it lives with the room's settings, not Sound.
+        shownTone?.volumeLimit?.let { limit ->
+            ToneRow("Volume limit", limit, onStepVolumeLimit, valueText = if (limit >= 100) "Off" else "$limit%")
+        }
         light?.let { on ->
             AppButton(onClick = onToggleStatusLight, modifier = Modifier.fillMaxWidth()) {
                 Text(if (on) "Status light   On" else "Status light   Off")
@@ -514,7 +519,7 @@ private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
+private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit, valueText: String? = null) {
     var focused by remember { mutableStateOf(false) }
     val shown = stepMarksShown(focused)
     AppButton(
@@ -537,10 +542,10 @@ private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
             Text(label, modifier = Modifier.weight(1f))
             StepMark("\u2212", shown) { onStep(-1) }
             Text(
-                text = if (level > 0) "+$level" else "$level",
+                text = valueText ?: if (level > 0) "+$level" else "$level",
                 textAlign = TextAlign.Center,
-                // Wide enough for "+10", so the marks stay put as the value moves.
-                modifier = Modifier.widthIn(min = 36.dp),
+                // Wide enough for "+10", and "100%" where a row says a percent, so the marks stay put.
+                modifier = Modifier.widthIn(min = if (valueText != null) 56.dp else 36.dp),
             )
             StepMark("+", shown) { onStep(+1) }
         }

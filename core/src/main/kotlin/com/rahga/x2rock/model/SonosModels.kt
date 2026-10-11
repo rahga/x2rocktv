@@ -160,7 +160,16 @@ data class HomeTheaterOptions(
  * Only the home-theatre block is read; the object carries more (room name, volume mode,
  * spatial audio) that nothing here has a use for.
  */
-data class PlayerSettings(val homeTheater: HomeTheaterOptions? = null, val eq: EqSettings? = null)
+data class PlayerSettings(
+    val homeTheater: HomeTheaterOptions? = null,
+    val eq: EqSettings? = null,
+    /**
+     * The speaker's volume limit, 0.0–1.0 — the Sonos app's Volume Limit; absent is none. **It
+     * scales, it does not clamp**: the level keeps 0–100 and reads back as set, and the speaker
+     * plays it scaled, so under 0.5 a level of 100 sounds as 50 did (x2rock).
+     */
+    val volumeScalingFactor: Double? = null,
+)
 
 /**
  * A speaker's tone, as `settings:1 getPlayerSettings` reads it. Read-only there — a write is

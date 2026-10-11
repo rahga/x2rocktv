@@ -42,6 +42,7 @@ import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import java.util.UUID
 import javax.inject.Inject
+import kotlin.math.roundToInt
 
 /**
  * Sidebar order: Sonos's own, which is alphabetical and nothing else.
@@ -532,6 +533,8 @@ class HomeViewModel @Inject constructor(
         /** The speaker's status light, and whether its touch controls are locked; `null` unread. */
         val statusLight: Boolean? = null,
         val buttonsLocked: Boolean? = null,
+        /** The speaker's volume limit as a percent, 100 being none; `null` where it says nothing. */
+        val volumeLimit: Int? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -563,12 +566,14 @@ class HomeViewModel @Inject constructor(
         // needing the other: together, so the Sound rows wait for one latency, not two.
         // The light and the lock are the speaker's own switches, read with its tone for the same panel.
         val read = coroutineScope {
-            val eq = async { runCatching { household.playerSettings(playerId).eq }.getOrNull() }
+            val settings = async { runCatching { household.playerSettings(playerId) }.getOrNull() }
             val trueplay = async { runCatching { household.trueplay(playerId) }.getOrNull() }
             val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
-            val eqNow = eq.await() ?: return@coroutineScope null
-            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await())
+            val read = settings.await()
+            val eqNow = read?.eq ?: return@coroutineScope null
+            val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit)
         }
         if (read == null || edits != toneEdits) return
         _tone.value = read
@@ -611,6 +616,19 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val on = !tone.loudness
         editTone("loudness", "change Loudness", tone.copy(loudness = on)) { household.setLoudness(it, on) }
+    }
+
+    /**
+     * The volume limit, in fives from 5% to 100% (none). A limit scales the level rather than
+     * capping it, so nothing else on screen changes; only how loud each level sounds.
+     */
+    fun stepVolumeLimit(delta: Int) {
+        val tone = _tone.value ?: return
+        val now = tone.volumeLimit ?: return
+        val target = (now + delta * LIMIT_STEP).coerceIn(LIMIT_STEP, 100)
+        if (target != now) editTone("limit", "change the volume limit", tone.copy(volumeLimit = target)) {
+            household.setVolumeLimit(it, target / 100.0)
+        }
     }
 
     fun toggleStatusLight() {
@@ -710,3 +728,6 @@ fun roomRowLines(info: HomeViewModel.RoomInfo, playbackState: String): List<Stri
     // playing" beside it (Streamer, 2026-10-07).
     else -> listOf(roomActivity(playbackState, info.hasSource).label)
 }
+
+/** The volume limit's step, in percent. */
+private const val LIMIT_STEP = 5

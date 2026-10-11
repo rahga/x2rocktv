@@ -152,4 +152,16 @@ class ToneStepsTest {
         withTimeout(5_000) { while (lights.isEmpty()) delay(20) }
         assertEquals(listOf("On"), lights.toList())
     }
+
+    /** No limit reads 100; a step down shows 95 at once and writes 0.95 to the room's own speaker. */
+    @Test fun `a step down on the volume limit is written as a factor`() = runBlocking<Unit> {
+        openKitchen()
+        val kitchen = household.state.value.groups.first { it.name == "Kitchen" }
+        assertEquals(100, viewModel.tone.value?.volumeLimit)
+        viewModel.stepVolumeLimit(-1)
+        assertEquals(95, viewModel.tone.value?.volumeLimit)
+        val header = fake.awaitCommand("setPlayerSettings", 3_000)
+        assertEquals(kitchen.coordinatorId, header.get("playerId").asString)
+        assertEquals(0.95, fake.lastCommandBody("setPlayerSettings")!!.get("volumeScalingFactor").asDouble, 1e-9)
+    }
 }

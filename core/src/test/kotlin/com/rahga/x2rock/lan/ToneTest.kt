@@ -112,4 +112,25 @@ class ToneTest {
         assertEquals("On", requests.first { it.first == "SetLEDState" }.second["DesiredLEDState"])
         assertEquals("Off", requests.first { it.first == "SetButtonLockState" }.second["DesiredButtonLockState"])
     }
+
+    // ---------------------------------------------------------------- volume limit
+
+    /** The captured getPlayerSettings carries `volumeScalingFactor: 1.000000` — no limit. */
+    @Test fun `a speaker's volume limit is read from its settings`() = runBlocking<Unit> {
+        assertEquals(1.0, household.playerSettings(fake.id).volumeScalingFactor!!, 0.0)
+    }
+
+    @Test fun `a volume limit is written to that speaker's own settings`() = runBlocking<Unit> {
+        household.setVolumeLimit(fake.id, 0.5)
+        val header = fake.awaitCommand("setPlayerSettings", 3_000)
+        assertEquals("settings:1", header.get("namespace").asString)
+        assertEquals(fake.id, header.get("playerId").asString)
+        assertEquals(0.5, fake.lastCommandBody("setPlayerSettings")!!.get("volumeScalingFactor").asDouble, 0.0)
+    }
+
+    @Test fun `a limit outside 0 to 1 is refused before it is sent`() = runBlocking<Unit> {
+        val failed = runCatching { household.setVolumeLimit(fake.id, 50.0) }
+        assertTrue(failed.isFailure)
+        assertEquals(null, fake.lastCommandBody("setPlayerSettings"))
+    }
 }
