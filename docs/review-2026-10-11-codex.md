@@ -49,6 +49,12 @@ but if "Dispatchers.Main is used concurrently with setting it" reappears, C1 is 
   edit during a SMAPI station remains untested. No speculative refresh trigger was added.
 - Hardware replay through the changed Kotlin implementation and a TV UI check remain owed;
   no release was installed during this task.
+- **Both done on hardware by Claude Code, 2026-10-11, 11:27-11:35, Kitchen at volume 1.** R1, a
+  scratch live check outside the tree: Smooth Jazz played and paused, then `replay("Nashville
+  Now")` returned in 2.7s with Nashville Now playing, and still so 5s later; the same item replayed
+  over itself returned in 3.9s, playing. R3, a release on the Shield: Scenery queued in Kitchen,
+  Queue open with the marker on track 1; `x2rock next` from the laptop moved it to track 2 within
+  2.5s, with no queue edit. Kitchen left idle, queue empty, volume 1, as found.
 
 ## Lay of the land
 
