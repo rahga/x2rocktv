@@ -131,17 +131,24 @@ fun parseShelves(json: String): List<Shelf> {
         val title = view.getAsJsonObject("content")?.getAsJsonObject("container")?.get("name")?.asString ?: return@mapNotNull null
         val items = view.getAsJsonArray("items")?.mapNotNull { i ->
             val item = i.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            if (item.getAsJsonObject("browsePolicies")?.get("canPlay")?.asBoolean != true) return@mapNotNull null
+            val policies = item.getAsJsonObject("browsePolicies")
+            val playable = policies?.get("canPlay")?.asBoolean == true
+            // Browse Radio's rows — Music, News & Talk, Sports, Locations — play nothing and open:
+            // their ids (`/stations/en-US/US/…`) are ones SMAPI's getMetadata answers, anonymously,
+            // with the stations or the next level of containers (2026-10-11).
+            val opens = !playable && policies?.get("canEnumerate")?.asBoolean == true
+            if (!playable && !opens) return@mapNotNull null
             val c = item.getAsJsonObject("content")?.getAsJsonObject("container") ?: return@mapNotNull null
             val id = item.getAsJsonObject("id")?.get("objectId")?.asString ?: return@mapNotNull null
             Item(
                 id = id,
                 title = c.get("name")?.asString.orEmpty(),
                 // `trackList.program`: a station, played as the room's source like any SMAPI program.
-                itemType = c.get("type")?.asString?.substringAfterLast('.') ?: "program",
-                summary = c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString,
+                itemType = if (opens) "container" else c.get("type")?.asString?.substringAfterLast('.') ?: "program",
+                // The page names a row's own name as its "service" and leaves summary empty: say nothing.
+                summary = (c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString)?.takeIf { it.isNotBlank() },
                 artUrl = c.get("imageUrl")?.asString,
-                container = false,
+                container = opens,
             )
         }.orEmpty()
         Shelf(title, items).takeIf { items.isNotEmpty() }

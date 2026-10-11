@@ -453,6 +453,13 @@ the bare `playlist-…` id while listings name the same playlist `playlist_spoti
 `deleteContainer(id)` cleaned up. **YouTube Music refused every SMAPI call from outside a player**
 (403, "unregistered callers"), so it was not probed; Qobuz is not linked at home.
 
+**Sonos Radio's "Browse Radio" opens over SMAPI** (2026-10-11). Its page, from the manifest's
+`browse` endpoint, lists four rows (Music, News & Talk, Sports, Locations) with `canPlay` false,
+`canEnumerate` true and path ids like `/stations/en-US/US/EgdVUzpHOjIy`. The browse endpoint ignores
+an id in its query and 404s one in its path; **`getMetadata` on Sonos Radio's SMAPI takes the path
+id as it stands**, with no token: News & Talk answered 5,637 `stream`s (iHeart's, `ihr:` ids), Music
+17 genre containers in the same path form.
+
 ## Recorded by x2rock, and relied on here
 
 The sibling project measured these on its own household's hardware between 2026-09-04 and

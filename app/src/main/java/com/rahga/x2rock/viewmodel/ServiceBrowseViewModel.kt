@@ -249,7 +249,7 @@ class ServiceBrowseViewModel @Inject constructor(
                 shelves = runCatching { household.serviceShelves(service) }.getOrDefault(emptyList())
                 if (shelves.isNotEmpty()) {
                     publish(root, Results.Found(shelves.mapIndexed { i, shelf ->
-                        Item("$SHELF$i", shelf.title, "container", stationCount(shelf.items.size), shelf.items.first().artUrl, container = true)
+                        Item("$SHELF$i", shelf.title, "container", shelfCount(shelf.items), shelf.items.first().artUrl, container = true)
                     }))
                     return@launch
                 }
@@ -508,7 +508,15 @@ class ServiceBrowseViewModel @Inject constructor(
 /** The id a shelf of a service's page is listed under; never a service's own id. */
 private const val SHELF = "\u0000shelf:"
 
-private fun stationCount(n: Int) = if (n == 1) "1 station" else "$n stations"
+/**
+ * A shelf's count as what it holds: stations, or — Browse Radio's Music, News & Talk, Sports and
+ * Locations — places to open, which read "4 stations" until 2026-10-11.
+ */
+internal fun shelfCount(items: List<Item>): String {
+    val n = items.size
+    return if (items.all { it.container }) (if (n == 1) "1 category" else "$n categories")
+    else if (n == 1) "1 station" else "$n stations"
+}
 
 /** What [ServiceBrowseViewModel.starting] holds while a container plays whole: no row is starting. */
 const val WHOLE = "\u0000whole"

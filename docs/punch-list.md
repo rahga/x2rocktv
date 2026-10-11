@@ -72,7 +72,7 @@ builder for the thirty-one test preambles (the two that could reach real SSDP ar
 `REPLY_TIMEOUT_MILLIS` as a constructor seam so ReplayTest's two 5.5s waits go; `disconnect()`
 clearing the session outside the mutex `teardown()` takes.
 
-**Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`; Sonos Radio's "Browse Radio";
+**Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`;
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
 2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an
 audiobook's chapter, T-07.)
@@ -740,8 +740,9 @@ protocol facts it rests on are in `lan-transport.md`, "A service item, beyond pl
   - [x] **Sonos Radio's page.** *Done: its SMAPI root is empty, but its manifest's `browse`
     endpoint answers anonymously with the shelves the Sonos app draws, stations inline, ids the same
     as its search's. Listed as the service's page; Hit List played from Trending Now. "Browse Radio"
-    (News & Talk, Sports, Locations) is not listed: its rows are containers, and no form of asking
-    that endpoint for one container was found.*
+    (Music, News & Talk, Sports, Locations) was left out until 2026-10-11, when its rows' path ids
+    (`/stations/en-US/US/…`) turned out to be what Sonos Radio's **SMAPI** `getMetadata` answers,
+    anonymously — the browse endpoint itself ignores any id it is given. Built then (T-09).*
 - [x] **Play Next.** *Done: a hold or Menu on any service item, in Music Services and Search, opens
   its menu — Play now, Play next (only while the room plays from its queue, as the Sonos app does),
   Add to end of queue. Play Next put Drive My Car straight after Michelle on Media Room. Apple Music

@@ -237,7 +237,26 @@ class SmapiTest {
         assertEquals("sonos:2997", hitList.id)
         assertEquals("program", hitList.itemType)
         assertEquals(false, hitList.container)
-        assertTrue(shelves.none { it.title == "Browse Radio" })
-        assertEquals(27, shelves.size)
+        assertEquals(28, shelves.size)
+    }
+
+    /**
+     * Browse Radio's four rows play nothing and open (canEnumerate): kept as containers, with the
+     * path ids SMAPI's getMetadata answers. Left out until 2026-10-11, when no way to open them was known.
+     */
+    @Test fun `Browse Radio's rows are places to open`() {
+        val browse = parseShelves(captured("sonosradio.browse.json")).single { it.title == "Browse Radio" }
+        assertEquals(listOf("Music", "News & Talk", "Sports", "Locations"), browse.items.map { it.title })
+        assertTrue(browse.items.all { it.container })
+        assertEquals("/stations/en-US/US/EgdVUzpHOjIy", browse.items.first { it.title == "News & Talk" }.id)
+        assertEquals("no blank line under each", null, browse.items.first().summary)
+    }
+
+    /** What opening News & Talk answers, captured anonymously off Sonos Radio's SMAPI: stations to play. */
+    @Test fun `a Browse Radio row opens on stations`() {
+        val page = parseItems(captured("smapi.sonosradio.newsTalk.xml"))
+        assertEquals(5637, page.total)
+        assertTrue(page.items.isNotEmpty() && page.items.none { it.container })
+        assertEquals("stream", page.items.first().itemType)
     }
 }
