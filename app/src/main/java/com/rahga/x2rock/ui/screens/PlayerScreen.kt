@@ -644,7 +644,6 @@ private fun PlaybackControls(
             }
         }
 
-
         Spacer(modifier = Modifier.height(16.dp))
 
         // Where to go from here. These used to share a row with shuffle and repeat as labelled
@@ -926,6 +925,7 @@ private fun GlyphTile(icon: ImageVector) {
     }
 }
 
+/** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
 private val ART_SIZE = 168.dp
 
 /** A seek total as a viewer reads it: −30s, +1:00, −1:30. */

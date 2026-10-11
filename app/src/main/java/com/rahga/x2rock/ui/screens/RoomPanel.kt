@@ -314,9 +314,8 @@ fun RoomPanel(
         // so with it off they go with the Sound rows; read with them, so absent until read.
         val light = shownTone?.statusLight
         val locked = shownTone?.buttonsLocked
-        if (light != null || locked != null || (shownTone?.volumeLimit ?: 100) < 100 || shownTone?.battery != null || info.hasTvInput) PanelSection("Room settings")
-        // Said only where one is set, since it explains a room that seems too quiet; not a focus stop,
-        // because this connection may not change it (setPlayerSettings is refused without a sign-in).
+        val limit = shownTone?.volumeLimit?.takeIf { it < 100 }
+        if (light != null || locked != null || limit != null || shownTone?.battery != null || info.hasTvInput) PanelSection("Room settings")
         // A portable's pack, as a line: it is read, not set. Health only where it is not the usual GREEN.
         shownTone?.battery?.let { pack ->
             val parts = listOfNotNull(
@@ -331,7 +330,8 @@ fun RoomPanel(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
-        val limit = shownTone?.volumeLimit?.takeIf { it < 100 }
+        // Said only where one is set, since it explains a room that seems too quiet; not a focus stop,
+        // because this connection may not change it (setPlayerSettings is refused without a sign-in).
         limit?.let {
             Text(
                 "Volume limit $it% · set in the Sonos app",

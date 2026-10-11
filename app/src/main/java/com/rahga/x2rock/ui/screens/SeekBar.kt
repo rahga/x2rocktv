@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,18 +78,7 @@ internal fun ProgressBar(
     // focus stop that answers a press with an error.
     val seekable = hasDuration && state.actions.canSeek
 
-    var displayPositionMillis by remember(state.positionUpdatedAt) {
-        mutableLongStateOf(livePosition(state.positionMillis, state.positionUpdatedAt, state.playbackState, state.durationMillis))
-    }
-
-    LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
-        if (state.playbackState.isPlaying()) {
-            while (true) {
-                delay(1_000L)
-                displayPositionMillis = (displayPositionMillis + 1_000L).coerceAtMost(state.durationMillis)
-            }
-        }
-    }
+    val displayPositionMillis by rememberLivePosition(state.positionMillis, state.positionUpdatedAt, state.playbackState, state.durationMillis)
 
     val progress = if (hasDuration) (displayPositionMillis.toFloat() / state.durationMillis).coerceIn(0f, 1f) else 0f
     var isFocused by remember { mutableStateOf(false) }
@@ -236,7 +226,6 @@ private val SEEK_KNOB = 20.dp
 /** The step of each press in a burst of seeks, the last repeating: see the seek bar's burstSteps. */
 private val SEEK_STEPS_MILLIS = longArrayOf(10_000L, 20_000L, 30_000L)
 
-/** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
 internal fun Long.toSeekLabel(): String {
     val sign = if (this < 0) "−" else "+"
     val seconds = kotlin.math.abs(this) / 1_000
@@ -252,6 +241,19 @@ internal fun livePosition(positionMillis: Long, updatedAt: Long, playbackState: 
     val since = if (playbackState.isPlaying() && updatedAt > 0) System.currentTimeMillis() - updatedAt else 0
     val now = positionMillis + since.coerceAtLeast(0)
     return if (durationMillis > 0) now.coerceAtMost(durationMillis) else now
+}
+
+/** [livePosition], counting on a second at a time while the room plays, until the player next reports. */
+@Composable
+internal fun rememberLivePosition(positionMillis: Long, updatedAt: Long, playbackState: String, durationMillis: Long): State<Long> {
+    val position = remember(updatedAt) { mutableLongStateOf(livePosition(positionMillis, updatedAt, playbackState, durationMillis)) }
+    LaunchedEffect(updatedAt, playbackState) {
+        if (playbackState.isPlaying()) while (true) {
+            delay(1_000L)
+            position.longValue = (position.longValue + 1_000L).coerceAtMost(durationMillis)
+        }
+    }
+    return position
 }
 
 internal fun Long.toTimeString(): String {

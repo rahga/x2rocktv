@@ -1,6 +1,7 @@
 package com.rahga.x2rock
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
@@ -171,7 +172,7 @@ class FocusChoreographyTest {
                             room = "Bedroom",
                             onBack = { nav.popBackStack() },
                             playerViewModel = player,
-                            viewModel = QueueViewModel(household, SavedStateHandle(mapOf("groupId" to groupId))),
+                            viewModel = remember(groupId) { QueueViewModel(household, SavedStateHandle(mapOf("groupId" to groupId))) },
                         )
                     }
                 }
@@ -209,7 +210,7 @@ class FocusChoreographyTest {
         org.junit.Assert.assertEquals("the TV room must stay selected", living.id, home.selectedGroupId.value)
     }
 
-    /** A key still moves the selection: Down from Kitchen's row selects Living Room, the next. */
+    /** A key still moves the selection: four Downs from Bedroom's row, the first, select Living Room. */
     @Test fun aKeyStillSelectsTheRoomItReaches() {
         showHome()
         awaitRoomList()

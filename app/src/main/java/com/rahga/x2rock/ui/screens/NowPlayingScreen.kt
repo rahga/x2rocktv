@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,7 +74,11 @@ import java.util.Date
 @Composable
 fun NowPlayingScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsState()
-    LaunchedEffect(state.gone) { if (state.gone) onBack() }
+    // Once only: the screen stays composed, and focused, through the navigation's fade, and a
+    // second key released then would pop the home screen too, leaving nothing but a blank.
+    var closed by remember { mutableStateOf(false) }
+    val close = { if (!closed) { closed = true; onBack() } }
+    LaunchedEffect(state.gone) { if (state.gone) close() }
 
     // Kept awake while the room plays, which is what this view is for; paused or idle, the
     // television's own screensaver may take over as it would anywhere else.
@@ -110,7 +115,7 @@ fun NowPlayingScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltVi
             .onKeyEvent { event ->
                 when {
                     event.key in PASS_THROUGH -> false
-                    event.type == KeyEventType.KeyUp -> { onBack(); true }
+                    event.type == KeyEventType.KeyUp -> { close(); true }
                     else -> true
                 }
             }
@@ -194,15 +199,7 @@ private fun Clock(modifier: Modifier) {
 @Composable
 private fun Progress(state: NowPlayingUi) {
     if (state.durationMillis <= 0) return
-    var position by remember(state.positionUpdatedAt) {
-        mutableLongStateOf(livePosition(state.positionMillis, state.positionUpdatedAt, state.playbackState, state.durationMillis))
-    }
-    LaunchedEffect(state.positionUpdatedAt, state.playbackState) {
-        if (state.playbackState.isPlaying()) while (true) {
-            delay(1_000)
-            position = (position + 1_000).coerceAtMost(state.durationMillis)
-        }
-    }
+    val position by rememberLivePosition(state.positionMillis, state.positionUpdatedAt, state.playbackState, state.durationMillis)
     Column(Modifier.fillMaxWidth()) {
         LinearProgressIndicator(
             progress = { (position.toFloat() / state.durationMillis).coerceIn(0f, 1f) },

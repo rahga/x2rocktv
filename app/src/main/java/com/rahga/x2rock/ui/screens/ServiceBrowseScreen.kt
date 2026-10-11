@@ -344,7 +344,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
             menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
             here = here, onOpen = { viewModel.select(target.item, onPlayed) }, onOpenRelated = viewModel::openRelated,
             onPlayed = onPlayed,
-            onChapters = { viewModel.menu.close(); viewModel.openChapters(target.item) },
+            onChapters = { viewModel.openChapters(target.item) },
         )
     }
     PlaylistPicker(viewModel.menu)

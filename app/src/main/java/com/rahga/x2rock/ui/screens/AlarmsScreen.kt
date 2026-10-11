@@ -13,7 +13,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -148,13 +150,16 @@ private fun NewAlarm(draft: AlarmDraft, viewModel: AlarmsViewModel, firstFocus: 
     val programs by viewModel.programs.collectAsState()
     LaunchedEffect(draft.step) { firstFocus.requestFocusRetrying() }
     when (draft.step) {
-        AlarmDraft.Step.ROOM -> Choices("Which room?") {
-            items(viewModel.rooms(), key = { it.playerId }) { room ->
-                MediaRow(
-                    title = room.name, subtitle = null, artUrl = null,
-                    onClick = { viewModel.chooseRoom(room) },
-                    modifier = if (room == viewModel.rooms().first()) Modifier.focusRequester(firstFocus) else Modifier,
-                )
+        AlarmDraft.Step.ROOM -> {
+            val rooms = remember { viewModel.rooms() }
+            Choices("Which room?") {
+                itemsIndexed(rooms, key = { _, room -> room.playerId }) { i, room ->
+                    MediaRow(
+                        title = room.name, subtitle = null, artUrl = null,
+                        onClick = { viewModel.chooseRoom(room) },
+                        modifier = if (i == 0) Modifier.focusRequester(firstFocus) else Modifier,
+                    )
+                }
             }
         }
         AlarmDraft.Step.TIME -> TimeStep(draft, viewModel, firstFocus)
@@ -187,7 +192,7 @@ private fun NewAlarm(draft: AlarmDraft, viewModel: AlarmsViewModel, firstFocus: 
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun Choices(question: String, content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit) {
+private fun Choices(question: String, content: LazyListScope.() -> Unit) {
     SectionTitle(question, first = true)
     LazyColumn(contentPadding = PaddingValues(bottom = 48.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
 }
