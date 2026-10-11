@@ -40,9 +40,11 @@ class ServiceSearchTest {
         const val QOBUZ = "31"       // app-link by policy; usable only via the stored token
         const val RADIO = "894"      // anonymous; usable with no credential
         const val APPLE = "204"      // has a token, but excluded (searched via iTunes)
+        const val MIXCLOUD = "181"   // has a token; its items play through the queue
 
-        // 31*256+7 = 7943 (Qobuz), 204*256+7 = 52231 (Apple). The service type list a cdudn needs.
-        const val TYPE_LIST = "7943,52231"
+        // 31*256+7 = 7943 (Qobuz), 204*256+7 = 52231 (Apple), 181*256+7 = 46343 (Mixcloud).
+        // The service type list a cdudn needs.
+        const val TYPE_LIST = "7943,52231,46343"
 
         /** A presentation map with one Tracks search category. */
         const val MAP = """<Presentation><PresentationMap type="Search"><Match>
@@ -179,6 +181,8 @@ class ServiceSearchTest {
                   Nickname0="Qb1" Username0="X_#Svc7943-6c0ffea0-Token"/>
                 <MediaServer UDN="SA_RINCON52231_X" SerialNum0="19" Token0="apple-token" Key0=""
                   Nickname0="Richard"/>
+                <MediaServer UDN="SA_RINCON46343_X" SerialNum0="41" Token0="mc-token" Key0="mc-key"
+                  Nickname0="Mixcloud" Username0="X_#Svc46343-0-Token"/>
             </ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
@@ -213,6 +217,8 @@ class ServiceSearchTest {
             """<Policy Auth="Anonymous" PollInterval="0"/><Manifest Uri="$manifest"/></Service>""" +
             """<Service Id="$APPLE" Name="Apple Music" Uri="$smapi" SecureUri="$smapi">""" +
             """<Policy Auth="AppLink" PollInterval="30"/></Service>""" +
+            """<Service Id="$MIXCLOUD" Name="Mixcloud" Uri="$smapi" SecureUri="$smapi">""" +
+            """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="$manifest"/></Service>""" +
             """</Services>"""
         val escaped = descriptors.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
         return """<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
@@ -319,6 +325,30 @@ class ServiceSearchTest {
         assertEquals(0, fake.commandsNamed("loadContent"))
         assertTrue("a program is not resolved by getMediaURI", smapiCalls.none { "<getMediaURI" in it })
         assertTrue("a program is not enqueued", avTransport.none { "AddURIToQueue" in it })
+    }
+
+    /**
+     * A Mixcloud item through `loadContent` restarted Dining Room's player (2026-10-11); the Sonos app
+     * queues it. Replaced queue, the cloudcast added under the account's serial, slot 1 played.
+     */
+    @Test fun `a Mixcloud item plays through the queue, never loadContent`() = runBlocking {
+        val groupId = connected()
+        val mixcloud = household.searchableServices().first { it.service.id == MIXCLOUD }
+        val mix = com.rahga.x2rock.smapi.Item(
+            id = "cloudcast:116676861", title = "#ChilloutSession 7", itemType = "track", summary = null, artUrl = null, container = false,
+        )
+        val started = async(Dispatchers.Default) { household.playServiceItem(groupId, mixcloud, mix) }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "play" }
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        started.await()
+        assertEquals("loadContent restarts the player for Mixcloud", 0, fake.commandsNamed("loadContent"))
+        val actions = avTransport.map { body -> Regex("<u:(\\w+)").find(body)?.groupValues?.get(1) }
+        val cleared = actions.indexOf("RemoveAllTracksFromQueue")
+        val added = actions.indexOf("AddURIToQueue")
+        val seek = actions.indexOf("Seek")
+        assertTrue("queue replaced, item added, slot played, in that order: $actions", cleared in 0 until added && added < seek)
+        val add = avTransport[added]
+        assertTrue(add, "cloudcast%3a116676861" in add && "sid=181" in add && "sn=41" in add)
     }
 
     @Test fun `a program the player refuses as a source is streamed instead`() = runBlocking {

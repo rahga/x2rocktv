@@ -36,7 +36,7 @@ the x2rock CLI, whose playback goes through the same player paths.
 | Bandcamp | same, empty: x2rocktv falls to its search, the app says "No content items available" | x2rocktv: "1 service didn't answer" (`Client.LoginInvalid`); the app leaves it out | — | The household's own token is refused, by the app too. Relink in the Sonos app; nothing to fix here |
 | Deezer | **differs**: SMAPI root (Flow, Popular, Explore, Picked for you, My Music, …) vs the app's page — Favorites (Tracks, Playlists, Albums, Artists), Recently played, Flow moods, Made for you, Recommended playlists, Music by genre, Recommended releases, Music by mood, Charts | both answer | x2rocktv queued a track, home, 2026-10-07 | Page from the manifest `browse` endpoint; answers a bearer token (x2rock) |
 | iHeartRadio | same: For You, My Stations, Nearby Stations, Live Radio, Artist Radio, Podcasts | both answer | x2rocktv, office, 2026-10-07 (custom stations) | Two household accounts: two rows here, an account switcher in the app's service header |
-| Mixcloud | **x2rocktv only** | x2rocktv answers (mixes, and user names) | **✗ x2rocktv's play restarts the player** (below); through the queue ✓, Dining Room, 2026-10-11 | The household still stores a Mixcloud account (`sid 181`); the app lists it nowhere |
+| Mixcloud | **x2rocktv only** | x2rocktv answers (mixes, and user names) | x2rocktv through the queue, Dining Room, 2026-10-11 (restarted the player through `loadContent` until then) | The household still stores a Mixcloud account (`sid 181`); the app lists it nowhere |
 | Pandora | same: My Stations | both answer, every hit a station | x2rock, 2026-10-11 | A station is `canPlay`/not `canEnumerate`; x2rocktv already plays a `program` as a leaf |
 | Qobuz | same: Playlists, Purchases, Favorites, Discover, Qobuz Playlists | both answer | x2rock, office, 2026-09-23 | |
 | Radio Paradise | same: 128k, 320k, FLAC | no search categories in either | x2rock, 2026-09-30 (office) | |
@@ -65,7 +65,7 @@ the room reporting PLAYING with the new content.
 | Bandcamp | — | nothing to play: the household's token is refused |
 | Deezer | track; album | ✓ 3.3s; ✓ 2.3s. Titles carry a literal `&amp;` (P-22) |
 | iHeartRadio, both accounts | live station | ✓ 1.4s, 1.5s. Its first hit for "miles davis" is a live station, not the artist station |
-| **Mixcloud** | any mix | **✗ the player hangs and restarts** (P-21). `loadContent` leaves it BUFFERING, it stops answering within 5s and is back ~2.5 min later. Reproduced three times, twice with nothing else sent. The same mix through the queue plays |
+| **Mixcloud** | any mix | **✗ the player hung and restarted** (P-21): `loadContent` left it BUFFERING, it stopped answering within 5s and was back ~2.5 min later — four times, on two accounts, twice with nothing else sent. The Sonos app plays Mixcloud through the queue; **fixed the same day** to do the same, and a mix (8.2s) and the "Bass" history playlist (8.4s) then played with the player up |
 | Pandora | search station | ✓ 2.4s; playing a search hit adds it to My Stations, as the app does |
 | Qobuz | track; album | ✓ 2.9s; ✓ 2.2s |
 | Radio Paradise | The Main Mix | ✓ 3.9s |

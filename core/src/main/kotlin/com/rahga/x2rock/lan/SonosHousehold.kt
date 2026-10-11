@@ -1345,6 +1345,7 @@ class SonosHousehold(
      * [LOAD_SETTLE_MILLIS], that it loaded and did not start.
      */
     suspend fun replay(groupId: String, item: HistoryItem) {
+        if (item.id.serviceId in PLAYS_THROUGH_QUEUE) return replayThroughQueue(groupId, item)
         runCatching { pause(groupId) }
         // Wait out the pause, or a room that was playing still reads as playing below.
         withTimeoutOrNull(2_000) {
@@ -1405,6 +1406,30 @@ class SonosHousehold(
             true
         }
         if (started == null) throw IOException("${item.name} loaded but did not start playing")
+    }
+
+    /**
+     * [replay] for a service whose items `loadContent` must not be given: one Mixcloud item through
+     * it left Dining Room's coordinator BUFFERING, then answering nothing at all, 1400 included, until
+     * it restarted itself ~2.5 min later — four times, on two accounts, twice with nothing else sent
+     * (2026-10-11). The Sonos app plays Mixcloud through the queue, and so does this: the queue
+     * replaced, the item added, its first slot played. The same mix played that way and the player
+     * stayed up.
+     */
+    private suspend fun replayThroughQueue(groupId: String, item: HistoryItem) {
+        val accounts = searchableServices().filter { it.service.id == item.id.serviceId }
+        val linked = accounts.firstOrNull { it.accountId == item.id.accountId } ?: accounts.firstOrNull()
+            ?: error("${item.name} is from a service this system no longer has")
+        val startsBefore = _groupStates.value[groupId]?.playStarts ?: 0
+        clearQueue(groupId)
+        queueServiceItem(
+            groupId, linked,
+            Item(item.id.objectId, item.name, item.type, summary = null, artUrl = null, container = item.type != "track"),
+        )
+        skipToQueueItem(groupId, 1)
+        if (awaitPlayStart(groupId, startsBefore, STREAM_START_MILLIS) == StreamStart.SILENT) {
+            throw IOException("${item.name} was queued but did not start playing")
+        }
     }
 
     suspend fun favorites(): FavoritesResponse {
@@ -2409,6 +2434,12 @@ internal const val APP_ID = "com.rahga.x2rock"
 
 /** What snooze means with no duration given: the clock radio's nine minutes, as x2rock has it. */
 const val SNOOZE_MINUTES = 9
+
+/** Services whose items play through the queue, never `loadContent` — see [SonosHousehold.replayThroughQueue]. */
+private val PLAYS_THROUGH_QUEUE = setOf(MIXCLOUD_SERVICE_ID)
+
+/** Mixcloud's Sonos service id. */
+internal const val MIXCLOUD_SERVICE_ID = "181"
 
 /** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
 private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
