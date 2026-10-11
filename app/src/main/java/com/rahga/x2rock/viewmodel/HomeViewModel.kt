@@ -9,6 +9,7 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.RemoteSettings
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.lan.Upnp
 import com.rahga.x2rock.model.AppColorTheme
@@ -538,6 +539,9 @@ class HomeViewModel @Inject constructor(
          * not set: the write is refused to an unsigned connection (see `PlayerSettings`).
          */
         val volumeLimit: Int? = null,
+        /** The room's soundbar, when it has one, and its TV-remote settings: see `RemoteSettings`. */
+        val soundbarId: String? = null,
+        val remote: RemoteSettings? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -552,10 +556,13 @@ class HomeViewModel @Inject constructor(
 
     /** Read the tone of [groupId]'s own speaker: its coordinator, the room it is named for. */
     fun loadTone(groupId: String) {
-        val playerId = findGroup(groupId)?.coordinatorId ?: return
+        val group = findGroup(groupId) ?: return
+        val playerId = group.coordinatorId
+        // The remote settings are the soundbar's own, which need not be the room's coordinator.
+        val soundbar = TvSoundbar.soundbarOf(group, household.state.value)
         if (_tone.value?.playerId != playerId) _tone.value = null
         toneJob?.cancel()
-        toneJob = viewModelScope.launch { readTone(playerId) }
+        toneJob = viewModelScope.launch { readTone(playerId, soundbar) }
     }
 
     /**
@@ -563,7 +570,7 @@ class HomeViewModel @Inject constructor(
      * reports the level before it, and showing that would also make the next press step from
      * it, losing one.
      */
-    private suspend fun readTone(playerId: String) {
+    private suspend fun readTone(playerId: String, soundbar: String?) {
         val edits = toneEdits
         // Two reads of the same speaker, one over its socket and one over UPnP, neither
         // needing the other: together, so the Sound rows wait for one latency, not two.
@@ -573,10 +580,11 @@ class HomeViewModel @Inject constructor(
             val trueplay = async { runCatching { household.trueplay(playerId) }.getOrNull() }
             val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
+            val remote = async { soundbar?.let { runCatching { household.remoteSettings(it) }.getOrNull() } }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null
             val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
-            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit)
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await())
         }
         if (read == null || edits != toneEdits) return
         _tone.value = read
@@ -599,7 +607,7 @@ class HomeViewModel @Inject constructor(
             toneSends.withLock {
                 runCatching { send(edited.playerId) }.onFailure { _notice.failure(what, it) }
             }
-            if (toneWrites.isEmpty()) readTone(edited.playerId)
+            if (toneWrites.isEmpty()) readTone(edited.playerId, edited.soundbarId)
         }
     }
 
@@ -619,6 +627,26 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val on = !tone.loudness
         editTone("loudness", "change Loudness", tone.copy(loudness = on)) { household.setLoudness(it, on) }
+    }
+
+    /** The soundbar's acknowledging flash for the TV remote. Written to the soundbar, not the room. */
+    fun toggleRemoteFeedback() {
+        val tone = _tone.value ?: return
+        val soundbar = tone.soundbarId ?: return
+        val remote = tone.remote ?: return
+        val on = !remote.feedback
+        editTone("feedback", "change the remote light", tone.copy(remote = remote.copy(feedback = on))) { household.setRemoteFeedback(soundbar, on) }
+    }
+
+    /** Repeating the TV remote's IR on to the TV. Only between On and Off; another word is left alone. */
+    fun toggleIrRepeater() {
+        val tone = _tone.value ?: return
+        val soundbar = tone.soundbarId ?: return
+        val remote = tone.remote ?: return
+        val on = !(remote.irRepeaterOn ?: return)
+        editTone("repeater", "change the IR repeater", tone.copy(remote = remote.copy(irRepeater = if (on) "On" else "Off"))) {
+            household.setIrRepeater(soundbar, on)
+        }
     }
 
     fun toggleStatusLight() {

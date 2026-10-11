@@ -1,0 +1,1 @@
+<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:IsRemoteConfiguredResponse xmlns:u="urn:schemas-upnp-org:service:HTControl:1"><RemoteConfigured>0</RemoteConfigured></u:IsRemoteConfiguredResponse></s:Body></s:Envelope>

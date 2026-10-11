@@ -65,12 +65,18 @@ class ToneStepsTest {
                     }
                     // The read after a write asks TruePlay too; slow, so a press can land inside it.
                     if (action == "GetRoomCalibrationStatus") Thread.sleep(400)
-                    if (action == "SetLEDState") lights += Regex("<DesiredLEDState>(\\w+)<").find(request.body.readUtf8())!!.groupValues[1]
+                    val text = request.body.readUtf8()
+                    if (action == "SetLEDState") lights += Regex("<DesiredLEDState>(\\w+)<").find(text)!!.groupValues[1]
+                    if (action == "SetLEDFeedbackState") feedbacks += Regex("<LEDFeedbackState>(\\w+)<").find(text)!!.groupValues[1]
                     return MockResponse().setBody(when (action) {
                         // Kitchen's, 2026-10-10: light off, controls unlocked.
                         "GetLEDState" -> FakePlayer.fixtureText("GetLEDState.xml")
                         "GetButtonLockState" -> FakePlayer.fixtureText("GetButtonLockState.xml")
                         "SetLEDState" -> FakePlayer.fixtureText("SetLEDState.xml")
+                        // Bedroom's Beam, 2026-10-10.
+                        "GetLEDFeedbackState" -> FakePlayer.fixtureText("GetLEDFeedbackState.xml")
+                        "GetIRRepeaterState" -> FakePlayer.fixtureText("GetIRRepeaterState.xml")
+                        "SetLEDFeedbackState" -> FakePlayer.fixtureText("SetLEDFeedbackState.xml")
                         else -> EMPTY_SOAP
                     })
                 }
@@ -97,6 +103,9 @@ class ToneStepsTest {
             withTimeout(10_000) { viewModel.uiState.first { it is HomeViewModel.UiState.Success } }
         }
     }
+
+    /** Every `LEDFeedbackState` written, in order. */
+    private val feedbacks = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     /** Every `DesiredLEDState` written, in order. */
     private val lights = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -157,5 +166,23 @@ class ToneStepsTest {
     @Test fun `the volume limit is read with the tone`() = runBlocking<Unit> {
         openKitchen()
         assertEquals(100, viewModel.tone.value?.volumeLimit)
+    }
+
+    /** A room with a soundbar reads its remote settings with the tone, and switches them on the soundbar. */
+    @Test fun `a soundbar's remote light is read and switched from the panel`() = runBlocking<Unit> {
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        viewModel.loadTone(bedroom.id)
+        val read = withTimeout(5_000) { viewModel.tone.first { it?.remote != null } }!!
+        assertEquals(true, read.remote?.feedback)
+        assertEquals(true, read.remote?.irRepeaterOn)
+        viewModel.toggleRemoteFeedback()
+        withTimeout(5_000) { while (feedbacks.isEmpty()) delay(20) }
+        assertEquals(listOf("Off"), feedbacks.toList())
+    }
+
+    /** Kitchen has no soundbar: no remote settings to read or show. */
+    @Test fun `a room without a soundbar has no remote settings`() = runBlocking<Unit> {
+        openKitchen()
+        assertEquals(null, viewModel.tone.value?.remote)
     }
 }

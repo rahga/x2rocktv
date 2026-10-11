@@ -69,6 +69,20 @@ internal fun formatClock(millis: Long): String {
     return "%02d:%02d:%02d".format(Locale.ROOT, total / 3_600, total / 60 % 60, total % 60)
 }
 
+/**
+ * A soundbar's TV-remote settings — see [Upnp.remoteSettings]. [irRepeater] is the word as sent:
+ * the service documents a third state, `Disabled`, beside On and Off, and flattening one nobody
+ * here has seen to "off" would say something untrue about the hardware.
+ */
+data class RemoteSettings(val feedback: Boolean, val irRepeater: String) {
+    /** On or off, where the player said one of those; null for anything else. */
+    val irRepeaterOn: Boolean? get() = when {
+        irRepeater.equals("On", ignoreCase = true) -> true
+        irRepeater.equals("Off", ignoreCase = true) -> false
+        else -> null
+    }
+}
+
 /** `GetMediaInfo`'s answer — see [Upnp.mediaInfo]. */
 data class MediaInfo(val currentUri: String, val currentUriMetaData: String = "") {
     val playingFromQueue: Boolean get() = currentUri.startsWith("x-rincon-queue:")
@@ -367,6 +381,32 @@ class Upnp(
         soap(hostname, Service.DEVICE_PROPERTIES, "SetButtonLockState", listOf("DesiredButtonLockState" to if (locked) "On" else "Off"))
     }
 
+    /**
+     * A soundbar's TV-remote settings, captured off Bedroom's Beam (2026-10-10): whether it flashes
+     * its light to acknowledge the TV remote, and whether it repeats the remote's IR on to the TV
+     * behind it. Soundbars only — anything else answers a fault, so callers ask the soundbar.
+     */
+    suspend fun remoteSettings(hostname: String): RemoteSettings = withContext(Dispatchers.IO) {
+        suspend fun one(action: String, tag: String) = parse(soap(hostname, Service.HT_CONTROL, action, emptyList())).text(tag).orEmpty().trim()
+        RemoteSettings(
+            feedback = one("GetLEDFeedbackState", "LEDFeedbackState").equals("On", ignoreCase = true),
+            irRepeater = one("GetIRRepeaterState", "CurrentIRRepeaterState"),
+        )
+    }
+
+    /**
+     * The acknowledging flash. **The argument is `LEDFeedbackState`, without the `Desired` every
+     * other setter here has**: Sonos's own inconsistency, and `DesiredLEDFeedbackState` is a 402
+     * (x2rock). Unlike the status light, this one refuses anything but On and Off.
+     */
+    suspend fun setRemoteFeedback(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.HT_CONTROL, "SetLEDFeedbackState", listOf("LEDFeedbackState" to if (on) "On" else "Off"))
+    }
+
+    suspend fun setIrRepeater(hostname: String, on: Boolean): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.HT_CONTROL, "SetIRRepeaterState", listOf("DesiredIRRepeaterState" to if (on) "On" else "Off"))
+    }
+
     /** TruePlay's state, captured off Kitchen's One SL: enabled and available as `1`/`0`. */
     suspend fun trueplay(hostname: String): TruePlay = withContext(Dispatchers.IO) {
         val envelope = parse(rendering(hostname, "GetRoomCalibrationStatus"))
@@ -495,6 +535,7 @@ class Upnp(
         MUSIC_SERVICES("/MusicServices/Control", "urn:schemas-upnp-org:service:MusicServices:1"),
         ALARM_CLOCK("/AlarmClock/Control", "urn:schemas-upnp-org:service:AlarmClock:1"),
         DEVICE_PROPERTIES("/DeviceProperties/Control", "urn:schemas-upnp-org:service:DeviceProperties:1"),
+        HT_CONTROL("/HTControl/Control", "urn:schemas-upnp-org:service:HTControl:1"),
     }
 
     /**

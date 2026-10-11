@@ -134,6 +134,8 @@ fun RoomPanel(
     onToggleLoudness: () -> Unit,
     onToggleTrueplay: () -> Unit,
     onToggleStatusLight: () -> Unit,
+    onToggleRemoteFeedback: () -> Unit,
+    onToggleIrRepeater: () -> Unit,
     onToggleTouchControls: () -> Unit,
     onToggleCrossfade: () -> Unit,
     /** Keep this room's speakers, levels and favourite as a preset in Browse. */
@@ -333,6 +335,24 @@ fun RoomPanel(
         locked?.let { isLocked ->
             AppButton(onClick = onToggleTouchControls, modifier = Modifier.fillMaxWidth()) {
                 Text(if (isLocked) "Touch controls   Off" else "Touch controls   On")
+            }
+        }
+        // The soundbar's own TV-remote settings, written to the soundbar wherever it sits in the group.
+        shownTone?.remote?.let { remote ->
+            AppButton(onClick = onToggleRemoteFeedback, modifier = Modifier.fillMaxWidth()) {
+                Text(if (remote.feedback) "Remote feedback light   On" else "Remote feedback light   Off")
+            }
+            // A third word, which the service documents and nobody here has seen, is said and not toggled.
+            when (remote.irRepeaterOn) {
+                null -> Text(
+                    "IR repeater: ${remote.irRepeater}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                )
+                else -> AppButton(onClick = onToggleIrRepeater, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (remote.irRepeaterOn == true) "IR repeater   On" else "IR repeater   Off")
+                }
             }
         }
         if (info.hasTvInput) {

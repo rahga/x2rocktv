@@ -1604,6 +1604,10 @@ class SonosHousehold(
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
     suspend fun statusLight(playerId: String): Boolean = upnp.statusLight(hostnameOf(playerId))
+    /** A soundbar's TV-remote settings; [soundbarId] must be the soundbar itself. */
+    suspend fun remoteSettings(soundbarId: String): RemoteSettings = upnp.remoteSettings(hostnameOf(soundbarId))
+    suspend fun setRemoteFeedback(soundbarId: String, on: Boolean) = upnp.setRemoteFeedback(hostnameOf(soundbarId), on)
+    suspend fun setIrRepeater(soundbarId: String, on: Boolean) = upnp.setIrRepeater(hostnameOf(soundbarId), on)
     suspend fun setStatusLight(playerId: String, on: Boolean) = upnp.setStatusLight(hostnameOf(playerId), on)
     suspend fun buttonsLocked(playerId: String): Boolean = upnp.buttonsLocked(hostnameOf(playerId))
     suspend fun setButtonsLocked(playerId: String, locked: Boolean) = upnp.setButtonsLocked(hostnameOf(playerId), locked)

@@ -437,6 +437,8 @@ fun HomeScreen(
                     onToggleLoudness = homeViewModel::toggleLoudness,
                     onToggleTrueplay = homeViewModel::toggleTrueplay,
                     onToggleStatusLight = homeViewModel::toggleStatusLight,
+                    onToggleRemoteFeedback = homeViewModel::toggleRemoteFeedback,
+                    onToggleIrRepeater = homeViewModel::toggleIrRepeater,
                     onToggleTouchControls = homeViewModel::toggleTouchControls,
                     onToggleCrossfade = { homeViewModel.toggleCrossfade(liveGroup.id) },
                     onSavePreset = { homeViewModel.savePreset(liveGroup.id) },

@@ -45,6 +45,10 @@ class ToneTest {
                         "GetLEDState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDState.xml"))
                         "GetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("GetButtonLockState.xml"))
                         "SetLEDState", "SetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("SetLEDState.xml"))
+                        // Bedroom's Beam, 2026-10-10: feedback on, repeater on.
+                        "GetLEDFeedbackState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDFeedbackState.xml"))
+                        "GetIRRepeaterState" -> MockResponse().setBody(FakePlayer.fixtureText("GetIRRepeaterState.xml"))
+                        "SetLEDFeedbackState", "SetIRRepeaterState" -> MockResponse().setBody(FakePlayer.fixtureText("SetLEDFeedbackState.xml"))
                         else -> MockResponse().setBody(EMPTY_SOAP)
                     }
                 }
@@ -118,5 +122,26 @@ class ToneTest {
     /** The captured getPlayerSettings carries `volumeScalingFactor: 1.000000` — no limit. */
     @Test fun `a speaker's volume limit is read from its settings`() = runBlocking<Unit> {
         assertEquals(1.0, household.playerSettings(fake.id).volumeScalingFactor!!, 0.0)
+    }
+
+    // ---------------------------------------------------------------- a soundbar's remote settings
+
+    @Test fun `a soundbar's remote settings are read`() = runBlocking<Unit> {
+        val remote = household.remoteSettings(fake.id)
+        assertTrue(remote.feedback)
+        assertEquals("On", remote.irRepeater)
+        assertEquals(true, remote.irRepeaterOn)
+    }
+
+    /** The feedback setter's argument has no `Desired`; the repeater's does. A swap is a 402. */
+    @Test fun `the remote settings are written under their own argument names`() = runBlocking<Unit> {
+        household.setRemoteFeedback(fake.id, false)
+        household.setIrRepeater(fake.id, false)
+        assertEquals("Off", requests.first { it.first == "SetLEDFeedbackState" }.second["LEDFeedbackState"])
+        assertEquals("Off", requests.first { it.first == "SetIRRepeaterState" }.second["DesiredIRRepeaterState"])
+    }
+
+    @Test fun `a repeater state other than On or Off is kept as said`() {
+        assertEquals(null, RemoteSettings(feedback = true, irRepeater = "Disabled").irRepeaterOn)
     }
 }
