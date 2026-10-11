@@ -436,6 +436,11 @@ list is now strictly alphabetical, which is Sonos's own order and the only order
 Sonos has playback, EQ and home-theatre settings but nothing positional. "If it doesn't let
 us reorder in the Sonos app, I don't think we should either."
 
+**The Sonos app has since gained room sorting** (seen 2026-10-11, app 90.00): Actively playing (its
+default), Frequently used, Alphabetical, and Pin. The premise below, that Sonos has no order, is no
+longer true of the app; whether to follow is the owner's call (PUNCH P-20). Until then, nothing
+changes here.
+
 - **Favourites**, a second sort rank with a star in the list. The owner's verdict on the
   feature it mirrored: "probably the least used Sonos feature on the planet." If it returns
   it belongs as a star off to the side, not a row in this panel. Sonos *content* favourites
@@ -654,6 +659,9 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   and the item menu adds to and removes from them, as the Sonos app's does (asked for, 2026-10-08).
 
 ### Browse against the Sonos app (2026-10-08)
+
+**The current comparison, service by service, with testing status and the gaps — attainable and
+not — is `docs/sonos-app-comparison.md`** (2026-10-11, Sonos app 90.00 against the Shield).
 
 Compared screen by screen with the Sonos app on a phone; the record is the punch list's "Against
 the Sonos app" and `lan-transport.md`'s "A service item". What it settled:

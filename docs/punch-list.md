@@ -7,6 +7,9 @@ agreed small; C1 and C3 declined. Implemented the same day (R1, R3, R4/C2, C4) a
 documented limit after a Kitchen capture; what is still owed on hardware is at the head of the
 review's follow-up. The closed reviews below do not include this pass.
 
+**Against the Sonos app again (2026-10-11):** every service compared with app 90.00, with
+testing status and the gaps that remain, in [sonos-app-comparison.md](sonos-app-comparison.md).
+
 Written 2026-10-01. x2rocktv's last commit was 2026-09-09 and its last working session 2026-09-12;
 the Rust sibling `../x2rock` landed 388 commits since 2026-09-05 and its `docs/architecture.md`
 grew to 9,400 lines, audited whole on 2026-09-13 and reviewed 2026-09-18/19. This is what that
