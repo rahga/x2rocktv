@@ -148,6 +148,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── SearchScreen.kt        one search across every service and Apple Music, by section
 │       ├── PreferredServicesScreen.kt  Settings' sorter: mark services preferred, carry them into order
 │       ├── AlarmsScreen.kt        Settings' alarms: every room's, armed on Select; a new one step by step
+│       ├── AboutSystemScreen.kt   Settings' About this system: every speaker, its software, any update waiting
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       ├── ServiceBrowseScreen.kt the household's own services — each opens on its library (or its
@@ -164,6 +165,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── AppleMusicViewModel.kt
     ├── ServiceBrowseViewModel.kt   browse/search the household's own services, a level at a time
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
+    ├── AboutSystemViewModel.kt     every speaker's description and update state, read once
     ├── AlarmsViewModel.kt          the household's alarms, the clock they are on, and the new-alarm steps
     ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say

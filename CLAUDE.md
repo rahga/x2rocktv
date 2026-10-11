@@ -455,7 +455,11 @@ Two things sit outside the widget's version, in the order asked for:
   listening, and it sits above "This is my TV" because it is a thing to do where that is a thing
   to state once and never touch again. Room settings is every room's since T-08 (2026-10-10): the
   room's own speaker's **Status light** and **Touch controls** (the Sonos app's Button Control,
-  so On is unlocked), read with its tone, then "This is my TV" where there is a television.
+  so On is unlocked), read with its tone; a **volume limit** and a **battery** as lines where there
+  is one (the limit cannot be set unsigned; battery is untested against a portable); for a room
+  with a soundbar, the soundbar's **Remote feedback light** and **IR repeater**, written to the
+  soundbar itself; then "This is my TV". **About this system** (Settings → Household) lists every
+  speaker and whether an update waits, by `DownloadSize`; nothing here ever applies one.
 
 Settings sits at the **foot** of the room list, past the last room. At the top it was the first
 thing Compose found, and focus fell onto it three different ways. Moving it exposed what it had

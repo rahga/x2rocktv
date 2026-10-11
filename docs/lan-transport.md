@@ -318,6 +318,18 @@ to a Sonos account and sends `authorization: Bearer …` in every command header
 write is "accepted" holds for a signed-in caller only; this app has no account, so it shows the limit
 and does not offer to change it.
 
+**A speaker's own switches and self-description** (Kitchen and Bedroom's Beam, 2026-10-10, T-08):
+`DeviceProperties` `GetLEDState`/`GetButtonLockState` answer `On`/`Off` (lock On = touch controls do
+nothing); the setters take `Desired…State` and light the light for any word but `Off` (x2rock), so
+only the two words are sent. A soundbar's `HTControl` answers `GetLEDFeedbackState` (`LEDFeedbackState`)
+and `GetIRRepeaterState` (`CurrentIRRepeaterState`), and its feedback setter alone takes
+`LEDFeedbackState` with no `Desired`. `/xml/device_description.xml` carries About My System's fields
+(`modelName`, `displayVersion`, `softwareVersion`, `serialNum`). `ZoneGroupTopology CheckForUpdate`
+(`Software`, `CachedOnly` 1) offers an `UpdateItem` as text; **its `DownloadSize`, not its version,
+says whether an update waits** — Dining Room's SYMFONISK pair runs 86.10-80260 and is offered 97.1
+with `DownloadSize` 0. `/status/batterystatus` on a speaker on mains is an empty `<ZPSupportInfo>`;
+no portable has been read here.
+
 **Android's XML parser takes no Xerces features.** `DocumentBuilderFactory.setFeature` for
 `disallow-doctype-decl` throws `ParserConfigurationException` on the Shield (Android 11), so
 there no UPnP reply parsed and every fault read as a bare HTTP 500 — unseen because the JVM's
