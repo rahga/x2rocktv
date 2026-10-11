@@ -131,17 +131,18 @@ fun SearchScreen(
             Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
                 ScreenHeader(title = "Search", room = room, onBack = onBack)
                 Spacer(Modifier.height(20.dp))
+                // A fresh search is not a return from an album: the old row key would hold focus in the field.
+                val search = { openedFrom = null; viewModel.search() }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SearchField(
                         value = query,
                         placeholder = "Songs, albums, artists, stations",
                         onValueChange = viewModel::setQuery,
-                        // A fresh search is not a return from an album: the old row key would hold focus in the field.
-                        onSearch = { openedFrom = null; viewModel.search() },
+                        onSearch = search,
                         modifier = Modifier.weight(1f).focusRequester(fieldFocus),
                     )
                     Spacer(Modifier.width(16.dp))
-                    AppButton(onClick = viewModel::search) { Text("Search") }
+                    AppButton(onClick = search) { Text("Search") }
                 }
                 Spacer(Modifier.height(16.dp))
                 Status(results)

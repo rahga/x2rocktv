@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -21,8 +22,11 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -32,6 +36,12 @@ import androidx.tv.material3.Text
  * Plain text entry, outlined in the theme's colours: tv-material3 has no text field, and the
  * app sets no material3 theme for one to draw in. Focusing it brings up the system keyboard, with
  * its microphone for dictating from the remote. Shared by every search in the app.
+ *
+ * The D-pad leaves it as it would any control. While the keyboard is up its keys are the
+ * keyboard's; once Back has closed it they reach the field, and a text field keeps every arrow
+ * for its cursor — so Right never reached the Search button beside it, nor Down the results
+ * (Shield, 2026-10-11). Up and Down always move focus; Right and Left only from the end of the
+ * text that way, so a hardware keyboard's arrows still move the cursor within it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -49,14 +59,18 @@ fun SearchField(
     var focused by remember { mutableStateOf(false) }
     val colors = MaterialTheme.colorScheme
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    // The cursor is kept here, for the arrows; the text is still the caller's, which may refuse an edit.
+    var edited by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    val field = if (edited.text == value) edited else TextFieldValue(value, TextRange(value.length))
     // The keyboard goes once the search is sent: the results are under it.
     val search = {
         keyboard?.hide()
         onSearch()
     }
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = field,
+        onValueChange = { edited = it; if (it.text != value) onValueChange(it.text) },
         singleLine = true,
         textStyle = MaterialTheme.typography.titleMedium.copy(color = colors.onSurface),
         cursorBrush = SolidColor(colors.primary),
@@ -71,10 +85,16 @@ fun SearchField(
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && (event.key == Key.Enter || event.key == Key.NumPadEnter)) {
-                    search()
-                    true
-                } else false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val cursor = field.selection.takeIf { it.collapsed }?.start
+                when (event.key) {
+                    Key.Enter, Key.NumPadEnter -> { search(); true }
+                    Key.DirectionDown -> focusManager.moveFocus(FocusDirection.Down)
+                    Key.DirectionUp -> focusManager.moveFocus(FocusDirection.Up)
+                    Key.DirectionRight -> cursor == field.text.length && focusManager.moveFocus(FocusDirection.Right)
+                    Key.DirectionLeft -> cursor == 0 && focusManager.moveFocus(FocusDirection.Left)
+                    else -> false
+                }
             },
         decorationBox = { inner ->
             Box(

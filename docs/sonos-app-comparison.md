@@ -88,7 +88,8 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
 - **The search field holds the D-pad once the keyboard is closed.** With the keyboard dismissed
   (Back), Right and Down stay in the field, so the Search button beside it and the results under it
   cannot be reached; Back leaves the screen. Seen on the Shield with key events from both the
-  keyboard and D-pad sources; the keyboard's own SEARCH key works. PUNCH P-19.
+  keyboard and D-pad sources; the keyboard's own SEARCH key works. PUNCH P-19, fixed the same day:
+  Up and Down always leave the field, Right and Left from the end of the text (`SearchFieldFocusTest`).
 
 ## Attainable, in order of what a listener would notice
 
@@ -96,7 +97,7 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
    account's token as `Authorization: Bearer`, falling back to SMAPI root on any non-200 — today
    `SmapiClient.shelves` is anonymous and only consulted when root is empty. Amazon (401) and TuneIn
    (403) want the header each expects worked out first.
-2. **The search field's D-pad trap** (above).
+2. ~~The search field's D-pad trap~~ (above; fixed).
 3. **Recent searches** on the Search screen.
 4. **Sub and surround levels** in the room panel's Sound section, for rooms that have them.
 5. **Amazon's "Content Unavailable" row** dropped from listings.
