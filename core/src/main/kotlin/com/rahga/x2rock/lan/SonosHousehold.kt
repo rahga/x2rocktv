@@ -35,6 +35,7 @@ import com.rahga.x2rock.smapi.Rating
 import com.rahga.x2rock.smapi.RatingsCatalogue
 import com.rahga.x2rock.smapi.RatingsMatch
 import com.rahga.x2rock.smapi.RatingsStore
+import com.rahga.x2rock.smapi.ResumePoint
 import com.rahga.x2rock.smapi.Service
 import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.smapi.Shelf
@@ -1278,7 +1279,7 @@ class SonosHousehold(
      * Where [book] resumes — the chapter its service has the listener in, and how far into it — or
      * null where it keeps no place. One `getMetadata` of a single chapter: the place comes with it.
      */
-    suspend fun bookResume(linked: LinkedService, book: Item): com.rahga.x2rock.smapi.ResumePoint? =
+    suspend fun bookResume(linked: LinkedService, book: Item): ResumePoint? =
         smapi.chapters(linked.service, linked.token, book.id).resume
 
     /**
@@ -1603,7 +1604,6 @@ class SonosHousehold(
     suspend fun setBass(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.BASS, level)
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
-    suspend fun statusLight(playerId: String): Boolean = upnp.statusLight(hostnameOf(playerId))
     /** One speaker, as About My System lists it: the room it is in, what it is, and any update offered. */
     data class SpeakerAbout(val playerId: String, val room: String, val info: DeviceInfo?, val offer: SoftwareOffer?) {
         /** An update is waiting where there is something to download — see [SoftwareOffer]. Read, never applied. */
@@ -1628,6 +1628,7 @@ class SonosHousehold(
     suspend fun remoteSettings(soundbarId: String): RemoteSettings = upnp.remoteSettings(hostnameOf(soundbarId))
     suspend fun setRemoteFeedback(soundbarId: String, on: Boolean) = upnp.setRemoteFeedback(hostnameOf(soundbarId), on)
     suspend fun setIrRepeater(soundbarId: String, on: Boolean) = upnp.setIrRepeater(hostnameOf(soundbarId), on)
+    suspend fun statusLight(playerId: String): Boolean = upnp.statusLight(hostnameOf(playerId))
     suspend fun setStatusLight(playerId: String, on: Boolean) = upnp.setStatusLight(hostnameOf(playerId), on)
     suspend fun buttonsLocked(playerId: String): Boolean = upnp.buttonsLocked(hostnameOf(playerId))
     suspend fun setButtonsLocked(playerId: String, locked: Boolean) = upnp.setButtonsLocked(hostnameOf(playerId), locked)

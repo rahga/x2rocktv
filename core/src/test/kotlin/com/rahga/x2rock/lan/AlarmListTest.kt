@@ -35,6 +35,7 @@ class AlarmListTest {
     private val requests = CopyOnWriteArrayList<Pair<String, Map<String, String>>>()
     @Volatile private var list = "ListAlarms.two.xml"
     @Volatile private var duplicate = false
+    @Volatile private var armed = false
 
     /** The ten fields `UpdateAlarm` requires; the 402 capture is what a record missing one gets. */
     private val fields = listOf(
@@ -51,7 +52,9 @@ class AlarmListTest {
                     val f = soapFields(request.body.readUtf8())
                     requests += action to f
                     return when (action) {
-                        "ListAlarms" -> MockResponse().setBody(FakePlayer.fixtureText(list))
+                        "ListAlarms" -> MockResponse().setBody(FakePlayer.fixtureText(list).let {
+                            if (armed) it.replace("Recurrence=&quot;WEEKDAYS&quot; Enabled=&quot;0&quot;", "Recurrence=&quot;WEEKDAYS&quot; Enabled=&quot;1&quot;") else it
+                        })
                         // As the player does: all ten fields and an id, or 402.
                         "UpdateAlarm" -> if (f.keys.containsAll(fields + "ID")) MockResponse().setBody(FakePlayer.fixtureText("UpdateAlarm.reply.xml"))
                             else MockResponse().setResponseCode(500).setBody(FakePlayer.fixtureText("UpdateAlarm.partial.fault402.xml"))
@@ -114,6 +117,16 @@ class AlarmListTest {
     @Test fun `an alarm already in that state is not written`() = runBlocking<Unit> {
         household.setAlarmEnabled(33, false)
         assertEquals(listOf("ListAlarms"), requests.map { it.first })
+    }
+
+    /** Both captured alarms are disarmed; [armed] is Kitchen's list with only 33's `Enabled` moved. */
+    @Test fun `an armed alarm reads armed, and disarming writes Enabled 0`() = runBlocking<Unit> {
+        armed = true
+        assertTrue(household.alarms().first { it.id == 33 }.enabled)
+        household.setAlarmEnabled(33, true)
+        assertEquals("already armed: nothing written", listOf("ListAlarms", "ListAlarms"), requests.map { it.first })
+        household.setAlarmEnabled(33, false)
+        assertEquals("0", requests.last { it.first == "UpdateAlarm" }.second["Enabled"])
     }
 
     @Test fun `a new alarm answers the id it was given`() = runBlocking<Unit> {

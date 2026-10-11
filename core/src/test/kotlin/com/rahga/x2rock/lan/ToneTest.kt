@@ -30,6 +30,8 @@ class ToneTest {
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
     private val requests = CopyOnWriteArrayList<Pair<String, Map<String, String>>>()
+    /** Kitchen's replies say Off; a test may turn one to On, which is the only other word sent. */
+    @Volatile private var lightAndLock = "Off"
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
@@ -42,8 +44,8 @@ class ToneTest {
                     return when (action) {
                         "GetRoomCalibrationStatus" -> MockResponse().setBody(FakePlayer.fixtureText("GetRoomCalibrationStatus.reply.xml"))
                         // Kitchen's, 2026-10-10: light off, controls unlocked, and the empty write reply.
-                        "GetLEDState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDState.xml"))
-                        "GetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("GetButtonLockState.xml"))
+                        "GetLEDState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDState.xml").replace(">Off<", ">$lightAndLock<"))
+                        "GetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("GetButtonLockState.xml").replace(">Off<", ">$lightAndLock<"))
                         "SetLEDState", "SetButtonLockState" -> MockResponse().setBody(FakePlayer.fixtureText("SetLEDState.xml"))
                         // Bedroom's Beam, 2026-10-10: feedback on, repeater on.
                         "GetLEDFeedbackState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDFeedbackState.xml"))
@@ -106,12 +108,20 @@ class ToneTest {
         assertEquals(listOf("GetLEDState", "GetButtonLockState"), requests.map { it.first }.filter { it.startsWith("Get") && it != "GetRoomCalibrationStatus" })
     }
 
+    @Test fun `a lit light and locked controls read as such`() = runBlocking<Unit> {
+        lightAndLock = "On"
+        assertEquals(true, household.statusLight(fake.id))
+        assertEquals(true, household.buttonsLocked(fake.id))
+    }
+
     /** Only the two words are sent: the player lights the light for anything but `Off`. */
     @Test fun `the switches are written as On and Off`() = runBlocking<Unit> {
         household.setStatusLight(fake.id, true)
+        household.setStatusLight(fake.id, false)
+        household.setButtonsLocked(fake.id, true)
         household.setButtonsLocked(fake.id, false)
-        assertEquals("On", requests.first { it.first == "SetLEDState" }.second["DesiredLEDState"])
-        assertEquals("Off", requests.first { it.first == "SetButtonLockState" }.second["DesiredButtonLockState"])
+        assertEquals(listOf("On", "Off"), requests.filter { it.first == "SetLEDState" }.map { it.second["DesiredLEDState"] })
+        assertEquals(listOf("On", "Off"), requests.filter { it.first == "SetButtonLockState" }.map { it.second["DesiredButtonLockState"] })
     }
 
     // ---------------------------------------------------------------- volume limit

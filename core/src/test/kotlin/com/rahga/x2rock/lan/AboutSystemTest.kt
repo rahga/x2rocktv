@@ -29,6 +29,7 @@ class AboutSystemTest {
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
     @Volatile private var offer = FakePlayer.fixtureText("CheckForUpdate.cached.xml")
+    @Volatile private var description = FakePlayer.fixtureText("device_description.kitchen.xml")
     private val actions = CopyOnWriteArrayList<String>()
 
     @Before fun setUp() {
@@ -36,7 +37,7 @@ class AboutSystemTest {
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse = when {
-                    request.path == "/xml/device_description.xml" -> MockResponse().setBody(FakePlayer.fixtureText("device_description.kitchen.xml"))
+                    request.path == "/xml/device_description.xml" -> MockResponse().setBody(description)
                     soapAction(request) == "CheckForUpdate" -> MockResponse().setBody(offer).also { actions += soapFields(request.body.readUtf8()).toString() }
                     else -> MockResponse().setBody(EMPTY_SOAP)
                 }
@@ -69,12 +70,14 @@ class AboutSystemTest {
     }
 
     /**
-     * Dining Room's SYMFONISK pair, captured: it runs 86.10 and is offered the household's 97.1 with
-     * nothing to download. A version comparison called that an update; the CLI and the size do not.
+     * Dining Room's SYMFONISK pair runs 86.10 and is offered the household's 97.1 with nothing to
+     * download (2026-10-10). Its offer reads exactly as Kitchen's, so Kitchen's description is served
+     * with only its build moved back: a version comparison would call that an update; the size does not.
      */
     @Test fun `another build offered with nothing to download is no update`() = runBlocking<Unit> {
-        offer = FakePlayer.fixtureText("CheckForUpdate.cached.symfonisk.xml")
+        description = description.replace("<softwareVersion>97.1-80312<", "<softwareVersion>86.10-80260<")
         val one = household.aboutSystem().first()
+        assertEquals("86.10-80260", one.info?.softwareVersion)
         assertEquals("97.1-80312", one.offer?.version)
         assertFalse(one.updateWaiting)
     }

@@ -1,10 +1,9 @@
 package com.rahga.x2rock.lan
 
-import com.rahga.x2rock.smapi.AccountCapture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.first
-import okhttp3.OkHttpClient
 import kotlinx.coroutines.withTimeout
+import okhttp3.OkHttpClient
 
 /** Connect to [fake] as its seed and wait until the household says it is connected. */
 suspend fun SonosHousehold.connectTo(fake: FakePlayer, timeoutMillis: Long = 5_000): HouseholdState {
@@ -25,8 +24,10 @@ class FakeSeedStore(
 /**
  * A household pointed at [fake], with what every test wants fixed: no multicast, the production
  * client over [addressBook], and **no real SSDP or mDNS** — a test that dropped its connection used to
- * reconnect through a sweep of this machine's actual LAN (two did, until 2026-10-10). The rest are
- * the constructor's own parameters, defaulted as it defaults them; name only what a test changes.
+ * reconnect through a sweep of this machine's actual LAN (two did, until 2026-10-10) — and no GENA
+ * subscribe to a player for its accounts, which a test wanting them passes as [accountCapture]. The
+ * rest are the constructor's own parameters, defaulted as it defaults them; name only what a test
+ * changes.
  */
 fun fakeHousehold(
     fake: FakePlayer,
@@ -38,7 +39,7 @@ fun fakeHousehold(
     ssdp: suspend () -> List<Discovery.DiscoveredPlayer> = { emptyList() },
     mdns: MdnsDiscovery = MdnsDiscovery.None,
     internetClient: OkHttpClient = OkHttpClient(),
-    accountCapture: suspend (String) -> String? = { AccountCapture.captureEnvelope(it) },
+    accountCapture: suspend (String) -> String? = { null },
 ): SonosHousehold = SonosHousehold(
     scope = scope,
     addressBook = addressBook,

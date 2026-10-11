@@ -7,6 +7,7 @@ import com.rahga.x2rock.lan.firstChildNamed
 import com.rahga.x2rock.lan.firstNamed
 import com.rahga.x2rock.lan.localTag
 import com.google.gson.JsonParser
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -532,12 +533,6 @@ fun parseServices(descriptorList: String, typeList: String = ""): List<Service> 
 }
 
 /**
- * The items in a `search` or `getMetadata` reply, and the total it claims. One parser for
- * both: the payload is the same shape, `mediaCollection` for something to descend into and
- * `mediaMetadata` for something to play, and services mix them freely in either call. Read in
- * document order so a mixed page keeps the service's own ordering.
- */
-/**
  * The playlists [browse] shows that can be added to. They live in the collection marked the
  * account's own and not read-only — at the root, or one level into another of the account's own
  * (Deezer: My Music, read-only, holds My Playlists, writable) — and each playlist in it says for
@@ -548,12 +543,24 @@ suspend fun writablePlaylists(browse: suspend (id: String) -> List<Item>): List<
     val root = browse("root")
     val home = place(root)
         ?: root.filter { it.container && it.userContent }.firstNotNullOfOrNull { mine ->
-            runCatching { place(browse(mine.id)) }.getOrNull()
+            try {
+                place(browse(mine.id))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
         }
         ?: return emptyList()
     return browse(home.id).filter { it.container && !it.readOnly }
 }
 
+/**
+ * The items in a `search` or `getMetadata` reply, and the total it claims. One parser for
+ * both: the payload is the same shape, `mediaCollection` for something to descend into and
+ * `mediaMetadata` for something to play, and services mix them freely in either call. Read in
+ * document order so a mixed page keeps the service's own ordering.
+ */
 fun parseItems(body: String): ItemPage {
     val root = Xml.parse(body)
     val total = root.firstNamed("total")?.textContent?.trim()?.toIntOrNull() ?: 0
@@ -582,8 +589,8 @@ fun parseItems(body: String): ItemPage {
                 artUrl = child("albumArtURI") ?: nested("trackMetadata", "albumArtURI")
                     ?: nested("streamMetadata", "logo"),
                 container = container,
-                userContent = (node as? org.w3c.dom.Element)?.getAttribute("userContent") == "true",
-                readOnly = (node as? org.w3c.dom.Element)?.getAttribute("readOnly") != "false",
+                userContent = node.getAttribute("userContent") == "true",
+                readOnly = node.getAttribute("readOnly") != "false",
             )
         }
     return ItemPage(items, total)

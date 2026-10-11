@@ -40,6 +40,15 @@ class WritablePlaylistsTest {
         assertTrue("no flags is read-only", flow.readOnly)
     }
 
+    /** The place is writable, but a playlist in it may still say it is not: Deezer's own, made read-only. */
+    @Test fun `a read-only playlist in the account's place is not offered`() = runBlocking<Unit> {
+        val found = writablePlaylists { id ->
+            val page = FakePlayer.fixtureText(pages.getValue(id))
+            parseItems(if (id == "playlists") page.replace("readOnly=\"false\"", "readOnly=\"true\"") else page).items
+        }
+        assertTrue(found.isEmpty())
+    }
+
     @Test fun `a service with no place of its own offers nothing`() = runBlocking<Unit> {
         val none = writablePlaylists { listOf(Item("x", "Charts", "trackList", null, null, container = true)) }
         assertTrue(none.isEmpty())

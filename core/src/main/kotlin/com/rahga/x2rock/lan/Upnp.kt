@@ -304,12 +304,12 @@ class Upnp(
     suspend fun zoneName(hostname: String): String? =
         statusZp(hostname)?.let { Regex("<ZoneName>([^<]+)</ZoneName>").find(it)?.groupValues?.get(1) }
 
-    private suspend fun statusZp(hostname: String): String? = statusPage(hostname, "zp")
+    private suspend fun statusZp(hostname: String): String? = page(hostname, "/status/zp")
 
-    /** One of the player's own support pages, `/status/<page>`; null for anything but a 200. */
-    private suspend fun statusPage(hostname: String, page: String): String? = withContext(Dispatchers.IO) {
+    /** One of the player's own cleartext pages, such as `/status/zp`; null for anything but a 200. */
+    private suspend fun page(hostname: String, path: String): String? = withContext(Dispatchers.IO) {
         require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
-        client.newCall(Request.Builder().url("http://$hostname:$port/status/$page").build()).awaitReply().let { response ->
+        client.newCall(Request.Builder().url("http://$hostname:$port$path").build()).awaitReply().let { response ->
             if (!response.isSuccessful) null else response.body
         }
     }
@@ -318,12 +318,8 @@ class Upnp(
      * What a player says about itself — the fields the Sonos apps' About My System prints — from its
      * own `/xml/device_description.xml`, one cleartext GET (Kitchen, 2026-10-10; x2rock's `system`).
      */
-    suspend fun deviceInfo(hostname: String): DeviceInfo? = withContext(Dispatchers.IO) {
-        require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
-        val body = client.newCall(Request.Builder().url("http://$hostname:$port/xml/device_description.xml").build())
-            .awaitReply().takeIf { it.isSuccessful }?.body ?: return@withContext null
-        parseDeviceInfo(body)
-    }
+    suspend fun deviceInfo(hostname: String): DeviceInfo? =
+        page(hostname, "/xml/device_description.xml")?.let(::parseDeviceInfo)
 
     /**
      * What a player is being offered, or null where it says nothing. `CheckForUpdate` with
@@ -345,7 +341,7 @@ class Upnp(
      * `<ZPSupportInfo>` (Kitchen, 2026-10-10; a Beam for x2rock): the absent block is the answer.
      * **Untested against a portable**: see [parseBattery].
      */
-    suspend fun battery(hostname: String): Battery? = statusPage(hostname, "batterystatus")?.let(::parseBattery)
+    suspend fun battery(hostname: String): Battery? = page(hostname, "/status/batterystatus")?.let(::parseBattery)
 
     /**
      * The group's own sleep timer: how long until it stops, or `null` with none set.
