@@ -1025,7 +1025,10 @@ class SonosHouseholdTest {
         assertTrue(household.groupStates.value.isEmpty())
 
         // And nothing is trying to come back up. Asserted behaviourally rather than by
-        // counting jobs: wait past the first backoff and check the player is left alone.
+        // counting jobs: wait past the first backoff and check the player is left alone. Only once
+        // every socket has closed: a command sent just before the disconnect can still be in flight
+        // under load, and landing after the clear it read as a reconnect (PUNCH P-17).
+        withTimeout(5_000) { while (fake.openSockets > 0) delay(20) }
         fake.clearHistory()
         delay(MIN_BACKOFF_MILLIS + 1_500)
         assertTrue(

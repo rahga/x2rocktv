@@ -128,6 +128,12 @@ class FakePlayer(
      * player a connection is to — and so which one [dropConnection] can end on its own.
      */
     private val sockets = java.util.concurrent.ConcurrentHashMap<String, WebSocket>()
+
+    /**
+     * How many of the client's sockets are still open. A frame sent on one arrives before its
+     * close, so once this is 0 nothing the client sent can still be on its way in.
+     */
+    val openSockets: Int get() = sockets.size
     /** The most recently opened, which is what a bare [dropConnection] has always ended. */
     @Volatile private var socket: WebSocket? = null
     @Volatile private var groups: JsonObject = reachableTopology()
