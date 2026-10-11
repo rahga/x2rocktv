@@ -3,11 +3,9 @@ package com.rahga.x2rock.viewmodel
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
-import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.fakeHousehold
 import com.rahga.x2rock.radio.RadioDirectory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -56,10 +54,7 @@ class RadioViewModelTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book)
         runBlocking {
             household.connectTo(fake, 10_000)
         }

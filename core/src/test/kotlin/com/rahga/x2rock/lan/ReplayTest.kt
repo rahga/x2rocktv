@@ -32,10 +32,7 @@ class ReplayTest {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), port = fake.port, settleMillis = 2_000,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book, settleMillis = 2_000)
         runBlocking {
             household.connectTo(fake)
         }

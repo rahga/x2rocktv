@@ -59,14 +59,12 @@ class TwoHouseholdsTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope,
+        household = fakeHousehold(
+            fake,
+            scope,
             addressBook = book,
-            multicast = MulticastGate.None,
-            client = LanHttp.client(book),
-            seeds = seeds,
-            port = fake.port,
             upnpPort = status.port,
+            seeds = seeds,
             ssdp = { bothHouseholds() },
         )
     }
@@ -100,10 +98,12 @@ class TwoHouseholdsTest {
     /** The office case, SSDP dropped, with two systems on it: mDNS must not guess either. */
     @Test fun `two households found by mDNS are a question too`() = runBlocking<Unit> {
         val book = PlayerAddressBook()
-        val mdnsOnly = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            mdns = { bothHouseholds() }, client = LanHttp.client(book),
-            port = fake.port, upnpPort = status.port, ssdp = { emptyList() },
+        val mdnsOnly = fakeHousehold(
+            fake,
+            scope,
+            addressBook = book,
+            upnpPort = status.port,
+            mdns = { bothHouseholds() },
         )
         try {
             runCatching { mdnsOnly.connect() }
@@ -117,9 +117,10 @@ class TwoHouseholdsTest {
 
     /** One household with several players is the ordinary case, and asks nothing. */
     @Test fun `several players of one household need no choice`() = runBlocking<Unit> {
-        val single = SonosHousehold(
-            scope = scope, addressBook = PlayerAddressBook(), multicast = MulticastGate.None,
-            port = fake.port, upnpPort = status.port,
+        val single = fakeHousehold(
+            fake,
+            scope,
+            upnpPort = status.port,
             ssdp = {
                 listOf(
                     Discovery.DiscoveredPlayer(fake.id, loopback, fake.householdId),

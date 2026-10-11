@@ -42,15 +42,7 @@ class SonosHouseholdTest {
         scope = CoroutineScope(SupervisorJob())
         seeds = FakeSeedStore(held = fake.seed)
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope,
-            addressBook = book,
-            multicast = MulticastGate.None,
-            // The production client: trust manager, address book, default hostname verifier.
-            client = LanHttp.client(book),
-            seeds = seeds,
-            port = fake.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book, seeds = seeds)
     }
 
     @After fun tearDown() {
@@ -911,10 +903,7 @@ class SonosHouseholdTest {
      * remembered must still find the household.
      */
     @Test fun `a network that drops SSDP is found by mDNS`() = runBlocking<Unit> {
-        val cold = SonosHousehold(
-            scope = scope, addressBook = PlayerAddressBook().also { }, multicast = MulticastGate.None,
-            mdns = { listOf(fake.seed) }, port = fake.port, ssdp = { emptyList() },
-        )
+        val cold = fakeHousehold(fake, scope, mdns = { listOf(fake.seed) })
         try {
             cold.connect()
             withTimeout(5_000) { cold.state.first { it.connected } }
@@ -959,9 +948,11 @@ class SonosHouseholdTest {
      */
     private suspend fun seededWithDiscovery(ssdp: suspend () -> List<Discovery.DiscoveredPlayer>): SonosHousehold {
         val book = PlayerAddressBook()
-        return SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), seeds = FakeSeedStore(held = fake.seed), port = fake.port,
+        return fakeHousehold(
+            fake,
+            scope,
+            addressBook = book,
+            seeds = FakeSeedStore(held = fake.seed),
             ssdp = ssdp,
         ).also {
             it.connect()

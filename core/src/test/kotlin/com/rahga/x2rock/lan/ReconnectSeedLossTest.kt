@@ -20,9 +20,10 @@ class ReconnectSeedLossTest {
     @Test(timeout = 20_000) fun `a seed lost while a reconnect sets up is reconnected again, not left deaf`() = runBlocking {
         val fake = FakePlayer().also { it.start() }
         val scope = CoroutineScope(SupervisorJob())
-        val household = SonosHousehold(
-            scope = scope, addressBook = PlayerAddressBook(), multicast = MulticastGate.None,
-            seeds = FakeSeedStore(keyedByNetwork = true, held = fake.seed), port = fake.port,
+        val household = fakeHousehold(
+            fake,
+            scope,
+            seeds = FakeSeedStore(keyedByNetwork = true, held = fake.seed),
             ssdp = { listOf(fake.seed) },
         )
         try {

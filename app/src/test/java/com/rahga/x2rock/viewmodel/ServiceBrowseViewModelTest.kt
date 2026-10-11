@@ -4,18 +4,16 @@ import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.lan.FakePlayer
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.connectTo
+import com.rahga.x2rock.lan.fakeHousehold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -101,10 +99,12 @@ class ServiceBrowseViewModelTest {
                Token0="t" Key0="k" Nickname0="Qb1" Username0="X_#Svc7943-abc-Token"/></ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), internetClient = OkHttpClient(),
-            port = fake.port, upnpPort = upnp.port, accountCapture = { envelope },
+        household = fakeHousehold(
+            fake,
+            scope,
+            addressBook = book,
+            upnpPort = upnp.port,
+            accountCapture = { envelope },
         )
         runBlocking { household.connectTo(fake) }
         viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))

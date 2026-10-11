@@ -3,12 +3,10 @@ package com.rahga.x2rock.viewmodel
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
-import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.soapFields
+import com.rahga.x2rock.lan.fakeHousehold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
@@ -70,10 +68,7 @@ class SleepTimerViewModelTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), seeds = SeedStore.None, port = fake.port, upnpPort = upnp.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book, upnpPort = upnp.port)
         viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
         runBlocking { household.connectTo(fake) }
         groupId = fake.groupId(household)

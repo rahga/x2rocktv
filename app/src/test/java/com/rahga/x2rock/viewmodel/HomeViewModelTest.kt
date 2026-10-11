@@ -5,12 +5,10 @@ import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
 import com.google.gson.JsonObject
 import com.rahga.x2rock.lan.FakePlayer
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
-import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
+import com.rahga.x2rock.lan.fakeHousehold
 import com.rahga.x2rock.model.AppColorTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -55,17 +53,7 @@ class HomeViewModelTest {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope,
-            addressBook = book,
-            multicast = MulticastGate.None,
-            client = LanHttp.client(book),
-            seeds = SeedStore.None,
-            port = fake.port,
-            // Never real SSDP: a dropped connection reconnects through discovery, which would
-            // otherwise find the actual house this JVM is on.
-            ssdp = { emptyList() },
-        )
+        household = fakeHousehold(fake, scope, addressBook = book)
         prefs = FakePreferences()
         roomPrefs = RoomPreferencesStore(prefs)
         channels = RecordingChannelSync()

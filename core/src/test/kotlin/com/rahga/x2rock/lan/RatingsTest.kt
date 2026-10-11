@@ -8,7 +8,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -157,13 +156,10 @@ class RatingsTest {
                </ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
-        household = SonosHousehold(
-            scope = scope,
+        household = fakeHousehold(
+            fake,
+            scope,
             addressBook = book,
-            multicast = MulticastGate.None,
-            client = LanHttp.client(book),
-            internetClient = OkHttpClient(),
-            port = fake.port,
             upnpPort = upnp.port,
             accountCapture = { envelope },
         )

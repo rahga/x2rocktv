@@ -67,10 +67,7 @@ class AlarmListTest {
             start(InetAddress.getByName("127.0.0.1"), 0)
         }
         scope = CoroutineScope(SupervisorJob())
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book, upnpPort = upnp.port)
         runBlocking { household.connectTo(fake, 10_000) }
         requests.clear()
     }

@@ -45,10 +45,7 @@ class AboutSystemTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book, upnpPort = upnp.port)
         runBlocking { household.connectTo(fake, 10_000) }
     }
 

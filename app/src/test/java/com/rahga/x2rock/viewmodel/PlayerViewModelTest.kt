@@ -1,11 +1,9 @@
 package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.lan.FakePlayer
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
-import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.fakeHousehold
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import kotlinx.coroutines.CoroutineScope
@@ -48,17 +46,7 @@ class PlayerViewModelTest {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope,
-            addressBook = book,
-            multicast = MulticastGate.None,
-            client = LanHttp.client(book),
-            seeds = SeedStore.None,
-            port = fake.port,
-            // Never real SSDP: a dropped connection reconnects through discovery, which would
-            // otherwise find the actual house this JVM is on.
-            ssdp = { emptyList() },
-        )
+        household = fakeHousehold(fake, scope, addressBook = book)
         publisher = RecordingNowPlaying()
         viewModel = PlayerViewModel(household, publisher, testClock)
 

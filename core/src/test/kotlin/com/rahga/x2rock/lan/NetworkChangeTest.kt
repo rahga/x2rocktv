@@ -40,9 +40,10 @@ class NetworkChangeTest {
 
     private fun seed() = fake.seed
 
-    private fun household(keyed: Boolean) = SonosHousehold(
-        scope = scope, addressBook = PlayerAddressBook(), multicast = MulticastGate.None,
-        seeds = FakeSeedStore(keyed, seed()), port = fake.port,
+    private fun household(keyed: Boolean) = fakeHousehold(
+        fake,
+        scope,
+        seeds = FakeSeedStore(keyed, seed()),
         ssdp = { sweeps.incrementAndGet(); listOf(seed()) },
     )
 

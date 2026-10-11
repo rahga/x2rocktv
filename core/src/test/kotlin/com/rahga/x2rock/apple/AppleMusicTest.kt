@@ -1,13 +1,12 @@
 package com.rahga.x2rock.apple
 
 import com.rahga.x2rock.lan.FakePlayer
-import com.rahga.x2rock.lan.LanHttp
-import com.rahga.x2rock.lan.MulticastGate
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
 import com.rahga.x2rock.lan.soapFields
+import com.rahga.x2rock.lan.fakeHousehold
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,9 +66,12 @@ class AppleMusicTest {
         }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), port = fake.port, upnpPort = upnp.port, settleMillis = 2_000,
+        household = fakeHousehold(
+            fake,
+            scope,
+            addressBook = book,
+            upnpPort = upnp.port,
+            settleMillis = 2_000,
         )
         runBlocking { household.connectTo(fake) }
     }

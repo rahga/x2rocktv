@@ -32,9 +32,10 @@ class LossDuringSetupTest {
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
-        household = SonosHousehold(
-            scope = scope, addressBook = PlayerAddressBook(), multicast = MulticastGate.None,
-            seeds = FakeSeedStore(keyedByNetwork = true, held = fake.seed), port = fake.port,
+        household = fakeHousehold(
+            fake,
+            scope,
+            seeds = FakeSeedStore(keyedByNetwork = true, held = fake.seed),
             ssdp = { listOf(fake.seed) },
         )
     }

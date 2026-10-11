@@ -29,10 +29,7 @@ class LineInTest {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
-        household = SonosHousehold(
-            scope = scope, addressBook = book, multicast = MulticastGate.None,
-            client = LanHttp.client(book), port = fake.port,
-        )
+        household = fakeHousehold(fake, scope, addressBook = book)
         runBlocking { household.connectTo(fake, 10_000) }
     }
 
