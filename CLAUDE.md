@@ -405,6 +405,11 @@ see, and from a long press or Menu on the room, which stay for those who know th
 returns focus to whichever opened it. Group is in the pane's row rather than above or below the
 room list, for the reason in "Nothing that acts on the selected room" below.
 
+**A Sub and surrounds are in the Sound section too** (T-16, 2026-10-11), only for a room whose
+`zones:1` members name them (`SW`, `LR`/`RR`): Sub on/off and level, surrounds on/off and their TV
+and music levels, −15..15, as the Sonos app's Sub audio and Surround audio. Never offered from an EQ
+probe: the Sub types answer on a One SL with no Sub.
+
 **Crossfade lives in the panel's Sound section**, not the pane: Group needed its place in the row,
 and it is a room setting, which the Sonos app also keeps a level away. The row scrolls
 horizontally anyway, since a running sleep timer's label can still push it past the pane.

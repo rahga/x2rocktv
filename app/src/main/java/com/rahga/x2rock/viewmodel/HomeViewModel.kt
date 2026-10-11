@@ -13,6 +13,7 @@ import com.rahga.x2rock.lan.Battery
 import com.rahga.x2rock.lan.RemoteSettings
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.lan.Upnp
+import com.rahga.x2rock.model.Satellites
 import com.rahga.x2rock.model.AppColorTheme
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.hasLoadedContent
@@ -545,6 +546,8 @@ class HomeViewModel @Inject constructor(
         val remote: RemoteSettings? = null,
         /** A portable's pack, or `null` on mains. Untested against a portable: see `parseBattery`. */
         val battery: Battery? = null,
+        /** The room's Sub and surrounds, where it has either; see `SonosHousehold.satellites`. */
+        val satellites: Satellites? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -588,10 +591,11 @@ class HomeViewModel @Inject constructor(
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
             val remote = async { soundbar?.let { runCatching { household.remoteSettings(it) }.getOrNull() } }
             val battery = async { runCatching { household.battery(playerId) }.getOrNull() }
+            val satellites = async { runCatching { household.satellites(playerId) }.getOrNull() }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null
             val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
-            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await())
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await(), satellites.await())
         }
         if (read == null || edits != toneEdits || playerId != tonePlayer) return
         _tone.value = read
@@ -667,6 +671,40 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val locked = !(tone.buttonsLocked ?: return)
         editTone("buttons", "change the touch controls", tone.copy(buttonsLocked = locked)) { household.setButtonsLocked(it, locked) }
+    }
+
+    /** The Sub's level, as the Sonos app's Sub audio sets it; on the room's own player, like tone. */
+    fun stepSubLevel(delta: Int) = stepSatellite(delta, "sub", "change the Sub", { it.subLevel }, { s, v -> s.copy(subLevel = v) }) { id, v -> household.setSubLevel(id, v) }
+
+    /** The surrounds' level while the room plays its TV — the Sonos app's "TV Level". */
+    fun stepSurroundLevel(delta: Int) = stepSatellite(delta, "surround", "change the surrounds", { it.tvLevel }, { s, v -> s.copy(tvLevel = v) }) { id, v -> household.setSurroundLevel(id, v) }
+
+    /** The surrounds' level for music — the Sonos app's "Music Level". */
+    fun stepMusicSurroundLevel(delta: Int) = stepSatellite(delta, "musicSurround", "change the surrounds", { it.musicLevel }, { s, v -> s.copy(musicLevel = v) }) { id, v -> household.setMusicSurroundLevel(id, v) }
+
+    fun toggleSub() {
+        val tone = _tone.value ?: return
+        val s = tone.satellites ?: return
+        val on = !(s.subOn ?: return)
+        editTone("subOn", "turn the Sub ${if (on) "on" else "off"}", tone.copy(satellites = s.copy(subOn = on))) { household.setSubOn(it, on) }
+    }
+
+    fun toggleSurrounds() {
+        val tone = _tone.value ?: return
+        val s = tone.satellites ?: return
+        val on = !(s.surroundsOn ?: return)
+        editTone("surroundsOn", "turn the surrounds ${if (on) "on" else "off"}", tone.copy(satellites = s.copy(surroundsOn = on))) { household.setSurroundsOn(it, on) }
+    }
+
+    private fun stepSatellite(
+        delta: Int, key: String, what: String,
+        level: (Satellites) -> Int?, with: (Satellites, Int) -> Satellites, send: suspend (String, Int) -> Unit,
+    ) {
+        val tone = _tone.value ?: return
+        val s = tone.satellites ?: return
+        val now = level(s) ?: return
+        val target = (now + delta).coerceIn(Upnp.SATELLITE_RANGE)
+        if (target != now) editTone(key, what, tone.copy(satellites = with(s, target))) { send(it, target) }
     }
 
     fun toggleTrueplay() {

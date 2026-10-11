@@ -133,6 +133,11 @@ fun RoomPanel(
     onStepTreble: (Int) -> Unit,
     onToggleLoudness: () -> Unit,
     onToggleTrueplay: () -> Unit,
+    onToggleSub: () -> Unit,
+    onStepSub: (Int) -> Unit,
+    onToggleSurrounds: () -> Unit,
+    onStepSurround: (Int) -> Unit,
+    onStepMusicSurround: (Int) -> Unit,
     onToggleStatusLight: () -> Unit,
     onToggleRemoteFeedback: () -> Unit,
     onToggleIrRepeater: () -> Unit,
@@ -276,6 +281,21 @@ fun RoomPanel(
                 AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
                     Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
                 }
+            }
+            // The Sonos app's Sub audio and Surround audio, only where the room has the speakers:
+            // its zone names them, which an EQ probe cannot say (SonosHousehold.satellites).
+            shownTone.satellites?.let { s ->
+                s.subOn?.let { on ->
+                    AppButton(onClick = onToggleSub, modifier = Modifier.fillMaxWidth()) { Text(if (on) "Sub   On" else "Sub   Off") }
+                }
+                s.subLevel?.let { ToneRow("Sub level", it, onStepSub) }
+                s.surroundsOn?.let { on ->
+                    AppButton(onClick = onToggleSurrounds, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (on) "Surrounds   On" else "Surrounds   Off")
+                    }
+                }
+                s.tvLevel?.let { ToneRow("Surrounds for TV", it, onStepSurround) }
+                s.musicLevel?.let { ToneRow("Surrounds for music", it, onStepMusicSurround) }
             }
         }
         info.crossfade?.let { on ->

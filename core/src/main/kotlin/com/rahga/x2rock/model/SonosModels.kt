@@ -180,6 +180,21 @@ data class PlayerSettings(
  */
 data class EqSettings(val bass: Int = 0, val treble: Int = 0, val loudness: Boolean = false)
 
+/**
+ * A room's Sub and surrounds as the Sonos app's Sub audio and Surround audio set them: on or off,
+ * and a level of −15..15 ([com.rahga.x2rock.lan.Upnp.SATELLITE_RANGE]). Each is `null` where the
+ * room has no such speaker, or it would not say.
+ */
+data class Satellites(
+    val subOn: Boolean? = null,
+    val subLevel: Int? = null,
+    val surroundsOn: Boolean? = null,
+    /** While the room plays its TV. */
+    val tvLevel: Int? = null,
+    /** While it plays music. */
+    val musicLevel: Int? = null,
+)
+
 /** TruePlay, from RenderingControl's room calibration. Only read, and turned off or on. */
 data class TruePlay(val enabled: Boolean, val available: Boolean)
 

@@ -478,6 +478,15 @@ an id in its query and 404s one in its path; **`getMetadata` on Sonos Radio's SM
 id as it stands**, with no token: News & Talk answered 5,637 `stream`s (iHeart's, `ihr:` ids), Music
 17 genre containers in the same path form.
 
+**A room's Sub and surrounds are named by `zones:1`** (home, 2026-10-11). `activeZonesChange`, which
+the household already follows for disconnected satellites, gives every member's `channelMap`: Living
+Room's Beam `LF,RF` with a Sub `SW` and surrounds `LR` and `RR`; Bedroom's Beam with `LR` and `RR`;
+Dining Room's pair `LF,LF` and `RF,RF`. `settings:1 getPlayerSettings` carries no Sub or surround
+field at all, so the levels are RenderingControl `GetEQ`/`SetEQ` on the room's own player:
+`SubEnable`, `SubGain`, `SurroundEnable`, `SurroundLevel` (TV), `MusicSurroundLevel`. Living Room read
+1/0/1/0/0; `SubGain` stepped to 1 and back read back each time. Kitchen (One SL) answers `SubGain` 0
+and refuses the surround types, as x2rock's 2026-09-05 sweep found.
+
 **A service's own page takes its account's token as a bearer** (home, 2026-10-11). The manifest's
 `browse` endpoint, sent `Authorization: Bearer <the SMAPI token>`, answers Spotify's personal page
 (`spotify-v5.ws.sonos.com/v1/browse`, 22 views — "More like <artist>", "Recommended for today", "Your

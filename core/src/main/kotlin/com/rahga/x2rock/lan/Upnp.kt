@@ -418,6 +418,20 @@ class Upnp(
         rendering(hostname, "SetEQ", "EQType" to eqType, "DesiredValue" to if (on) "1" else "0")
     }
 
+    /** One EQ type's value, as `GetEQ` answers it: `CurrentValue`. A type the player lacks is UPnP 402. */
+    suspend fun eq(hostname: String, eqType: String): Int = withContext(Dispatchers.IO) {
+        parse(rendering(hostname, "GetEQ", "EQType" to eqType)).text("CurrentValue")?.trim()?.toIntOrNull()
+            ?: throw IOException("GetEQ $eqType answered no value")
+    }
+
+    /**
+     * An EQ type's value: a Sub's or the surrounds' level, −15..15 as the Sonos app sets them, or
+     * an enable as 0/1. For the toggles [setEq] says why the soundbar itself is addressed.
+     */
+    suspend fun setEqValue(hostname: String, eqType: String, value: Int): Unit = withContext(Dispatchers.IO) {
+        rendering(hostname, "SetEQ", "EQType" to eqType, "DesiredValue" to value.toString())
+    }
+
     /** Bass or treble, −10..10. The player answers an empty body; re-read to see it. */
     suspend fun setTone(hostname: String, which: Tone, level: Int): Unit = withContext(Dispatchers.IO) {
         require(level in TONE_RANGE) { "$level is outside the ${TONE_RANGE.first}..${TONE_RANGE.last} the player accepts" }
@@ -726,6 +740,9 @@ class Upnp(
         const val MAX_ITEMS = 1000
         /** Bass and treble, as the player accepts them. */
         val TONE_RANGE = -10..10
+
+        /** A Sub's or the surrounds' level, as the Sonos app sets them. */
+        val SATELLITE_RANGE = -15..15
 
         private val UPNP_ERRORS = mapOf(
             "701" to "no media loaded, or not available in this state",

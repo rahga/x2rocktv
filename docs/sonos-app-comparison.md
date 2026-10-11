@@ -100,7 +100,7 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
 - **Room settings, home theatre.** The app offers Surround audio (on/off, levels), Sub audio
   (on/off, level), TV autoplay, Ungroup on autoplay, TV dialog sync and Group audio delay.
   x2rocktv has night sound, speech enhancement, tone, loudness, status light, touch controls, IR
-  repeater and remote feedback light. Sub and surround levels are UPnP EQ types x2rock measured
+  repeater and remote feedback light, and since T-16 the Sub and surrounds (on/off and levels). Sub and surround levels are UPnP EQ types x2rock measured
   (`SubGain`, `SurroundLevel`, `MusicSurroundLevel`; they answer only where the hardware is), so
   they are attainable through the `setEq` this app already has. Autoplay and lip sync are probably
   `DeviceProperties`/EQ too, unverified.
@@ -127,7 +127,7 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
    (403) want the header each expects worked out first.
 2. ~~The search field's D-pad trap~~ (above; fixed).
 3. ~~Recent searches~~ on the Search screen (T-17, done).
-4. **Sub and surround levels** in the room panel's Sound section, for rooms that have them.
+4. ~~Sub and surround levels~~ in the room panel's Sound section, for rooms that have them (T-16, done).
 5. ~~Amazon's "Content Unavailable" row~~ dropped from listings (T-18, done).
 6. **Editing and removing alarms.**
 

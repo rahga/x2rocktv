@@ -66,6 +66,7 @@ class ToneStepsTest {
                     val text = request.body.readUtf8()
                     if (action == "SetLEDState") lights += Regex("<DesiredLEDState>(\\w+)<").find(text)!!.groupValues[1]
                     if (action == "SetLEDFeedbackState") feedbacks += Regex("<LEDFeedbackState>(\\w+)<").find(text)!!.groupValues[1]
+                    if (action == "SetEQ") eqWrites += Regex("<EQType>(\\w+)</EQType><DesiredValue>(-?\\d+)<").find(text)!!.destructured.let { (t, v) -> "$t=$v" }
                     return MockResponse().setBody(when (action) {
                         // Kitchen's, 2026-10-10: light off, controls unlocked.
                         "GetLEDState" -> FakePlayer.fixtureText("GetLEDState.xml")
@@ -75,6 +76,8 @@ class ToneStepsTest {
                         "GetLEDFeedbackState" -> FakePlayer.fixtureText("GetLEDFeedbackState.xml")
                         "GetIRRepeaterState" -> FakePlayer.fixtureText("GetIRRepeaterState.xml")
                         "SetLEDFeedbackState" -> FakePlayer.fixtureText("SetLEDFeedbackState.xml")
+                        // Kitchen's SubGain reply, 2026-10-11, standing for every EQ type read here.
+                        "GetEQ" -> FakePlayer.fixtureText("GetEQ.SubGain.xml")
                         else -> EMPTY_SOAP
                     })
                 }
@@ -98,6 +101,9 @@ class ToneStepsTest {
             withTimeout(10_000) { viewModel.uiState.first { it is HomeViewModel.UiState.Success } }
         }
     }
+
+    /** Every `SetEQ` written, as `type=value`, in order. */
+    private val eqWrites = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     /** Every `LEDFeedbackState` written, in order. */
     private val feedbacks = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -195,5 +201,26 @@ class ToneStepsTest {
         openKitchen()
         assertEquals(null, viewModel.tone.value?.remote)
         assertEquals(null, viewModel.tone.value?.battery)
+    }
+
+    /**
+     * A room with a Sub and surrounds — Living Room in the captured zones — offers their levels with
+     * its tone, and a press writes the Sub's; Kitchen, with neither, offers none.
+     */
+    @Test fun `the Sub and surrounds are offered where the room has them, and stepped`() = runBlocking<Unit> {
+        fake.pushFixture("activeZonesChange")
+        withTimeout(5_000) { household.state.first { it.bondedChannels.isNotEmpty() } }
+        openKitchen()
+        assertEquals("Kitchen has neither", null, viewModel.tone.value?.satellites)
+        val living = household.state.value.groups.first { it.name == "Living Room" }
+        viewModel.loadTone(living.id)
+        val read = withTimeout(5_000) { viewModel.tone.first { it?.playerId == living.coordinatorId && it.satellites != null } }!!
+        assertEquals(0, read.satellites?.subLevel)
+        assertEquals(0, read.satellites?.tvLevel)
+        viewModel.stepSubLevel(+1)
+        viewModel.stepSubLevel(+1)
+        assertEquals("shown at once", 2, viewModel.tone.value?.satellites?.subLevel)
+        withTimeout(5_000) { while (eqWrites.isEmpty()) delay(20) }
+        assertEquals(listOf("SubGain=2"), eqWrites.toList())
     }
 }

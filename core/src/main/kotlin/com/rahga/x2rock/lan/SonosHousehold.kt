@@ -23,6 +23,7 @@ import com.rahga.x2rock.model.QueueResponse
 import com.rahga.x2rock.model.Player
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.model.Track
+import com.rahga.x2rock.model.Satellites
 import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.smapi.AccountCapture
@@ -208,6 +209,13 @@ data class HouseholdState(
      */
     val offlineSpeakers: Map<String, Int> = emptyMap(),
     /**
+     * What each room's bonded speakers play, by the room's own player id: `SW` for a Sub, `LR` and
+     * `RR` for surrounds, from the same `zones:1` event. The only honest answer to "does this room
+     * have a Sub": every EQ type for one answers on a speaker that cannot have it (x2rock, home,
+     * 2026-09-05), while Living Room's Sub is plainly `SW` here (captured 2026-10-11).
+     */
+    val bondedChannels: Map<String, Set<String>> = emptyMap(),
+    /**
      * Each soundbar's `hdmi:1` `connection`, by player id: `CONNECTED`, or `NO_CONNECTION`
      * for an HDMI port with nothing in it (Guest TV's Beam, captured 2026-10-02). A soundbar
      * not yet heard from is absent, and counts as connected.
@@ -227,6 +235,12 @@ data class HouseholdState(
      * is the fix, and a retry is all it takes.
      */
     val authenticationRequired: Boolean get() = error == AUTHENTICATION_REQUIRED
+
+    /** Whether the room whose own player is [playerId] has a Sub bonded to it. */
+    fun hasSub(playerId: String): Boolean = "SW" in bondedChannels[playerId].orEmpty()
+
+    /** Whether the room whose own player is [playerId] has surrounds bonded to it. */
+    fun hasSurrounds(playerId: String): Boolean = bondedChannels[playerId].orEmpty().any { it == "LR" || it == "RR" }
 
     /**
      * Whether this group has a TV input to switch to at all.
@@ -1630,6 +1644,50 @@ class SonosHousehold(
     suspend fun setBass(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.BASS, level)
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
+
+    // ---------------------------------------------------------------- Sub and surrounds
+    //
+    // The Sonos app's Sub audio and Surround audio, for a room that has them: RenderingControl EQ
+    // types on the room's own player (the soundbar), read and written over UPnP like Night Sound.
+    // Offered only where [HouseholdState.bondedChannels] says the speakers exist, since the types
+    // answer on players that have none.
+
+    /** [playerId]'s room's Sub and surround settings, or `null` where it has neither. */
+    suspend fun satellites(playerId: String): Satellites? {
+        val state = _state.value
+        val sub = state.hasSub(playerId)
+        val surrounds = state.hasSurrounds(playerId)
+        if (!sub && !surrounds) return null
+        val host = hostnameOf(playerId)
+        return coroutineScope {
+            fun read(type: String) = async { runCatching { upnp.eq(host, type) }.getOrNull() }
+            val subOn = if (sub) read("SubEnable") else null
+            val subLevel = if (sub) read("SubGain") else null
+            val surroundsOn = if (surrounds) read("SurroundEnable") else null
+            val tv = if (surrounds) read("SurroundLevel") else null
+            val music = if (surrounds) read("MusicSurroundLevel") else null
+            Satellites(
+                subOn = subOn?.await()?.let { it != 0 }, subLevel = subLevel?.await(),
+                surroundsOn = surroundsOn?.await()?.let { it != 0 }, tvLevel = tv?.await(), musicLevel = music?.await(),
+            )
+        }
+    }
+
+    suspend fun setSubOn(playerId: String, on: Boolean) = satelliteEq(playerId, "SubEnable", if (on) 1 else 0)
+    suspend fun setSubLevel(playerId: String, level: Int) = satelliteEq(playerId, "SubGain", level)
+    suspend fun setSurroundsOn(playerId: String, on: Boolean) = satelliteEq(playerId, "SurroundEnable", if (on) 1 else 0)
+    /** Surround level while the room plays its TV, as the Sonos app's "TV Level". */
+    suspend fun setSurroundLevel(playerId: String, level: Int) = satelliteEq(playerId, "SurroundLevel", level)
+    /** Surround level for music, the Sonos app's "Music Level". */
+    suspend fun setMusicSurroundLevel(playerId: String, level: Int) = satelliteEq(playerId, "MusicSurroundLevel", level)
+
+    private suspend fun satelliteEq(playerId: String, type: String, value: Int) {
+        val state = _state.value
+        require(if (type.startsWith("Sub")) state.hasSub(playerId) else state.hasSurrounds(playerId)) {
+            "$type is for a room with ${if (type.startsWith("Sub")) "a Sub" else "surrounds"}, and $playerId's has none"
+        }
+        upnp.setEqValue(hostnameOf(playerId), type, value)
+    }
     /** One speaker, as About My System lists it: the room it is in, what it is, and any update offered. */
     data class SpeakerAbout(val playerId: String, val room: String, val info: DeviceInfo?, val offer: SoftwareOffer?) {
         /** An update is waiting where there is something to download — see [SoftwareOffer]. Read, never applied. */
@@ -2255,15 +2313,22 @@ class SonosHousehold(
                 val body = event.body.asJsonObject
                 if (body.string("_objectType") != "activeZonesChange") return
                 val players = _state.value.players.map { it.id }.toSet()
-                val offline = body.getAsJsonArray("zones")?.mapNotNull { zone ->
+                val zones = body.getAsJsonArray("zones")?.mapNotNull { zone ->
                     val members = zone.asJsonObject.getAsJsonArray("members")?.map { it.asJsonObject }.orEmpty()
                     val room = members.firstOrNull { it.string("id") in players }?.string("id") ?: return@mapNotNull null
+                    room to members
+                }.orEmpty()
+                val offline = zones.mapNotNull { (room, members) ->
                     val gone = members.count { member ->
                         member.getAsJsonObject("state")?.bool("disconnected") == true
                     }
                     if (gone > 0) room to gone else null
-                }?.toMap().orEmpty()
-                _state.update { it.copy(offlineSpeakers = offline) }
+                }.toMap()
+                val bonded = zones.associate { (room, members) ->
+                    room to members.filter { it.string("id") != room }
+                        .flatMap { m -> m.getAsJsonArray("channelMap")?.map { it.asString }.orEmpty() }.toSet()
+                }.filterValues { it.isNotEmpty() }
+                _state.update { it.copy(offlineSpeakers = offline, bondedChannels = bonded) }
             }
 
             // Which settings groups exist, each with its version, and no values. Only the seed's
