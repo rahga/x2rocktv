@@ -273,6 +273,24 @@ a TV than a request when you need one. (There is **one bounded exception**: the 
 read below opens a listener for a single GENA NOTIFY and closes it. That is a one-shot capture,
 not standing eventing — nothing hosts a listener between captures.)
 
+**An inactive queue can change without a usable Control API notification.** On Kitchen's
+One SL, 2026-10-11, while a direct SomaFM stream played at volume 1, a track was added to
+the initially empty queue and removed again. UPnP `UpdateID` moved 11 → 12 → 13 and
+`GetMediaInfo` confirmed the queue was not the source. Separate `playback:1` and
+`playbackMetadata:1` subscriptions captured their initial snapshots and a stream metadata
+update before the add; no further event arrived through the end of the observation window,
+roughly eight seconds after removal. The initial playback snapshots omitted `queueVersion`.
+The queue was left empty and its original `x-rincon-queue:` source restored, with playback
+stopped and volume unchanged. Commands and timestamped captures are kept locally under
+`.local-work/reviews/2026-10-11-codex/capture/`.
+
+This was a direct stream and CLI-issued UPnP edits, not a Sonos-app edit while a SMAPI
+station played. It does not settle every station/firmware combination. It does establish
+that checking `UpdateID` on playback events cannot guarantee freshness: there may be no
+event to trigger it. The earlier observation that every queue edit moves `queueVersion`
+applies to idle/queue playback, not all sources. External edits while on another source
+remain a documented limit; no timer polling or standing GENA listener is added.
+
 A player answering **HTTP 403** on 1400 has UPnP disabled in the Sonos app under
 Account → Privacy and Security → Connection Security → UPnP (the path x2rock confirmed on
 iPhone and Android, 2026-09-28; an older one was given here).

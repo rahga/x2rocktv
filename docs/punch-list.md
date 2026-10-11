@@ -3,8 +3,9 @@
 **Open review (2026-10-11, Codex, against `6cb4e59`):**
 [Correctness and simplification review](review-2026-10-11-codex.md). Answered by Claude Code
 the same day: R1, R3, R4 agreed as fixes (P2); R2 narrowed to P3 pending a capture; C2 and C4
-agreed small; C1 and C3 declined. Responses and the suggested order are under each item. Not yet
-implemented; the closed reviews below do not include this pass.
+agreed small; C1 and C3 declined. Implemented the same day (R1, R3, R4/C2, C4) and R2 settled as a
+documented limit after a Kitchen capture; what is still owed on hardware is at the head of the
+review's follow-up. The closed reviews below do not include this pass.
 
 Written 2026-10-01. x2rocktv's last commit was 2026-09-09 and its last working session 2026-09-12;
 the Rust sibling `../x2rock` landed 388 commits since 2026-09-05 and its `docs/architecture.md`
@@ -16,6 +17,11 @@ Where an item cites "x2rock", the evidence is in `../x2rock/docs/architecture.md
 section named. That file is the record; this one is the to-do.
 
 Decisions already taken (2026-10-01):
+
+The radio-only scope below was superseded by Search and Browse in October. They use the
+household's existing service accounts; linking a new account still requires the service's app.
+The original decisions remain here as history.
+
 - Music services are a **radio-only tier**: no account, little typing. Search, browse and
   account linking stay out — they need a keyboard and a browser.
 - The ratings work in progress is **finished and committed first**, not parked.

@@ -295,9 +295,11 @@ items below are the standing notes it does not repeat.
   `LanHttp` for why, and do not "simplify" it by adding a permissive verifier.
 - The queue is not pushed: UPnP eventing needs the player to connect back to us, which is
   deliberately not used. While the queue screen is open it re-reads when the room's
-  `queueVersion` moves. That is enough on this firmware: every edit moved it and arrived as
-  a playback event, on an idle room too (verified at home 2026-10-01). x2rock's firmware sent
-  no such field, which is why it re-reads the browse's `UpdateID` on each event instead.
+  `queueVersion` moves. Edits moved it while idle or playing the queue (home, 2026-10-01),
+  but that is not a guarantee while playing a station: x2rock measured an unchanged pushed
+  version, and Kitchen's direct-stream capture on 2026-10-11 saw no playback/metadata event
+  after an inactive-queue removal. External edits can remain stale until the screen is
+  reopened; this screen's own edits have a fallback read. See `docs/lan-transport.md`.
 - **Android's XML parser accepts no Xerces features, and the JVM's does.** `setFeature` for
   `disallow-doctype-decl` threw on the Shield, so no UPnP reply parsed there while the live
   suite, on the JVM, passed. `Upnp.parse` guards DOCTYPEs by hand now. The lesson is

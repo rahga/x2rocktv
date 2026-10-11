@@ -14,6 +14,42 @@ form; C1 and C3 declined with reasons. Suggested order: R4 with C2 (widest, mech
 C4, then R2's capture. Each fix lands with its reproduction turned into a regression test,
 mutation-checked, and `./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease` green.
 
+## Implementation follow-up (Codex, 2026-10-11)
+
+Owner authorized the agreed fixes, then asked to stop after this task. R1/R3/R4 and C2/C4
+are implemented. C1/C3 remain declined.
+
+**Verified and committed by Claude Code, 2026-10-11.** Each new test was mutation-checked:
+replay accepting any PLAYING, and dropping either same-item arm (container, track), each fail
+their test; the queue marker as a read-time snapshot, and the source never rechecked, each fail
+theirs; `attempt` reduced to `runCatching` fails both replaced-read tests. Two fresh full runs
+(`--rerun`) green, release build green. `ReplacedReadTest` swaps the process-wide Main and puts
+Unconfined back, the kind of swap `MainDispatcherRule` was written to avoid; it held in both runs,
+but if "Dispatchers.Main is used concurrently with setting it" reappears, C1 is the fix.
+
+- R4/C2: `attempt` preserves cancellation at replaceable publishing reads in Radio, Apple,
+  Search, ServiceBrowse, item details and home-theater settings. It also checks the calling
+  job after a best-effort core read. The radio and Apple regressions each failed before the
+  fix and passed after, using an owned view model and a local Main.immediate-like dispatcher.
+  Existing test classes retain their Unconfined baseline; no test-lifetime migration.
+  Audit: seek/volume already guard cancellation or detach sent writes; Home's tone read
+  uses structured concurrency and identity/edit checks; previous-track cancellation returns
+  no value to publish; core rating reads already rethrow cancellation.
+- R1: acknowledged and unanswered loads share the changed-content/requested-name check.
+  Same-container and same-track replay are covered; the measured play delay remains.
+- R3: the queue list stays read-driven; the marker follows live metadata. Source checks are
+  cancelled/replaced on room/container/track changes, without browsing on those changes or
+  rechecking on volume/position updates. The old overlapping-read test now holds a Browse
+  response because queue reads no longer include GetMediaInfo.
+- C4: the radio-only decision is marked historical. Correction to the proposed wording:
+  Search/Browse use stored household credentials; account linking was not built here.
+- R2: Kitchen direct-stream capture completed at volume 1, original source and empty queue
+  restored. UpdateID moved 11 → 12 → 13; no playback/metadata events followed the inactive
+  queue removal during the remaining ~8s capture. See `docs/lan-transport.md`. A Sonos-app
+  edit during a SMAPI station remains untested. No speculative refresh trigger was added.
+- Hardware replay through the changed Kotlin implementation and a TV UI check remain owed;
+  no release was installed during this task.
+
 ## Lay of the land
 
 The two-module boundary is useful: `:core` owns Sonos networking and service access without
