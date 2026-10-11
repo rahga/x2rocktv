@@ -16,6 +16,7 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -103,6 +104,16 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.okhttp.tls)
+
+    // On-device focus tests (T-10), against the same fake household the unit tests use.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(testFixtures(project(":core")))
+    androidTestImplementation(libs.mockwebserver)
+    androidTestImplementation(libs.okhttp.tls)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 kotlin {
