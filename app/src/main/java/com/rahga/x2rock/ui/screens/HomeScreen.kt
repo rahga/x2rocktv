@@ -1,5 +1,8 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.runtime.mutableLongStateOf
+import android.os.SystemClock
 import com.rahga.x2rock.viewmodel.label
 import androidx.compose.runtime.rememberCoroutineScope
 import com.rahga.x2rock.ui.components.handOffFocus
@@ -181,6 +184,22 @@ fun HomeScreen(
     var focusPlaced by remember { mutableStateOf(false) }
     fun place(target: FocusRequester): Boolean = target.requestFocusSafely().also { if (it) focusPlaced = true }
 
+    // When an Up or Down last reached this screen. A row selects its room on focus only when one of
+    // these put it there, or when it is the room already selected. Focus can reach a row with no key
+    // behind it: a focused control leaving the composition makes Compose drop focus, and the platform
+    // then puts it on the first focusable thing — the first room. At launch on the Shield the pane's
+    // first control did leave (the music pane gave way to the TV pane as Living Room's metadata
+    // arrived), and that first row, Bedroom, took the selection from the stated TV room (logcat,
+    // 2026-10-11). That focus is put back on the selected room instead.
+    var lastListKeyAt by remember { mutableLongStateOf(0L) }
+    val focusScope = rememberCoroutineScope()
+    fun rowFocused(group: Group) {
+        if (!focusPlaced) return
+        val byKey = SystemClock.uptimeMillis() - lastListKeyAt < LIST_KEY_WINDOW_MILLIS
+        if (byKey || group.id == selectedGroupId) homeViewModel.selectGroup(group.id)
+        else focusScope.launch { sidebarFocusRequester.requestFocusRetrying() }
+    }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -265,7 +284,17 @@ fun HomeScreen(
         if (sidebarFocusRequester.requestFocusRetrying()) focusPlaced = true
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            // Seen before anything handles it, and never consumed: only noted, for [rowFocused].
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
+                    lastListKeyAt = SystemClock.uptimeMillis()
+                }
+                false
+            },
+    ) {
         Row(modifier = Modifier.fillMaxSize()) {
             RoomSidebar(
                 state = state,
@@ -273,7 +302,7 @@ fun HomeScreen(
                 rooms = rooms,
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
-                onFocused = { if (focusPlaced) homeViewModel.selectGroup(it.id) },
+                onFocused = ::rowFocused,
                 onOpenPanel = { panelFromPane = false; panelGroup = it },
                 onSettingsClick = { showSettings = true },
                 settingsFocusRequester = settingsButtonFocus,
@@ -914,4 +943,7 @@ private fun ThemeSelector(
 }
 
 /** The pane's buttons that open another screen, so Back can return focus to the one that did. */
+/** How recent an Up or Down must be for the row focus reached to be the viewer's choice; see `rowFocused`. */
+private const val LIST_KEY_WINDOW_MILLIS = 500L
+
 private enum class Opener { QUEUE, BROWSE, SEARCH, NOW_PLAYING, SETTINGS }

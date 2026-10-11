@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocusable
 import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
@@ -64,6 +65,8 @@ class FocusChoreographyTest {
     private lateinit var home: HomeViewModel
     private lateinit var player: PlayerViewModel
 
+    private val prefs = TestPreferences()
+
     @Before fun setUp() = runBlocking {
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
@@ -74,7 +77,10 @@ class FocusChoreographyTest {
             fake.pushFixture("metadataStatus", group.id)
             fake.pushFixture("playbackStatus", group.id)
         }
-        val prefs = TestPreferences()
+        buildViewModels()
+    }
+
+    private fun buildViewModels() {
         home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs))
         player = PlayerViewModel(household, SilentNowPlaying, testClock)
     }
@@ -181,5 +187,34 @@ class FocusChoreographyTest {
         compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isEmpty() }
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         waitForFocusOn("Queue", hasContentDescription("Queue"))
+    }
+
+    /**
+     * Focus that reaches a room without a key does not change the selection. At launch on the
+     * Shield the pane's first control left the composition (its music pane gave way to the TV
+     * pane), Compose dropped focus, the platform put it on the first row, and that row selected
+     * Bedroom over the stated TV room, Living Room (2026-10-11, from its logcat). Forcing focus onto
+     * a row here is that same arrival with no key behind it.
+     */
+    @Test fun focusArrivingWithoutAKeyKeepsTheStatedTvRoom() = runBlocking<Unit> {
+        val living = household.state.value.groups.first { it.name == "Living Room" }
+        RoomPreferencesStore(prefs).setTvPlayer(living.coordinatorId)
+        buildViewModels()
+        showHome()
+        compose.waitUntil(10_000) { home.selectedGroupId.value == living.id }
+        waitForFocusOn("Living Room's row", hasText("Living Room"))
+        compose.onNode(isFocusable() and hasText("Bedroom", substring = true)).requestFocus()
+        compose.waitForIdle()
+        waitForFocusOn("Living Room's row, put back", hasText("Living Room"))
+        org.junit.Assert.assertEquals("the TV room must stay selected", living.id, home.selectedGroupId.value)
+    }
+
+    /** A key still moves the selection: Down from Kitchen's row selects Living Room, the next. */
+    @Test fun aKeyStillSelectsTheRoomItReaches() {
+        showHome()
+        awaitRoomList()
+        repeat(4) { press(Key.DirectionDown) }
+        waitForFocusOn("Living Room's row", hasText("Living Room"))
+        compose.waitUntil(5_000) { home.selectedGroupId.value == household.state.value.groups.first { it.name == "Living Room" }.id }
     }
 }

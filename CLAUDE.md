@@ -470,6 +470,14 @@ the platform's, not the viewer's. There is no collapse control:
 the list is the app's spine, and hiding it bought nothing on a television. Reordering rooms
 would live in the list too, if Sonos had an order to reorder — it does not.
 
+**A row selects its room only when a key put focus there** (2026-10-11): an Up or Down within the
+last half-second, or the row already being the selected room. Focus can reach a row with no key
+behind it — a focused control leaving the composition makes Compose drop focus and the platform put
+it on the first focusable thing — and that focus is handed back to the selected room's row instead.
+Without this the Shield opened on Bedroom every launch, over the stated TV room: the pane's first
+focus sat in Living Room's music pane, which gave way to the TV pane as its metadata arrived (logcat).
+`FocusChoreographyTest` covers it on the emulator.
+
 **Nothing that acts on "the selected room" may sit above or below the room list.** The list
 selects the room focus rests on, so walking up it to reach a button selects every room on the
 way: Browse and Search were first put at the top of the list, and Browse opened "in Bedroom"

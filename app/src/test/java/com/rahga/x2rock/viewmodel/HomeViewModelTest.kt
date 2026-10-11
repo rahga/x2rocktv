@@ -101,6 +101,21 @@ class HomeViewModelTest {
         assertEquals(listOf(kitchen.id), rooms.filterValues { it.hasLineIn }.keys.toList())
     }
 
+    /**
+     * A device that has been told its television's room opens on it, whatever sorts first. The
+     * Shield, with Living Room stored, opened on Bedroom every launch (2026-10-11).
+     */
+    @Test fun `launch selects the stated TV room, not the first`() = runBlocking<Unit> {
+        val kitchenPlayer = FakePlayer.reachableTopology().getAsJsonArray("groups").map { it.asJsonObject }
+            .first { it.get("name").asString == "Kitchen" }.get("coordinatorId").asString
+        roomPrefs.setTvPlayer(kitchenPlayer)
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } }
+        kotlinx.coroutines.delay(1_000)
+        assertEquals(kitchen.id, viewModel.selectedGroupId.value)
+    }
+
     // ---------------------------------------------------------------- channel tiles
 
     /**
