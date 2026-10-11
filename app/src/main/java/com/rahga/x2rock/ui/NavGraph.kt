@@ -17,6 +17,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.rahga.x2rock.ui.screens.AboutSystemScreen
 import com.rahga.x2rock.ui.screens.AlarmsScreen
 import com.rahga.x2rock.ui.screens.AppleMusicScreen
 import com.rahga.x2rock.ui.screens.ServiceBrowseScreen
@@ -89,6 +90,7 @@ fun X2RockNavGraph() {
                 },
                 onOpenPreferredServices = { navController.navigate("preferredServices") },
                 onOpenAlarms = { navController.navigate("alarms") },
+                onOpenAbout = { navController.navigate("about") },
                 homeViewModel = homeViewModel,
                 playerViewModel = playerViewModel
             )
@@ -99,6 +101,10 @@ fun X2RockNavGraph() {
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
             NowPlayingScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable("about") {
+            AboutSystemScreen(onBack = { navController.popBackStack() })
         }
 
         composable("alarms") {

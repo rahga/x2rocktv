@@ -1604,6 +1604,24 @@ class SonosHousehold(
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
     suspend fun statusLight(playerId: String): Boolean = upnp.statusLight(hostnameOf(playerId))
+    /** One speaker, as About My System lists it: the room it is in, what it is, and any update offered. */
+    data class SpeakerAbout(val playerId: String, val room: String, val info: DeviceInfo?, val offer: SoftwareOffer?) {
+        /** An update is waiting where there is something to download — see [SoftwareOffer]. Read, never applied. */
+        val updateWaiting: Boolean get() = offer?.waiting == true
+    }
+
+    /** Every speaker in the household, asked together: what each is, and what it is offered. */
+    suspend fun aboutSystem(): List<SpeakerAbout> = coroutineScope {
+        _state.value.groups.flatMap { it.playerIds }.distinct().map { id ->
+            async {
+                val host = hostnameOf(id)
+                val info = async { runCatching { upnp.deviceInfo(host) }.getOrNull() }
+                val offer = async { runCatching { upnp.softwareOffer(host) }.getOrNull() }
+                SpeakerAbout(id, playerName(id), info.await(), offer.await())
+            }
+        }.awaitAll().sortedBy { it.room }
+    }
+
     /** A portable's battery, or null on mains. Untested against a portable: see [parseBattery]. */
     suspend fun battery(playerId: String): Battery? = upnp.battery(hostnameOf(playerId))
     /** A soundbar's TV-remote settings; [soundbarId] must be the soundbar itself. */

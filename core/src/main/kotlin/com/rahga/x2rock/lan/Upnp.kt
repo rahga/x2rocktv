@@ -84,6 +84,31 @@ data class RemoteSettings(val feedback: Boolean, val irRepeater: String) {
 }
 
 /**
+ * What `CheckForUpdate` offers a player. **[downloadBytes] is the check, not the version**: Dining
+ * Room's SYMFONISK pair runs 86.10-80260 and is offered the household's 97.1-80312 with
+ * `DownloadSize` 0 — nothing it can take — which the CLI reports up to date (2026-10-10).
+ */
+data class SoftwareOffer(val version: String, val downloadBytes: Long) {
+    val waiting: Boolean get() = downloadBytes > 0
+}
+
+/** About My System's fields for one player — see [Upnp.deviceInfo]. */
+data class DeviceInfo(
+    val modelName: String,
+    val displayVersion: String,
+    /** The build, `97.1-80312`: what an offered version is compared with. */
+    val softwareVersion: String,
+    val hardwareVersion: String,
+    val serial: String,
+)
+
+internal fun parseDeviceInfo(body: String): DeviceInfo? {
+    val root = runCatching { Xml.parse(body) }.getOrNull() ?: return null
+    fun field(tag: String) = root.getElementsByTagName(tag).item(0)?.textContent?.trim().orEmpty()
+    return DeviceInfo(field("modelName"), field("displayVersion"), field("softwareVersion"), field("hardwareVersion"), field("serialNum"))
+}
+
+/**
  * What a portable says about its pack. Every field may be absent or a word nobody has seen, and is
  * passed on as said rather than flattened: a battery reporting trouble is the case worth showing.
  */
@@ -287,6 +312,32 @@ class Upnp(
         client.newCall(Request.Builder().url("http://$hostname:$port/status/$page").build()).awaitReply().let { response ->
             if (!response.isSuccessful) null else response.body
         }
+    }
+
+    /**
+     * What a player says about itself — the fields the Sonos apps' About My System prints — from its
+     * own `/xml/device_description.xml`, one cleartext GET (Kitchen, 2026-10-10; x2rock's `system`).
+     */
+    suspend fun deviceInfo(hostname: String): DeviceInfo? = withContext(Dispatchers.IO) {
+        require(PlayerNames.isLocalName(hostname)) { "cleartext is only permitted for .local names" }
+        val body = client.newCall(Request.Builder().url("http://$hostname:$port/xml/device_description.xml").build())
+            .awaitReply().takeIf { it.isSuccessful }?.body ?: return@withContext null
+        parseDeviceInfo(body)
+    }
+
+    /**
+     * What a player is being offered, or null where it says nothing. `CheckForUpdate` with
+     * `UpdateType` `Software` and **`CachedOnly` 1**, which answers from the player's own memory of
+     * the last check rather than reaching Sonos; its `Version` argument is ignored (x2rock). **Asked,
+     * never applied**: this app reads update state and nothing else.
+     */
+    suspend fun softwareOffer(hostname: String): SoftwareOffer? = withContext(Dispatchers.IO) {
+        val reply = parse(soap(hostname, Service.ZONE_GROUP_TOPOLOGY, "CheckForUpdate",
+            listOf("UpdateType" to "Software", "CachedOnly" to "1", "Version" to "")))
+        // The offer is an XML document carried as text, as the alarm list is.
+        val item = reply.text("UpdateItem")?.takeIf { it.isNotBlank() } ?: return@withContext null
+        val e = runCatching { Xml.parse(item) }.getOrNull() ?: return@withContext null
+        SoftwareOffer(version = e.getAttribute("Version"), downloadBytes = e.getAttribute("DownloadSize").toLongOrNull() ?: 0)
     }
 
     /**
@@ -570,6 +621,7 @@ class Upnp(
         ALARM_CLOCK("/AlarmClock/Control", "urn:schemas-upnp-org:service:AlarmClock:1"),
         DEVICE_PROPERTIES("/DeviceProperties/Control", "urn:schemas-upnp-org:service:DeviceProperties:1"),
         HT_CONTROL("/HTControl/Control", "urn:schemas-upnp-org:service:HTControl:1"),
+        ZONE_GROUP_TOPOLOGY("/ZoneGroupTopology/Control", "urn:schemas-upnp-org:service:ZoneGroupTopology:1"),
     }
 
     /**
