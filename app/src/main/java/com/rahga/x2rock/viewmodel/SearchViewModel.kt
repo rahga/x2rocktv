@@ -131,9 +131,9 @@ class SearchViewModel @Inject constructor(
         job?.cancel()
         job = viewModelScope.launch {
             // Side by side: neither needs the other, and the Apple answer is a speaker round trip.
-            val appleKnown = async { runCatching { household.appleMusicAccount() }.getOrNull() != null }
+            val appleKnown = async { attempt { household.appleMusicAccount() }.getOrNull() != null }
             // A service's primary account alone, where this device has one: see searchedAccounts.
-            val services = runCatching { searchedAccounts(household.searchableServices(), primaryAccounts.primaries.value) }.getOrElse {
+            val services = attempt { searchedAccounts(household.searchableServices(), primaryAccounts.primaries.value) }.getOrElse {
                 _results.value = Results(searched = true)
                 return@launch _notice.failure("read this system's services", it)
             }
@@ -167,10 +167,9 @@ class SearchViewModel @Inject constructor(
      */
     private suspend fun arrive(requests: Semaphore, order: List<String>, name: String, key: String, signedIn: Boolean, search: suspend () -> List<Hit>) {
         val hits = requests.withPermit {
-            withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { runCatching { search() }.getOrNull() }
+            withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { attempt { search() }.getOrNull() }
         }
-        // `runCatching` also swallows the cancellation of a search replaced by a newer one; without
-        // this its late answers were counted against the new search's pending and silent totals.
+        // Cancellation while waiting for a permit or timing out must not publish into a newer search.
         currentCoroutineContext().ensureActive()
         _results.update { r ->
             val sections = if (hits.isNullOrEmpty()) r.sections

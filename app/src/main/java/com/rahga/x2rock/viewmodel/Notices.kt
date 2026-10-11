@@ -10,6 +10,22 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+
+/** A replaceable read may fail, but a cancelled read must never publish over its replacement. */
+internal suspend inline fun <T> attempt(block: () -> T): Result<T> {
+    val result = try {
+        Result.success(block())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Throwable) {
+        Result.failure(e)
+    }
+    // Some best-effort core reads return null after catching cancellation themselves.
+    currentCoroutineContext().ensureActive()
+    return result
+}
 
 /**
  * One line of "that didn't work", shown for a few seconds and replaced by the next.

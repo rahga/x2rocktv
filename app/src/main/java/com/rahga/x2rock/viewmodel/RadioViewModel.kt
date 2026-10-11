@@ -70,7 +70,7 @@ class RadioViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             _stations.value = Stations.Loading
-            _stations.value = runCatching { directory.stations(category.tag, category.countryCode) }
+            _stations.value = attempt { directory.stations(category.tag, category.countryCode) }
                 .fold(
                     // Each stream once: directories list one stream under several entries, and the list is
                     // keyed by its URL, so a repeat would crash it. The first entry is kept.

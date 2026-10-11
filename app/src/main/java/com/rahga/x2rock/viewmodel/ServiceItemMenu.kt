@@ -109,7 +109,7 @@ class ServiceItemMenu(
             // A service that answers nothing more about an item still leaves Sonos's own actions;
             // an Apple result has no service of its own to ask.
             _details.value = (target as? Target.Service)
-                ?.let { runCatching { household.serviceItemDetails(it.linked, it.item) }.getOrNull() }
+                ?.let { attempt { household.serviceItemDetails(it.linked, it.item) }.getOrNull() }
                 ?: ItemDetails()
         }
     }

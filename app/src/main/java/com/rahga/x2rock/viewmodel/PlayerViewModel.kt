@@ -372,7 +372,7 @@ class PlayerViewModel @Inject constructor(
             val group = householdState.groups.firstOrNull { it.id == groupId }
             val soundbar = group?.let { TvSoundbar.soundbarOf(it, householdState) }
             _homeTheater.value = soundbar?.let { id ->
-                runCatching { household.playerSettings(id).homeTheater }.getOrNull()?.let {
+                attempt { household.playerSettings(id).homeTheater }.getOrNull()?.let {
                     HomeTheaterUi(id, it.nightMode, it.enhanceDialog)
                 }
             }

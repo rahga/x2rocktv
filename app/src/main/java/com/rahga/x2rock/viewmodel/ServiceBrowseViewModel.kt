@@ -196,8 +196,8 @@ class ServiceBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             // Side by side: the Apple answer is a speaker round trip neither the list nor an entry
             // container needs to wait for.
-            val apple = async { runCatching { household.appleMusicAccount() != null }.getOrDefault(false) }
-            val services = runCatching { household.searchableServices() }
+            val apple = async { attempt { household.appleMusicAccount() != null }.getOrDefault(false) }
+            val services = attempt { household.searchableServices() }
             entry?.let { (key, container, title) ->
                 services.getOrNull()?.firstOrNull { it.key() == key }?.let { service ->
                     _active.value = service
@@ -207,7 +207,7 @@ class ServiceBrowseViewModel @Inject constructor(
             if (entry == null) entrySearch?.let { (key, query) ->
                 services.getOrNull()?.firstOrNull { it.key() == key }?.let { service ->
                     _active.value = service
-                    _categories.value = runCatching { household.serviceCategories(service) }.getOrDefault(emptyList())
+                    _categories.value = attempt { household.serviceCategories(service) }.getOrDefault(emptyList())
                     _category.value = _categories.value.firstOrNull()
                     _query.value = query
                     search()
@@ -238,15 +238,15 @@ class ServiceBrowseViewModel @Inject constructor(
         show(root)
         publish(root, Results.Loading)
         job = viewModelScope.launch {
-            val cats = async { runCatching { household.serviceCategories(service) }.getOrDefault(emptyList()) }
-            val page = runCatching { household.browseService(service, "root") }
+            val cats = async { attempt { household.serviceCategories(service) }.getOrDefault(emptyList()) }
+            val page = attempt { household.browseService(service, "root") }
             _categories.value = cats.await()
             _category.value = _categories.value.firstOrNull()
             val empty = page.getOrNull()?.items.isNullOrEmpty()
             // An empty root may still have a page of its own, from the service's browse endpoint:
             // Sonos Radio's shelves, which the Sonos app opens it on.
             if (empty) {
-                shelves = runCatching { household.serviceShelves(service) }.getOrDefault(emptyList())
+                shelves = attempt { household.serviceShelves(service) }.getOrDefault(emptyList())
                 if (shelves.isNotEmpty()) {
                     publish(root, Results.Found(shelves.mapIndexed { i, shelf ->
                         Item("$SHELF$i", shelf.title, "container", shelfCount(shelf.items), shelf.items.first().artUrl, container = true)
@@ -295,7 +295,7 @@ class ServiceBrowseViewModel @Inject constructor(
         moreJob?.cancel()
         job = viewModelScope.launch {
             publish(level, Results.Loading)
-            publish(level, runCatching { household.searchService(service, category, term) }.fold(
+            publish(level, attempt { household.searchService(service, category, term) }.fold(
                 onSuccess = { found(it) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't answer: ${it.message ?: it}") },
             ))
@@ -319,7 +319,7 @@ class ServiceBrowseViewModel @Inject constructor(
         moreJob?.cancel()
         job = viewModelScope.launch {
             publish(level, Results.Loading)
-            publish(level, runCatching { household.browseService(service, id) }.fold(
+            publish(level, attempt { household.browseService(service, id) }.fold(
                 onSuccess = { found(it) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't open ${title}: ${it.message ?: it}") },
             ))
@@ -336,7 +336,7 @@ class ServiceBrowseViewModel @Inject constructor(
         val shown = level.results as? Results.Found ?: return
         if (!shown.hasMore || moreJob?.isActive == true) return
         moreJob = viewModelScope.launch {
-            val next = runCatching {
+            val next = attempt {
                 if (level.isSearch) {
                     val category = _category.value ?: return@launch
                     household.searchService(service, category, _query.value.trim(), index = shown.nextIndex)
@@ -402,7 +402,7 @@ class ServiceBrowseViewModel @Inject constructor(
         val from = trail.lastOrNull() ?: return
         from.opened = book.id
         viewModelScope.launch {
-            val resume = runCatching { household.bookResume(service, book) }.getOrNull()
+            val resume = attempt { household.bookResume(service, book) }.getOrNull()
             // Back, a second press, or anything opened while the place was read has moved on from
             // where this was asked: the chapters would land on top of whatever shows now.
             if (trail.lastOrNull() !== from) return@launch
