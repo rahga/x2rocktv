@@ -90,4 +90,26 @@ class SmapiRefreshTest {
         assertTrue("an ordinary fault still fails", failed)
         assertEquals("and is not retried", 1, server.requestCount)
     }
+
+    /**
+     * A service's own page answers a stale bearer 401 rather than with a refresh fault: Spotify's
+     * went from 200 to 401 within the hour (2026-10-11). One SMAPI call takes the refresh, and the
+     * page is asked again with the token it handed back.
+     */
+    @Test fun `a page refused for a stale token is asked again with the refreshed one`() = runBlocking {
+        val paged = service.copy(manifestUri = server.url("/manifest").toString())
+        server.enqueue(MockResponse().setBody("""{"endpoints":[{"type":"browse","uri":"${server.url("/browse")}"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setBody(refreshFault()))
+        server.enqueue(MockResponse().setBody(searchResult()))
+        server.enqueue(MockResponse().setBody(com.rahga.x2rock.lan.FakePlayer.fixtureText("spotify.browse.json")))
+
+        val shelves = client.shelves(paged, Token("stale-token", "stale-key", "hh"))
+
+        assertEquals("More like Tyler, The Creator", shelves.first().title)
+        server.takeRequest()
+        assertEquals("Bearer stale-token", server.takeRequest().getHeader("Authorization"))
+        server.takeRequest(); server.takeRequest()
+        assertEquals("Bearer fresh-token", server.takeRequest().getHeader("Authorization"))
+    }
 }

@@ -673,6 +673,10 @@ not — is `docs/sonos-app-comparison.md`** (2026-10-11, Sonos app 90.00 against
 Compared screen by screen with the Sonos app on a phone; the record is the punch list's "Against
 the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
 
+- **A service with a page of its own opens on it** (T-15, 2026-10-11): the manifest's `browse`
+  endpoint, read with the account's token — Sonos Radio's shelves, Spotify's and Deezer's personal
+  ones — then SMAPI's root rows after them, so nothing the root reached is lost. A shelf's albums
+  and playlists open; stations play. See `lan-transport.md` for the 401-and-refresh path.
 - **A service opens on its library, never on a keyboard.** Browsing is the cheap path on a remote;
   "Search <service>" is one press up. A searchable service used to open on its search and hid every
   library behind it.

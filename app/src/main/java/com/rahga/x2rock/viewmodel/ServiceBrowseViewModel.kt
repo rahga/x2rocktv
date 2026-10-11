@@ -239,27 +239,29 @@ class ServiceBrowseViewModel @Inject constructor(
         publish(root, Results.Loading)
         job = viewModelScope.launch {
             val cats = async { attempt { household.serviceCategories(service) }.getOrDefault(emptyList()) }
-            val page = attempt { household.browseService(service, "root") }
+            // The service's own page, where its manifest names one: what the Sonos app opens it on —
+            // Sonos Radio's shelves, Spotify's and Deezer's personal ones. Asked beside the root.
+            val page = async { attempt { household.browseService(service, "root") } }
+            val ownPage = async { attempt { household.serviceShelves(service) }.getOrDefault(emptyList()) }
             _categories.value = cats.await()
             _category.value = _categories.value.firstOrNull()
-            val empty = page.getOrNull()?.items.isNullOrEmpty()
-            // An empty root may still have a page of its own, from the service's browse endpoint:
-            // Sonos Radio's shelves, which the Sonos app opens it on.
-            if (empty) {
-                shelves = attempt { household.serviceShelves(service) }.getOrDefault(emptyList())
-                if (shelves.isNotEmpty()) {
-                    publish(root, Results.Found(shelves.mapIndexed { i, shelf ->
-                        Item("$SHELF$i", shelf.title, "container", shelfCount(shelf.items), shelf.items.first().artUrl, container = true)
-                    }))
-                    return@launch
-                }
+            shelves = ownPage.await()
+            val rootItems = page.await().getOrNull()?.items.orEmpty()
+            if (shelves.isNotEmpty()) {
+                // The shelves first, then the root's own rows, so nothing the root reached is lost:
+                // Spotify's page holds no "Your Music" that opens (2026-10-11).
+                publish(root, Results.Found(shelves.mapIndexed { i, shelf ->
+                    Item("$SHELF$i", shelf.title, "container", shelfCount(shelf.items), shelf.items.first().artUrl, container = true)
+                } + rootItems.filterNot { r -> shelves.any { it.title == r.title } }))
+                return@launch
             }
+            val empty = rootItems.isEmpty()
             if (empty && _categories.value.isNotEmpty()) {
                 trail.clear()
                 show(Level(null, service.service.name).also { trail.addLast(it) })
                 return@launch
             }
-            publish(root, page.fold(
+            publish(root, page.await().fold(
                 onSuccess = { found(it) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't open: ${it.message ?: it}") },
             ))
@@ -513,13 +515,18 @@ class ServiceBrowseViewModel @Inject constructor(
 private const val SHELF = "\u0000shelf:"
 
 /**
- * A shelf's count as what it holds: stations, or — Browse Radio's Music, News & Talk, Sports and
- * Locations — places to open, which read "4 stations" until 2026-10-11.
+ * A shelf's count as what it holds: stations; or — Browse Radio's Music, News & Talk, Sports and
+ * Locations — places to open, which read "4 stations" until 2026-10-11; or, for Spotify's and
+ * Deezer's albums and playlists, items.
  */
 internal fun shelfCount(items: List<Item>): String {
     val n = items.size
-    return if (items.all { it.container }) (if (n == 1) "1 category" else "$n categories")
-    else if (n == 1) "1 station" else "$n stations"
+    fun count(one: String, many: String) = if (n == 1) "1 $one" else "$n $many"
+    return when {
+        items.all { it.itemType == "program" || it.itemType == "stream" } -> count("station", "stations")
+        items.all { it.container && it.itemType == "container" } -> count("category", "categories")
+        else -> count("item", "items")
+    }
 }
 
 /** What [ServiceBrowseViewModel.starting] holds while a container plays whole: no row is starting. */

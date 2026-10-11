@@ -120,9 +120,11 @@ data class ItemPage(val items: List<Item>, val total: Int)
 data class Shelf(val title: String, val items: List<Item>)
 
 /**
- * The shelves of a browse endpoint's top — its `views`, each with its items inline. A shelf with
- * nothing playable inline is left out: "Browse Radio" lists only further containers, which this
- * endpoint answers only for its top, so it would be a row that opens on nothing.
+ * The shelves of a browse endpoint's top — its `views`, each with its items inline. A station,
+ * stream or track plays; anything else opens unless the service says it cannot — an album, a
+ * playlist, an artist, as Search and Browse treat them everywhere else. Spotify's page sends no
+ * policies at all, so there the type decides; Deezer's says its albums both play and open, and
+ * they open. A row that can do neither is left out, and so is a shelf left with nothing.
  */
 fun parseShelves(json: String): List<Shelf> {
     val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull() ?: return emptyList()
@@ -133,19 +135,24 @@ fun parseShelves(json: String): List<Shelf> {
         val items = view.getAsJsonArray("items")?.mapNotNull { i ->
             val item = i.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
             val policies = item.getAsJsonObject("browsePolicies")
-            val playable = policies?.get("canPlay")?.asBoolean == true
-            // Browse Radio's rows — Music, News & Talk, Sports, Locations — play nothing and open:
-            // their ids (`/stations/en-US/US/…`) are ones SMAPI's getMetadata answers, anonymously,
-            // with the stations or the next level of containers (2026-10-11).
-            val opens = !playable && policies?.get("canEnumerate")?.asBoolean == true
-            if (!playable && !opens) return@mapNotNull null
+            val playable = policies?.get("canPlay")?.asBoolean
+            val enumerable = policies?.get("canEnumerate")?.asBoolean
             val c = item.getAsJsonObject("content")?.getAsJsonObject("container") ?: return@mapNotNull null
             val id = item.getAsJsonObject("id")?.get("objectId")?.asString ?: return@mapNotNull null
+            // `trackList.program`: a station, played as the room's source like any SMAPI program.
+            val type = c.get("type")?.asString?.substringAfterLast('.')
+            val leaf = type in SHELF_LEAF_TYPES
+            // Browse Radio's rows — Music, News & Talk, Sports, Locations — play nothing and open:
+            // their ids (`/stations/en-US/US/…`) are ones SMAPI's getMetadata answers, anonymously,
+            // with the stations or the next level of containers (2026-10-11). So do Spotify's and
+            // Deezer's albums and playlists, by the ids their pages give (2026-10-11).
+            val opens = !leaf && enumerable != false
+            val plays = !opens && playable != false && (leaf || playable == true)
+            if (!opens && !plays) return@mapNotNull null
             Item(
                 id = id,
                 title = c.get("name")?.asString.orEmpty(),
-                // `trackList.program`: a station, played as the room's source like any SMAPI program.
-                itemType = if (opens) "container" else c.get("type")?.asString?.substringAfterLast('.') ?: "program",
+                itemType = type ?: if (opens) "container" else "program",
                 // The page names a row's own name as its "service" and leaves summary empty: say nothing.
                 summary = (c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString)?.takeIf { it.isNotBlank() },
                 artUrl = c.get("imageUrl")?.asString,
@@ -155,6 +162,9 @@ fun parseShelves(json: String): List<Shelf> {
         Shelf(title, items).takeIf { items.isNotEmpty() }
     }
 }
+
+/** What a shelf's row plays rather than opens. */
+private val SHELF_LEAF_TYPES = setOf("program", "stream", "track")
 
 /**
  * What a service says about one item beyond the item itself, from `getExtendedMetadata` — the
@@ -392,21 +402,32 @@ class SmapiClient(client: OkHttpClient) {
     /**
      * The shelves a service's own browse endpoint lists at its top — what the Sonos app draws as a
      * service's page, rather than SMAPI's `root`. Empty when its manifest declares no `browse`
-     * endpoint, or the endpoint does not answer without an account.
+     * endpoint, or the endpoint does not answer. [stored] goes as a bearer: with it, Spotify answers
+     * its personal page (22 views where SMAPI's root has 5 rows) and Deezer its own (2026-10-11);
+     * Amazon Music answers 401 to it, TuneIn 403 and Apple Music 500, and fall back to the root.
      *
      * Sonos Radio is why: its SMAPI root is empty, yet its manifest names
      * `https://sali.sonos.superhi.fi/browse/v1`, which answers anonymously with twenty-eight shelves
      * (Trending Now, Sonos Presents, the moods and genres) whose stations carry the very ids its SMAPI
-     * search returns — `sonos:2997` is Hit List in both (2026-10-08). Deezer, Amazon Music and Apple
-     * Music declare one too, but answer 400/500 without one.
+     * search returns — `sonos:2997` is Hit List in both (2026-10-08), and needs no token.
      */
-    suspend fun shelves(service: Service): List<Shelf> = withContext(Dispatchers.IO) {
+    suspend fun shelves(service: Service, stored: Token? = null): List<Shelf> = withContext(Dispatchers.IO) {
         val manifest = service.manifestUri?.let { get(it) } ?: return@withContext emptyList()
         val endpoint = runCatching { JsonParser.parseString(manifest).asJsonObject.getAsJsonArray("endpoints") }.getOrNull()
             ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
             ?.firstOrNull { it.get("type")?.asString == "browse" }
             ?.get("uri")?.asString ?: return@withContext emptyList()
-        get(endpoint)?.let(::parseShelves) ?: emptyList()
+        // The token a refresh fault handed back, where one has: the stored one is what aged.
+        fun bearer() = stored?.let { (refreshed[it.token] ?: it).token }
+        var page = fetch(endpoint, bearer())
+        // A stale token is answered 401 here, where SMAPI answers a refresh fault with its
+        // replacement: Spotify's page went from 200 to 401 within the hour (2026-10-11). One SMAPI
+        // call takes the refresh, and the page is asked once more with what it handed back.
+        if (page.code == 401 && stored != null) {
+            runCatching { metadata(service, stored, "root", 0, 1) }
+            if (refreshed[stored.token] != null) page = fetch(endpoint, bearer())
+        }
+        page.body?.let(::parseShelves) ?: emptyList()
     }
 
     /** The presentation map body, or `null` when the service publishes no manifest for one. */
@@ -419,10 +440,16 @@ class SmapiClient(client: OkHttpClient) {
         return get(mapUri)
     }
 
-    private suspend fun get(url: String): String? {
-        client.newCall(Request.Builder().url(url).header("User-Agent", USER_AGENT).build()).awaitReply().let { response ->
-            if (!response.isSuccessful) return null
-            return response.body
+    private suspend fun get(url: String): String? = fetch(url, null).body
+
+    /** A GET's status, and its body when it succeeded. */
+    private class Fetched(val code: Int, val body: String?)
+
+    private suspend fun fetch(url: String, bearer: String?): Fetched {
+        val request = Request.Builder().url(url).header("User-Agent", USER_AGENT)
+            .apply { bearer?.let { header("Authorization", "Bearer $it") } }.build()
+        client.newCall(request).awaitReply().let { response ->
+            return Fetched(response.code, response.body.takeIf { response.isSuccessful })
         }
     }
 

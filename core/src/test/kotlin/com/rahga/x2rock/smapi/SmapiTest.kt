@@ -259,4 +259,35 @@ class SmapiTest {
         assertTrue(page.items.isNotEmpty() && page.items.none { it.container })
         assertEquals("stream", page.items.first().itemType)
     }
+
+    /**
+     * Spotify's page, fetched with the account's token (captured 2026-10-11, four of its 22 views):
+     * no policies anywhere, so the type decides — albums, playlists and artists are places to open,
+     * by ids SMAPI's getMetadata answers.
+     */
+    @Test fun `Spotify's page is shelves of albums and playlists to open`() {
+        val shelves = parseShelves(captured("spotify.browse.json"))
+        assertEquals("More like Tyler, The Creator", shelves.first().title)
+        val album = shelves.single { it.title == "Recommended for today" }.items.first()
+        assertEquals("spotify:album:3MJGcgbroIjiO90yi7RMhy", album.id)
+        assertEquals("album", album.itemType)
+        assertTrue("an album opens", album.container)
+        assertEquals("Jack Harlow", album.summary)
+        assertTrue(shelves.flatMap { it.items }.all { it.container })
+    }
+
+    /**
+     * Deezer's page (captured 2026-10-11, three of its nine views): albums say they both play and
+     * open, and open; Flow's moods are programs, and play.
+     */
+    @Test fun `Deezer's page opens its albums and plays its Flow`() {
+        val shelves = parseShelves(captured("deezer.browse.json"))
+        assertEquals(listOf("Favorites", "Recently played", "Flow: play how you feel"), shelves.map { it.title })
+        val album = shelves[1].items.first()
+        assertEquals("album-262078", album.id)
+        assertTrue("an album that can be played opens all the same", album.container)
+        val flow = shelves[2].items.first()
+        assertEquals("program", flow.itemType)
+        assertEquals(false, flow.container)
+    }
 }

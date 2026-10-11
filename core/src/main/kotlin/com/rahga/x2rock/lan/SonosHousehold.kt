@@ -1165,8 +1165,8 @@ class SonosHousehold(
         return ItemPage((first.items + second.items).distinctBy { it.id }, first.total + second.total)
     }
 
-    /** The shelves of [linked]'s own page, where its SMAPI root has none — see [SmapiClient.shelves]. */
-    suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service)
+    /** The shelves of [linked]'s own page, read with its account's token — see [SmapiClient.shelves]. */
+    suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service, linked.token)
 
     /** What [linked] says about [item] beyond itself: its artist, album, radio, favourite state. */
     suspend fun serviceItemDetails(linked: LinkedService, item: Item): ItemDetails =

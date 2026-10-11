@@ -13,6 +13,11 @@ class ShelfCountTest {
         assertEquals("10 stations", shelfCount(shelves.first { it.title == "Trending Now" }.items))
     }
 
+    @Test fun `a shelf of albums and playlists counts items`() {
+        val spotify = parseShelves(FakePlayer.fixtureText("spotify.browse.json"))
+        assertEquals("10 items", shelfCount(spotify.first { it.title == "Recommended for today" }.items))
+    }
+
     @Test fun `Browse Radio counts categories, not stations`() {
         assertEquals("4 categories", shelfCount(shelves.first { it.title == "Browse Radio" }.items))
     }

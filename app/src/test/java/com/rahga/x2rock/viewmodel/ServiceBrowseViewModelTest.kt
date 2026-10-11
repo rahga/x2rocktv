@@ -46,6 +46,10 @@ class ServiceBrowseViewModelTest {
     @Volatile private var emptyRoot = false
     /** Whether the service's manifest names a browse endpoint, as Sonos Radio's does. */
     @Volatile private var shelvesOn = false
+    /** The page the browse endpoint answers with; Sonos Radio's unless a test says otherwise. */
+    @Volatile private var browsePage = "sonosradio.browse.json"
+    /** The Authorization header the browse endpoint was last sent. */
+    @Volatile private var browseAuth: String? = null
 
     /** Every SMAPI request body, in order. */
     private val smapiCalls = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -59,7 +63,10 @@ class ServiceBrowseViewModelTest {
                         if (shelvesOn) """{"presentationMap":{"uri":"${url("/map")}"},"endpoints":[{"type":"browse","uri":"${url("/browse")}"}]}"""
                         else """{"presentationMap":{"uri":"${url("/map")}"}}"""
                     )
-                    "/browse" -> MockResponse().setBody(FakePlayer.fixtureText("sonosradio.browse.json"))
+                    "/browse" -> {
+                        browseAuth = request.getHeader("Authorization")
+                        MockResponse().setBody(FakePlayer.fixtureText(browsePage))
+                    }
                     "/map" -> MockResponse().setBody(MAP)
                     "/smapi" -> {
                         val body = request.body.readUtf8()
@@ -225,6 +232,26 @@ class ServiceBrowseViewModelTest {
         assertTrue(stations.items.any { it.id == "sonos:2997" })
         assertTrue(viewModel.back())
         assertEquals("Trending Now", (viewModel.results.value as ServiceBrowseViewModel.Results.Found).items.first().title)
+    }
+
+    /**
+     * Spotify: a root of its own and a personal page, read with the account's token. The page's
+     * shelves come first and the root's rows after them, so nothing the root reached is lost.
+     */
+    @Test fun `a page read with the account's token leads, and the root follows it`() = runBlocking {
+        shelvesOn = true
+        browsePage = "spotify.browse.json"
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        val page = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.isNotEmpty() == true } }
+            as ServiceBrowseViewModel.Results.Found
+        assertEquals("Bearer t", browseAuth)
+        assertEquals("More like Tyler, The Creator", page.items.first().title)
+        assertTrue("the root's own rows follow the shelves", page.items.last().id !in page.items.take(4).map { it.id } && page.items.size > 4)
+        viewModel.select(page.items.first { it.title == "Recommended for today" }) {}
+        val albums = viewModel.results.value as ServiceBrowseViewModel.Results.Found
+        assertEquals("spotify:album:3MJGcgbroIjiO90yi7RMhy", albums.items.first().id)
+        assertTrue("an album on a shelf opens", albums.items.first().container)
     }
 
     @Test fun `descending into a container, then Back, climbs out a level at a time`() = runBlocking {

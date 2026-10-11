@@ -478,6 +478,19 @@ an id in its query and 404s one in its path; **`getMetadata` on Sonos Radio's SM
 id as it stands**, with no token: News & Talk answered 5,637 `stream`s (iHeart's, `ihr:` ids), Music
 17 genre containers in the same path form.
 
+**A service's own page takes its account's token as a bearer** (home, 2026-10-11). The manifest's
+`browse` endpoint, sent `Authorization: Bearer <the SMAPI token>`, answers Spotify's personal page
+(`spotify-v5.ws.sonos.com/v1/browse`, 22 views — "More like <artist>", "Recommended for today", "Your
+top mixes" — where SMAPI's root has 5 rows) and Deezer's (`platform.deezer.com/api/sonos/browse`, 9:
+Favorites, Recently played, the Flow moods, Made for you, Charts). The JSON is Sonos Radio's shape.
+Spotify's items carry **no `browsePolicies`**; Deezer's albums say `canPlay` and `canEnumerate` both.
+Every view id and item id tried opens with SMAPI `getMetadata` (albums, playlists, artists, Deezer's
+`flow` program), except Deezer's `user-recentlyplayed` view (`Client.ItemNotFound`) and Spotify's
+"Your Library" `playlists` (empty) — so a shelf opens on the items it carries inline. **A stale token
+is answered 401**, not with a refresh fault: Spotify's page went from 200 to 401 within the hour, and
+one SMAPI call (which takes the `tokenRefreshRequired` replacement) then lets the page answer the new
+token. Amazon Music answers its endpoint 401 to any token, TuneIn (New) 403, Apple Music 500.
+
 ## Recorded by x2rock, and relied on here
 
 The sibling project measured these on its own household's hardware between 2026-09-04 and
