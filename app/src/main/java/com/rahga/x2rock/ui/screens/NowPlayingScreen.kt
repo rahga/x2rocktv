@@ -205,6 +205,8 @@ private fun Progress(state: NowPlayingUi) {
             progress = { (position.toFloat() / state.durationMillis).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(6.dp),
             color = MaterialTheme.colorScheme.primary,
+            // The theme's, as the pane's seek bar: material3's own default is a light-theme grey.
+            trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

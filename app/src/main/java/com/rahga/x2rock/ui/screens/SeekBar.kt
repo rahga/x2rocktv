@@ -164,7 +164,10 @@ internal fun ProgressBar(
             LinearProgressIndicator(
                 progress = { progress },
                 modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth().height(if (isFocused) 12.dp else 8.dp),
-                color = barColor
+                color = barColor,
+                // The theme's own, not material3's: no material3 theme is set, so its default track
+                // was that library's light-baseline grey, the brightest thing on a dark pane (P-01).
+                trackColor = MaterialTheme.colorScheme.surfaceVariant,
             )
             if (isFocused) {
                 val knob = SEEK_KNOB
