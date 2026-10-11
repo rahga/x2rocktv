@@ -53,9 +53,9 @@ import com.rahga.x2rock.viewmodel.AlarmDraft
 import com.rahga.x2rock.viewmodel.AlarmsViewModel
 
 /**
- * The household's alarms, from Settings. Select on one arms or disarms it; "New alarm" walks a room,
- * a time, how often, and what it plays, one step to a screen, and Back steps back. Times are the
- * household's clock, said at the top and never converted.
+ * The household's alarms, from Settings. Select on one arms or disarms it, and Menu or a hold opens
+ * it to change or remove; "New alarm" walks a room, a time, how often, and what it plays, one step to
+ * a screen, and Back steps back. Times are the household's clock, said at the top and never converted.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -72,7 +72,7 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
                 ScreenHeader(
-                    title = if (draft == null) "Alarms" else "New alarm",
+                    title = when { draft == null -> "Alarms"; draft?.editing != null -> "Change alarm"; else -> "New alarm" },
                     room = draft?.room?.name,
                     onBack = { if (draft != null) viewModel.back() else onBack() },
                     backModifier = Modifier.focusRequester(backFocus),
@@ -101,7 +101,8 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
                         s.clock?.let { clock ->
                             Text(
                                 "Times are this system's clock, now ${clock.time}." +
-                                    if (clock.timeZoneSet) "" else " It has no time zone set, so they are UTC.",
+                                    (if (clock.timeZoneSet) "" else " It has no time zone set, so they are UTC.") +
+                                    " Select turns one on or off; Menu changes or removes it.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -126,6 +127,7 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
                                     subtitle = alarm.detail,
                                     artUrl = null,
                                     onClick = { viewModel.toggle(alarm.id) },
+                                    onLongClick = { viewModel.startEdit(alarm.id) },
                                 ) {
                                     Spacer(Modifier.width(16.dp))
                                     Text(
@@ -238,10 +240,14 @@ private fun Wheel(value: String, step: (Int) -> Unit, onDone: () -> Unit, modifi
     }
 }
 
-/** What is about to be made, its volume on Left and Right, and the button that makes it. */
+/**
+ * What is about to be made, its volume on Left and Right, and the button that makes it. For an
+ * alarm being changed, a button to each step it can change, Save, and Remove on two presses.
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun ConfirmStep(draft: AlarmDraft, viewModel: AlarmsViewModel, firstFocus: FocusRequester) {
+    val removeArmed by viewModel.removeArmed.collectAsState()
     SectionTitle("${draft.time} · ${draft.room?.name.orEmpty()}", first = true)
     Text(
         listOf(recurrenceLabel(draft.recurrence), draft.program?.title ?: "Chime").joinToString(" · "),
@@ -260,10 +266,30 @@ private fun ConfirmStep(draft: AlarmDraft, viewModel: AlarmsViewModel, firstFocu
                 }
             },
         ) { Text("Volume ${draft.volume}  ·  Left and Right to change") }
-        AppButton(onClick = { viewModel.create() }, modifier = Modifier.widthIn(min = 320.dp).focusRequester(firstFocus)) {
-            Text("Make this alarm")
+        if (draft.editing == null) {
+            AppButton(onClick = { viewModel.create() }, modifier = Modifier.widthIn(min = 320.dp).focusRequester(firstFocus)) {
+                Text("Make this alarm")
+            }
+        } else {
+            AppButton(onClick = { viewModel.save() }, modifier = Modifier.widthIn(min = 320.dp).focusRequester(firstFocus)) {
+                Text("Save changes")
+            }
+            CHANGES.forEach { (step, label) ->
+                AppButton(onClick = { viewModel.change(step) }, modifier = Modifier.widthIn(min = 320.dp)) { Text(label) }
+            }
+            AppButton(onClick = { viewModel.remove() }, modifier = Modifier.widthIn(min = 320.dp)) {
+                Text(if (removeArmed) "Press again to remove" else "Remove this alarm")
+            }
         }
     }
 }
 
 private val RECURRENCES = listOf("DAILY", "WEEKDAYS", "WEEKENDS", "ONCE")
+
+/** What an alarm being changed offers to change, each its own step, in the order a new one asks. */
+private val CHANGES = listOf(
+    AlarmDraft.Step.ROOM to "Change the room",
+    AlarmDraft.Step.TIME to "Change the time",
+    AlarmDraft.Step.REPEAT to "Change how often",
+    AlarmDraft.Step.SOUND to "Change what it plays",
+)

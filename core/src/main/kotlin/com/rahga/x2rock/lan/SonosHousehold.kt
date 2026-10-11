@@ -894,6 +894,26 @@ class SonosHousehold(
         upnp.updateAlarm(hostname, alarm.copy(enabled = enabled))
     }
 
+    /**
+     * Change alarm [id] as [change] says, on a fresh read written back whole, for the reason
+     * [setAlarmEnabled] gives: one read earlier may be stale, and the player takes only a whole record.
+     */
+    suspend fun editAlarm(id: Int, change: (Alarm) -> Alarm) {
+        val hostname = anyHostname()
+        val alarm = upnp.listAlarms(hostname).firstOrNull { it.id == id }
+            ?: throw IOException("that alarm is no longer in this system")
+        upnp.updateAlarm(hostname, change(alarm).copy(id = id))
+    }
+
+    /** Delete alarm [id]. One already gone (800) is what was asked for, and is not a failure. */
+    suspend fun removeAlarm(id: Int) {
+        try {
+            upnp.destroyAlarm(anyHostname(), id)
+        } catch (e: UpnpRefusedException) {
+            if (e.upnpCode != ALARM_GONE) throw e
+        }
+    }
+
     /** Create [alarm], its id ignored; answers the id the household gives it. */
     suspend fun createAlarm(alarm: Alarm): Int = upnp.createAlarm(anyHostname(), alarm)
 
@@ -2502,6 +2522,9 @@ const val SNOOZE_MINUTES = 9
 
 /** Services whose items play through the queue, never `loadContent` — see [SonosHousehold.replayThroughQueue]. */
 private val PLAYS_THROUGH_QUEUE = setOf(MIXCLOUD_SERVICE_ID)
+
+/** `DestroyAlarm`'s answer for an alarm the household no longer has (Kitchen, 2026-10-11). */
+private const val ALARM_GONE = "800"
 
 /** Mixcloud's Sonos service id. */
 internal const val MIXCLOUD_SERVICE_ID = "181"

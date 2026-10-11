@@ -11,6 +11,7 @@ import com.rahga.x2rock.lan.recurrenceLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,7 +31,10 @@ data class AlarmRow(
 /** A room an alarm can ring in: a player, which is what an alarm names. */
 data class AlarmRoom(val playerId: String, val name: String)
 
-/** The new alarm being put together, a step at a time. */
+/**
+ * The alarm being put together, a step at a time: a new one, or with [editing] an existing one,
+ * which opens on its summary and comes back to it after each change.
+ */
 data class AlarmDraft(
     val step: Step = Step.ROOM,
     val room: AlarmRoom? = null,
@@ -40,6 +44,8 @@ data class AlarmDraft(
     /** Null for the chime. */
     val program: AlarmProgram? = null,
     val volume: Int = 20,
+    /** The alarm as it was read, when this changes one rather than making one. */
+    val editing: Alarm? = null,
 ) {
     enum class Step { ROOM, TIME, REPEAT, SOUND, CONFIRM }
 
@@ -83,6 +89,17 @@ class AlarmsViewModel @Inject constructor(
 
     private var loadJob: Job? = null
     private var createJob: Job? = null
+    /** The alarms as last read, so one can be opened for editing whole. */
+    private var read: List<Alarm> = emptyList()
+
+    private val _removeArmed = MutableStateFlow(false)
+    /**
+     * True for a few seconds after the first press of Remove, when a second press deletes the
+     * alarm. Two presses, as the queue's Clear: one is easy to hit by accident on a remote, and an
+     * alarm removed cannot be got back.
+     */
+    val removeArmed: StateFlow<Boolean> = _removeArmed.asStateFlow()
+    private var disarm: Job? = null
 
     /** Each read replaces the one before, so an older list never lands over a newer one. */
     fun load() {
@@ -90,7 +107,9 @@ class AlarmsViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             runCatching {
                 val clock = runCatching { household.householdClock() }.getOrNull()
-                UiState.Ready(household.alarms().sortedWith(compareBy({ it.startTime }, { roomName(it.roomUuid) })).map(::row), clock)
+                val alarms = household.alarms().sortedWith(compareBy({ it.startTime }, { roomName(it.roomUuid) }))
+                read = alarms
+                UiState.Ready(alarms.map(::row), clock)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { e -> if (e !is CancellationException && _uiState.value !is UiState.Ready) _uiState.value = UiState.Error(failureNotice("read the alarms", e) ?: "Couldn't read the alarms") }
@@ -114,10 +133,42 @@ class AlarmsViewModel @Inject constructor(
 
     fun startNew() { _draft.value = AlarmDraft() }
 
-    /** One step back, or out of the new alarm altogether from its first step. */
+    /** Open alarm [id] to change it, on its summary, as it was read. */
+    fun startEdit(id: Int) {
+        val alarm = read.firstOrNull { it.id == id } ?: return
+        val (hour, minute) = alarm.time.split(':').map { it.toIntOrNull() ?: 0 }.let { it.getOrElse(0) { 0 } to it.getOrElse(1) { 0 } }
+        disarmRemove()
+        _draft.value = AlarmDraft(
+            step = AlarmDraft.Step.CONFIRM,
+            room = AlarmRoom(alarm.roomUuid, roomName(alarm.roomUuid)),
+            hour = hour, minute = minute,
+            recurrence = alarm.recurrence,
+            program = if (alarm.isChime) null else AlarmProgram(alarm.programTitle ?: "Music", alarm.programUri, alarm.programMetaData),
+            volume = alarm.volume,
+            editing = alarm,
+        )
+    }
+
+    /** Go to one step of an alarm being changed: it comes back to the summary when chosen. */
+    fun change(step: AlarmDraft.Step) {
+        val d = _draft.value ?: return
+        disarmRemove()
+        _draft.value = d.copy(step = step)
+        if (step == AlarmDraft.Step.SOUND) readPrograms()
+    }
+
+    /**
+     * One step back, or out of the new alarm altogether from its first step. Changing one, a step
+     * goes back to the summary and the summary out.
+     */
     fun back() {
         val d = _draft.value ?: return
-        _draft.value = if (d.step.ordinal == 0) null else d.copy(step = AlarmDraft.Step.entries[d.step.ordinal - 1])
+        disarmRemove()
+        _draft.value = when {
+            d.editing != null -> if (d.step == AlarmDraft.Step.CONFIRM) null else d.copy(step = AlarmDraft.Step.CONFIRM)
+            d.step.ordinal == 0 -> null
+            else -> d.copy(step = AlarmDraft.Step.entries[d.step.ordinal - 1])
+        }
     }
 
     fun chooseRoom(room: AlarmRoom) = advance { it.copy(room = room) }
@@ -132,16 +183,79 @@ class AlarmsViewModel @Inject constructor(
 
     private fun advance(change: (AlarmDraft) -> AlarmDraft) {
         val d = _draft.value ?: return
-        val next = change(d).let { it.copy(step = AlarmDraft.Step.entries[(it.step.ordinal + 1).coerceAtMost(AlarmDraft.Step.entries.lastIndex)]) }
-        _draft.value = next
-        // Asked again while there are none, so one failed read does not leave only the chime for good.
-        if (next.step == AlarmDraft.Step.SOUND && _programs.value.isNullOrEmpty()) {
-            viewModelScope.launch {
-                _programs.value = runCatching { household.alarmPrograms() }
-                    .onFailure { _notice.failure("read the favourites", it) }
-                    .getOrDefault(emptyList())
-            }
+        val next = change(d).let {
+            if (it.editing != null) it.copy(step = AlarmDraft.Step.CONFIRM)
+            else it.copy(step = AlarmDraft.Step.entries[(it.step.ordinal + 1).coerceAtMost(AlarmDraft.Step.entries.lastIndex)])
         }
+        _draft.value = next
+        if (next.step == AlarmDraft.Step.SOUND) readPrograms()
+    }
+
+    /** Asked again while there are none, so one failed read does not leave only the chime for good. */
+    private fun readPrograms() {
+        if (!_programs.value.isNullOrEmpty()) return
+        viewModelScope.launch {
+            _programs.value = runCatching { household.alarmPrograms() }
+                .onFailure { _notice.failure("read the favourites", it) }
+                .getOrDefault(emptyList())
+        }
+    }
+
+    /**
+     * Write the alarm being changed back, its other fields as the player has them now; [onDone]
+     * once the list has it. A second press while one is out is ignored, as for [create].
+     */
+    fun save(onDone: () -> Unit = {}) {
+        if (createJob?.isActive == true) return
+        val d = _draft.value ?: return
+        val editing = d.editing ?: return
+        val room = d.room ?: return
+        createJob = viewModelScope.launch {
+            runCatching {
+                household.editAlarm(editing.id) {
+                    it.copy(
+                        startTime = "${d.time}:00", recurrence = d.recurrence, roomUuid = room.playerId,
+                        programUri = d.program?.uri ?: Alarm.CHIME_URI, programMetaData = d.program?.metaData.orEmpty(),
+                        volume = d.volume,
+                    )
+                }
+            }
+                .onSuccess {
+                    _draft.value = null
+                    load()
+                    onDone()
+                }
+                .onFailure { e ->
+                    if ((e as? UpnpRefusedException)?.upnpCode == DUPLICATE) _notice.post("${room.name} already has an alarm at ${d.time}.")
+                    else _notice.failure("change the alarm", e)
+                }
+        }
+    }
+
+    /** Remove the alarm being changed: the first press arms it, a second within a few seconds removes it. */
+    fun remove() {
+        val editing = _draft.value?.editing ?: return
+        if (!_removeArmed.value) {
+            _removeArmed.value = true
+            disarm?.cancel()
+            disarm = viewModelScope.launch {
+                delay(REMOVE_CONFIRM_MILLIS)
+                _removeArmed.value = false
+            }
+            return
+        }
+        disarmRemove()
+        viewModelScope.launch {
+            runCatching { household.removeAlarm(editing.id) }
+                .onSuccess { _draft.value = null }
+                .onFailure { _notice.failure("remove the alarm", it) }
+            load()
+        }
+    }
+
+    private fun disarmRemove() {
+        disarm?.cancel()
+        _removeArmed.value = false
     }
 
     /**
@@ -195,5 +309,6 @@ class AlarmsViewModel @Inject constructor(
     private companion object {
         /** `CreateAlarm` for a room and start time that already has one (Kitchen, 2026-10-10). */
         const val DUPLICATE = "801"
+        const val REMOVE_CONFIRM_MILLIS = 4_000L
     }
 }

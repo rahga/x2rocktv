@@ -22,6 +22,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -45,6 +46,8 @@ class AlarmsViewModelTest {
     private lateinit var roomName: String
     private val requests = CopyOnWriteArrayList<Pair<String, Map<String, String>>>()
     @Volatile private var duplicate = false
+    /** Whether DestroyAlarm answers as for an alarm already gone. */
+    @Volatile private var gone = false
 
     @Before fun setUp() = runBlocking {
         fake = FakePlayer().also { it.start() }
@@ -56,6 +59,9 @@ class AlarmsViewModelTest {
                     val body = when (action) {
                         "ListAlarms" -> FakePlayer.fixtureText("ListAlarms.two.xml")
                         "UpdateAlarm" -> FakePlayer.fixtureText("UpdateAlarm.reply.xml")
+                        "DestroyAlarm" -> if (gone) return MockResponse().setResponseCode(500)
+                            .setBody(FakePlayer.fixtureText("DestroyAlarm.gone.fault800.xml"))
+                            else FakePlayer.fixtureText("DestroyAlarm.reply.xml")
                         "CreateAlarm" -> if (duplicate) return MockResponse().setResponseCode(500)
                             .setBody(FakePlayer.fixtureText("CreateAlarm.fault801.xml"))
                             else FakePlayer.fixtureText("CreateAlarm.reply.xml")
@@ -156,5 +162,58 @@ class AlarmsViewModelTest {
         viewModel.create()
         assertEquals("$roomName already has an alarm at 06:45.", withTimeout(5_000) { viewModel.notice.first { it != null } })
         assertNotNull("the draft stays, to be changed", viewModel.draft.value)
+    }
+
+    /**
+     * Changing an alarm opens on its summary, a change comes back to it, and Save writes the whole
+     * record with only what was changed: Wednesday's 07:30 album alarm moved to 08:15 keeps its days,
+     * its album, its half hour and its volume.
+     */
+    @Test fun `an alarm changed keeps everything it was not told to change`() = runBlocking<Unit> {
+        ready()
+        viewModel.startEdit(34)
+        assertEquals(AlarmDraft.Step.CONFIRM, viewModel.draft.value?.step)
+        viewModel.change(AlarmDraft.Step.TIME)
+        viewModel.chooseTime(8, 15)
+        assertEquals("a change comes back to the summary", AlarmDraft.Step.CONFIRM, viewModel.draft.value?.step)
+        requests.clear()
+        viewModel.save()
+        withTimeout(5_000) { while (requests.none { it.first == "UpdateAlarm" }) delay(20) }
+        val sent = requests.first { it.first == "UpdateAlarm" }.second
+        assertEquals("34", sent["ID"])
+        assertEquals("08:15:00", sent["StartLocalTime"])
+        assertEquals("ON_135", sent["Recurrence"])
+        assertEquals("00:30:00", sent["Duration"])
+        assertEquals("15", sent["Volume"])
+        assertEquals("0", sent["Enabled"])
+        assertTrue("its album, not the chime", sent["ProgramURI"].orEmpty().startsWith("x-rincon-cpcontainer:"))
+        withTimeout(5_000) { viewModel.draft.first { it == null } }
+    }
+
+    /** Remove takes two presses; the second deletes that alarm. */
+    @Test fun `remove takes a second press`() = runBlocking<Unit> {
+        ready()
+        viewModel.startEdit(33)
+        requests.clear()
+        viewModel.remove()
+        assertTrue(viewModel.removeArmed.value)
+        delay(300)
+        assertTrue("one press sends nothing", requests.none { it.first == "DestroyAlarm" })
+        viewModel.remove()
+        withTimeout(5_000) { while (requests.none { it.first == "DestroyAlarm" }) delay(20) }
+        assertEquals("33", requests.first { it.first == "DestroyAlarm" }.second["ID"])
+        withTimeout(5_000) { viewModel.draft.first { it == null } }
+    }
+
+    /** An alarm another controller removed first is gone, which is what was asked: no failure said. */
+    @Test fun `removing an alarm already gone is not a failure`() = runBlocking<Unit> {
+        ready()
+        gone = true
+        viewModel.startEdit(33)
+        viewModel.remove()
+        viewModel.remove()
+        withTimeout(5_000) { viewModel.draft.first { it == null } }
+        delay(300)
+        assertEquals(null, viewModel.notice.value)
     }
 }

@@ -568,6 +568,14 @@ class Upnp(
     }
 
     /**
+     * Delete alarm [id]. An empty reply; an id the household no longer has is refused with 800
+     * (both captured off Kitchen on an alarm made disarmed for it, 2026-10-11).
+     */
+    suspend fun destroyAlarm(hostname: String, id: Int): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.ALARM_CLOCK, "DestroyAlarm", listOf("ID" to id.toString()))
+    }
+
+    /**
      * Create [alarm], its id ignored, answering the id the household assigns. Refused with 801
      * when the room already has an alarm at that start time, whatever its recurrence (Kitchen,
      * 2026-10-10).

@@ -108,8 +108,8 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
   the device and carrying levels and a favourite. None were saved in this household.
 - **Music library** (local shares): none configured here, so not comparable. x2rocktv has no
   library browse; it would be UPnP `ContentDirectory` (`A:` containers), if a household needs it.
-- **Alarms**: the app edits and removes; x2rocktv creates and arms only (`AlarmsScreen`). Editing is
-  `UpdateAlarm`, removing `DestroyAlarm`, both UPnP and both done by the x2rock CLI.
+- **Alarms**: the app edits and removes; x2rocktv does too since T-19 (`UpdateAlarm`, `DestroyAlarm`),
+  checked on a disarmed test alarm in Kitchen through the emulator's screens, then removed.
 
 ## Found with the remote
 
@@ -129,7 +129,7 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
 3. ~~Recent searches~~ on the Search screen (T-17, done).
 4. ~~Sub and surround levels~~ in the room panel's Sound section, for rooms that have them (T-16, done).
 5. ~~Amazon's "Content Unavailable" row~~ dropped from listings (T-18, done).
-6. **Editing and removing alarms.**
+6. ~~Editing and removing alarms~~ (T-19, done).
 
 Not attainable: YouTube Music browse and search (Google's gate), Apple Music library (empty
 credential), Bandcamp until the household relinks it.

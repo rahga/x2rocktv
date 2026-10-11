@@ -611,7 +611,10 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   are the household's clock, said at the top with its time now, and **never converted** — with no
   timezone set it runs UTC, and the screen says so. A new alarm is one step to a screen (room, time,
   how often, chime or a favourite, then volume) and is made armed. Nothing pushes alarms, so the list
-  is read on opening and after each change made here. Editing and removing are not offered.
+  is read on opening and after each change made here. **Menu or a hold on one changes or removes it**
+  (T-19, 2026-10-11): it opens on its summary, each change is its own step and comes back to it, Save
+  writes a fresh read back whole with only those fields changed, and Remove takes two presses, as the
+  queue's Clear. An alarm already gone (`DestroyAlarm` 800) counts as removed.
 - **A screen that loads fast asks for first focus once it is resumed**, not before: during the
   navigation's fade the home screen is still composed and its Settings panel hands focus back to
   its button, and when it left, focus fell to Back (Alarms on the Shield). Lists that load slowly
