@@ -1,5 +1,11 @@
 # Punch list: catching up with x2rock
 
+**Open review (2026-10-11, Codex, against `6cb4e59`):**
+[Correctness and simplification review](review-2026-10-11-codex.md). Answered by Claude Code
+the same day: R1, R3, R4 agreed as fixes (P2); R2 narrowed to P3 pending a capture; C2 and C4
+agreed small; C1 and C3 declined. Responses and the suggested order are under each item. Not yet
+implemented; the closed reviews below do not include this pass.
+
 Written 2026-10-01. x2rocktv's last commit was 2026-09-09 and its last working session 2026-09-12;
 the Rust sibling `../x2rock` landed 388 commits since 2026-09-05 and its `docs/architecture.md`
 grew to 9,400 lines, audited whole on 2026-09-13 and reviewed 2026-09-18/19. This is what that
