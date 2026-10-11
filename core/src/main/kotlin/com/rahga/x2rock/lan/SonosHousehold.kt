@@ -1336,8 +1336,8 @@ class SonosHousehold(
      * `playback:1 loadContent` **loads and does not start**: `playOnCompletion` is accepted
      * and ignored, and a `play` sent at once is refused with `ERROR_PLAYBACK_NO_CONTENT`
      * while the load is under way, or accepted mid-load and comes to nothing (x2rock,
-     * verified 2026-09-26). So, as x2rock does: pause first, so that *playing* can only mean
-     * the new content; load; then press play until the room is pushed as playing. The
+     * verified 2026-09-26). Pause first; load; then press play until the room reports playing
+     * changed content, or names the item requested (which may be the same item again). The
      * pushed state is the answer — only the press repeats, and only until it lands.
      *
      * Fails as the player does, with its words: an anonymous service's item answers
@@ -1353,10 +1353,9 @@ class SonosHousehold(
         // No reply is not no, here as for a regroup: a coordinator busy with a load can answer
         // late or not at all and do what it was asked. Only a refusal is final; a timeout on
         // the load or on a press leaves the wait below to judge, by whether the room plays —
-        // and, for a load nobody answered, by whether what plays is something *else*: the
-        // presses below would otherwise resume what was paused and pass it off as the item.
+        // and by what plays: even an acknowledged load can briefly resume the old content
+        // before the load takes over (x2rock's hardware capture, 2026-10-08).
         val before = _groupStates.value[groupId]?.let { it.track?.id to it.container?.name }
-        var loadLost = false
         try {
             groupCommand(
                 groupId, "playback:1", "loadContent",
@@ -1371,7 +1370,7 @@ class SonosHousehold(
                 },
             )
         } catch (e: ReplyTimeoutException) {
-            loadLost = true
+            // The pushed content and playback state below decide whether it landed.
         }
         val started = withTimeoutOrNull(minOf(settleMillis, LOAD_SETTLE_MILLIS)) {
             // Not straight away. A play ~30ms after the load hung the home Dining Room — a
@@ -1395,7 +1394,9 @@ class SonosHousehold(
                     _groupStates.first { all ->
                         all[groupId]?.let { g ->
                             g.playbackState == PlaybackStates.PLAYING &&
-                                (!loadLost || (g.track?.id to g.container?.name) != before)
+                                ((g.track?.id to g.container?.name) != before ||
+                                    g.container?.name == item.name ||
+                                    (item.type == "track" && g.track?.name == item.name))
                         } == true
                     }
                 }

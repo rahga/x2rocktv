@@ -169,4 +169,36 @@ class ReplayTest {
         assertTrue("expected the refusal, got $failure", failure is SonosCommandException && "ERROR_ACCOUNT_INVALID_ID" in failure.message!!)
         assertEquals(0, fake.commandsNamed("play"))
     }
+
+    @Test fun `an acknowledged load cannot pass off the old content as the requested item`() = runBlocking<Unit> {
+        val groupId = group()
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }
+        val call = scope.async { runCatching { household.replay(groupId, household.history().first()) } }
+        fake.awaitCommand("loadContent", 5_000)
+        fake.awaitCommand("play", 5_000)
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        val result = withTimeout(5_000) { call.await() }
+        assertTrue("the acknowledged load resumed the old track and was called successful", result.isFailure)
+    }
+
+    @Test fun `replaying the same container does not require different metadata`() =
+        replaySameItem(track = false)
+
+    @Test fun `replaying the same track does not require different metadata`() =
+        replaySameItem(track = true)
+
+    private fun replaySameItem(track: Boolean) = runBlocking<Unit> {
+        val groupId = group()
+        fake.pushFixture("metadataStatus", groupId)
+        val state = withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true } }.getValue(groupId)
+        val item = household.history().first().copy(
+            name = if (track) state.track!!.name!! else state.container!!.name!!,
+            type = if (track) "track" else "playlist",
+        )
+        val call = scope.async { household.replay(groupId, item) }
+        fake.awaitCommand("play", 5_000)
+        fake.pushFixture("radioPlaybackStatus", groupId)
+        withTimeout(5_000) { call.await() }
+    }
 }
