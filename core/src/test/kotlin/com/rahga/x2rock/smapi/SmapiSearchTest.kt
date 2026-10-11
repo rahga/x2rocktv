@@ -210,4 +210,10 @@ class SmapiSearchTest {
         assertEquals(listOf("An Awesome Wave", "Higher", "love (Deluxe Edition)", "Nobody but Me"), page.items.map { it.title })
         assertTrue("the albums themselves are still containers", page.items.all { it.container })
     }
+
+    /** A summary sent as HTML reads as its words (Community Radio Plus's episodes, captured 2026-10-11). */
+    @Test fun `a summary's markup is left out`() {
+        val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("search.communityRadioPlus.ondemand.xml"))
+        assertEquals("See omnystudio.com/listener for privacy information.", page.items.first().summary)
+    }
 }

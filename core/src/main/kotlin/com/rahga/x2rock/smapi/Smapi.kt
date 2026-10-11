@@ -556,6 +556,17 @@ suspend fun writablePlaylists(browse: suspend (id: String) -> List<Item>): List<
 }
 
 /**
+ * [text] without markup: some services send a summary as HTML, a podcast episode's
+ * `<p>See <a href="…">omnystudio.com/listener</a> for privacy information.</p>` (Community Radio
+ * Plus, 2026-10-11), which a row printed tags and all. `null` when nothing is left.
+ */
+internal fun plainText(text: String): String? =
+    (if ('<' in text) text.replace(TAG, " ").replace(SPACES, " ") else text).trim().ifEmpty { null }
+
+private val TAG = Regex("<[^>]*>")
+private val SPACES = Regex("\\s+")
+
+/**
  * The items in a `search` or `getMetadata` reply, and the total it claims. One parser for
  * both: the payload is the same shape, `mediaCollection` for something to descend into and
  * `mediaMetadata` for something to play, and services mix them freely in either call. Read in
@@ -589,8 +600,8 @@ fun parseItems(body: String): ItemPage {
                 title = child("title").orEmpty(),
                 itemType = itemType,
                 // trackMetadata is where Deezer keeps artist/album/art, leaving the element bare.
-                summary = child("summary") ?: child("artist") ?: nested("trackMetadata", "artist")
-                    ?: child("genre") ?: child("country"),
+                summary = (child("summary") ?: child("artist") ?: nested("trackMetadata", "artist")
+                    ?: child("genre") ?: child("country"))?.let(::plainText),
                 artUrl = child("albumArtURI") ?: nested("trackMetadata", "albumArtURI")
                     ?: nested("streamMetadata", "logo"),
                 container = container,
