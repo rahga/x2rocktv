@@ -327,8 +327,13 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
     // it fell to Back, and the next presses walked the list and played whatever they landed on.
     var menuFrom by remember { mutableStateOf<String?>(null) }
     val menuReturn = remember { FocusRequester() }
-    LaunchedEffect(menuItem) {
-        if (menuItem != null) menuFrom = menuItem.id
+    // The playlist picker follows the menu without a gap, so the two are one overlay here: focus goes
+    // back when both are shut. Keyed on the menu alone, it went back as the picker opened, lost to the
+    // picker's trap, and Back from the picker left it on the screen's Back (Shield, 2026-10-11).
+    val picker by viewModel.menu.picker.collectAsState()
+    val overlayItem = menuItem ?: picker?.target?.item
+    LaunchedEffect(overlayItem) {
+        if (overlayItem != null) menuFrom = overlayItem.id
         else if (menuFrom != null) menuReturn.requestFocusRetrying()
     }
     val fromQueue by viewModel.menu.fromQueue.collectAsState()

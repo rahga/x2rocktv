@@ -102,8 +102,10 @@ fun SearchScreen(
     // The row a menu was opened from, so focus goes back to it when the menu closes.
     var menuFrom by remember { mutableStateOf<String?>(null) }
     val menuReturn = remember { FocusRequester() }
-    LaunchedEffect(menuTarget) {
-        if (menuTarget == null && menuFrom != null) menuReturn.requestFocusRetrying()
+    // The playlist picker follows the menu without a gap: focus goes back once both are shut.
+    val picker by viewModel.menu.picker.collectAsState()
+    LaunchedEffect(menuTarget == null && picker == null) {
+        if (menuTarget == null && picker == null && menuFrom != null) menuReturn.requestFocusRetrying()
     }
     BackHandler { onBack() }
     // The row that opened another screen — an album, a service's own search — so Back lands on it.
