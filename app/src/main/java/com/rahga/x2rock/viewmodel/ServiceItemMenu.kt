@@ -74,7 +74,8 @@ class ServiceItemMenu(
 
     /**
      * The account's playlists a track could go in, for "Add to playlist…" — read as a menu opens on
-     * one, and kept per service for the screen's life: finding them is up to three `getMetadata`.
+     * one, and kept per service for the screen's life once answered: finding them is up to three
+     * `getMetadata`.
      * Empty where the service has nowhere to add, which leaves the action out.
      */
     private val _playlists = MutableStateFlow<List<Item>>(emptyList())
@@ -92,7 +93,8 @@ class ServiceItemMenu(
         (target as? Target.Service)?.takeIf { !it.item.container }?.let { service ->
             val key = service.linked.key()
             playlistsByService[key]?.let { _playlists.value = it } ?: scope.launch {
-                val found = runCatching { household.writablePlaylists(service.linked) }.getOrDefault(emptyList())
+                // Kept only when answered: one timeout would otherwise hide the action for the screen's life.
+                val found = runCatching { household.writablePlaylists(service.linked) }.getOrNull() ?: return@launch
                 playlistsByService[key] = found
                 if (_open.value == target) _playlists.value = found
             }

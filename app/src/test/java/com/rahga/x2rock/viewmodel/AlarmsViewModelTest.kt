@@ -130,6 +130,21 @@ class AlarmsViewModelTest {
         withTimeout(5_000) { viewModel.draft.first { it == null } }
     }
 
+    /** A second press while the first is out would be refused as a duplicate of it, and say so. */
+    @Test fun `make pressed twice makes one alarm`() = runBlocking<Unit> {
+        ready()
+        viewModel.startNew()
+        viewModel.chooseRoom(viewModel.rooms().first { it.playerId == playerId })
+        viewModel.chooseTime(5, 15)
+        viewModel.chooseRecurrence("ONCE")
+        viewModel.chooseProgram(null)
+        requests.clear()
+        viewModel.create()
+        viewModel.create()
+        withTimeout(5_000) { viewModel.draft.first { it == null } }
+        assertEquals(1, requests.count { it.first == "CreateAlarm" })
+    }
+
     @Test fun `a second alarm at that time in that room is said in words`() = runBlocking<Unit> {
         ready()
         duplicate = true

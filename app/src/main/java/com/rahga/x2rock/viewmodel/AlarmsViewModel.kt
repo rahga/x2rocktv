@@ -9,6 +9,8 @@ import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.UpnpRefusedException
 import com.rahga.x2rock.lan.recurrenceLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,14 +81,19 @@ class AlarmsViewModel @Inject constructor(
 
     init { load() }
 
+    private var loadJob: Job? = null
+    private var createJob: Job? = null
+
+    /** Each read replaces the one before, so an older list never lands over a newer one. */
     fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             runCatching {
                 val clock = runCatching { household.householdClock() }.getOrNull()
                 UiState.Ready(household.alarms().sortedWith(compareBy({ it.startTime }, { roomName(it.roomUuid) })).map(::row), clock)
             }
                 .onSuccess { _uiState.value = it }
-                .onFailure { e -> if (_uiState.value !is UiState.Ready) _uiState.value = UiState.Error(failureNotice("read the alarms", e) ?: "Couldn't read the alarms") }
+                .onFailure { e -> if (e !is CancellationException && _uiState.value !is UiState.Ready) _uiState.value = UiState.Error(failureNotice("read the alarms", e) ?: "Couldn't read the alarms") }
         }
     }
 
@@ -106,8 +113,6 @@ class AlarmsViewModel @Inject constructor(
         .sortedBy { it.name }
 
     fun startNew() { _draft.value = AlarmDraft() }
-
-    fun cancelNew() { _draft.value = null }
 
     /** One step back, or out of the new alarm altogether from its first step. */
     fun back() {
@@ -129,13 +134,22 @@ class AlarmsViewModel @Inject constructor(
         val d = _draft.value ?: return
         val next = change(d).let { it.copy(step = AlarmDraft.Step.entries[(it.step.ordinal + 1).coerceAtMost(AlarmDraft.Step.entries.lastIndex)]) }
         _draft.value = next
-        if (next.step == AlarmDraft.Step.SOUND && _programs.value == null) {
-            viewModelScope.launch { _programs.value = runCatching { household.alarmPrograms() }.getOrDefault(emptyList()) }
+        // Asked again while there are none, so one failed read does not leave only the chime for good.
+        if (next.step == AlarmDraft.Step.SOUND && _programs.value.isNullOrEmpty()) {
+            viewModelScope.launch {
+                _programs.value = runCatching { household.alarmPrograms() }
+                    .onFailure { _notice.failure("read the favourites", it) }
+                    .getOrDefault(emptyList())
+            }
         }
     }
 
-    /** Make the alarm, armed; [onDone] once it is in the list. */
+    /**
+     * Make the alarm, armed; [onDone] once it is in the list. A press while one is out is ignored:
+     * sent twice, the second is refused as a duplicate of the first, and says so.
+     */
     fun create(onDone: () -> Unit = {}) {
+        if (createJob?.isActive == true) return
         val d = _draft.value ?: return
         val room = d.room ?: return
         val alarm = Alarm(
@@ -148,7 +162,7 @@ class AlarmsViewModel @Inject constructor(
             programMetaData = d.program?.metaData.orEmpty(),
             volume = d.volume,
         )
-        viewModelScope.launch {
+        createJob = viewModelScope.launch {
             runCatching { household.createAlarm(alarm) }
                 .onSuccess {
                     _draft.value = null

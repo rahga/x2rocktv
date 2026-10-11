@@ -171,11 +171,11 @@ class ServiceBrowseViewModel @Inject constructor(
     private val _returnTo = MutableStateFlow<String?>(null)
     val returnTo: StateFlow<String?> = _returnTo.asStateFlow()
 
-    /** Whether the container showing can be played whole — an album, a playlist, a favourite. */
     /** Where the book showing resumes, so its chapter row can say so; null for anything else. */
     private val _resume = MutableStateFlow<ResumePoint?>(null)
     val resume: StateFlow<ResumePoint?> = _resume.asStateFlow()
 
+    /** Whether the container showing can be played whole — an album, a playlist, a favourite. */
     private val _playsWhole = MutableStateFlow(false)
     val playsWhole: StateFlow<Boolean> = _playsWhole.asStateFlow()
 
@@ -399,9 +399,13 @@ class ServiceBrowseViewModel @Inject constructor(
      */
     fun openChapters(book: Item) {
         val service = _active.value ?: return
-        trail.lastOrNull()?.opened = book.id
+        val from = trail.lastOrNull() ?: return
+        from.opened = book.id
         viewModelScope.launch {
             val resume = runCatching { household.bookResume(service, book) }.getOrNull()
+            // Back, a second press, or anything opened while the place was read has moved on from
+            // where this was asked: the chapters would land on top of whatever shows now.
+            if (trail.lastOrNull() !== from) return@launch
             browse(book.id, book.title, null)
             trail.lastOrNull()?.takeIf { it.id == book.id }?.let { level ->
                 level.book = book

@@ -118,6 +118,21 @@ class ToneStepsTest {
         withTimeout(5_000) { viewModel.tone.first { it != null } }
     }
 
+    /**
+     * A write's own read lands after the panel has moved on to another room: it is Kitchen's, and
+     * showing it in Bedroom's panel would aim Bedroom's switches at Kitchen.
+     */
+    @Test fun `a read after a write does not land in the next room's panel`() = runBlocking<Unit> {
+        openKitchen()
+        viewModel.toggleStatusLight()
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        viewModel.loadTone(bedroom.id)
+        withTimeout(5_000) { while (lights.isEmpty()) delay(20) }
+        // Past Kitchen's read after the write, which waits on the slow TruePlay answer.
+        delay(1_500)
+        assertEquals(bedroom.coordinatorId, viewModel.tone.value?.playerId)
+    }
+
     /** A burst of presses is one write, of the total. */
     @Test fun `quick presses send their total once`() = runBlocking<Unit> {
         openKitchen()

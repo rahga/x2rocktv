@@ -556,6 +556,8 @@ class HomeViewModel @Inject constructor(
     private val toneSends = Mutex()
     /** Moves on every press, so a read that started before one is known to be stale. */
     private var toneEdits = 0
+    /** The speaker the panel last asked about: a read of any other — a write's, landing late — is not shown. */
+    private var tonePlayer: String? = null
 
     /** Read the tone of [groupId]'s own speaker: its coordinator, the room it is named for. */
     fun loadTone(groupId: String) {
@@ -564,6 +566,7 @@ class HomeViewModel @Inject constructor(
         // The remote settings are the soundbar's own, which need not be the room's coordinator.
         val soundbar = TvSoundbar.soundbarOf(group, household.state.value)
         if (_tone.value?.playerId != playerId) _tone.value = null
+        tonePlayer = playerId
         toneJob?.cancel()
         toneJob = viewModelScope.launch { readTone(playerId, soundbar) }
     }
@@ -590,7 +593,7 @@ class HomeViewModel @Inject constructor(
             val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
             ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await())
         }
-        if (read == null || edits != toneEdits) return
+        if (read == null || edits != toneEdits || playerId != tonePlayer) return
         _tone.value = read
     }
 
