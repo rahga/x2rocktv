@@ -640,6 +640,13 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   services first and holds its first focus until none that would rank above the first section is
   still out — focus used to go to whichever service answered first, which on a slow box was Hype
   Machine, with the household's own services sorting in above it, off-screen.
+- **Recent searches** (`RecentSearches`, 2026-10-11): before a search, this device's last eight
+  terms are rows under the field; a press searches again, Menu or a hold forgets one, and focus
+  then goes to the next row (or the field), never left to fall. The Sonos app keeps a search
+  history; on a remote the typing is the cost. **The D-pad leaves the field** once the keyboard is
+  closed (`SearchField`): Up and Down always, Right and Left from the end of the text — a text field
+  keeps every arrow for its cursor otherwise, and the Search button and the results were
+  unreachable (P-19, Shield).
 - **Presets** are this device's (`PresetStore`): players, each one's level, and a Sonos favourite,
   saved from the room panel and played from Browse. Players, not groups, for the reason the TV
   room stores a player. Applying one sets levels **before** it starts the music, so nothing starts

@@ -30,7 +30,7 @@ the x2rock CLI, whose playback goes through the same player paths.
 
 | service | top level, x2rocktv vs app | search ("miles davis") | played | notes |
 |---|---|---|---|---|
-| Amazon Music | **differs**: Library, User Playlists vs the app's Home — Library, Explore Podcasts, User Playlists, then 11 personal shelves (Followed Playlists, Songs for You, Your Frequent Plays, Podcasts You May Like, …) | both answer; x2rocktv gets tracks and albums, the app's section held only two playlists | x2rock, Kitchen, 2026-10-11 | Home is `api/home`, which refuses a bearer token (x2rock). Library's albums end in a sentinel row, id `unauthorized`, "Content Unavailable" — x2rocktv lists it as a container |
+| Amazon Music | **differs**: Library, User Playlists vs the app's Home — Library, Explore Podcasts, User Playlists, then 11 personal shelves (Followed Playlists, Songs for You, Your Frequent Plays, Podcasts You May Like, …) | both answer; x2rocktv gets tracks and albums, the app's section held only two playlists | x2rock, Kitchen, 2026-10-11 | Home is `api/home`, which refuses a bearer token (x2rock). Library's albums end in a sentinel row, id `unauthorized`, "Content Unavailable"; x2rocktv leaves out any row that says it can neither play nor open (T-18) |
 | Apple Music | **differs, by necessity**: search only (iTunes) vs the app's Library (Artists, Albums, Songs, Playlists, Recently Added) | both answer | x2rocktv, Dining Room, 2026-10-06 (catalogue ids) | The household's credential has an empty `privateKey`; SMAPI refuses every call. Not attainable |
 | Audible | same: the marketplaces (`.com`, `.co.uk`, `.de`, …) | neither offers it | x2rock, 2026-10-06 (resume measured); x2rocktv's chapters only against a captured shape | x2rock guessed the app opens straight into the library; it does not |
 | Bandcamp | same, empty: x2rocktv falls to its search, the app says "No content items available" | x2rocktv: "1 service didn't answer" (`Client.LoginInvalid`); the app leaves it out | — | The household's own token is refused, by the app too. Relink in the Sonos app; nothing to fix here |
@@ -85,8 +85,8 @@ the room reporting PLAYING with the new content.
   alphabetical under its own Preferred services tier, which is empty on the Shield.
 - The app has a **filter chip per service** above the results; x2rocktv has "More from
   <service>" at the end of each block, which opens that service's full search. Equivalent reach.
-- The app keeps a **search history** on its Search tab. x2rocktv keeps none, and typing is the
-  expensive part on a remote. Attainable: a short list of this device's recent terms.
+- The app keeps a **search history** on its Search tab. x2rocktv keeps one too since T-17: this
+  device's last eight terms, under the field before a search.
 - x2rocktv's Amazon results were richer: tracks and albums where the app showed two playlists.
 
 ## Beyond services
@@ -126,9 +126,9 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
    `SmapiClient.shelves` is anonymous and only consulted when root is empty. Amazon (401) and TuneIn
    (403) want the header each expects worked out first.
 2. ~~The search field's D-pad trap~~ (above; fixed).
-3. **Recent searches** on the Search screen.
+3. ~~Recent searches~~ on the Search screen (T-17, done).
 4. **Sub and surround levels** in the room panel's Sound section, for rooms that have them.
-5. **Amazon's "Content Unavailable" row** dropped from listings.
+5. ~~Amazon's "Content Unavailable" row~~ dropped from listings (T-18, done).
 6. **Editing and removing alarms.**
 
 Not attainable: YouTube Music browse and search (Google's gate), Apple Music library (empty

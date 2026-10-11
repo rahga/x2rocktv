@@ -94,7 +94,16 @@ fun SearchScreen(
     val results by viewModel.results.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val notice by viewModel.notice.collectAsState()
+    val recent by viewModel.recent.collectAsState()
     val fieldFocus = remember { FocusRequester() }
+    val recentFocus = remember { FocusRequester() }
+    // A forgotten term's row leaves under the focus; the next one up takes it, or the field.
+    var forgot by remember { mutableStateOf(false) }
+    LaunchedEffect(recent) {
+        if (!forgot) return@LaunchedEffect
+        forgot = false
+        if (recent.isEmpty()) fieldFocus.requestFocusRetrying() else recentFocus.requestFocusRetrying()
+    }
     val resultsFocus = remember { FocusRequester() }
     val menuTarget by viewModel.menu.open.collectAsState()
     val fromQueue by viewModel.menu.fromQueue.collectAsState()
@@ -167,6 +176,21 @@ fun SearchScreen(
                     // One block per service, as the Sonos app lays its search out: its name, then
                     // its hits three to a column, sideways, "More from" it in the last cell — wider
                     // than the screen, so the next column showing at the edge says there is more.
+                    // Before a search, this device's recent terms: one press for what took a keyboard.
+                    // Menu or a hold forgets one.
+                    if (!results.searched && recent.isNotEmpty()) {
+                        item(key = "recent:heading") {
+                            Text("Recent searches", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 8.dp, bottom = 4.dp))
+                        }
+                        itemsIndexed(recent, key = { _, term -> "recent:$term" }) { index, term ->
+                            MediaRow(
+                                title = term, subtitle = null, artUrl = null,
+                                onClick = { openedFrom = null; viewModel.searchAgain(term) },
+                                onLongClick = { forgot = true; viewModel.forget(term) },
+                                modifier = if (index == 0) Modifier.focusRequester(recentFocus) else Modifier,
+                            )
+                        }
+                    }
                     itemsIndexed(results.sections, key = { _, section -> "section:${section.key}" }) { sectionIndex, section ->
                         val cells = cellKeys(section)
                         val gridState = rememberLazyGridState()

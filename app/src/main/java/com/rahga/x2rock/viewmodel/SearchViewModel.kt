@@ -9,6 +9,7 @@ import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.StreamStart
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
+import com.rahga.x2rock.store.RecentSearches
 import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.searchedAccounts
 import com.rahga.x2rock.smapi.Category
@@ -56,6 +57,7 @@ class SearchViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val primaryAccounts: PrimaryAccounts,
     private val preferredServices: PreferredServices,
+    private val recentSearches: RecentSearches,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -124,10 +126,22 @@ class SearchViewModel @Inject constructor(
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null
 
+    /** This device's recent terms, newest first, offered under the field before a search. */
+    val recent: StateFlow<List<String>> = recentSearches.terms
+
     fun setQuery(text: String) { _query.value = text }
+
+    /** A recent [term], searched again: one press for what once took a keyboard. */
+    fun searchAgain(term: String) {
+        _query.value = term
+        search()
+    }
+
+    fun forget(term: String) = recentSearches.remove(term)
 
     fun search() {
         val term = _query.value.trim().ifEmpty { return }
+        recentSearches.add(term)
         job?.cancel()
         job = viewModelScope.launch {
             // Side by side: neither needs the other, and the Apple answer is a speaker round trip.
