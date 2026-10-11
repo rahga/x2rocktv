@@ -63,7 +63,7 @@ the room reporting PLAYING with the new content.
 | Apple Music | song and album, from iTunes | ✓ 4.2s each |
 | Audible | "The Body" | ✓ 5.1s — **the resume path's first run on hardware**: it started chapter 14, where the account's place was. Whether it also sought into the chapter was not checked |
 | Bandcamp | — | nothing to play: the household's token is refused |
-| Deezer | track; album | ✓ 3.3s; ✓ 2.3s. Titles carry a literal `&amp;` (P-22) |
+| Deezer | track; album | ✓ 3.3s; ✓ 2.3s |
 | iHeartRadio, both accounts | live station | ✓ 1.4s, 1.5s. Its first hit for "miles davis" is a live station, not the artist station |
 | **Mixcloud** | any mix | **✗ the player hung and restarted** (P-21): `loadContent` left it BUFFERING, it stopped answering within 5s and was back ~2.5 min later — four times, on two accounts, twice with nothing else sent. The Sonos app plays Mixcloud through the queue; **fixed the same day** to do the same, and a mix (8.2s) and the "Bass" history playlist (8.4s) then played with the player up |
 | Pandora | search station | ✓ 2.4s; playing a search hit adds it to My Stations, as the app does |
