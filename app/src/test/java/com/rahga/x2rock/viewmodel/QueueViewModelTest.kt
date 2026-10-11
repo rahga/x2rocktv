@@ -52,6 +52,7 @@ class QueueViewModelTest {
     @Volatile private var refuseEdits = false
     /** Serve slot 1 as a different track, as if an edit elsewhere had moved one into it. */
     @Volatile private var slotOneReplaced = false
+    @Volatile private var fromQueue = true
 
 
     @Before fun setUp() {
@@ -78,7 +79,7 @@ class QueueViewModelTest {
                                     .let { if (slotOneReplaced) it.replaceFirst("Cómo Me Quieres", "Somebody Else") else it }
                             )
                         }
-                        "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
+                        "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>${if (fromQueue) "x-rincon-queue:X#0" else "http://radio.example/stream"}</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
                         "SaveQueue" -> MockResponse().setBody("<s:Envelope><s:Body><u:SaveQueueResponse><AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>")
                         else -> MockResponse().setBody(EMPTY_SOAP)
                     }
@@ -265,33 +266,30 @@ class QueueViewModelTest {
     }
 
     @Test fun `an older queue read finishing last does not roll the list back`() = runBlocking<Unit> {
-        val oldAtMedia = java.util.concurrent.CountDownLatch(1)
+        val oldAtRead = java.util.concurrent.CountDownLatch(1)
         val releaseOld = java.util.concurrent.CountDownLatch(1)
-        val mediaCalls = java.util.concurrent.atomic.AtomicInteger()
+        val pages = java.util.concurrent.atomic.AtomicInteger()
         val oldTitle = "Cómo Me Quieres"
         val newTitle = "A later queue snapshot"
         upnp.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest): MockResponse = when (soapAction(request)) {
-                "Browse" -> {
-                    val body = request.body.readUtf8()
-                    val fixture = if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
-                    MockResponse().setBody(FakePlayer.fixtureText(fixture)
-                        .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
-                        .let { if (slotOneReplaced) it.replaceFirst(oldTitle, newTitle) else it })
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (soapAction(request) != "Browse") return MockResponse().setBody(EMPTY_SOAP)
+                val body = request.body.readUtf8()
+                val fixture = if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
+                val answer = FakePlayer.fixtureText(fixture)
+                    .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
+                    .let { if (slotOneReplaced) it.replaceFirst(oldTitle, newTitle) else it }
+                // Hold the old read's final page, with its original version and titles.
+                if (pages.incrementAndGet() == 2) {
+                    oldAtRead.countDown()
+                    check(releaseOld.await(5, java.util.concurrent.TimeUnit.SECONDS))
                 }
-                "GetMediaInfo" -> {
-                    if (mediaCalls.incrementAndGet() == 1) {
-                        oldAtMedia.countDown()
-                        check(releaseOld.await(5, java.util.concurrent.TimeUnit.SECONDS))
-                    }
-                    MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>x-rincon-queue:X#0</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
-                }
-                else -> MockResponse().setBody(EMPTY_SOAP)
+                return MockResponse().setBody(answer)
             }
         }
         try {
             viewModel.reload()
-            assertTrue(oldAtMedia.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(oldAtRead.await(3, java.util.concurrent.TimeUnit.SECONDS))
             slotOneReplaced = true
             updateId = "59"
             viewModel.reload()
@@ -329,4 +327,35 @@ class QueueViewModelTest {
             answer.isFailure)
     }
 
+    @Test fun `the current track follows metadata without a queue edit`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.metadataSeen == true && it[groupId]?.queueVersion == "8" } }
+        viewModel.reload()
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.currentTrackName == "Ironic (2015 remaster)" } }
+        val readsBefore = fullReads()
+        fake.push("playbackMetadata:1", "metadataStatus", FakePlayer.fixtureText("event.metadataStatus.json").replace("Ironic (2015 remaster)", "Next queue track"), groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.track?.name == "Next queue track" } }
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.currentTrackName == "Next queue track" } }
+        assertEquals("a track change should not browse the queue", readsBefore, fullReads())
+    }
+
+    @Test fun `a source change updates in use without browsing the queue`() = runBlocking<Unit> {
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.currentTrackName != null } }
+        val readsBefore = fullReads()
+        fromQueue = false
+        fake.pushFixture("radioMetadataStatus", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.inUse == false } }
+        assertEquals(null, (viewModel.uiState.value as QueueViewModel.UiState.Success).currentTrackName)
+        fromQueue = true
+        fake.pushFixture("metadataStatus", groupId)
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.let { it.inUse && it.currentTrackName != null } == true } }
+        assertEquals("source changes must not browse the queue", readsBefore, fullReads())
+        val mediaReads = actions.count { it == "GetMediaInfo" }
+        fake.pushGroupVolume(groupId, volume = 17)
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        delay(300)
+        assertEquals("volume and playback ticks must not recheck the source", mediaReads, actions.count { it == "GetMediaInfo" })
+    }
 }

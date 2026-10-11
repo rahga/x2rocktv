@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.Date
@@ -66,7 +68,16 @@ class QueueViewModel @Inject constructor(
     }
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
-    val uiState: StateFlow<UiState> = _uiState.asStateFlow()
+    private val source = MutableStateFlow<Pair<String?, Boolean>>(null to true)
+    val uiState: StateFlow<UiState> = combine(
+        _uiState, household.state, household.groupStates, source,
+    ) { read, _, states, source ->
+        if (read is UiState.Success) {
+            val id = room.currentOrNull()
+            val inUse = if (source.first == id) source.second else true
+            read.copy(currentTrackName = states[id]?.track?.name?.takeIf { inUse }, inUse = inUse)
+        } else read
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
     private val _notice = TransientNotice(viewModelScope)
 
@@ -74,6 +85,18 @@ class QueueViewModel @Inject constructor(
     val notice: StateFlow<String?> = _notice.text
 
     init {
+        // Source and current track can change without an edit to the queue. Re-check the
+        // source on metadata changes only, never on position ticks or volume events.
+        viewModelScope.launch {
+            combine(household.state, household.groupStates) { _, states ->
+                val id = room.currentOrNull()
+                Triple(id, states[id]?.container, states[id]?.track)
+            }.distinctUntilChanged().collectLatest { (id, _, _) ->
+                if (id != null) {
+                    source.value = id to attempt { household.playingFromQueue(id) }.getOrDefault(true)
+                }
+            }
+        }
         // The room's group and its version, as read now — taken before the read, so an edit
         // landing between the two only costs a second read. A null version is a room that has
         // not said yet, early in a session: the first to arrive is then a change, because nothing
@@ -84,9 +107,10 @@ class QueueViewModel @Inject constructor(
         val openedAt = where(household.groupStates.value)
         load()
         // Kept current while this screen is open, which is this view model's whole life, by the
-        // room's `queueVersion`. Verified at home on 2026-10-01: each edit moved it (26, 27, 28
-        // for a move and its undo) and each arrived as a playback event, on an idle room too.
-        // So nothing is browsed on a timer or per event; the version moving is the signal. The
+        // room's `queueVersion`. It moves on edits while idle or playing the queue. While
+        // playing a station, an external queue edit may send no event at all (2026-10-11
+        // capture, docs/lan-transport.md); reopening reads fresh, our own edits have a fallback.
+        // Nothing is browsed on a timer or per playback tick. The
         // topology is combined in, since a regroup is what moves the room: judged off group
         // states alone it was noticed only when one happened to arrive after.
         viewModelScope.launch {
@@ -125,7 +149,7 @@ class QueueViewModel @Inject constructor(
         neighbourSlots(entries(), trackNumber).second?.let { household.moveInQueue(room.current(), trackNumber, it, updateId) }
     }
 
-    private fun entries() = (uiState.value as? UiState.Success)?.entries.orEmpty()
+    private fun entries() = (_uiState.value as? UiState.Success)?.entries.orEmpty()
 
     private val _clearArmed = MutableStateFlow(false)
 
@@ -182,9 +206,9 @@ class QueueViewModel @Inject constructor(
      * track that was pressed — slot numbers shift when a row above goes — and says so rather than
      * editing whatever moved into the slot.
      *
-     * The re-read is the watcher's where it can be: this firmware pushes a new `queueVersion` for
-     * every edit, and reading here as well cost a second full Browse per press. A refusal still
-     * re-reads here, and so does a firmware that sends no version — x2rock's did not.
+     * The re-read is the watcher's where it can be: edits while the queue is active push a new
+     * `queueVersion`, and reading here as well costs a second Browse. A refusal still re-reads
+     * here, and so does an edit with no version push (including while a station plays).
      */
     private fun edit(what: String, trackNumber: Int?, block: suspend () -> Unit) {
         val pressed = trackNumber?.let { n -> entries().firstOrNull { it.trackNumber == n }?.item?.track }
@@ -232,14 +256,7 @@ class QueueViewModel @Inject constructor(
             // The queue is the one thing still asked for rather than pushed; what is
             // playing is already known from the household's subscriptions.
             val queue = household.queue(room.current())
-            // Unknown counts as in use: a failed read must not hide the marker it can't
-            // disprove, and the play path checks again for itself.
-            val inUse = runCatching { household.playingFromQueue(room.current()) }.getOrDefault(true)
-            queue.updateId to UiState.Success(
-                queueEntries(queue.items),
-                household.groupState(room.forNavigation()).track?.name?.takeIf { inUse },
-                inUse,
-            )
+            queue.updateId to UiState.Success(queueEntries(queue.items), currentTrackName = null)
         }
             .onSuccess { (version, state) ->
                 if (mine != latestRead) return@onSuccess
