@@ -4,6 +4,16 @@ import com.rahga.x2rock.channel.PosterArt
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.PlaybackActions
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
+import coil.imageLoader
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -96,9 +106,17 @@ interface NowPlayingPublisher {
  */
 @Singleton
 class MediaSessionPublisher @Inject constructor(
-    @ApplicationContext context: Context,
+    @ApplicationContext private val context: Context,
     private val addresses: PlayerAddressBook,
 ) : NowPlayingPublisher {
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /** The cover fetched for [coverUrl], so a track on the same album needs no second fetch. */
+    private var coverUrl: String? = null
+    private var cover: Bitmap? = null
+    private var coverJob: Job? = null
+    /** Bumped on every publish, so a cover that arrives late never lands on a newer track. */
+    private var published = 0
 
     private val session = MediaSession(context, "x2rock").apply {
         // Activated on attach, not here: an active session with no callback is worse than
@@ -130,7 +148,8 @@ class MediaSessionPublisher @Inject constructor(
     }
 
     override fun publish(title: String?, artist: String?, album: String?, durationMillis: Long, artUrl: String?) {
-        session.setMetadata(
+        val now = ++published
+        fun metadata(bitmap: Bitmap?) =
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title ?: "")
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist ?: "")
@@ -145,9 +164,34 @@ class MediaSessionPublisher @Inject constructor(
                         putString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI, it)
                         putString(MediaMetadata.METADATA_KEY_ART_URI, it)
                     }
+                    // And the picture itself: the Shield's card drew a blank icon with only the URIs,
+                    // https and speaker art alike (2026-10-11) — the system opens an art URI through a
+                    // ContentResolver, which takes no http. Fetched here by the app's own loader.
+                    bitmap?.let {
+                        putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, it)
+                        putBitmap(MediaMetadata.METADATA_KEY_ART, it)
+                    }
                 }
                 .build()
-        )
+        if (artUrl == null) {
+            coverJob?.cancel(); coverUrl = null; cover = null
+            session.setMetadata(metadata(null))
+            return
+        }
+        if (artUrl == coverUrl && cover != null) {
+            session.setMetadata(metadata(cover))
+            return
+        }
+        session.setMetadata(metadata(null))
+        coverJob?.cancel()
+        coverJob = scope.launch {
+            val request = ImageRequest.Builder(context).data(artUrl).size(COVER_PX).allowHardware(false).build()
+            val bitmap = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+                ?: return@launch
+            coverUrl = artUrl
+            cover = bitmap
+            if (now == published) session.setMetadata(metadata(bitmap))
+        }
     }
 
     override fun publishState(playing: Boolean, idle: Boolean, positionMillis: Long, actions: PlaybackActions) {
@@ -191,3 +235,6 @@ class MediaSessionPublisher @Inject constructor(
         session.isActive = false
     }
 }
+
+/** The cover's edge for the system's card: enough for it, small enough to send across processes. */
+private const val COVER_PX = 320
