@@ -503,7 +503,10 @@ Every view id and item id tried opens with SMAPI `getMetadata` (albums, playlist
 "Your Library" `playlists` (empty) — so a shelf opens on the items it carries inline. **A stale token
 is answered 401**, not with a refresh fault: Spotify's page went from 200 to 401 within the hour, and
 one SMAPI call (which takes the `tokenRefreshRequired` replacement) then lets the page answer the new
-token. Amazon Music answers its endpoint 401 to any token, TuneIn (New) 403, Apple Music 500.
+token. Amazon Music answers its endpoint 401 to any token and Apple Music 500. TuneIn (New) answered a
+Python client 403 (Cloudflare 1010) and OkHttp 200 with the bearer (2026-10-12): 19 views, its stations
+typed `station` (canPlay, not canEnumerate) under the ids its SMAPI search calls `stream`; one played in
+Dining Room as a stream. Sonos Radio's page refuses a token and is asked without one.
 
 ## Recorded by x2rock, and relied on here
 

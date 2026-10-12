@@ -152,7 +152,9 @@ fun parseShelves(json: String): List<Shelf> {
             Item(
                 id = id,
                 title = c.get("name")?.asString.orEmpty(),
-                itemType = type ?: if (opens) "container" else "program",
+                // TuneIn's page calls a station `station`; its SMAPI search names the same ids `stream`,
+                // and a stream is what plays, resolved through getMediaURI (2026-10-12, T-20).
+                itemType = if (type == "station") "stream" else type ?: if (opens) "container" else "program",
                 // The page names a row's own name as its "service" and leaves summary empty: say nothing.
                 summary = (c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString)?.takeIf { it.isNotBlank() },
                 artUrl = c.get("imageUrl")?.asString,
@@ -164,7 +166,7 @@ fun parseShelves(json: String): List<Shelf> {
 }
 
 /** What a shelf's row plays rather than opens. */
-private val SHELF_LEAF_TYPES = setOf("program", "stream", "track")
+private val SHELF_LEAF_TYPES = setOf("program", "stream", "track", "station")
 
 /**
  * What a service says about one item beyond the item itself, from `getExtendedMetadata` — the

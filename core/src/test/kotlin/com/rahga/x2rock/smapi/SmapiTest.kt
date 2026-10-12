@@ -290,4 +290,16 @@ class SmapiTest {
         assertEquals("program", flow.itemType)
         assertEquals(false, flow.container)
     }
+
+    /**
+     * TuneIn's page, fetched with the household token from OkHttp (2026-10-12, two of its views):
+     * its stations say `station`, playable and not openable, and are streams to play — the same ids
+     * its SMAPI search answers as `stream`.
+     */
+    @Test fun `TuneIn's page stations are streams to play`() {
+        val stations = parseShelves(captured("tunein.browse.json")).first().items
+        assertTrue(stations.isNotEmpty())
+        assertTrue("every one a stream", stations.all { it.itemType == "stream" && !it.container })
+        assertEquals("Today's Hits", stations.first { it.id == "s242677" }.title)
+    }
 }

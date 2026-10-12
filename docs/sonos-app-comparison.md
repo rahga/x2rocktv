@@ -46,7 +46,7 @@ the x2rock CLI, whose playback goes through the same player paths.
 | SoundCloud | same: Likes, Playlists, Feed, New & Hot, Following, own uploads | both answer | x2rock, 2026-10-11 | |
 | Spotify | **same since T-15** (was 5 SMAPI rows: Popular Playlists, Charts, New Releases, Genres and Moods, Your Music, which now follow the shelves): the app's personalised page — More like <artist>, Recommended for today, Albums featuring songs you like, Recommended Stations, Album picks, Your top mixes, Based on your recent listening, … (22 views) | both answer | x2rock, 2026-10-11 | `browse` endpoint answers a bearer token; each view's id opens with SMAPI `getMetadata` (x2rock) |
 | TIDAL | same: My Collection, My Mix, Suggested new albums, Recommended new tracks, Featured Playlists, Genres, … | both answer | x2rock, home, 2026-10-11 | |
-| TuneIn (New) | **differs**: SMAPI root (iHeartRadio, Holiday Stations, TuneIn Recommends, Music, News & Talk, …) vs 13 shelves — Recents, Exclusive Music Stations, Most Popular, Top Calm Radio, Featured Collections, … | both answer | x2rock, 2026-10-11 | `browse` endpoint answered 403 (Cloudflare 1010) to a Python client; untried from OkHttp |
+| TuneIn (New) | **same since T-20** (was SMAPI root: iHeartRadio, Holiday Stations, TuneIn Recommends, Music, News & Talk, …): its page's shelves — Recents, Exclusive Music Stations, Most Popular, Top Calm Radio, Featured Collections, … | both answer | x2rock, 2026-10-11 | The 403 (Cloudflare 1010) was a Python client's; OkHttp with the household token gets 200 and 19 shelves (x2rock's Rust client 27). Its stations, typed `station`, play as streams |
 | YouTube Music | **app only** (Home, Library, My Supermix) | the app answers; x2rocktv leaves it out | x2rocktv, favourites only | Google's project gate: HTTP 403 `SERVICE_DISABLED` on every SMAPI call, the household's own token included. Not attainable. Saved favourites still play |
 | More radio (Hype Machine, myTuner, NRK, Radio France, …) | x2rocktv only | x2rocktv only | — | Anonymous services the app does not show as "yours" |
 
@@ -123,8 +123,8 @@ Seen in the app's System tab and Settings (viewed, nothing changed):
 
 1. ~~Personalised front pages for Spotify and Deezer~~ (T-15, done; Amazon and TuneIn still open): read the manifest `browse` endpoint with the
    account's token as `Authorization: Bearer`, falling back to SMAPI root on any non-200 — today
-   `SmapiClient.shelves` is anonymous and only consulted when root is empty. Amazon (401) and TuneIn
-   (403) want the header each expects worked out first.
+   `SmapiClient.shelves` is anonymous and only consulted when root is empty. Amazon (401) wants the header
+   it expects worked out first; TuneIn answered OkHttp (T-20).
 2. ~~The search field's D-pad trap~~ (above; fixed).
 3. ~~Recent searches~~ on the Search screen (T-17, done).
 4. ~~Sub and surround levels~~ in the room panel's Sound section, for rooms that have them (T-16, done).
