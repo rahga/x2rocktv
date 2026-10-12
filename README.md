@@ -1,21 +1,60 @@
 # x2rock
 
-A Sonos controller for Google TV / Android TV. The Sonos layer is a plain Kotlin/JVM
-library (`:core`) with no Android dependency; `:app` is the TV frontend.
+A Sonos controller for Google TV / Android TV.
 
-It talks to the speakers directly over the local network, the same Control API the Sonos
-apps use, with **no Sonos account, no sign-in and no polling**: subscribe, and the speakers
-push every change. See [`docs/lan-transport.md`](docs/lan-transport.md) for the protocol and
-the evidence behind it.
+It talks to the speakers directly over the local network, using the same Control API the Sonos
+apps use, with **no Sonos account, no sign-in and no polling**: subscribe, and the speakers push
+every change.
 
-## Status
+> **Testers wanted from Monday 19 October 2026.** x2rock is heading for a closed test on Google
+> Play, which needs testers with a Google TV or Android TV device and a Sonos system on the same
+> network. Speakers neither of our households has are especially welcome: a Port, Five, Amp or
+> Play:5 with something on its line-in, or a Roam or Move. To take part,
+> [open an issue](https://github.com/rahga/x2rocktv/issues/new?title=I%27d%20like%20to%20test)
+> saying which TV device and which speakers you have, and we will reply with how to join. Please
+> don't post your email address there.
 
-In use on an NVIDIA Shield (Android 11, Ethernet) and a Google TV Streamer (Android 14,
-Wi-Fi). Rooms, transport, volume, grouping and party mode, the queue, favourites, a
-soundbar's TV input with Night Sound and Speech Enhancement, and track ratings all work.
-What is still open is at the head of [`docs/punch-list.md`](docs/punch-list.md).
+![The room list and the player pane on an NVIDIA Shield: five rooms, Dining Room selected](docs/images/home.png)
 
-Speakers are found by SSDP, with mDNS as the fallback on networks that drop SSDP.
+*Every room down the left with what it is playing, a soundbar on its TV input among them; the
+selected room's player on the right.*
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/search.png" alt="Search for &quot;coheed&quot;: 111 results from 17 services, Apple Music's section in view"></td>
+    <td width="50%"><img src="docs/images/service.png" alt="Deezer's own front page: Recently played, Flow, Made for you, Recommended playlists"></td>
+  </tr>
+  <tr>
+    <td><em>One search across every music service the household has, plus Apple Music, each
+    answering in its own section.</em></td>
+    <td><em>A service opens on its own front page, here Deezer's, with its personal shelves.</em></td>
+  </tr>
+</table>
+
+*Screenshots from an NVIDIA Shield, 12 October 2026.*
+
+## What it does
+
+- **Rooms**: play, pause, skip, seek, volume per room and per speaker, grouping, and "Play
+  everywhere".
+- **Music**: Sonos favourites, the queue, radio, browsing each music service from its own front
+  page, and one search across all of them.
+- **TV**: switching a room to its soundbar's TV input, with Night Sound and Speech Enhancement.
+- **Room settings**: bass, treble and loudness, a Sub's and surrounds' levels, the status light,
+  touch controls, crossfade, and a sleep timer.
+- **The household**: alarms (made, changed and removed here), and which speakers have an update
+  waiting.
+
+In daily use on an NVIDIA Shield (Android 11, Ethernet) and a Google TV Streamer (Android 14,
+Wi-Fi). Speakers are found by SSDP, with mDNS as the fallback on networks that drop SSDP. What is
+still open is at the head of [`docs/punch-list.md`](docs/punch-list.md), and
+[`docs/sonos-app-comparison.md`](docs/sonos-app-comparison.md) compares it with the Sonos app,
+service by service.
+
+A few features have never run against a real speaker, because neither household has the hardware:
+Line-In, and a portable's battery. They stay hidden until **Settings → Beta features** is turned
+on, and each says "Beta" where it appears. **Send a report**, under that same switch, shows a QR
+code that opens a draft GitHub issue describing your system, so a tester can tell us what happened.
 
 ## Building
 
@@ -29,6 +68,9 @@ Open in Android Studio and run `:app`, or:
 ./gradlew :app:installDebug
 ```
 
+A debug build is several times slower on a TV box than a release one, so judge speed from
+`./gradlew :app:assembleRelease`.
+
 ## Tests
 
 ```sh
@@ -36,7 +78,12 @@ Open in Android Studio and run `:app`, or:
 ./gradlew :core:test -Dx2rock.live=discover            # also against real speakers, read-only
 ```
 
-See `ARCHITECTURE.md` for the layout and `CLAUDE.md` for the conventions.
+## Layout
+
+The Sonos layer, `:core`, is a plain Kotlin/JVM library with no Android dependency, so it can be
+exercised against real speakers from a plain JVM test; `:app` is the TV frontend. See
+[`docs/lan-transport.md`](docs/lan-transport.md) for the protocol and the evidence behind it,
+`ARCHITECTURE.md` for the layout, and `CLAUDE.md` for the conventions.
 
 ## License
 
