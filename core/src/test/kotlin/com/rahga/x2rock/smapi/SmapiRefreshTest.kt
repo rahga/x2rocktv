@@ -112,4 +112,24 @@ class SmapiRefreshTest {
         server.takeRequest(); server.takeRequest()
         assertEquals("Bearer fresh-token", server.takeRequest().getHeader("Authorization"))
     }
+
+    /**
+     * Sonos Radio's page needs no token and refuses the household's with 401 (2026-10-11): with no
+     * refresh to take, it is asked again without one, and its shelves come back.
+     */
+    @Test fun `a page that refuses a token is asked again without one`() = runBlocking {
+        val paged = service.copy(manifestUri = server.url("/manifest").toString())
+        server.enqueue(MockResponse().setBody("""{"endpoints":[{"type":"browse","uri":"${server.url("/browse")}"}]}"""))
+        server.enqueue(MockResponse().setResponseCode(401))
+        server.enqueue(MockResponse().setBody(searchResult()))
+        server.enqueue(MockResponse().setBody(com.rahga.x2rock.lan.FakePlayer.fixtureText("sonosradio.browse.json")))
+
+        val shelves = client.shelves(paged, Token("radio-token", "radio-key", "hh"))
+
+        assertEquals("Trending Now", shelves.first().title)
+        server.takeRequest()
+        assertEquals("Bearer radio-token", server.takeRequest().getHeader("Authorization"))
+        server.takeRequest()
+        assertEquals("the last ask carries no token", null, server.takeRequest().getHeader("Authorization"))
+    }
 }

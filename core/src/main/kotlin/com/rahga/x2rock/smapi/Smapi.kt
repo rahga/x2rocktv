@@ -426,6 +426,9 @@ class SmapiClient(client: OkHttpClient) {
         if (page.code == 401 && stored != null) {
             runCatching { metadata(service, stored, "root", 0, 1) }
             if (refreshed[stored.token] != null) page = fetch(endpoint, bearer())
+            // And a page that needs no token can refuse one: Sonos Radio's answers the household's
+            // with 401 and its shelves only without (2026-10-11; x2rock found the same).
+            if (page.code == 401) page = fetch(endpoint, null)
         }
         page.body?.let(::parseShelves) ?: emptyList()
     }
