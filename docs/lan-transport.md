@@ -487,6 +487,11 @@ field at all, so the levels are RenderingControl `GetEQ`/`SetEQ` on the room's o
 1/0/1/0/0; `SubGain` stepped to 1 and back read back each time. Kitchen (One SL) answers `SubGain` 0
 and refuses the surround types, as x2rock's 2026-09-05 sweep found.
 
+**A bonded satellite is not a household speaker for UPnP** (home, 2026-10-11). Discovery hears subs,
+surrounds and a stereo pair's second half, and a session can be seeded from one. Asked `Browse FV:2`,
+every satellite answered HTTP 500 (.33, .34, .35, .39, .44) and every room's own player 200, so calls
+that any speaker could answer go to a room's player (`householdSpeaker`).
+
 **A service's own page takes its account's token as a bearer** (home, 2026-10-11). The manifest's
 `browse` endpoint, sent `Authorization: Bearer <the SMAPI token>`, answers Spotify's personal page
 (`spotify-v5.ws.sonos.com/v1/browse`, 22 views — "More like <artist>", "Recommended for today", "Your

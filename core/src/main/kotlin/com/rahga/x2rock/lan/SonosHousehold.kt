@@ -866,11 +866,11 @@ class SonosHousehold(
     suspend fun setSleepTimer(groupId: String, minutes: Int?) =
         upnp.setSleepTimer(coordinatorHostname(groupId), minutes?.let { it * 60_000L })
 
-    // Alarms are the household's, not a room's: any player answers for all of them, so these ask
-    // the speaker this session was seeded from, or failing that the first coordinator.
+    // Alarms are the household's, not a room's: any room's player answers for all of them — see
+    // [householdSpeaker] for which is asked.
 
     private fun anyHostname(): String =
-        hostnameOf(seedPlayerId ?: _state.value.groups.firstOrNull()?.coordinatorId ?: error("no speaker to ask"))
+        hostnameOf(householdSpeaker(seedPlayerId, _state.value.groups) ?: error("no speaker to ask"))
 
     /** Every alarm in the household, each naming its room by a player id. Asked: nothing pushes them. */
     suspend fun alarms(): List<Alarm> = upnp.listAlarms(anyHostname())
@@ -2522,6 +2522,15 @@ const val SNOOZE_MINUTES = 9
 
 /** Services whose items play through the queue, never `loadContent` — see [SonosHousehold.replayThroughQueue]. */
 private val PLAYS_THROUGH_QUEUE = setOf(MIXCLOUD_SERVICE_ID)
+
+/**
+ * The speaker a household-wide UPnP call goes to: the one this session was seeded from, if it is a
+ * room's own player, else the first coordinator. Discovery hears bonded satellites too, and a Sub,
+ * a surround or a pair's other half answers `Browse FV:2` with HTTP 500 — the Shield, seeded from one,
+ * could offer an alarm nothing but the chime (2026-10-11; every room's player answered 200).
+ */
+internal fun householdSpeaker(seed: String?, groups: List<Group>): String? =
+    seed?.takeIf { s -> groups.any { s in it.playerIds } } ?: groups.firstOrNull()?.coordinatorId
 
 /** `DestroyAlarm`'s answer for an alarm the household no longer has (Kitchen, 2026-10-11). */
 private const val ALARM_GONE = "800"

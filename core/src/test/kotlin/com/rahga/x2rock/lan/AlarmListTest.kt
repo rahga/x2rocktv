@@ -156,4 +156,18 @@ class AlarmListTest {
         assertTrue(scenery.uri.startsWith("x-rincon-cpcontainer:"))
         assertTrue("<dc:title>Scenery</dc:title>" in scenery.metaData)
     }
+
+    /**
+     * Household-wide calls go to a room's own player: a satellite the session was seeded from answers
+     * `Browse FV:2` with HTTP 500 (the Shield, 2026-10-11). Living Room's Sub in the captured zones
+     * stands for one; it is in no group's players.
+     */
+    @Test fun `a seed that is a satellite is passed over for a room's player`() {
+        val groups = household.state.value.groups
+        val sub = "RINCON_AA12BBCCDDEE01400"
+        assertTrue("the Sub is no room's own player", groups.none { sub in it.playerIds })
+        assertEquals(groups.first().coordinatorId, householdSpeaker(sub, groups))
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        assertEquals("a room's own player is used as seeded", kitchen, householdSpeaker(kitchen, groups))
+    }
 }
