@@ -78,6 +78,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
@@ -733,12 +734,17 @@ private fun TvInfo(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFoc
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("HDMI", style = MaterialTheme.typography.bodyLarge)
             }
-            Spacer(modifier = Modifier.weight(1f))
             // Empty while the television is off or between sources, where the player reports
-            // no signal at all — an empty string reads better than "No Signal 0.0".
-            if (state.inputFormat.isNotEmpty()) {
-                Text(state.inputFormat, style = MaterialTheme.typography.headlineSmall)
-            }
+            // no signal at all — an empty string reads better than "No Signal 0.0". The rest of the
+            // row, right-aligned with a gap: given only what it needed, "Dolby Digital Surround 5.1"
+            // squeezed the spacer out and wrapped its "5.1" in beside "HDMI" (Shield, 2026-10-11).
+            Text(
+                state.inputFormat,
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.End,
+                maxLines = 2,
+                modifier = Modifier.weight(1f).padding(start = 32.dp),
+            )
         }
     }
 }
