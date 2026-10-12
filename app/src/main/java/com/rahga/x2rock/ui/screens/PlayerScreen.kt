@@ -256,7 +256,6 @@ fun PlayerPane(
                         onOpenGroup = onOpenGroup,
                     )
                 } else {
-                    if (state.ringingAlarm != null) AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester)
                     TrackInfo(state, viewModel, sidebarFocusRequester, volumeEntry, showService = volumeFocused.value || seekFocused)
                     ProgressBar(
                         state,
@@ -288,6 +287,7 @@ fun PlayerPane(
                         onOpenGroup = onOpenGroup,
                         onNextFocused = { nextFocused = it },
                         onPreviousFocused = { previousFocused = it },
+                        alarm = if (state.ringingAlarm != null) { { AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester) } } else null,
                     )
                 }
             }
@@ -325,9 +325,11 @@ fun PlayerPane(
 }
 
 /**
- * A ringing alarm's two answers, above the track while it rings. Play/Pause keeps the focus it
- * had: pressing it, or the remote's play/pause key, stops the alarm too, which is what someone
- * half awake reaches for. Snooze is one press up. A snoozed alarm is not offered here: the
+ * A ringing alarm's two answers, in the places row's slot below the transport while it rings: as a
+ * row of their own above the track they pushed that row off the screen (P-25, 34px at 1080p with a
+ * two-line title, Shield and emulator alike). Play/Pause keeps the focus it had: pressing it, or the
+ * remote's play/pause key, stops the alarm too, which is what someone half awake reaches for.
+ * Snooze is one press down. A snoozed alarm is not offered here: the
  * player still counts it as running, but nothing is sounding, and it comes back when it rings.
  *
  * This row leaves the screen the moment the room stops, so a press on it takes the focused
@@ -527,6 +529,8 @@ private fun PlaybackControls(
     onOpenGroup: () -> Unit,
     onNextFocused: (Boolean) -> Unit,
     onPreviousFocused: (Boolean) -> Unit,
+    /** A ringing alarm's controls, drawn in place of the places row while it rings; see [AlarmControls]. */
+    alarm: (@Composable () -> Unit)? = null,
 ) {
     // The exit has to sit on whichever control is actually leftmost, and that now depends on
     // what the source permits: hiding Prev promotes the seek button, hiding Shuffle promotes
@@ -657,7 +661,9 @@ private fun PlaybackControls(
         // button into view, and the sliver at the edge says there is one.
         // Icons since 2026-10-09, each named under it while it has focus: as labelled buttons the
         // row overran the pane and scrolled, which left "Queue" cut in half at the left edge.
-        Row(
+        // While an alarm rings its answers take this row's place: nowhere to go matters then, and
+        // everything above stays where it was.
+        if (alarm != null) alarm() else Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
             // The scroll clips at its edges, which cut a focused end button's name ("Sleep tim");
