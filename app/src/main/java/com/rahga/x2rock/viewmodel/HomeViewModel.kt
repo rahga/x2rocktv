@@ -425,7 +425,9 @@ class HomeViewModel @Inject constructor(
 
     /** A whole group's level, from a row that offers to join it. */
     fun adjustGroupVolume(groupId: String, delta: Int) {
-        val current = groupVolumes.value[groupId] ?: return
+        // From the sources, not [groupVolumes]: that is derived a step behind, and a press inside
+        // the step added to the level before the last press and was lost (P-17, 2026-10-11).
+        val current = _pendingGroupVolumes.value[groupId] ?: household.groupState(groupId).volume?.volume ?: return
         setGroupVolume(groupId, current + delta)
     }
 
@@ -433,7 +435,7 @@ class HomeViewModel @Inject constructor(
     fun setGroupVolume(groupId: String, volume: Int) {
         if (household.groupState(groupId).volume?.fixed == true) return _notice.post(FIXED_VOLUME)
         // Unknown until the speaker has said; a level set from nothing would be a guess.
-        if (groupVolumes.value[groupId] == null) return
+        if (household.groupState(groupId).volume == null) return
         val target = volume.coerceIn(0, 100)
         _pendingGroupVolumes.update { it + (groupId to target) }
         groupVolumeJobs[groupId]?.cancel()
@@ -449,14 +451,15 @@ class HomeViewModel @Inject constructor(
 
     /** One speaker's own level, accumulating presses the way the group volume does. */
     fun adjustPlayerVolume(playerId: String, delta: Int) {
-        val current = playerVolumes.value[playerId] ?: return
+        // From the sources, as [adjustGroupVolume]: four quick presses from 30 sent 45, one lost.
+        val current = _pendingPlayerVolumes.value[playerId] ?: household.playerVolumes.value[playerId]?.volume ?: return
         setPlayerVolume(playerId, current + delta)
     }
 
     /** One speaker's level set outright; see [setGroupVolume]. */
     fun setPlayerVolume(playerId: String, volume: Int) {
         if (household.playerVolumes.value[playerId]?.fixed == true) return _notice.post(FIXED_VOLUME)
-        if (playerVolumes.value[playerId] == null) return
+        if (household.playerVolumes.value[playerId] == null) return
         val target = volume.coerceIn(0, 100)
         _pendingPlayerVolumes.update { it + (playerId to target) }
         playerVolumeJobs[playerId]?.cancel()
