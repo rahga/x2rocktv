@@ -25,6 +25,7 @@ import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.fakeHousehold
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.PresetStore
 import com.rahga.x2rock.store.RoomPreferencesStore
@@ -82,7 +83,7 @@ class FocusChoreographyTest {
     }
 
     private fun buildViewModels() {
-        home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs))
+        home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs))
         player = PlayerViewModel(household, SilentNowPlaying, testClock)
     }
 
@@ -96,7 +97,7 @@ class FocusChoreographyTest {
         X2RockTheme {
             HomeScreen(
                 onOpenQueue = onOpenQueue, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
-                onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {},
+                onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
                 homeViewModel = home, playerViewModel = player,
             )
         }
@@ -162,7 +163,7 @@ class FocusChoreographyTest {
                     composable("home") {
                         HomeScreen(
                             onOpenQueue = { id -> nav.navigate("queue/$id") }, onOpenFavorites = {}, onOpenSearch = {},
-                            onOpenNowPlaying = {}, onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {},
+                            onOpenNowPlaying = {}, onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
                             homeViewModel = home, playerViewModel = player,
                         )
                     }

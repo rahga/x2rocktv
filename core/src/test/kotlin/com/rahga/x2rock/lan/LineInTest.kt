@@ -57,12 +57,34 @@ class LineInTest {
         withTimeout(5_000) {
             household.state.first { s -> s.groups.firstOrNull { it.id == groupId }?.let(s::lineInPlayer) != null }
         }
-        household.useLineIn(groupId)
+        household.useLineIn(groupId, fake.id)
         val header = fake.awaitCommand("loadLineIn", 3_000)
         assertEquals("playback:1", header.get("namespace").asString)
         assertEquals(groupId, header.get("groupId").asString)
         val body = fake.lastCommandBody("loadLineIn")!!
         assertEquals(fake.id, body.get("deviceId").asString)
         assertEquals(true, body.get("playOnCompletion").asBoolean)
+    }
+
+    /**
+     * Another room's input, played here: the command still goes to this room's group, naming the
+     * player whose input it is. Whether a real player takes that is owed with P-14.
+     */
+    @Test fun `another room's line-in is loaded on this room's group, naming that player`() = runBlocking<Unit> {
+        val groupId = fake.groupId(household)
+        val other = household.state.value.groups.first { it.id != groupId }.coordinatorId
+        fake.pushTopology(withLineIn(other))
+        withTimeout(5_000) { household.state.first { s -> s.lineInPlayers.any { it.id == other } } }
+        household.useLineIn(groupId, other)
+        val header = fake.awaitCommand("loadLineIn", 3_000)
+        assertEquals(groupId, header.get("groupId").asString)
+        assertEquals(other, fake.lastCommandBody("loadLineIn")!!.get("deviceId").asString)
+    }
+
+    @Test fun `a speaker with no line-in is not asked to play one`() = runBlocking<Unit> {
+        val groupId = fake.groupId(household)
+        val refused = runCatching { household.useLineIn(groupId, fake.id) }.exceptionOrNull()
+        assertEquals("that speaker has no line-in", refused?.message)
+        assertNull(fake.lastCommandBody("loadLineIn"))
     }
 }

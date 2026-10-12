@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.AboutSystemScreen
+import com.rahga.x2rock.ui.screens.BetaReportScreen
 import com.rahga.x2rock.ui.screens.AlarmsScreen
 import com.rahga.x2rock.ui.screens.AppleMusicScreen
 import com.rahga.x2rock.ui.screens.ServiceBrowseScreen
@@ -91,6 +92,7 @@ fun X2RockNavGraph() {
                 onOpenPreferredServices = { navController.navigate("preferredServices") },
                 onOpenAlarms = { navController.navigate("alarms") },
                 onOpenAbout = { navController.navigate("about") },
+                onOpenReport = { navController.navigate("report") },
                 homeViewModel = homeViewModel,
                 playerViewModel = playerViewModel
             )
@@ -105,6 +107,9 @@ fun X2RockNavGraph() {
 
         composable("about") {
             AboutSystemScreen(onBack = { navController.popBackStack() })
+        }
+        composable("report") {
+            BetaReportScreen(onBack = { navController.popBackStack() })
         }
 
         composable("alarms") {

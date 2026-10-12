@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
@@ -73,6 +74,7 @@ class HomeViewModel @Inject constructor(
     private val channelSync: ChannelSync,
     private val pendingRoomDeepLink: PendingRoomDeepLink,
     private val presetStore: PresetStore,
+    private val betaFeatures: BetaFeatures,
 ) : ViewModel() {
 
     /**
@@ -95,8 +97,11 @@ class HomeViewModel @Inject constructor(
         val inputFormat: String = "",
         /** Whether this room has an HDMI input at all, from any of its speakers. */
         val hasTvInput: Boolean = false,
-        /** Whether one of its speakers has an analog line-in. Untested on hardware: see `LINE_IN`. */
-        val hasLineIn: Boolean = false,
+        /**
+         * The line-ins this room can play: its own speaker's first, then every other room's. Empty
+         * unless Beta features is on, since none has run on hardware: see `LINE_IN` (T-21).
+         */
+        val lineIns: List<LineIn> = emptyList(),
         /** The container: an album, a station, or "TV Audio". */
         val source: String? = null,
         /**
@@ -115,6 +120,9 @@ class HomeViewModel @Inject constructor(
         val crossfade: Boolean? = null,
     )
 
+    /** A speaker's analog line-in, offered to a room: [room] is that speaker's, and [own] if it is this room's. */
+    data class LineIn(val playerId: String, val room: String, val own: Boolean)
+
     sealed interface UiState {
         /** Not connected yet — or, with [reconnecting], again, after the speaker it ran through went. */
         data class Loading(val reconnecting: Boolean = false) : UiState
@@ -131,7 +139,7 @@ class HomeViewModel @Inject constructor(
      * something actually changes and at no other time.
      */
     val uiState: StateFlow<UiState> =
-        combine(household.state, household.groupStates) { state, groupStates ->
+        combine(household.state, household.groupStates, betaFeatures.enabled) { state, groupStates, beta ->
             val error = state.error
             when {
                 error != null -> UiState.Error(error, state.householdChoices)
@@ -150,7 +158,9 @@ class HomeViewModel @Inject constructor(
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,
                             hasTvInput = state.hasTvInput(group),
-                            hasLineIn = state.lineInPlayer(group) != null,
+                            lineIns = if (!beta) emptyList() else state.lineInPlayers
+                                .map { LineIn(it.id, it.name, own = it.id in group.playerIds) }
+                                .sortedByDescending { it.own },
                             source = pushed?.container?.name,
                             alarmRinging = pushed?.ringingAlarm != null,
                             crossfade = pushed
@@ -203,6 +213,11 @@ class HomeViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
+
+    /** Settings → Beta features: see [BetaFeatures]. */
+    val betaEnabled: StateFlow<Boolean> = betaFeatures.enabled
+
+    fun setBetaEnabled(on: Boolean) = betaFeatures.setEnabled(on)
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
@@ -393,11 +408,17 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    /** Put the room on its line-in. Untested on hardware: see `SonosHousehold.useLineIn`. */
-    fun useLineIn(groupId: String) {
+    /**
+     * Put the room on a line-in, its own or another room's. A beta feature, untested on hardware:
+     * see `SonosHousehold.useLineIn`. A refusal is kept for the tester's report as well as said.
+     */
+    fun useLineIn(groupId: String, playerId: String) {
         viewModelScope.launch {
-            runCatching { household.useLineIn(groupId) }
-                .onFailure { _notice.failure("switch to the line-in", it) }
+            runCatching { household.useLineIn(groupId, playerId) }
+                .onFailure {
+                    _notice.failure("switch to the line-in", it)
+                    betaFeatures.noteRefusal("Line-In (${household.playerName(playerId)})", it)
+                }
         }
     }
 
@@ -593,7 +614,8 @@ class HomeViewModel @Inject constructor(
             val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
             val remote = async { soundbar?.let { runCatching { household.remoteSettings(it) }.getOrNull() } }
-            val battery = async { runCatching { household.battery(playerId) }.getOrNull() }
+            // Never seen on a portable, so asked only with Beta features on (T-21).
+            val battery = async { if (betaFeatures.enabled.value) runCatching { household.battery(playerId) }.getOrNull() else null }
             val satellites = async { runCatching { household.satellites(playerId) }.getOrNull() }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null

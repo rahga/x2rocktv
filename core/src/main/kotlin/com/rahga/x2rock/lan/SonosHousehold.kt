@@ -265,6 +265,12 @@ data class HouseholdState(
         val byId = players.associateBy { it.id }
         return (listOf(group.coordinatorId) + group.playerIds).firstOrNull { LINE_IN in byId[it]?.capabilities.orEmpty() }
     }
+
+    /**
+     * Every player in the household with an analog line-in, by name: the inputs any room might
+     * play, its own or another's. **Untested on hardware**: see [LINE_IN].
+     */
+    val lineInPlayers: List<Player> get() = players.filter { LINE_IN in it.capabilities }.sortedBy { it.name }
 }
 
 /**
@@ -988,9 +994,15 @@ class SonosHousehold(
      * Fire and forget, as every playback command here: the effect arrives as metadata. **Untested
      * on hardware** — see [LINE_IN]; what a room on its line-in reports is not known, so nothing
      * here waits for it or recognises it.
+     *
+     * [playerId] may be another room's: Sonos's own steps pick the room, then "the source device",
+     * which implies any room can play any input. Whether a player takes `loadLineIn` naming a player
+     * outside its group is not known either; if it does not, SoCo's way is the fallback,
+     * `SetAVTransportURI x-rincon-stream:<player>` to the coordinator, as the TV input is switched.
      */
-    suspend fun useLineIn(groupId: String) {
-        val player = _state.value.lineInPlayer(group(groupId)) ?: error("this room has no line-in")
+    suspend fun useLineIn(groupId: String, playerId: String) {
+        val player = playerId.takeIf { id -> _state.value.lineInPlayers.any { it.id == id } }
+            ?: error("that speaker has no line-in")
         groupCommand(
             groupId, "playback:1", "loadLineIn",
             JsonObject().apply {

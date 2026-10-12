@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
@@ -64,6 +65,7 @@ class HomeViewModelTest {
             channelSync = channels,
             pendingRoomDeepLink = deepLink,
             presetStore = PresetStore(prefs),
+            betaFeatures = BetaFeatures(prefs),
         )
     }
 
@@ -82,23 +84,48 @@ class HomeViewModelTest {
         }
     }
 
+    /** The captured topology, with [playerId] reporting a line-in: the capability from Sonos's list. */
+    private fun withLineIn(playerId: String) = FakePlayer.reachableTopology().also { topology ->
+        topology.getAsJsonArray("players").map { it.asJsonObject }
+            .first { it.get("id").asString == playerId }
+            .getAsJsonArray("capabilities").add(com.rahga.x2rock.lan.LINE_IN)
+    }
+
+    private suspend fun roomsOnceALineInShows() = withTimeout(5_000) {
+        viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.values?.any { r -> r.lineIns.isNotEmpty() } == true }
+            as HomeViewModel.UiState.Success
+    }.rooms
+
     /**
-     * A room whose player reports a line-in offers it; the rest do not. Untested on hardware: the
-     * captured topology with `LINE_IN` added to one player, the capability from Sonos's list.
+     * With Beta features on, every room is offered Kitchen's line-in: Kitchen as its own, the rest as
+     * another room's (T-21). Untested on hardware: the captured topology with `LINE_IN` added.
      */
-    @Test fun `only a room with a line-in offers one`() = runBlocking<Unit> {
+    @Test fun `with beta features on, every room is offered the line-in, its own first`() = runBlocking<Unit> {
         val state = connect()
         val kitchen = state.groups.first { it.name == "Kitchen" }
-        fake.pushTopology(FakePlayer.reachableTopology().also { topology ->
-            topology.getAsJsonArray("players").map { it.asJsonObject }
-                .first { it.get("id").asString == kitchen.coordinatorId }
-                .getAsJsonArray("capabilities").add(com.rahga.x2rock.lan.LINE_IN)
-        })
-        val rooms = withTimeout(5_000) {
-            viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.values?.any { r -> r.hasLineIn } == true }
-                as HomeViewModel.UiState.Success
-        }.rooms
-        assertEquals(listOf(kitchen.id), rooms.filterValues { it.hasLineIn }.keys.toList())
+        viewModel.setBetaEnabled(true)
+        fake.pushTopology(withLineIn(kitchen.coordinatorId))
+        val rooms = roomsOnceALineInShows()
+        assertEquals(listOf(HomeViewModel.LineIn(kitchen.coordinatorId, "Kitchen", own = true)), rooms.getValue(kitchen.id).lineIns)
+        val other = state.groups.first { it.id != kitchen.id }
+        assertEquals(listOf(HomeViewModel.LineIn(kitchen.coordinatorId, "Kitchen", own = false)), rooms.getValue(other.id).lineIns)
+    }
+
+    /** Off, the default: no room offers a line-in, though a player has one, until the switch is turned on. */
+    @Test fun `with beta features off, no room offers a line-in`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        fake.pushTopology(withLineIn(kitchen.coordinatorId))
+        withTimeout(5_000) { household.state.first { s -> s.lineInPlayers.isNotEmpty() } }
+        // Held for a second rather than read once: one read could land before the topology does.
+        repeat(10) {
+            kotlinx.coroutines.delay(100)
+            val rooms = (viewModel.uiState.value as HomeViewModel.UiState.Success).rooms
+            assertEquals(emptyList<HomeViewModel.LineIn>(), rooms.values.flatMap { it.lineIns })
+        }
+        // The same household, the switch turned on: now it shows, so the absence above was the switch.
+        viewModel.setBetaEnabled(true)
+        roomsOnceALineInShows()
     }
 
     /**

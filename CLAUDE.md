@@ -350,6 +350,13 @@ what a room *on* its line-in reports is unknown: nothing recognises it, so there
 no third line, no "(current source)". **Any release notes must say Line-In is untested** until a
 real Port, Five or Amp has taken it (PUNCH P-14).
 
+**Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
+as is a portable's battery line, and each says "Beta" where it appears. With the switch on, every
+room is also offered **another room's** line-in ("Line-In on Den"), as Sonos's own steps imply but
+never state. Anything else that has never run on a device goes behind the same switch. **Send a
+report**, under it, is a QR code to a prefilled public GitHub issue: models, versions, capabilities,
+what a line-in room reports, the last refusal; never an id, address or serial.
+
 SoCo (the Python library) corroborates the command, not the capability: a UPnP event it captured off
 a player on line-in (`tests/data/data_structures_entry_integration/source_linein.xml`, read
 2026-10-10) carries `AVTransportURI` `x-rincon-stream:<player>` with metadata titled **`loadLineIn`**,

@@ -18,6 +18,7 @@ import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.fakeHousehold
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.PresetStore
 import com.rahga.x2rock.store.RoomPreferencesStore
@@ -88,13 +89,13 @@ class AlarmPaneTest {
 
     @Test fun aRingingAlarmLeavesThePaneOnTheScreen() {
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
-        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs))
+        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs))
         val player = PlayerViewModel(household, SilentNowPlaying, testClock)
         compose.setContent {
             X2RockTheme {
                 HomeScreen(
                     onOpenQueue = {}, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
-                    onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {},
+                    onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
                     homeViewModel = home, playerViewModel = player,
                 )
             }

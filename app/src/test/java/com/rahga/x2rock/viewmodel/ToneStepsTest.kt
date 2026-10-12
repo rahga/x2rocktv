@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
@@ -45,6 +46,8 @@ class ToneStepsTest {
     private lateinit var scope: CoroutineScope
     private lateinit var household: SonosHousehold
     private lateinit var viewModel: HomeViewModel
+    /** Every path asked of the speakers' UPnP port, SOAP and pages alike. */
+    private val paths = CopyOnWriteArrayList<String>()
     /** Every SetBass, in the order the player received them. */
     private val basses = CopyOnWriteArrayList<Int>()
 
@@ -53,6 +56,7 @@ class ToneStepsTest {
         upnp = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse {
+                    paths += request.path.orEmpty()
                     val action = soapAction(request)
                     if (action == "SetBass") {
                         val level = Regex("<DesiredBass>(-?\\d+)<").find(request.body.readUtf8())!!.groupValues[1].toInt()
@@ -95,6 +99,7 @@ class ToneStepsTest {
             channelSync = RecordingChannelSync(),
             pendingRoomDeepLink = PendingRoomDeepLink(),
             presetStore = PresetStore(prefs),
+            betaFeatures = BetaFeatures(prefs),
         )
         runBlocking {
             household.connect(fake.seed)
@@ -201,6 +206,18 @@ class ToneStepsTest {
         openKitchen()
         assertEquals(null, viewModel.tone.value?.remote)
         assertEquals(null, viewModel.tone.value?.battery)
+    }
+
+    /**
+     * A portable's battery is asked for only with Beta features on, since it has never been read off
+     * one (T-21). Kitchen is on mains, so the question is whether it is asked, not what it says.
+     */
+    @Test fun `the battery is asked for only with beta features on`() = runBlocking<Unit> {
+        openKitchen()  // the tone is published only once every read in it, the battery's too, is back
+        assertEquals(emptyList<String>(), paths.filter { it.startsWith("/status/batterystatus") })
+        viewModel.setBetaEnabled(true)
+        viewModel.loadTone(household.state.value.groups.first { it.name == "Kitchen" }.id)
+        withTimeout(5_000) { while (paths.none { it.startsWith("/status/batterystatus") }) delay(20) }
     }
 
     /**

@@ -45,6 +45,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
+import androidx.tv.material3.LocalContentColor
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.Group
@@ -124,7 +125,8 @@ fun RoomPanel(
     onJoin: (Group) -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
-    onUseLineIn: () -> Unit,
+    /** Play a speaker's line-in here: this room's own, or another's. */
+    onUseLineIn: (playerId: String) -> Unit,
     /** UPnP is off for the household, so the TV input cannot be switched to. */
     upnpOff: Boolean,
     /** This room's tone, or `null` while it is read. */
@@ -307,7 +309,7 @@ fun RoomPanel(
         // TV Input is UPnP, so with UPnP off it is not offered; Line-In is the Control API's own
         // `loadLineIn` and needs nothing else. Either makes a Source section.
         val tvSwitchable = info.hasTvInput && !upnpOff
-        if (tvSwitchable || info.hasLineIn) PanelSection("Source")
+        if (tvSwitchable || info.lineIns.isNotEmpty()) PanelSection("Source")
         if (tvSwitchable) {
             AppButton(
                 onClick = onUseTvInput,
@@ -321,12 +323,14 @@ fun RoomPanel(
                 Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
             }
         }
-        // Untested on hardware: no player here has a line-in (see `LINE_IN`). Nothing says when a
-        // room is already on it — what such a room reports has never been seen — so this row
-        // never claims "current source".
-        if (info.hasLineIn) {
-            AppButton(onClick = onUseLineIn, modifier = Modifier.fillMaxWidth()) {
-                Text("Line-In")
+        // Beta, untested on hardware: no player here has a line-in (see `LINE_IN`), and present only
+        // with Beta features on. Nothing says when a room is already on one — what such a room
+        // reports has never been seen — so these rows never claim "current source". Another room's
+        // input is offered too, as Sonos's own steps imply (T-21).
+        info.lineIns.forEach { input ->
+            AppButton(onClick = { onUseLineIn(input.playerId) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (input.own) "Line-In" else "Line-In on ${input.room}", modifier = Modifier.weight(1f))
+                BetaMark()
             }
         }
 
@@ -342,6 +346,8 @@ fun RoomPanel(
                 pack.level?.let { "Battery $it%" } ?: "Battery",
                 when (pack.charging) { true -> "charging"; false -> "on battery"; null -> null },
                 pack.health?.takeUnless { it.equals("GREEN", ignoreCase = true) },
+                // Read only with Beta features on: never seen on a portable (T-21).
+                "Beta",
             )
             Text(
                 parts.joinToString(" · "),
@@ -610,4 +616,11 @@ private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
             StepMark("+", shown) { onStep(+1) }
         }
     }
+}
+
+/** Says a row is a beta feature, at its end: in the content colour, so it shows on a focused row too. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun BetaMark() {
+    Text("Beta", style = MaterialTheme.typography.labelLarge, color = LocalContentColor.current.copy(alpha = 0.7f))
 }

@@ -62,6 +62,8 @@ import androidx.tv.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +127,8 @@ fun HomeScreen(
     onOpenPreferredServices: () -> Unit,
     onOpenAlarms: () -> Unit,
     onOpenAbout: () -> Unit,
+    /** Settings → Beta features → Send a report (T-21). */
+    onOpenReport: () -> Unit,
     // Never defaulted to hiltViewModel(): inside the NavHost that would mint a second
     // PlayerViewModel owned by the back-stack entry, which would attach its own controls to the
     // publisher and never be told the room. NavGraph passes the activity's.
@@ -135,6 +139,7 @@ fun HomeScreen(
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val upnpOff by homeViewModel.upnpOff.collectAsState()
+    val betaEnabled by homeViewModel.betaEnabled.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
@@ -402,6 +407,13 @@ fun HomeScreen(
                     showSettings = false
                     onOpenAbout()
                 },
+                betaEnabled = betaEnabled,
+                onToggleBeta = { homeViewModel.setBetaEnabled(!betaEnabled) },
+                onOpenReport = {
+                    opener = Opener.SETTINGS
+                    showSettings = false
+                    onOpenReport()
+                },
                 onThemeSelected = { homeViewModel.setTheme(it) }
             )
         }
@@ -461,8 +473,8 @@ fun HomeScreen(
                         homeViewModel.useTvInput(liveGroup.id)
                         closePanel()
                     },
-                    onUseLineIn = {
-                        homeViewModel.useLineIn(liveGroup.id)
+                    onUseLineIn = { player ->
+                        homeViewModel.useLineIn(liveGroup.id, player)
                         closePanel()
                     },
                     upnpOff = upnpOff,
@@ -832,6 +844,9 @@ private fun SettingsPanel(
     onOpenPreferredServices: () -> Unit,
     onOpenAlarms: () -> Unit,
     onOpenAbout: () -> Unit,
+    betaEnabled: Boolean,
+    onToggleBeta: () -> Unit,
+    onOpenReport: () -> Unit,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
     Box(
@@ -842,9 +857,11 @@ private fun SettingsPanel(
             .modalFocusTrap(trapped)
             .keepTaps()
     ) {
+        // Scrolls: the Beta section took it past the screen's height, and focus brings a row into view.
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 32.dp, vertical = 48.dp)
         ) {
             Text("Settings", style = MaterialTheme.typography.headlineMedium)
@@ -876,6 +893,25 @@ private fun SettingsPanel(
             // Every speaker, what it runs, and whether an update waits — read, never applied.
             AppButton(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth()) {
                 Text("About this system")
+            }
+            Spacer(Modifier.height(32.dp))
+            Text("Beta", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            // What has never run against a real speaker, shown only when asked for (T-21): a plain
+            // switch rather than a hidden gesture, so a tester needs no instructions to find it.
+            AppButton(onClick = onToggleBeta, modifier = Modifier.fillMaxWidth()) {
+                Text(if (betaEnabled) "Beta features   On" else "Beta features   Off")
+            }
+            Text(
+                "Features not yet tried on real speakers, such as Line-In and a portable's battery. Each says Beta where it appears.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            )
+            if (betaEnabled) {
+                AppButton(onClick = onOpenReport, modifier = Modifier.fillMaxWidth()) {
+                    Text("Send a report")
+                }
             }
         }
     }

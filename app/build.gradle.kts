@@ -85,6 +85,7 @@ dependencies {
 
     // Image loading
     implementation(libs.coil.compose)
+    implementation(libs.zxing.core)
     implementation(libs.androidx.palette)
 
     // Security
