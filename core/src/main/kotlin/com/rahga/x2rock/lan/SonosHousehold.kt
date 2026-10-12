@@ -1176,13 +1176,14 @@ class SonosHousehold(
         } catch (e: Exception) {
             emptyList()
         }
-        // Two services carry a token but still dead-end here, so they are dropped rather than shown
+        // Three services carry a token but still dead-end here, so they are dropped rather than shown
         // and left to fail: Apple Music, whose stored credential has an empty key and whose SMAPI
-        // refuses every call (searched through iTunes on its own screen instead); and YouTube Music,
+        // refuses every call (searched through iTunes on its own screen instead); YouTube Music,
         // whose search and browse both answer HTTP 403 — Google's project gate, which the household's
-        // own token does not get past either (x2rock, verified again here 2026-10-06).
+        // own token does not get past either (x2rock, verified again here 2026-10-06); and Bandcamp,
+        // which takes the household's token only from the speakers ([UNSEARCHABLE]).
         linkedServices(services, accounts, household)
-            .filterNot { it.service.id == AppleMusic.SERVICE_ID || it.service.id == YOUTUBE_MUSIC_SERVICE_ID }
+            .filterNot { it.service.id in UNSEARCHABLE }
             .also { if (generation == session) searchable = it }
     }
 
@@ -2548,6 +2549,14 @@ internal const val MIXCLOUD_SERVICE_ID = "181"
 
 /** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
 private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
+
+/**
+ * Services a household token cannot search or browse, left out of Search and Music Services: Apple
+ * Music and YouTube Music (see [SonosHousehold.searchableServices]), and Bandcamp, which answers the
+ * household's token only from the speakers — `Client.LoginInvalid` to this app, even minted fresh by a
+ * re-add (2026-10-12, PUNCH P-28). Their favourites and history still play through the household.
+ */
+private val UNSEARCHABLE = setOf(AppleMusic.SERVICE_ID, YOUTUBE_MUSIC_SERVICE_ID, "157")
 
 /** How many times a queue read starts again when the queue changes under it; see [SonosHousehold.queue]. */
 private const val QUEUE_READ_ATTEMPTS = 3

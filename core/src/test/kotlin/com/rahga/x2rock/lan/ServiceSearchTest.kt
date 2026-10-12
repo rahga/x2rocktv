@@ -41,10 +41,11 @@ class ServiceSearchTest {
         const val RADIO = "894"      // anonymous; usable with no credential
         const val APPLE = "204"      // has a token, but excluded (searched via iTunes)
         const val MIXCLOUD = "181"   // has a token; its items play through the queue
+        const val BANDCAMP = "157"   // has a token the speakers alone may use (P-28)
 
-        // 31*256+7 = 7943 (Qobuz), 204*256+7 = 52231 (Apple), 181*256+7 = 46343 (Mixcloud).
-        // The service type list a cdudn needs.
-        const val TYPE_LIST = "7943,52231,46343"
+        // 31*256+7 = 7943 (Qobuz), 204*256+7 = 52231 (Apple), 181*256+7 = 46343 (Mixcloud),
+        // 157*256+7 = 40199 (Bandcamp). The service type list a cdudn needs.
+        const val TYPE_LIST = "7943,52231,46343,40199"
 
         /** A presentation map with one Tracks search category. */
         const val MAP = """<Presentation><PresentationMap type="Search"><Match>
@@ -183,6 +184,8 @@ class ServiceSearchTest {
                   Nickname0="Richard"/>
                 <MediaServer UDN="SA_RINCON46343_X" SerialNum0="41" Token0="mc-token" Key0="mc-key"
                   Nickname0="Mixcloud" Username0="X_#Svc46343-0-Token"/>
+                <MediaServer UDN="SA_RINCON40199_X" SerialNum0="43" Token0="bc-token" Key0="bc-key"
+                  Nickname0="Bandcamp" Username0="X_#Svc40199-0-Token"/>
             </ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
@@ -217,6 +220,8 @@ class ServiceSearchTest {
             """<Policy Auth="Anonymous" PollInterval="0"/><Manifest Uri="$manifest"/></Service>""" +
             """<Service Id="$APPLE" Name="Apple Music" Uri="$smapi" SecureUri="$smapi">""" +
             """<Policy Auth="AppLink" PollInterval="30"/></Service>""" +
+            """<Service Id="$BANDCAMP" Name="Bandcamp" Uri="$smapi" SecureUri="$smapi">""" +
+            """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="$manifest"/></Service>""" +
             """<Service Id="$MIXCLOUD" Name="Mixcloud" Uri="$smapi" SecureUri="$smapi">""" +
             """<Policy Auth="DeviceLink" PollInterval="30"/><Manifest Uri="$manifest"/></Service>""" +
             """</Services>"""
@@ -246,6 +251,8 @@ class ServiceSearchTest {
         assertTrue("Qobuz is usable through its stored token", byId.containsKey(QOBUZ))
         assertTrue("the radio service is usable anonymously", byId.containsKey(RADIO))
         assertNull("Apple is searched via iTunes, not listed here", byId[APPLE])
+        assertNull("Bandcamp answers the household token only from the speakers", byId[BANDCAMP])
+        assertTrue("Mixcloud, a token like it, is listed", byId.containsKey(MIXCLOUD))
         assertEquals("Qb1", byId.getValue(QOBUZ).nickname)
         assertEquals("sn_14", byId.getValue(QOBUZ).accountId)
     }
