@@ -454,13 +454,18 @@ class FakePlayer(
                     commandLog += header.get("namespace")?.asString to command
                 }
             }
+            // The topology as it stood when the command arrived, which is what a player judges it by.
+            // A test woken by `received` can push the next one before this thread replies, and the
+            // reply then refused a group that existed when the command was sent: GatherRoomsTest's
+            // "Incorrect groupId", once on CI and twice under load here (PUNCH P-17).
+            val topology = groups
             received += header
             awaitRelease(header.get("command")?.asString)
-            reply(webSocket, header, host)
+            reply(webSocket, header, host, topology)
         }
     })
 
-    private fun reply(webSocket: WebSocket, request: JsonObject, host: String) {
+    private fun reply(webSocket: WebSocket, request: JsonObject, host: String, topology: JsonObject = groups) {
         val namespace = request.get("namespace")?.asString
         val command = request.get("command")?.asString
         val cmdId = request.get("cmdId")?.asString
@@ -521,7 +526,7 @@ class FakePlayer(
         // answers ERROR_INVALID_OBJECT_ID — and so does this one, so a household that put a
         // group's subscriptions on the wrong socket can no longer pass here.
         val groupId = request.get("groupId")?.asString
-        if (groupId != null && coordinatorHostOf(groupId) != host) {
+        if (groupId != null && coordinatorHostOf(groupId, topology) != host) {
             refuseObject(webSocket, cmdId, namespace, "Incorrect groupId")
             return
         }
@@ -561,8 +566,8 @@ class FakePlayer(
         )
 
     /** The `.local` name of [groupId]'s coordinator in the served topology, or null for no such group. */
-    private fun coordinatorHostOf(groupId: String): String? =
-        groups.getAsJsonArray("groups").map { it.asJsonObject }
+    private fun coordinatorHostOf(groupId: String, topology: JsonObject = groups): String? =
+        topology.getAsJsonArray("groups").map { it.asJsonObject }
             .firstOrNull { it.get("id").asString == groupId }
             ?.get("coordinatorId")?.asString
             ?.let { PlayerNames.localHostname(it) }?.lowercase()
