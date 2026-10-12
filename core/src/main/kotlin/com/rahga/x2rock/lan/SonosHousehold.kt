@@ -729,7 +729,15 @@ class SonosHousehold(
         subscribedPlayers.removeAll(players)
         subscribedGroups.entries.removeIf { it.value in players }
         _playerVolumes.update { it - players }
-        if (!carried || reconnectJob?.isActive == true) return
+        // A reconnect under way checks for unsubscribed groups only partway through its set-up; a
+        // loss after that check was caught up only if the groups:1 event's own catch-up happened
+        // to run later, and when it ran first the room stayed frozen (CI, 2026-10-11, PUNCH P-17).
+        // So the catch-up is asked for here; it stops once every group is subscribed.
+        if (reconnectJob?.isActive == true) {
+            if (unsubscribedGroupsRemain()) catchUpLater()
+            return
+        }
+        if (!carried) return
         // Said as reconnecting, not as [cause]: a speaker unplugged is ordinary, and the
         // error is for a reconnect that fails. Tried at once, past the speaker that went —
         // other speakers are very likely there, and the backoff is for when they are not.

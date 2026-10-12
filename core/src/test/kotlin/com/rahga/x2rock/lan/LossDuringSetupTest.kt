@@ -98,6 +98,10 @@ class LossDuringSetupTest {
         val other = state.groups.first { it.coordinatorId != fake.id }
         val before = fake.commandsNamed("subscribe", "playback:1")
         assertEquals("the reconnect should have subscribed every group before its settings read", state.groups.size, before)
+        // Past the catch-up the reconnect's groups:1 subscription starts: when that ran after the
+        // drop it re-subscribed the group by luck, and when it ran first nothing did (CI, run
+        // 38199691088). Waiting makes the bad order the one tested, every time.
+        delay(1_500)
         fake.dropConnection(other.coordinatorId)
         delay(300)
         fake.releaseReplies()
