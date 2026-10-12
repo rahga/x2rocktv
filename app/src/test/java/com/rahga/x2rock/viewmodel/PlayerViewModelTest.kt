@@ -325,11 +325,13 @@ class PlayerViewModelTest {
             groupId,
         )
         withTimeout(5_000) { viewModel.uiState.first { it.playbackState.isPlaying() } }
-        withTimeout(5_000) {
-            while (publisher.states.isEmpty()) delay(20)
+        // Waited for, not read off the end: the publisher can be told a moment after the UI state
+        // turns, and the state published before the push is already in the list — under load on
+        // 2026-10-11 the test read that one. Never published as playing fails here, by timing out.
+        val published = withTimeout(5_000) {
+            while (publisher.states.lastOrNull()?.playing != true) delay(20)
+            publisher.states.last()
         }
-        val published = publisher.states.last()
-        assertTrue("a playing room was published as not playing", published.playing)
         assertFalse("a playing room with no title was published as idle", published.idle)
     }
 
