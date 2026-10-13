@@ -37,6 +37,23 @@ claim in it was run against real hardware.
   `wss://sonos-<MAC>.local:1443/websocket/api`. **No account, no OAuth, no tokens.** The
   cloud transport was removed in 2026-09 — it offered nothing the LAN does not, and its
   consent page cannot be completed with a TV remote, so it could never have shipped here.
+
+  **One gated exception, T-27 (2026-10-13): a developer's own Sonos integration.** A household
+  with Sonos's **Authentication** switch on refuses every command without an account token
+  (`ERROR_NO_PERMISSION`), so a build can carry its owner's registered Control integration and
+  sign the TV in from a phone: a QR code to Sonos's consent page, whose redirect page
+  (`rahga.github.io/x2rock/callback.html`) forwards the phone to the TV's LAN address, where the
+  app listens once and redeems the code. The token then rides in each WebSocket command's header
+  as `authorization: Bearer …`. **No key or secret is ever committed, and none goes in the Play
+  bundle**: a build has one only with `-Px2rock.sonosIntegration` (it reads `~/sonos.api.key`
+  and `~/sonos.api.secret`), and the Settings row exists only then, with Beta features on.
+  Without it nothing changes: no account, no token, no call to Sonos. **Run end to end on the
+  Streamer at home, 2026-10-13**: the phone's browser followed the page's hop from HTTPS to the
+  TV's plain-HTTP LAN address, the TV redeemed the code, and the household (Authentication off)
+  went on answering every command carrying the token. Not yet seen: a household with it on. Anyone who registers with
+  Sonos and signs its agreement can build with their own. The undocumented cloud content API
+  x2rock found the same day (front pages and search for Amazon, Apple, YouTube Music) is T-28,
+  not built.
 - It is **push, not poll**. Subscribe and the speakers send changes; a command's effect
   arrives as an event, so nothing re-fetches after acting. If you find yourself adding a
   timer or a `delay()` before a re-read, something is wrong.
@@ -111,7 +128,9 @@ banner the full wordmark; both are generated from `~/x2rock.png` and meant to be
 An Android SDK is needed for `:app` (`sdk.dir` in `local.properties`, or `ANDROID_HOME`).
 **There are no credentials to supply** — no client id, no secret, nothing in
 `local.properties` beyond the SDK path. If you find yourself looking for Sonos API keys,
-you are working from a stale mental model of this project.
+you are working from a stale mental model of this project. The one exception is opt-in and
+the owner's: `-Px2rock.sonosIntegration` compiles a developer's own integration into a build
+for their own TVs (T-27, above); a build without it is complete, and a Play bundle refuses it.
 
 ### Two test suites, and why both
 

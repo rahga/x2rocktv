@@ -39,6 +39,8 @@ class SonosSocket private constructor(
     private val _failures: MutableSharedFlow<Throwable>,
     private val closedByUs: AtomicBoolean,
     val hostname: String,
+    /** The account token, for a household with Authentication on (see [open]); `null` for every other. */
+    private val authorization: (suspend () -> String?)?,
 ) {
 
     /**
@@ -71,8 +73,14 @@ class SonosSocket private constructor(
         val id = nextId.getAndIncrement().toString()
         val waiter = CompletableDeferred<SonosReply>()
         pending[id] = waiter
+        // Signed in, for a household with Authentication on: the token rides in each command's own
+        // header as `Bearer <token>` — the handshake's is ignored, and a bare token refused (x2rock,
+        // 2026-09-27). Not signed in, no field: every household with Authentication off.
+        val sent = authorization?.invoke()
+            ?.let { token -> header.deepCopy().apply { addProperty("authorization", "Bearer $token") } }
+            ?: header
         val reply = try {
-            if (!socket.send(Frames.encode(header, body, id))) {
+            if (!socket.send(Frames.encode(sent, body, id))) {
                 throw IOException("socket to $hostname is closed")
             }
             try {
@@ -133,6 +141,12 @@ class SonosSocket private constructor(
             client: OkHttpClient,
             hostname: String,
             port: Int = PORT,
+            /**
+             * The Sonos account token to send with each command, where this device is signed in
+             * (T-27). A household with Authentication on answers every command without one
+             * `ERROR_NO_PERMISSION`; one with it off, the default, never sees it.
+             */
+            authorization: (suspend () -> String?)? = null,
         ): SonosSocket {
             val request = Request.Builder()
                 .url("wss://$hostname:$port/websocket/api")
@@ -154,7 +168,7 @@ class SonosSocket private constructor(
                 val listener = object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         cont.resume(
-                            SonosSocket(webSocket, pending, events, failures, closedByUs, hostname)
+                            SonosSocket(webSocket, pending, events, failures, closedByUs, hostname, authorization)
                         )
                     }
 

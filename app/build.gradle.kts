@@ -30,6 +30,36 @@ val uploadKey: Properties? = rootProject.file("keystore.properties")
         Properties().apply { file.inputStream().use(::load) }
     }
 
+/**
+ * A developer's own Sonos Control integration (T-27), compiled in only when asked for:
+ * `-Px2rock.sonosIntegration`, or that line in `~/.gradle/gradle.properties` for every build of one's
+ * own. It reads `~/sonos.api.key` and `~/sonos.api.secret` (or `x2rock.sonosKeyFile` /
+ * `x2rock.sonosSecretFile`) and the integration's redirect URL (`x2rock.sonosRedirect`).
+ *
+ * **Never in the repo, and never in the Play bundle.** Anything compiled into an APK can be read out
+ * of it, so a build carrying a secret is for the TVs of whoever owns the integration; one signed for
+ * Play refuses to carry it. Without it every field is empty and the feature does not exist. Anyone
+ * who registers with Sonos and signs its agreement can build with their own.
+ */
+val sonosIntegration: Triple<String, String, String>? =
+    if (!providers.gradleProperty("x2rock.sonosIntegration").isPresent) null else {
+        require(uploadKey == null) { "a Play bundle must not carry a Sonos secret: drop -Px2rock.sonosIntegration" }
+        val home = System.getProperty("user.home")
+        fun read(property: String, default: String): String {
+            val file = File(providers.gradleProperty(property).getOrElse(default))
+            require(file.canRead()) { "-Px2rock.sonosIntegration needs $file" }
+            return file.readText().trim().also { require(it.isNotEmpty()) { "$file is empty" } }
+        }
+        Triple(
+            read("x2rock.sonosKeyFile", "$home/sonos.api.key"),
+            read("x2rock.sonosSecretFile", "$home/sonos.api.secret"),
+            providers.gradleProperty("x2rock.sonosRedirect").getOrElse("https://rahga.github.io/x2rock/callback.html"),
+        )
+    }
+
+/** A Kotlin/Java string literal for a BuildConfig field. */
+fun literal(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.rahga.x2rock"
     compileSdk = 35
@@ -43,6 +73,9 @@ android {
         versionCode = 3
         versionName = tagVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SONOS_KEY", literal(sonosIntegration?.first.orEmpty()))
+        buildConfigField("String", "SONOS_SECRET", literal(sonosIntegration?.second.orEmpty()))
+        buildConfigField("String", "SONOS_REDIRECT", literal(sonosIntegration?.third.orEmpty()))
     }
 
     signingConfigs {

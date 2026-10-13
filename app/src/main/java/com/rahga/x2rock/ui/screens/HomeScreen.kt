@@ -134,6 +134,13 @@ fun HomeScreen(
     // publisher and never be told the room. NavGraph passes the activity's.
     homeViewModel: HomeViewModel,
     playerViewModel: PlayerViewModel,
+    /**
+     * Settings → Sonos account (T-27): offered only by a build carrying a developer integration, with
+     * Beta features on; [accountSignedIn] is its state. Off by default, as in every build from the repo.
+     */
+    accountOffered: Boolean = false,
+    accountSignedIn: Boolean = false,
+    onOpenAccount: () -> Unit = {},
 ) {
     val state by homeViewModel.uiState.collectAsState()
     val selectedTheme by homeViewModel.selectedTheme.collectAsState()
@@ -413,6 +420,13 @@ fun HomeScreen(
                     opener = Opener.SETTINGS
                     showSettings = false
                     onOpenReport()
+                },
+                accountOffered = accountOffered,
+                accountSignedIn = accountSignedIn,
+                onOpenAccount = {
+                    opener = Opener.SETTINGS
+                    showSettings = false
+                    onOpenAccount()
                 },
                 onThemeSelected = { homeViewModel.setTheme(it) }
             )
@@ -847,6 +861,9 @@ private fun SettingsPanel(
     betaEnabled: Boolean,
     onToggleBeta: () -> Unit,
     onOpenReport: () -> Unit,
+    accountOffered: Boolean,
+    accountSignedIn: Boolean,
+    onOpenAccount: () -> Unit,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
     Box(
@@ -911,6 +928,14 @@ private fun SettingsPanel(
             if (betaEnabled) {
                 AppButton(onClick = onOpenReport, modifier = Modifier.fillMaxWidth()) {
                     Text("Send a report")
+                }
+            }
+            // Only in a build with its own Sonos integration (T-27): who is controlling, for speakers
+            // that ask. Never in a build from the repo as it stands.
+            if (accountOffered) {
+                Spacer(Modifier.height(8.dp))
+                AppButton(onClick = onOpenAccount, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (accountSignedIn) "Sonos account   Signed in" else "Sonos account   Sign in")
                 }
             }
         }

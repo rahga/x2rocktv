@@ -368,6 +368,11 @@ class SonosHousehold(
      * host instead. Returns `null` when none can be had, which leaves only anonymous services.
      */
     private val accountCapture: suspend (String) -> String? = { AccountCapture.captureEnvelope(it) },
+    /**
+     * The signed-in Sonos account's token, sent with each command (T-27); `null` when no account
+     * exists, which is every build without a developer integration and every device not signed in.
+     */
+    private val authorization: (suspend () -> String?)? = null,
 ) {
 
     private val gson = Gson()
@@ -2112,7 +2117,7 @@ class SonosHousehold(
             sockets[hostname]?.let { return it }
             generation
         }
-        val socket = SonosSocket.open(client, hostname, port)
+        val socket = SonosSocket.open(client, hostname, port, authorization)
         return lock.withLock {
             // A teardown while the handshake was in flight means this socket belongs to a
             // dead session; adopting it would resurrect it into a just-cleared map.

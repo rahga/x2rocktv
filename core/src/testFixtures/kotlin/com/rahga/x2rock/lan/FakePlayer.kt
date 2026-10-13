@@ -268,6 +268,16 @@ class FakePlayer(
 
     private val refused = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    /**
+     * A household with **Authentication** on: every command without `authorization: Bearer <this>`
+     * in its header is refused `ERROR_NO_PERMISSION` (x2rock's record of such a household,
+     * 2026-09-26/27). `null`, the default, is a household with it off.
+     */
+    @Volatile var requiredBearer: String? = null
+
+    /** The `authorization` field of the last command received, as sent. */
+    @Volatile var lastAuthorization: String? = null
+
     /** Refuse every [command] from now on, the way a real player says no: `globalError`. */
     fun refuse(command: String, errorCode: String = "ERROR_COMMAND_FAILED") {
         refused[command] = errorCode
@@ -469,6 +479,17 @@ class FakePlayer(
         val namespace = request.get("namespace")?.asString
         val command = request.get("command")?.asString
         val cmdId = request.get("cmdId")?.asString
+
+        lastAuthorization = request.get("authorization")?.asString
+        requiredBearer?.let { token ->
+            if (lastAuthorization != "Bearer $token") {
+                respond(
+                    webSocket, cmdId, namespace, "globalError", success = false,
+                    body = JsonObject().apply { addProperty("errorCode", "ERROR_NO_PERMISSION") },
+                )
+                return
+            }
+        }
 
         // Refusals are keyed by command, or by "namespace/command" for one namespace's — "subscribe"
         // alone would refuse every subscription in the house.

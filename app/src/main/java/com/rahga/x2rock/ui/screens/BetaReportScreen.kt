@@ -113,7 +113,7 @@ fun BetaReportScreen(onBack: () -> Unit, viewModel: BetaReportViewModel = hiltVi
 
 /** [text] as a QR code, black on white with a quiet zone, whatever the theme. */
 @Composable
-private fun QrCode(text: String, modifier: Modifier = Modifier) {
+internal fun QrCode(text: String, modifier: Modifier = Modifier, description: String = "QR code for the report") {
     val image = remember(text) {
         // One pixel a module, scaled up without smoothing: sharp at any size.
         val matrix = QRCodeWriter().encode(
@@ -127,7 +127,7 @@ private fun QrCode(text: String, modifier: Modifier = Modifier) {
     }
     Image(
         bitmap = image,
-        contentDescription = "QR code for the report",
+        contentDescription = description,
         filterQuality = FilterQuality.None,
         modifier = modifier.background(Color.White).padding(20.dp),
     )

@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import javax.inject.Qualifier
+import com.rahga.x2rock.store.DeveloperAccount
 import javax.inject.Singleton
 
 /** Distinguishes the plain internet [OkHttpClient] from the LAN one players get. */
@@ -112,6 +113,7 @@ object AppModule {
         seeds: SeedStore,
         @InternetHttp internetClient: OkHttpClient,
         ratingsStore: RatingsStore,
+        developerAccount: DeveloperAccount,
     ): SonosHousehold = SonosHousehold(
         scope, addressBook, multicast, mdns, client, seeds, internetClient, ratingsStore,
         // Asked at each discovery, so a debug launch can switch SSDP off: see DebugSwitches.
@@ -119,5 +121,7 @@ object AppModule {
         // A debug launch can hand over a host-captured envelope, for the emulator whose NAT drops
         // the player's callback the way it drops discovery: see DebugSwitches.serviceEnvelope.
         accountCapture = { ip -> DebugSwitches.serviceEnvelope ?: AccountCapture.captureEnvelope(ip) },
+        // Only where the build carries a developer integration and this TV is signed in (T-27).
+        authorization = developerAccount.account?.let { account -> { account.bearer() } },
     )
 }

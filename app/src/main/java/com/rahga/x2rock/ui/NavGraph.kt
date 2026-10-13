@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.rahga.x2rock.ui.screens.AboutSystemScreen
+import com.rahga.x2rock.ui.screens.AccountScreen
 import com.rahga.x2rock.ui.screens.BetaReportScreen
 import com.rahga.x2rock.ui.screens.AlarmsScreen
 import com.rahga.x2rock.ui.screens.AppleMusicScreen
@@ -29,6 +30,7 @@ import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.screens.PreferredServicesScreen
 import com.rahga.x2rock.ui.screens.RadioScreen
 import com.rahga.x2rock.ui.screens.SearchScreen
+import com.rahga.x2rock.viewmodel.AccountViewModel
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
@@ -76,6 +78,9 @@ fun X2RockNavGraph() {
 
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
+            val accountViewModel: AccountViewModel = hiltViewModel()
+            val accountOffered by accountViewModel.offered.collectAsState()
+            val accountSignedIn by accountViewModel.signedIn.collectAsState()
             HomeScreen(
                 onOpenQueue = { groupId ->
                     navController.navigate("queue?groupId=${Uri.encode(groupId)}")
@@ -94,7 +99,10 @@ fun X2RockNavGraph() {
                 onOpenAbout = { navController.navigate("about") },
                 onOpenReport = { navController.navigate("report") },
                 homeViewModel = homeViewModel,
-                playerViewModel = playerViewModel
+                playerViewModel = playerViewModel,
+                accountOffered = accountOffered,
+                accountSignedIn = accountSignedIn,
+                onOpenAccount = { navController.navigate("account") },
             )
         }
 
@@ -107,6 +115,9 @@ fun X2RockNavGraph() {
 
         composable("about") {
             AboutSystemScreen(onBack = { navController.popBackStack() })
+        }
+        composable("account") {
+            AccountScreen(onBack = { navController.popBackStack() })
         }
         composable("report") {
             BetaReportScreen(onBack = { navController.popBackStack() })

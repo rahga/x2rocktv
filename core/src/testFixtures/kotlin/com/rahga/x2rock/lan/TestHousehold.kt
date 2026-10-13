@@ -40,6 +40,7 @@ fun fakeHousehold(
     mdns: MdnsDiscovery = MdnsDiscovery.None,
     internetClient: OkHttpClient = OkHttpClient(),
     accountCapture: suspend (String) -> String? = { null },
+    authorization: (suspend () -> String?)? = null,
 ): SonosHousehold = SonosHousehold(
     scope = scope,
     addressBook = addressBook,
@@ -53,4 +54,5 @@ fun fakeHousehold(
     settleMillis = settleMillis,
     ssdp = ssdp,
     accountCapture = accountCapture,
+    authorization = authorization,
 )
