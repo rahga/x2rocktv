@@ -41,6 +41,7 @@ import com.rahga.x2rock.smapi.Service
 import com.rahga.x2rock.smapi.ServiceContent
 import com.rahga.x2rock.smapi.Shelf
 import com.rahga.x2rock.smapi.SmapiClient
+import com.rahga.x2rock.smapi.StoredAccount
 import com.rahga.x2rock.smapi.StoredAccounts
 import com.rahga.x2rock.smapi.Thumb
 import com.rahga.x2rock.smapi.Token
@@ -371,7 +372,7 @@ class SonosHousehold(
 
     private val gson = Gson()
     private val upnp = Upnp(client, upnpPort)
-    private val smapi = SmapiClient(internetClient)
+    private val smapi = SmapiClient(internetClient, reread = ::rereadToken)
     private val ratingsCatalogue = RatingsCatalogue(smapi, ratingsStore)
 
     private val sockets = ConcurrentHashMap<String, SonosSocket>()
@@ -764,6 +765,7 @@ class SonosHousehold(
         clearSession { runCatching { it.cancel() } }
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
+        lastReread = null
         categoryCache.clear()
         appleAccount = null
         _state.update { it.copy(connected = false) }
@@ -1175,11 +1177,7 @@ class SonosHousehold(
         val answer = upnp.listAvailableServices(hostname)
         val services = parseServices(answer.descriptors, answer.types)
         val accounts = try {
-            val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
-            ip?.let { accountCapture(it) }
-                // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
-                ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
-                ?: emptyList()
+            storedAccounts(hostname, household)
         } catch (e: CancellationException) {
             // A caller that left is not a capture that failed: it says nothing about which
             // accounts the household has. Degrading here cached anonymous services for the whole
@@ -1199,26 +1197,62 @@ class SonosHousehold(
             .also { if (generation == session) searchable = it }
     }
 
+    /** The accounts the household stores, read off the player at [hostname]; empty when it sends none. */
+    private suspend fun storedAccounts(hostname: String, household: String): List<StoredAccount> {
+        val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
+        return ip?.let { accountCapture(it) }
+            // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
+            ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
+            ?: emptyList()
+    }
+
+    private val rereadLock = Mutex()
+    /** The last re-read, when it was taken and what it found; `null` accounts for a read that failed. */
+    @Volatile private var lastReread: Pair<Long, List<StoredAccount>?>? = null
+
+    /**
+     * The household's token now, for the account [stored] was read for at connect, when the household
+     * holds a different one; `null` otherwise. [searchableServices] reads tokens once per connection,
+     * and a TV left on outlives them: Pandora's went stale within a day while the Sonos app kept the
+     * household's copy fresh (P-32). [SmapiClient] asks this after a refusal about the credential.
+     *
+     * A read asks a player to call back into this device, so one serves every refusal for
+     * [REREAD_KEEP_NANOS], a failed one included, and reads are taken one at a time: a search across
+     * every service, refused at once, reads once.
+     */
+    private suspend fun rereadToken(service: Service, stored: Token): Token? {
+        val serial = searchable
+            ?.firstOrNull { it.service.id == service.id && it.token?.token == stored.token }
+            ?.accountId?.removePrefix("sn_")?.toIntOrNull() ?: return null
+        val accounts = rereadLock.withLock {
+            val last = lastReread
+            if (last != null && System.nanoTime() - last.first < REREAD_KEEP_NANOS) return@withLock last.second
+            val session = generation
+            val read = try {
+                val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
+                storedAccounts(hostnameOf(coordinator), householdId())
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (generation == session) lastReread = System.nanoTime() to read
+            read
+        } ?: return null
+        val fresh = accounts.firstOrNull { it.serviceId.toString() == service.id && it.serial == serial && it.hasToken }
+            ?: return null
+        return Token(fresh.token, fresh.key, stored.household).takeIf { it.token != stored.token }
+    }
+
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
     suspend fun serviceCategories(linked: LinkedService): List<Category> =
         categoryCache[linked.service.id]
             ?: ServiceContent.asSonosShowsThem(linked.service.id, smapi.categories(linked.service))
                 .also { categoryCache[linked.service.id] = it }
 
-    /**
-     * Search [linked] for [term] under [category]. A category that is two searches as one asks
-     * both at once and lists the second's hits after the first's, each item once.
-     */
-    suspend fun searchService(linked: LinkedService, category: Category, term: String, index: Int = 0, count: Int = 30): ItemPage {
-        val then = category.thenMappedId
-            ?: return smapi.search(linked.service, linked.token, category.mappedId, term, index, count)
-        val (first, second) = coroutineScope {
-            listOf(category.mappedId, then)
-                .map { async { smapi.search(linked.service, linked.token, it, term, index, count) } }
-                .awaitAll()
-        }
-        return ItemPage((first.items + second.items).distinctBy { it.id }, first.total + second.total)
-    }
+    /** Search [linked] for [term] under [category]. */
+    suspend fun searchService(linked: LinkedService, category: Category, term: String, index: Int = 0, count: Int = 30): ItemPage =
+        smapi.search(linked.service, linked.token, category.mappedId, term, index, count)
 
     /** The shelves of [linked]'s own page, read with its account's token — see [SmapiClient.shelves]. */
     suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service, linked.token)
@@ -2558,6 +2592,9 @@ private const val ALARM_GONE = "800"
 
 /** Mixcloud's Sonos service id. */
 internal const val MIXCLOUD_SERVICE_ID = "181"
+
+/** How long one re-read of the household's tokens answers every refusal: ten minutes, as x2rock's. */
+private const val REREAD_KEEP_NANOS = 10L * 60 * 1_000_000_000
 
 /** YouTube Music's Sonos service id — excluded from the searchable list, see [SonosHousehold.searchableServices]. */
 private const val YOUTUBE_MUSIC_SERVICE_ID = "284"

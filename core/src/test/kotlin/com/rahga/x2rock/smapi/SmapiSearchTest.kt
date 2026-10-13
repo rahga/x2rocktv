@@ -227,6 +227,11 @@ class SmapiSearchTest {
         assertEquals(listOf("Red Hot Chili Peppers", "Jason Mraz", "Coldplay"), page.items.map { it.summary })
     }
 
+    @Test fun `a track carries its number on its album`() {
+        val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("getMetadata.plex.albumTracks.xml"))
+        assertEquals(listOf(1, 2, 3), page.items.map { it.trackNumber })
+    }
+
     /** Not a track, the summary still leads: a station's line is its description, not its artist. */
     @Test fun `a station keeps its summary first`() {
         val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("smapi.sonosradio.newsTalk.xml"))

@@ -698,6 +698,12 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
 - **Hold or Menu on an item is its menu** (`ServiceItemMenu`), Sonos's actions first and the
   service's under its name. **Play next only while the room plays from its queue**, as the Sonos
   app; it is a queue slot, not a flag.
+- **An album's tracks carry their numbers; a playlist's do not** (T-24, 2026-10-12), as the Sonos
+  app draws them: in a playlist a track's number is its own album's. **A container that lists nothing
+  offers no Play or Shuffle** (P-23): SoundCloud's albums say `canPlay` and hold nothing, and the app's
+  page for one has no Play either.
+- **A household token the service refuses is read again once** (P-32, 2026-10-12): tokens are read per
+  connection, and a TV outlives them. See `lan-transport.md`, "A household token can go stale".
 - **A favourite says `REPLACE`.** `loadFavorite` appended an album to the queue without it.
 - **The content colour is provided once, at the root** (`X2RockTheme`). tv-material derives a
   transparent container's content colour from `LocalContentColor`, whose default is black, and the

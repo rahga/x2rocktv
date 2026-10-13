@@ -72,19 +72,20 @@ class ServiceSearchTest {
                 """<albumArtURI>https://cdn.example/cover.jpg</albumArtURI></trackMetadata>""" +
                 """</mediaMetadata></searchResult></searchResponse></s:Body></s:Envelope>"""
 
-        /** The `artist` category's answer: the track above again, then an artist station. */
-        fun artistResponse() =
-            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
-                """<searchResponse><searchResult><index>0</index><count>2</count><total>2</total>""" +
-                """<mediaMetadata><id>tr-flac:536421002</id><itemType>track</itemType><title>SICKO MODE</title></mediaMetadata>""" +
-                """<mediaMetadata><id>artist_radio.1</id><itemType>program</itemType><title>Travis Scott</title></mediaMetadata>""" +
-                """</searchResult></searchResponse></s:Body></s:Envelope>"""
-
         fun metadataResponse() =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
                 """<getMetadataResponse><getMetadataResult><index>0</index><count>1</count><total>1</total>""" +
                 """<mediaCollection><id>album:9</id><itemType>album</itemType><title>ASTROWORLD</title></mediaCollection>""" +
                 """</getMetadataResult></getMetadataResponse></s:Body></s:Envelope>"""
+
+        /**
+         * Pandora's refusal of a day-old household token, by its message as x2rock recorded it
+         * (2026-10-12); the code beside it is SOAP's generic one, which x2rock did not record.
+         */
+        val TOKEN_REFUSAL =
+            """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>""" +
+                """<faultcode>s:Server</faultcode><faultstring>Failed to reauth device id</faultstring>""" +
+                """</s:Fault></s:Body></s:Envelope>"""
 
         fun mediaUriResponse() =
             """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>""" +
@@ -111,6 +112,14 @@ class ServiceSearchTest {
     @Volatile private var currentUri = "x-rincon-queue:RINCON_X#0"
     @Volatile private var currentTrack = 3
 
+    /** A token the service refuses as Pandora refused a day-old one, and the fault it answers with. */
+    @Volatile private var refusedToken: String? = null
+    @Volatile private var refusal = TOKEN_REFUSAL
+
+    /** The account store a player hands over, and how many times one was asked for. */
+    @Volatile private var envelope = ""
+    private val captures = java.util.concurrent.atomic.AtomicInteger()
+
     /** The presentation map the service publishes; a test about ratings swaps in one that has them. */
     @Volatile private var map = MAP
 
@@ -125,9 +134,9 @@ class ServiceSearchTest {
                         val body = request.body.readUtf8().also { smapiCalls += it }
                         MockResponse().setBody(
                             when {
+                                refusedToken?.let { "<token>$it</token>" in body } == true -> refusal
                                 "<getMediaURI" in body -> mediaUriResponse()
                                 "<getMetadata" in body -> metadataResponse()
-                                "<id>artist</id>" in body -> artistResponse()
                                 else -> searchResponse()
                             }
                         )
@@ -176,9 +185,26 @@ class ServiceSearchTest {
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
         // One Qobuz account, one Apple account (both with tokens); the radio service carries none.
-        val envelope = com.rahga.x2rock.smapi.TestEnvelope.seal(
+        envelope = store("qb-token")
+        household = fakeHousehold(
+            fake,
+            scope,
+            addressBook = book,
+            upnpPort = upnp.port,
+            accountCapture = {
+                captures.incrementAndGet()
+                captureEntered.complete(Unit)
+                captureGate?.await()
+                envelope
+            },
+        )
+    }
+
+    /** The household's sealed account store, with [qobuzToken] as Qobuz's. */
+    private fun store(qobuzToken: String) =
+        com.rahga.x2rock.smapi.TestEnvelope.seal(
             """<ThirdPartyMediaServers>
-                <MediaServer UDN="SA_RINCON7943_X" SerialNum0="14" Token0="qb-token" Key0="qb-key"
+                <MediaServer UDN="SA_RINCON7943_X" SerialNum0="14" Token0="$qobuzToken" Key0="qb-key"
                   Nickname0="Qb1" Username0="X_#Svc7943-6c0ffea0-Token"/>
                 <MediaServer UDN="SA_RINCON52231_X" SerialNum0="19" Token0="apple-token" Key0=""
                   Nickname0="Richard"/>
@@ -189,18 +215,6 @@ class ServiceSearchTest {
             </ThirdPartyMediaServers>""",
             fake.householdId.substringBefore('.'),
         )
-        household = fakeHousehold(
-            fake,
-            scope,
-            addressBook = book,
-            upnpPort = upnp.port,
-            accountCapture = {
-                captureEntered.complete(Unit)
-                captureGate?.await()
-                envelope
-            },
-        )
-    }
 
     @After fun tearDown() {
         household.disconnect()
@@ -255,13 +269,6 @@ class ServiceSearchTest {
         assertTrue("Mixcloud, a token like it, is listed", byId.containsKey(MIXCLOUD))
         assertEquals("Qb1", byId.getValue(QOBUZ).nickname)
         assertEquals("sn_14", byId.getValue(QOBUZ).accountId)
-    }
-
-    @Test fun `a category that is two searches lists the second's hits after the first's, once each`() = runBlocking {
-        connected()
-        val page = household.searchService(qobuz(), Category("stations", "track", thenMappedId = "artist"), term = "x")
-        assertEquals(listOf("SICKO MODE", "Travis Scott"), page.items.map { it.title })
-        assertEquals("both categories were asked", 2, smapiCalls.count { "<search" in it })
     }
 
     @Test fun `a search carries the stored token and parses the hits`() = runBlocking {
@@ -445,6 +452,51 @@ class ServiceSearchTest {
         val retried = household.searchableServices()
         assertTrue("cancelled discovery cached only ${retried.map { it.service.name }} for the entire session",
             retried.any { it.service.id == QOBUZ && it.added })
+    }
+
+    @Test fun `a token refused as stale is read again from the household and the call retried`() = runBlocking {
+        connected()
+        val linked = qobuz()
+        refusedToken = "qb-token"
+        envelope = store("qb-token-2")
+
+        val page = household.searchService(linked, Category("tracks", "track"), term = "sicko")
+
+        assertEquals("the retry's hits came back", "SICKO MODE", page.items.single().title)
+        assertEquals("the household's store was read once more", 2, captures.get())
+        val searches = smapiCalls.filter { "<search" in it }
+        assertTrue(searches.last(), "<token>qb-token-2</token>" in searches.last())
+        // Kept: the next call goes straight out with the newer token.
+        household.searchService(linked, Category("tracks", "track"), term = "again")
+        assertEquals(2, captures.get())
+        assertTrue("<token>qb-token-2</token>" in smapiCalls.last())
+    }
+
+    /**
+     * However it is worded: a garbled Pandora token is refused with a script error, not anything about
+     * a login (x2rock, 2026-10-13). A newer token on the household is what tells.
+     */
+    @Test fun `a refusal in any words is retried with a newer household token`() = runBlocking {
+        connected()
+        val linked = qobuz()
+        refusedToken = "qb-token"
+        refusal = TOKEN_REFUSAL.replace("Failed to reauth device id", "TypeError: Cannot read properties of null (reading 'getListenerId')")
+        envelope = store("qb-token-2")
+
+        val page = household.searchService(linked, Category("tracks", "track"), term = "x")
+        assertEquals("SICKO MODE", page.items.single().title)
+        assertEquals(2, captures.get())
+    }
+
+    @Test fun `one re-read answers every refusal for a while`() = runBlocking {
+        connected()
+        val linked = qobuz()
+        refusedToken = "qb-token"
+
+        repeat(3) { assertTrue(runCatching { household.searchService(linked, Category("tracks", "track"), "x") }.isFailure) }
+
+        assertEquals("the household holds nothing newer, and was asked once", 2, captures.get())
+        assertEquals("each refusal is final with nothing newer to try", 3, smapiCalls.count { "<search" in it })
     }
 
     @Test fun `a capture left to finish lists the credentialed service`() = runBlocking<Unit> {

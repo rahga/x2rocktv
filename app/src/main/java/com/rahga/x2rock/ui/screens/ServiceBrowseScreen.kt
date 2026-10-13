@@ -265,6 +265,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
     val searching by viewModel.searching.collectAsState()
     val place by viewModel.place.collectAsState()
     val playsWhole by viewModel.playsWhole.collectAsState()
+    val numbered by viewModel.numbered.collectAsState()
     val starting by viewModel.starting.collectAsState()
     val returnTo by viewModel.returnTo.collectAsState()
     val resume by viewModel.resume.collectAsState()
@@ -390,6 +391,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
                         }
                         ItemRow(
                             item = item,
+                            number = item.trackNumber?.takeIf { numbered },
                             isStarting = starting == item.id,
                             resumesAt = resume?.takeIf { it.id == item.id }?.offsetMillis,
                             onClick = { viewModel.select(item, onPlayed) },
@@ -427,6 +429,8 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
 @Composable
 private fun ItemRow(
     item: Item,
+    /** Its place on the album showing, drawn before the art as the queue draws its positions. */
+    number: Int?,
     isStarting: Boolean,
     onClick: () -> Unit,
     onMenu: () -> Unit,
@@ -443,6 +447,7 @@ private fun ItemRow(
         onClick = onClick,
         onLongClick = onMenu,
         modifier = modifier,
+        leading = number?.toString(),
     ) {
         when {
             isStarting -> RowStatus("Starting…")

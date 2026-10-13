@@ -506,7 +506,26 @@ one SMAPI call (which takes the `tokenRefreshRequired` replacement) then lets th
 token. Amazon Music answers its endpoint 401 to any token and Apple Music 500. TuneIn (New) answered a
 Python client 403 (Cloudflare 1010) and OkHttp 200 with the bearer (2026-10-12): 19 views, its stations
 typed `station` (canPlay, not canEnumerate) under the ids its SMAPI search calls `stream`; one played in
-Dining Room as a stream. Sonos Radio's page refuses a token and is asked without one.
+Dining Room as a stream. Sonos Radio's page refuses a token and is asked without one. TuneIn's page and
+its SMAPI root both carry Music, News & Talk and Sports, under different ids (2026-10-12), so the root's
+entries are appended after the shelves by **title** as well as id.
+
+**A household token can go stale with no refresh offered** (x2rock, home, 2026-10-12). Pandora's,
+read a day earlier, was refused with only a message, "Failed to reauth device id", while the Sonos app
+kept the household's own copy fresh; reading the account store again gave a working one. So a refusal
+that reads as the credential's (`login`, `auth`, `token`, `linked`, `expired` in its code or message;
+no code is common to them) and carries no `refreshAuthTokenResult` reads the store once more, matches
+the account by service and `SerialNum`, and retries once with its token if it differs. One read serves
+every refusal for ten minutes, failed reads included: it asks a player to call back into the device.
+
+**A SoundCloud album lists nothing** (home, 2026-10-12): search returns it `canPlay`, and its own
+`getMetadata` answers `total` 0. The Sonos app's page for one shows no tracks and no Play, and its menu,
+once loaded, offers only Save to Favorites and Browse Artist. A container that lists nothing is not
+offered Play here either.
+
+**Plex plays through `loadContent`** (home, 2026-10-12, Kitchen): a track, an album and Shuffle All
+each started within 5-7s. The track came up as `x-sonos-http:…track.unknown?…&flags=0`, where the
+queue path writes `track.mp3?…&flags=24616`; it played regardless.
 
 ## Recorded by x2rock, and relied on here
 

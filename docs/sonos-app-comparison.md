@@ -46,7 +46,7 @@ the x2rock CLI, whose playback goes through the same player paths.
 | SoundCloud | same: Likes, Playlists, Feed, New & Hot, Following, own uploads | both answer | x2rock, 2026-10-11 | |
 | Spotify | **same since T-15** (was 5 SMAPI rows: Popular Playlists, Charts, New Releases, Genres and Moods, Your Music, which now follow the shelves): the app's personalised page — More like <artist>, Recommended for today, Albums featuring songs you like, Recommended Stations, Album picks, Your top mixes, Based on your recent listening, … (22 views) | both answer | x2rock, 2026-10-11 | `browse` endpoint answers a bearer token; each view's id opens with SMAPI `getMetadata` (x2rock) |
 | TIDAL | same: My Collection, My Mix, Suggested new albums, Recommended new tracks, Featured Playlists, Genres, … | both answer | x2rock, home, 2026-10-11 | |
-| TuneIn (New) | **same since T-20** (was SMAPI root: iHeartRadio, Holiday Stations, TuneIn Recommends, Music, News & Talk, …): its page's shelves — Recents, Exclusive Music Stations, Most Popular, Top Calm Radio, Featured Collections, … | both answer | x2rock, 2026-10-11 | The 403 (Cloudflare 1010) was a Python client's; OkHttp with the household token gets 200 and 19 shelves (x2rock's Rust client 27). Its stations, typed `station`, play as streams |
+| TuneIn (New) | **same since T-20** (was SMAPI root: iHeartRadio, Holiday Stations, TuneIn Recommends, Music, News & Talk, …): its page's shelves — Recents, Exclusive Music Stations, Most Popular, Top Calm Radio, Featured Collections, … — then the root's own entries | both answer | x2rock, 2026-10-11 | The 403 (Cloudflare 1010) was a Python client's; OkHttp with the household token gets 200 and 19 shelves (x2rock's Rust client 27). Its stations, typed `station`, play as streams. Music, News & Talk and Sports are in both page and root under other ids, and listed once, from the page (T-23, 2026-10-12) |
 | YouTube Music | **app only** (Home, Library, My Supermix) | the app answers; x2rocktv leaves it out | x2rocktv, favourites only | Google's project gate: HTTP 403 `SERVICE_DISABLED` on every SMAPI call, the household's own token included. Not attainable. Saved favourites still play |
 | More radio (Hype Machine, myTuner, NRK, Radio France, …) | x2rocktv only | x2rocktv only | — | Anonymous services the app does not show as "yours" |
 
@@ -64,7 +64,7 @@ the room reporting PLAYING with the new content.
 | Audible | "The Body" | ✓ 5.1s — **the resume path's first run on hardware**: it started chapter 14, where the account's place was. Whether it also sought into the chapter was not checked |
 | Bandcamp | — | nothing to play: the household's token is refused |
 | Deezer | track; album | ✓ 3.3s; ✓ 2.3s |
-| iHeartRadio, both accounts | live station | ✓ 1.4s, 1.5s. Its first hit for "miles davis" is a live station, not the artist station |
+| iHeartRadio, both accounts | live station | ✓ 1.4s, 1.5s. Its first hit for "miles davis" was a live station, not the artist station; since T-22 (2026-10-12) its search is the app's three sections, Stations (artist stations), Live stations, Podcasts |
 | **Mixcloud** | any mix | **✗ the player hung and restarted** (P-21): `loadContent` left it BUFFERING, it stopped answering within 5s and was back ~2.5 min later — four times, on two accounts, twice with nothing else sent. The Sonos app plays Mixcloud through the queue; **fixed the same day** to do the same, and a mix (8.2s) and the "Bass" history playlist (8.4s) then played with the player up |
 | Pandora | search station | ✓ 2.4s; playing a search hit adds it to My Stations, as the app does |
 | Qobuz | track; album | ✓ 2.9s; ✓ 2.2s |
@@ -72,7 +72,7 @@ the room reporting PLAYING with the new content.
 | Saavn | track | ✓ 4.5s (it stalled once, in a run that ended in a restart; alone, it played and the player stayed up) |
 | SiriusXM | artist station | ✓ 2.9s |
 | Sonos Radio | station | ✓ 1.5s |
-| SoundCloud | track; album | ✓ 4.8s; **✗ the album "loaded but did not start"** — the room kept playing the track before it (P-23) |
+| SoundCloud | track; album | ✓ 4.8s; **✗ the album "loaded but did not start"** — the room kept playing the track before it (P-23). Not ours to fix: SoundCloud answers its albums' contents with none (`total` 0, though `canPlay`), and the app's page for one has no tracks and no Play (2026-10-12). x2rocktv now offers no Play on a container that lists nothing |
 | Spotify | track; album | ✓ 4.2s; ✓ 2.4s |
 | TIDAL | track; album | ✓ 5.1s; ✓ 2.3s |
 | TuneIn (New) | stream | ✓ 2.2s |
@@ -88,6 +88,8 @@ the room reporting PLAYING with the new content.
 - The app keeps a **search history** on its Search tab. x2rocktv keeps one too since T-17: this
   device's last eight terms, under the field before a search.
 - x2rocktv's Amazon results were richer: tracks and albums where the app showed two playlists.
+- An album's tracks are numbered, as the app numbers them (Plex, 2026-10-12; T-24). Not a
+  playlist's: its tracks carry their own albums' numbers, and Deezer's carry 0.
 
 ## Beyond services
 

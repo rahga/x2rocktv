@@ -48,6 +48,8 @@ class ServiceBrowseViewModelTest {
     @Volatile private var shelvesOn = false
     /** The page the browse endpoint answers with; Sonos Radio's unless a test says otherwise. */
     @Volatile private var browsePage = "sonosradio.browse.json"
+    /** A captured SMAPI root to answer with, in place of the made-up children. */
+    @Volatile private var rootFixture: String? = null
     /** The Authorization header the browse endpoint was last sent. */
     @Volatile private var browseAuth: String? = null
 
@@ -74,8 +76,11 @@ class ServiceBrowseViewModelTest {
                         MockResponse().setBody(when {
                             "<addToContainer" in body -> FakePlayer.fixtureText("smapi.deezer.addToContainer.xml")
                             "<id>$PLAYLIST</id>" in body -> FakePlayer.fixtureText("smapi.deezer.playlist.oneTrack.xml")
+                            "<id>$ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.plex.albumTracks.xml")
+                            "<id>$EMPTY_ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.soundcloud.emptyAlbum.xml")
                             "<getMetadata" !in body -> SEARCH_ALBUM
                             "<id>root</id>" in body && emptyRoot -> EMPTY
+                            "<id>root</id>" in body && rootFixture != null -> FakePlayer.fixtureText(rootFixture!!)
                             // A page naming one item twice, as radio directories do: t1 at 1 and 2.
                             "<id>dups</id><index>0</index>" in body -> pageOf(listOf(0, 1, 1), total = 4)
                             "<id>dups</id><index>2</index>" in body -> pageOf(listOf(1), total = 4)
@@ -254,6 +259,54 @@ class ServiceBrowseViewModelTest {
         assertTrue("an album on a shelf opens", albums.items.first().container)
     }
 
+    /**
+     * TuneIn, both captured off the home household on 2026-10-12: its page has Music, News & Talk and
+     * Sports as shelves, and its SMAPI root has them again under other ids. Each is listed once, from
+     * the page, and the root's own entries follow the shelves.
+     */
+    @Test fun `a root entry a shelf already names is left out`() = runBlocking {
+        shelvesOn = true
+        browsePage = "tunein.browse.home.json"
+        rootFixture = "getMetadata.tunein.root.xml"
+        viewModel.open(ready().first { it.service.id == "31" })
+        val page = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.isNotEmpty() == true } }
+            as ServiceBrowseViewModel.Results.Found
+        val titles = page.items.map { it.title }
+        assertEquals(listOf("Music", "News & Talk", "Sports"), titles.filter { it in setOf("Music", "News & Talk", "Sports") })
+        assertEquals("TuneIn's Exclusive Music Stations", titles.first())
+        assertEquals(listOf("iHeartRadio", "Holiday Stations", "TuneIn Recommends", "Talk", "Trending", "Location"), titles.takeLast(6))
+    }
+
+    /** An album's tracks are numbered, as the Sonos app draws Plex's; a playlist's are not. */
+    @Test fun `an album's tracks are numbered and a playlist's are not`() = runBlocking {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        found()
+        viewModel.select(com.rahga.x2rock.smapi.Item(ALBUM, "00s Hits", "album", null, null, container = true)) {}
+        val tracks = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.any { t -> t.trackNumber == 1 } == true } }
+            as ServiceBrowseViewModel.Results.Found
+        // The capture is the first three of a hundred.
+        assertEquals(listOf(1, 2, 3), tracks.items.take(3).map { it.trackNumber })
+        assertTrue("an album is numbered", viewModel.numbered.value)
+
+        viewModel.back()
+        viewModel.select(com.rahga.x2rock.smapi.Item(PLAYLIST, "Favorite tracks", "playlist", null, null, container = true)) {}
+        val listed = withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.singleOrNull()?.id?.let { id -> id != "tr:1" } == true } }
+            as ServiceBrowseViewModel.Results.Found
+        assertEquals("the playlist's one track", 1, listed.items.size)
+        assertFalse("but a playlist is not numbered", viewModel.numbered.value)
+    }
+
+    /** SoundCloud's albums answer with nothing in them; the Sonos app's page for one has no Play. */
+    @Test fun `an album that holds nothing offers no Play`() = runBlocking {
+        viewModel.open(ready().first { it.service.id == "31" })
+        found()
+        viewModel.select(com.rahga.x2rock.smapi.Item("playlist->soundcloud:playlists:867830924", "400 Miles From L.A. 1955-56", "album", null, null, container = true)) {}
+        assertTrue("an album offers Play while it loads", viewModel.playsWhole.value)
+        withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.isEmpty() == true } }
+        assertFalse("and none once it holds nothing", viewModel.playsWhole.value)
+    }
+
     @Test fun `descending into a container, then Back, climbs out a level at a time`() = runBlocking {
         val qobuz = ready().first { it.service.id == "31" }
         viewModel.open(qobuz)
@@ -416,6 +469,8 @@ class ServiceBrowseViewModelTest {
          */
         /** Deezer's one playlist as its listing names it (number redacted), and the track added. */
         const val PLAYLIST = "playlist_spotify:playlist-10000000001"
+        const val ALBUM = "plex-album"
+        const val EMPTY_ALBUM = "playlist-&gt;soundcloud:playlists:867830924"
 
         const val BOOK = "reftitle:B002V1OF70_com"
         const val RESUME_CHAPTER = "refchapter:B002V1OF70_119953071_com_119000_1795000"

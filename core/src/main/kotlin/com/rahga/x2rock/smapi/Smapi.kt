@@ -98,6 +98,11 @@ data class Item(
     val userContent: Boolean = false,
     /** `readOnly`, true unless the service says otherwise: nothing is written where it is not offered. */
     val readOnly: Boolean = true,
+    /**
+     * A track's place on its album, `trackMetadata`'s `trackNumber`. Its album's, wherever it is
+     * listed: in a playlist it is no position at all, so it is drawn only inside an album.
+     */
+    val trackNumber: Int? = null,
 )
 
 /** A searchable category, from a service's presentation map. */
@@ -106,11 +111,6 @@ data class Category(
     val id: String,
     /** What the service is actually sent: `search:station`, `SONGS`, `STRK`. */
     val mappedId: String,
-    /**
-     * A second category searched alongside, its hits listed after [mappedId]'s. Only where the
-     * Sonos app shows two of a service's categories as one — see [ServiceContent.asSonosShowsThem].
-     */
-    val thenMappedId: String? = null,
 )
 
 /** A page of hits and the total the service claims it could return. */
@@ -273,7 +273,19 @@ class SmapiException(message: String) : IOException(message)
  * [OkHttpClient] — never the LAN one built for players, which trusts a leaf-only
  * certificate chain that has no business being extended to the rest of the internet.
  */
-class SmapiClient(client: OkHttpClient) {
+class SmapiClient(
+    client: OkHttpClient,
+    /**
+     * The household's current token for the account [Token] was stored for, read again; `null` when
+     * it holds none newer. Asked once, after any refusal that carries no refresh of its own — Pandora's
+     * household token, a day old, answered "Failed to reauth device id" while the Sonos app kept the
+     * household's copy fresh (x2rock, 2026-10-12). Any refusal, not only one worded like the token's:
+     * a garbled Pandora token is refused with "TypeError: Cannot read properties of null (reading
+     * 'getListenerId')" (x2rock, 2026-10-13). What tells is a different token on the household, and
+     * only a read can say; the caller keeps that read cheap.
+     */
+    private val reread: (suspend (Service, Token) -> Token?)? = null,
+) {
 
     private val client = client.newBuilder()
         .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
@@ -497,6 +509,14 @@ class SmapiClient(client: OkHttpClient) {
                     if (stored != null) refreshed[stored.token] = fresh
                     return call(service, stored, action, params, retried = true)
                 }
+                // No refresh offered: the household may hold a newer token than this connection read.
+                // Kept the same way as a refresh.
+                if (!retried && stored != null && reread != null) {
+                    reread.invoke(service, stored)?.takeIf { it.token != token?.token }?.let { fresh ->
+                        refreshed[stored.token] = fresh
+                        return call(service, stored, action, params, retried = true)
+                    }
+                }
                 throw SmapiException("${service.name} refused $action: $fault")
             }
             if (!response.isSuccessful) {
@@ -644,6 +664,7 @@ fun parseItems(body: String): ItemPage {
                 container = container,
                 userContent = node.getAttribute("userContent") == "true",
                 readOnly = node.getAttribute("readOnly") != "false",
+                trackNumber = nested("trackMetadata", "trackNumber")?.trim()?.toIntOrNull()?.takeIf { it > 0 },
             )
         }
     return ItemPage(items, total)

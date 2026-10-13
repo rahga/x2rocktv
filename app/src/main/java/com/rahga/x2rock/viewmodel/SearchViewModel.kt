@@ -253,7 +253,9 @@ class SearchViewModel @Inject constructor(
         private const val MAX_CONCURRENT_SERVICES = 8
 
         /** The order categories are worth asking for, most wanted first. */
-        private val PREFERRED = listOf("tracks", "albums", "artists", "playlists", "stations", "podcasts", "audiobooks")
+        private val PREFERRED = listOf(
+            "tracks", "albums", "artists", "playlists", "stations", ServiceContent.LIVE_STATIONS, "podcasts", "audiobooks",
+        )
 
         /**
          * Two categories per service: its two most wanted, or whatever it has first. Two, because

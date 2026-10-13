@@ -179,6 +179,13 @@ class ServiceBrowseViewModel @Inject constructor(
     private val _playsWhole = MutableStateFlow(false)
     val playsWhole: StateFlow<Boolean> = _playsWhole.asStateFlow()
 
+    /**
+     * Whether the level showing is an album, whose tracks are drawn with their numbers as the Sonos
+     * app draws them (Plex, 2026-10-12). Nowhere else: a playlist's tracks carry their albums' numbers.
+     */
+    private val _numbered = MutableStateFlow(false)
+    val numbered: StateFlow<Boolean> = _numbered.asStateFlow()
+
     private val _notice = TransientNotice(viewModelScope)
     private val guard = StartGuard(viewModelScope, _notice)
     /** The item being started — or [WHOLE] — so its row can say so. */
@@ -249,10 +256,12 @@ class ServiceBrowseViewModel @Inject constructor(
             val rootItems = page.await().getOrNull()?.items.orEmpty()
             if (shelves.isNotEmpty()) {
                 // The shelves first, then the root's own rows, so nothing the root reached is lost:
-                // Spotify's page holds no "Your Music" that opens (2026-10-11).
+                // Spotify's page holds no "Your Music" that opens (2026-10-11). A row a shelf already
+                // names is left out: TuneIn's page and root both carry Music, News & Talk and Sports,
+                // under different ids (2026-10-12). By title, as a listener tells them apart.
                 publish(root, Results.Found(shelves.mapIndexed { i, shelf ->
                     Item("$SHELF$i", shelf.title, "container", shelfCount(shelf.items), shelf.items.first().artUrl, container = true)
-                } + rootItems.filterNot { r -> shelves.any { it.title == r.title } }))
+                } + rootItems.filterNot { r -> shelves.any { it.title.trim().equals(r.title.trim(), ignoreCase = true) } }))
                 return@launch
             }
             val empty = rootItems.isEmpty()
@@ -499,7 +508,8 @@ class ServiceBrowseViewModel @Inject constructor(
         _place.value = level.title.takeIf { !level.isSearch && (trail.size > 1 || entry != null) }
         _returnTo.value = level.opened
         _here.value = level.id
-        _playsWhole.value = level.whole != null
+        _playsWhole.value = playsWhole(level)
+        _numbered.value = (level.whole as? Whole.Container)?.item?.itemType.equals("album", ignoreCase = true)
         _resume.value = level.resume
         _results.value = level.results
     }
@@ -507,8 +517,20 @@ class ServiceBrowseViewModel @Inject constructor(
     /** Record [results] on [level], and show them if it is still the level showing. */
     private fun publish(level: Level, results: Results) {
         level.results = results
-        if (trail.lastOrNull() === level) _results.value = results
+        if (trail.lastOrNull() === level) {
+            _results.value = results
+            _playsWhole.value = playsWhole(level)
+        }
     }
+
+    /**
+     * Whether [level] offers Play and Shuffle: an album or playlist, unless it turned out to hold
+     * nothing. SoundCloud lists its albums `canPlay` and answers each one's contents with none, and
+     * the Sonos app's page for one has no tracks and no Play (P-23, 2026-10-12); played anyway, it
+     * loaded and never started.
+     */
+    private fun playsWhole(level: Level) =
+        level.whole != null && (level.results as? Results.Found)?.items?.isEmpty() != true
 }
 
 /** The id a shelf of a service's page is listed under; never a service's own id. */

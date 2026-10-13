@@ -18,6 +18,14 @@ class SearchRulesTest {
         assertEquals(listOf("stations"), SearchViewModel.pickCategories(radio).map { it.id })
     }
 
+    /** iHeartRadio, as Search shows it: its artist stations and its live radio, both stations to a listener. */
+    @Test fun `iHeartRadio is asked for both kinds of station`() {
+        val iheart = com.rahga.x2rock.smapi.ServiceContent.asSonosShowsThem(
+            "6", listOf("stations", "artists", "tracks", "podcasts").map { Category(it, "m-$it") },
+        )
+        assertEquals(listOf("m-artists", "m-stations"), SearchViewModel.pickCategories(iheart).map { it.mappedId })
+    }
+
     @Test fun `a service with only its own categories is asked for its first two`() {
         // Hype Machine's custom category, and nothing standard.
         val custom = listOf(Category("Blogs", "SBLG"), Category("Feeds", "SFED"), Category("More", "SMOR"))
