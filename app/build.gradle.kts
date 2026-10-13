@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +7,28 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+/**
+ * The version is the tag (T-12): built at `v0.1.0` it is 0.1.0; past it, `git describe` says how far
+ * (0.1.0-3-gabc1234), and `-dirty` marks uncommitted changes. No tag at all, or no git, is 0.0.0-dev.
+ */
+val tagVersion: String = providers.exec {
+    commandLine("git", "describe", "--tags", "--match", "v[0-9]*", "--dirty")
+    isIgnoreExitValue = true
+}.standardOutput.asText.get().trim().removePrefix("v").ifEmpty { "0.0.0-dev" }
+
+/**
+ * Play's upload key, used only when asked for: `./gradlew :app:bundleRelease -Px2rock.upload`. Its
+ * details live in `keystore.properties` at the root, never committed (`storeFile`, `storePassword`,
+ * `keyAlias`, `keyPassword`). Every other release build keeps the debug key, so it still installs
+ * over what the house's TVs have: a TV refuses an update signed by a different key.
+ */
+val uploadKey: Properties? = rootProject.file("keystore.properties")
+    .takeIf { providers.gradleProperty("x2rock.upload").isPresent }
+    ?.let { file ->
+        require(file.exists()) { "-Px2rock.upload needs keystore.properties at the project root" }
+        Properties().apply { file.inputStream().use(::load) }
+    }
 
 android {
     namespace = "com.rahga.x2rock"
@@ -14,19 +38,29 @@ android {
         applicationId = "com.rahga.x2rock"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0"
+        // Must rise with every build that leaves this machine, to Play or to a TV: neither installs a
+        // lower one over a higher. 3 is 0.1.0, the first closed test.
+        versionCode = 3
+        versionName = tagVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        if (uploadKey != null) create("upload") {
+            storeFile = rootProject.file(uploadKey.getProperty("storeFile"))
+            storePassword = uploadKey.getProperty("storePassword")
+            keyAlias = uploadKey.getProperty("keyAlias")
+            keyPassword = uploadKey.getProperty("keyPassword")
+        }
     }
 
     buildTypes {
         release {
-            // Signed with the local debug key, so a release build installs on this household's
-            // own TVs — over a debug install, with no uninstall and no lost settings. Debug
-            // builds run several times slower on a TV box: 4.7s to the room list on the
-            // Streamer against 0.6-0.8s for this (2026-10-05). Publishing anywhere would need
-            // a real upload key in place of this line.
-            signingConfig = signingConfigs.getByName("debug")
+            // Signed with the local debug key unless the upload key is asked for (above), so a
+            // release build installs on this household's own TVs — over a debug install, with no
+            // uninstall and no lost settings. Debug builds run several times slower on a TV box:
+            // 4.7s to the room list on the Streamer against 0.6-0.8s for this (2026-10-05).
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

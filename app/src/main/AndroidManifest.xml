@@ -14,6 +14,15 @@
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
+    <!-- Both implied otherwise, and Play filters on what is implied: the multicast permission above
+         implies Wi-Fi is required, which would hide the app from a box on Ethernet only (the Shield
+         runs it on Ethernet), and the activity's landscape orientation implies a landscape screen. -->
+    <uses-feature
+        android:name="android.hardware.wifi"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.screen.landscape"
+        android:required="false" />
 
     <application
         android:name=".X2RockApp"

@@ -52,3 +52,8 @@ captures/
 
 # virtual machine crash logs
 hs_err_pid*
+
+# Play's upload key and its passwords (T-12): never committed.
+keystore.properties
+*.jks
+*.keystore
