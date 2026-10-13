@@ -66,8 +66,9 @@ class SmapiSearchTest {
         assertFalse("a track is not a place to open", page.items[0].container)
     }
 
-    @Test fun `a direct summary still outranks the nested artist`() {
-        // The nested read is a fallback, not a replacement.
+    @Test fun `a track's nested artist outranks its summary`() {
+        // Reversed 2026-10-12: a track's summary is not its line where it has an artist. Plex's is the
+        // date the track was added (see `a track's line is its artist, not its summary`).
         val body = """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body>
             <searchResponse><searchResult><total>1</total>
               <mediaMetadata>
@@ -76,7 +77,7 @@ class SmapiSearchTest {
                 <trackMetadata><artist>Shawn Mendes</artist></trackMetadata>
               </mediaMetadata>
             </searchResult></searchResponse></s:Body></s:Envelope>"""
-        assertEquals("Various Artists on Prime", parseItems(body).items[0].summary)
+        assertEquals("Shawn Mendes", parseItems(body).items[0].summary)
     }
 
     @Test fun `search hits keep the service's document order when the types are mixed`() {
@@ -215,5 +216,21 @@ class SmapiSearchTest {
     @Test fun `a summary's markup is left out`() {
         val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("search.communityRadioPlus.ondemand.xml"))
         assertEquals("See omnystudio.com/listener for privacy information.", page.items.first().summary)
+    }
+
+    /**
+     * A Plex album's tracks name their artists, not the date each was added: Plex puts that date in a
+     * track's `summary` and the artist in its `trackMetadata` (an album of hits, captured 2026-10-12).
+     */
+    @Test fun `a track's line is its artist, not its summary`() {
+        val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("getMetadata.plex.albumTracks.xml"))
+        assertEquals(listOf("Red Hot Chili Peppers", "Jason Mraz", "Coldplay"), page.items.map { it.summary })
+    }
+
+    /** Not a track, the summary still leads: a station's line is its description, not its artist. */
+    @Test fun `a station keeps its summary first`() {
+        val page = parseItems(com.rahga.x2rock.lan.FakePlayer.fixtureText("smapi.sonosradio.newsTalk.xml"))
+        val station = page.items.first { it.itemType == "stream" }
+        assertEquals("Jackson's Black Information Network", station.summary)
     }
 }

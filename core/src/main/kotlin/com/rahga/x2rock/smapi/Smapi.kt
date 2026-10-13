@@ -631,9 +631,14 @@ fun parseItems(body: String): ItemPage {
                 id = id,
                 title = child("title").orEmpty(),
                 itemType = itemType,
-                // trackMetadata is where Deezer keeps artist/album/art, leaving the element bare.
-                summary = (child("summary") ?: child("artist") ?: nested("trackMetadata", "artist")
-                    ?: child("genre") ?: child("country"))?.let(::plainText),
+                // trackMetadata is where Deezer keeps artist/album/art, leaving the element bare. A
+                // track says its artist before its summary, as the Sonos app does: Plex's summary of a
+                // track is the date it was added ("Saturday, December 13th 2025"), which drowned the
+                // artist out. Everything else keeps its summary first: a station's or a podcast's
+                // description is what its line is for.
+                summary = (child("artist") ?: nested("trackMetadata", "artist")).let { artist ->
+                    if (itemType == "track") artist ?: child("summary") else child("summary") ?: artist
+                }.let { it ?: child("genre") ?: child("country") }?.let(::plainText),
                 artUrl = child("albumArtURI") ?: nested("trackMetadata", "albumArtURI")
                     ?: nested("streamMetadata", "logo"),
                 container = container,
