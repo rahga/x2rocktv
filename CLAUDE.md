@@ -51,9 +51,9 @@ claim in it was run against real hardware.
   Streamer at home, 2026-10-13**: the phone's browser followed the page's hop from HTTPS to the
   TV's plain-HTTP LAN address, the TV redeemed the code, and the household (Authentication off)
   went on answering every command carrying the token. Not yet seen: a household with it on. Anyone who registers with
-  Sonos and signs its agreement can build with their own. The undocumented cloud content API
-  x2rock found the same day (front pages and search for Amazon, Apple, YouTube Music) is T-28,
-  not built.
+  Sonos and signs its agreement can build with their own.
+
+  T-28's notes are kept outside the repository.
 - It is **push, not poll**. Subscribe and the speakers send changes; a command's effect
   arrives as an event, so nothing re-fetches after acting. If you find yourself adding a
   timer or a `delay()` before a re-read, something is wrong.

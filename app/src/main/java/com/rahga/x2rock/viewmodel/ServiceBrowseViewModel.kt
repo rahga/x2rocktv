@@ -518,8 +518,9 @@ class ServiceBrowseViewModel @Inject constructor(
     private fun publish(level: Level, results: Results) {
         level.results = results
         if (trail.lastOrNull() === level) {
-            _results.value = results
+            // Play's offer first: whoever sees the results must not still see Play on an empty one.
             _playsWhole.value = playsWhole(level)
+            _results.value = results
         }
     }
 

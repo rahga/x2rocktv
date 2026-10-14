@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import javax.inject.Qualifier
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.DeveloperAccount
 import javax.inject.Singleton
 
@@ -114,6 +115,7 @@ object AppModule {
         @InternetHttp internetClient: OkHttpClient,
         ratingsStore: RatingsStore,
         developerAccount: DeveloperAccount,
+        betaFeatures: BetaFeatures,
     ): SonosHousehold = SonosHousehold(
         scope, addressBook, multicast, mdns, client, seeds, internetClient, ratingsStore,
         // Asked at each discovery, so a debug launch can switch SSDP off: see DebugSwitches.
@@ -123,5 +125,7 @@ object AppModule {
         accountCapture = { ip -> DebugSwitches.serviceEnvelope ?: AccountCapture.captureEnvelope(ip) },
         // Only where the build carries a developer integration and this TV is signed in (T-27).
         authorization = developerAccount.account?.let { account -> { account.bearer() } },
+        // The Sonos app's own content API is undocumented (T-28): only with Beta features on as well.
+        cloudBearer = developerAccount.account?.let { account -> { if (betaFeatures.enabled.value) account.bearer() else null } },
     )
 }

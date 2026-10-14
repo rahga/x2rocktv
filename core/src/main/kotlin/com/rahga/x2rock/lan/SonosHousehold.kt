@@ -28,6 +28,7 @@ import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.smapi.AccountCapture
 import com.rahga.x2rock.smapi.Category
+import com.rahga.x2rock.smapi.CloudContent
 import com.rahga.x2rock.smapi.Item
 import com.rahga.x2rock.smapi.ItemDetails
 import com.rahga.x2rock.smapi.ItemPage
@@ -373,11 +374,20 @@ class SonosHousehold(
      * exists, which is every build without a developer integration and every device not signed in.
      */
     private val authorization: (suspend () -> String?)? = null,
+    /**
+     * The same token, offered to the Sonos app's own content API only while Beta features are on
+     * (T-28): front pages and search for what SMAPI refuses. `null` in every build without an
+     * integration; answering `null` while signed out or with Beta off.
+     */
+    cloudBearer: (suspend () -> String?)? = null,
+    /** Where the content API is; overridden only by tests. */
+    cloudBase: String = CloudContent.BASE,
 ) {
 
     private val gson = Gson()
     private val upnp = Upnp(client, upnpPort)
     private val smapi = SmapiClient(internetClient, reread = ::rereadToken)
+    private val cloud = cloudBearer?.let { CloudContent(internetClient, it, cloudBase) }
     private val ratingsCatalogue = RatingsCatalogue(smapi, ratingsStore)
 
     private val sockets = ConcurrentHashMap<String, SonosSocket>()
@@ -1171,7 +1181,15 @@ class SonosHousehold(
      * come back — the capability degrades, it does not fail. Apple Music is deliberately absent;
      * its catalogue is reached through [searchAppleMusic]-shaped iTunes search, not SMAPI.
      */
-    suspend fun searchableServices(): List<LinkedService> = serviceLock.withLock {
+    suspend fun searchableServices(): List<LinkedService> {
+        val all = linkedForThisSession()
+        // YouTube Music only while the content API would answer for it: signed in, Beta on (T-28).
+        if (all.none { it.service.id in CLOUD_ONLY }) return all
+        val ready = cloud?.ready() == true
+        return all.filter { it.service.id !in CLOUD_ONLY || ready }
+    }
+
+    private suspend fun linkedForThisSession(): List<LinkedService> = serviceLock.withLock {
         searchable?.let { return@withLock it }
         // The session this list is for: a reconnect while it loads clears the cache, and this
         // load must not fill it again with the old session's answer.
@@ -1198,7 +1216,7 @@ class SonosHousehold(
         // own token does not get past either (x2rock, verified again here 2026-10-06); and Bandcamp,
         // which takes the household's token only from the speakers ([UNSEARCHABLE]).
         linkedServices(services, accounts, household)
-            .filterNot { it.service.id in UNSEARCHABLE }
+            .filterNot { it.service.id in UNSEARCHABLE && !(cloud != null && it.service.id in CLOUD_ONLY) }
             .also { if (generation == session) searchable = it }
     }
 
@@ -1251,20 +1269,28 @@ class SonosHousehold(
 
     /** The categories [linked] will accept in [searchService]; empty when it can only be browsed. */
     suspend fun serviceCategories(linked: LinkedService): List<Category> =
-        categoryCache[linked.service.id]
+        if (linked.service.id in CLOUD_ONLY) listOf(CLOUD_CATEGORY)
+        else categoryCache[linked.service.id]
             ?: ServiceContent.asSonosShowsThem(linked.service.id, smapi.categories(linked.service))
                 .also { categoryCache[linked.service.id] = it }
 
     /** Search [linked] for [term] under [category]. */
-    suspend fun searchService(linked: LinkedService, category: Category, term: String, index: Int = 0, count: Int = 30): ItemPage =
-        smapi.search(linked.service, linked.token, category.mappedId, term, index, count)
+    suspend fun searchService(linked: LinkedService, category: Category, term: String, index: Int = 0, count: Int = 30): ItemPage {
+        if (category == CLOUD_CATEGORY) {
+            // The household search sends one page, whole; there is no second to ask for.
+            if (index > 0) return ItemPage(emptyList(), 0)
+            val (household, type, serial) = cloudAddress(linked)
+            return requireNotNull(cloud).search(household, type, serial, term)
+        }
+        return smapi.search(linked.service, linked.token, category.mappedId, term, index, count)
+    }
 
     /** The shelves of [linked]'s own page, read with its account's token — see [SmapiClient.shelves]. */
     suspend fun serviceShelves(linked: LinkedService): List<Shelf> = smapi.shelves(linked.service, linked.token)
 
     /** What [linked] says about [item] beyond itself: its artist, album, radio, favourite state. */
     suspend fun serviceItemDetails(linked: LinkedService, item: Item): ItemDetails =
-        smapi.itemDetails(linked.service, linked.token, item.id)
+        smapi.itemDetails(linked.service, linked.token, item.id.removePrefix(CloudContent.CLOUD))
 
     /**
      * Add [item] to the account's favourites in [linked], or take it out. A service whose ratings
@@ -1296,8 +1322,32 @@ class SonosHousehold(
     }
 
     /** Browse into a container of [linked] — `root` for its top level. */
-    suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage =
-        smapi.metadata(linked.service, linked.token, id, index, count)
+    suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage {
+        val cloud = cloud
+        if (cloud != null && id.startsWith(CloudContent.CLOUD)) {
+            if (index > 0) return ItemPage(emptyList(), 0)
+            val (household, type, serial) = cloudAddress(linked)
+            return cloud.browse(household, type, serial, id).let { ItemPage(it, it.size) }
+        }
+        // The app's front page where SMAPI's root is thin or refused (T-28): YouTube Music's library,
+        // Amazon's Home. Amazon falls back to its SMAPI root when the content API will not answer.
+        if (cloud != null && id == "root" && index == 0 && linked.service.id in CLOUD_FRONT_PAGES && cloud.ready()) {
+            val home = runCatching {
+                val (household, type, serial) = cloudAddress(linked)
+                cloud.home(household, type, serial)
+            }
+            home.getOrNull()?.takeIf { it.isNotEmpty() }?.let { return ItemPage(it, it.size) }
+            if (linked.service.id in CLOUD_ONLY) home.getOrThrow()
+        }
+        return smapi.metadata(linked.service, linked.token, id, index, count)
+    }
+
+    /** The content API's names for [linked]: the household, the service's type, the account's serial. */
+    private suspend fun cloudAddress(linked: LinkedService): Triple<String, Long, Int> = Triple(
+        householdId(),
+        linked.service.serviceType ?: error("${linked.service.name} has no service type to address it by"),
+        linked.accountId?.removePrefix("sn_")?.toIntOrNull() ?: error("${linked.service.name} has no account serial"),
+    )
 
     /**
      * Play a service [item] in [groupId], in place of the queue, through the household's own
@@ -1306,8 +1356,10 @@ class SonosHousehold(
      * a container to descend into. Answers how a station or program got on, as [playStream]
      * does; anything loaded through `loadContent` either plays or throws.
      */
-    suspend fun playServiceItem(groupId: String, linked: LinkedService, item: Item): StreamStart =
-        when {
+    suspend fun playServiceItem(groupId: String, linked: LinkedService, cloudOrNot: Item): StreamStart {
+        // A container opened through the content API carries its mark; the player wants the object id.
+        val item = cloudOrNot.copy(id = cloudOrNot.id.removePrefix(CloudContent.CLOUD))
+        return when {
             // A radio station is not queue content: it has no universalMusicObjectId to load, and
             // the service resolves it to a stream URL instead, which plays through `playbackSession`
             // the way the radio directory's stations do (x2rock: TuneIn and SomaFM hand back one).
@@ -1325,6 +1377,7 @@ class SonosHousehold(
                 StreamStart.PLAYING
             }
         }
+    }
 
     /**
      * Play a radio [item] (a `program`) in [groupId] as the room's own source — `SetAVTransportURI`
@@ -1404,7 +1457,8 @@ class SonosHousehold(
      * fetched. Fails for a container of containers (an artist), which a queue cannot take, and for
      * a service the player's type list gives no cdudn for.
      */
-    suspend fun queueServiceItem(groupId: String, linked: LinkedService, item: Item, next: Boolean = false) {
+    suspend fun queueServiceItem(groupId: String, linked: LinkedService, cloudOrNot: Item, next: Boolean = false) {
+        val item = cloudOrNot.copy(id = cloudOrNot.id.removePrefix(CloudContent.CLOUD))
         require(ServiceContent.canEnqueue(item)) { "${item.title} is not something a queue can hold" }
         val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
             ?: error("${linked.service.name} has no account to queue through")
@@ -2611,6 +2665,15 @@ private const val YOUTUBE_MUSIC_SERVICE_ID = "284"
  * re-add (2026-10-12, PUNCH P-28). Their favourites and history still play through the household.
  */
 private val UNSEARCHABLE = setOf(AppleMusic.SERVICE_ID, YOUTUBE_MUSIC_SERVICE_ID, "157")
+
+/** Listed only through the content API, while it would answer (T-28): YouTube Music's SMAPI is 403. */
+private val CLOUD_ONLY = setOf(YOUTUBE_MUSIC_SERVICE_ID)
+
+/** Whose front page is the content API's, where it answers: YouTube Music's, and Amazon's Home. */
+private val CLOUD_FRONT_PAGES = CLOUD_ONLY + "201"
+
+/** A cloud-only service's one search: the household search, which takes no category. */
+private val CLOUD_CATEGORY = Category("music", "\u0000cloud")
 
 /** How many times a queue read starts again when the queue changes under it; see [SonosHousehold.queue]. */
 private const val QUEUE_READ_ATTEMPTS = 3
