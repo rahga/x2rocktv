@@ -41,8 +41,7 @@ fun fakeHousehold(
     internetClient: OkHttpClient = OkHttpClient(),
     accountCapture: suspend (String) -> String? = { null },
     authorization: (suspend () -> String?)? = null,
-    cloudBearer: (suspend () -> String?)? = null,
-    cloudBase: String = com.rahga.x2rock.smapi.CloudContent.BASE,
+    servicePages: com.rahga.x2rock.smapi.ServicePages? = null,
 ): SonosHousehold = SonosHousehold(
     scope = scope,
     addressBook = addressBook,
@@ -57,6 +56,5 @@ fun fakeHousehold(
     ssdp = ssdp,
     accountCapture = accountCapture,
     authorization = authorization,
-    cloudBearer = cloudBearer,
-    cloudBase = cloudBase,
+    servicePages = servicePages,
 )

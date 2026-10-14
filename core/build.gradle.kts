@@ -20,6 +20,17 @@ kotlin {
     }
 }
 
+// Untracked service pages (T-28): `src/cloud` and `src/cloudTest` exist only on the owner's machine
+// (ignored by git) and join the build only when asked, with `-Px2rock.cloudContent`. Without it the
+// module has no source of service pages at all, which is every build from the repository.
+if (providers.gradleProperty("x2rock.cloudContent").isPresent) {
+    require(file("src/cloud/kotlin").isDirectory) { "-Px2rock.cloudContent needs core/src/cloud, which is not in the repository" }
+    sourceSets["main"].resources.srcDir("src/cloud/resources")
+    sourceSets["test"].resources.srcDir("src/cloudTest/resources")
+    kotlin.sourceSets["main"].kotlin.srcDir("src/cloud/kotlin")
+    kotlin.sourceSets["test"].kotlin.srcDir("src/cloudTest/kotlin")
+}
+
 // The live suite reaches real speakers and is opt-in; these carry the opt-in through to the
 // test JVM, which does not inherit the Gradle daemon's system properties.
 tasks.test {

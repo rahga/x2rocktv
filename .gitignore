@@ -57,3 +57,8 @@ hs_err_pid*
 keystore.properties
 *.jks
 *.keystore
+
+# Untracked service pages (T-28): the Sonos app's undocumented content API, built only with
+# -Px2rock.cloudContent for the owner's own TVs. Never committed; see CLAUDE.md.
+core/src/cloud/
+core/src/cloudTest/

@@ -53,7 +53,14 @@ claim in it was run against real hardware.
   went on answering every command carrying the token. Not yet seen: a household with it on. Anyone who registers with
   Sonos and signs its agreement can build with their own.
 
-  T-28's notes are kept outside the repository.
+  **Untracked service pages (T-28).** `SonosHousehold` can route a service's root, containers
+  and search through a `ServicePages` source — for what a service's SMAPI endpoint refuses a client
+  like this one — and lists a service only that source reaches only while it answers. **No source
+  ships in the repository.** The owner's lives in `core/src/cloud` and `core/src/cloudTest`, which
+  git ignores, and joins a build only with `-Px2rock.cloudContent`, found through `ServiceLoader` so
+  no tracked code names it. It uses an undocumented API outside the Sonos Platform Terms (3(a), 3(g)),
+  so it is for the owner's own TVs and must never be committed, nor its captured replies; its notes
+  are in its own folder. Tracked tests cover only the routing, against a stand-in.
 - It is **push, not poll**. Subscribe and the speakers send changes; a command's effect
   arrives as an event, so nothing re-fetches after acting. If you find yourself adding a
   timer or a `delay()` before a re-read, something is wrong.

@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import javax.inject.Qualifier
+import com.rahga.x2rock.smapi.suppliedServicePages
 import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.DeveloperAccount
 import javax.inject.Singleton
@@ -125,7 +126,10 @@ object AppModule {
         accountCapture = { ip -> DebugSwitches.serviceEnvelope ?: AccountCapture.captureEnvelope(ip) },
         // Only where the build carries a developer integration and this TV is signed in (T-27).
         authorization = developerAccount.account?.let { account -> { account.bearer() } },
-        // The Sonos app's own content API is undocumented (T-28): only with Beta features on as well.
-        cloudBearer = developerAccount.account?.let { account -> { if (betaFeatures.enabled.value) account.bearer() else null } },
+        // A source of service pages, only where the build was given one (T-28, untracked) and has an
+        // account to sign its calls; it may send the token only while Beta features are on.
+        servicePages = developerAccount.account?.let { account ->
+            suppliedServicePages()?.create(internetClient) { if (betaFeatures.enabled.value) account.bearer() else null }
+        },
     )
 }

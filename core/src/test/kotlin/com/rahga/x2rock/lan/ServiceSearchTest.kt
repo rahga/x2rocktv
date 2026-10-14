@@ -42,7 +42,7 @@ class ServiceSearchTest {
         const val APPLE = "204"      // has a token, but excluded (searched via iTunes)
         const val MIXCLOUD = "181"   // has a token; its items play through the queue
         const val BANDCAMP = "157"   // has a token the speakers alone may use (P-28)
-        const val YTM = "284"        // SMAPI refused (403); listed only through the content API (T-28)
+        const val YTM = "284"        // SMAPI refused (403); listed only through a build's own page source
 
         // 31*256+7 = 7943 (Qobuz), 204*256+7 = 52231 (Apple), 181*256+7 = 46343 (Mixcloud),
         // 157*256+7 = 40199 (Bandcamp). The service type list a cdudn needs.
@@ -121,9 +121,31 @@ class ServiceSearchTest {
     @Volatile private var envelope = ""
     private val captures = java.util.concurrent.atomic.AtomicInteger()
 
-    /** The content API's token, as a signed-in TV with Beta features on would offer it; `null` otherwise. */
-    @Volatile private var cloudToken: String? = null
-    private val cloudCalls = CopyOnWriteArrayList<String>()
+    /**
+     * A build's own source of service pages ([com.rahga.x2rock.smapi.ServicePages]), as a stand-in: none
+     * ships in the repository, so what is tested here is the household's routing, not any source.
+     */
+    private inner class Pages : com.rahga.x2rock.smapi.ServicePages {
+        @Volatile var answering = false
+        @Volatile var refuseHome = false
+        val calls = CopyOnWriteArrayList<String>()
+        override val onlyHere = setOf(YTM)
+        override val frontPages = setOf(YTM, QOBUZ)
+        override suspend fun ready() = answering
+        override fun owns(id: String) = id.startsWith("pages:")
+        override fun objectId(id: String) = id.removePrefix("pages:")
+        override suspend fun home(household: String, linked: com.rahga.x2rock.smapi.LinkedService): List<com.rahga.x2rock.smapi.Item> {
+            calls += "home ${linked.service.id}"
+            if (refuseHome) throw java.io.IOException("refused")
+            return listOf(com.rahga.x2rock.smapi.Item("pages:shelf", "A shelf", "container", null, null, container = true))
+        }
+        override suspend fun browse(household: String, linked: com.rahga.x2rock.smapi.LinkedService, id: String) =
+            listOf(com.rahga.x2rock.smapi.Item("track-1", "So What", "track", null, null, container = false)).also { calls += "browse $id" }
+        override suspend fun search(household: String, linked: com.rahga.x2rock.smapi.LinkedService, term: String) =
+            com.rahga.x2rock.smapi.ItemPage(listOf(com.rahga.x2rock.smapi.Item("pages:album-9", "Kind Of Blue", "album", null, null, container = true)), 1)
+                .also { calls += "search $term" }
+    }
+    private val pages = Pages()
 
     /** The presentation map the service publishes; a test about ratings swaps in one that has them. */
     @Volatile private var map = MAP
@@ -135,9 +157,6 @@ class ServiceSearchTest {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                     "/manifest" -> MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map")}"}}""")
                     "/map" -> MockResponse().setBody(map)
-                    else -> if (request.path!!.startsWith("/content/api/v3/")) cloud(request) else smapiOr404(request)
-                }
-                private fun smapiOr404(request: RecordedRequest): MockResponse = when (request.path) {
                     "/smapi" -> {
                         val body = request.body.readUtf8().also { smapiCalls += it }
                         MockResponse().setBody(
@@ -199,8 +218,7 @@ class ServiceSearchTest {
             scope,
             addressBook = book,
             upnpPort = upnp.port,
-            cloudBearer = { cloudToken },
-            cloudBase = service.url("/content/api/v3").toString(),
+            servicePages = pages,
             accountCapture = {
                 captures.incrementAndGet()
                 captureEntered.complete(Unit)
@@ -234,20 +252,6 @@ class ServiceSearchTest {
         fake.shutdown()
         upnp.shutdown()
         service.shutdown()
-    }
-
-    /** The content API: the captured replies, their own links pointed here. */
-    private fun cloud(request: RecordedRequest): MockResponse {
-        val path = request.path!!.also { cloudCalls += it }
-        if (request.getHeader("Authorization") != "Bearer $cloudToken") return MockResponse().setResponseCode(401)
-        val name = when {
-            "/search?" in path -> "cloud.search.milesdavis.json"
-            "/containers/root/browse" in path -> "cloud.ytm.home.json"
-            else -> "cloud.ytm.album.json"
-        }
-        return MockResponse().setBody(
-            FakePlayer.fixtureText(name).replace("https://api.ws.sonos.com/content/api/v3", service.url("/content/api/v3").toString())
-        )
     }
 
     private fun listAvailableServices(): String {
@@ -527,43 +531,47 @@ class ServiceSearchTest {
         assertEquals("each refusal is final with nothing newer to try", 3, smapiCalls.count { "<search" in it })
     }
 
-    @Test fun `YouTube Music is listed only while the content API would answer`() = runBlocking {
+    @Test fun `a service only a page source reaches is listed only while it answers`() = runBlocking {
         connected()
-        assertTrue("signed out, or Beta off", household.searchableServices().none { it.service.id == YTM })
-        cloudToken = "acct"
+        assertTrue("not answering", household.searchableServices().none { it.service.id == YTM })
+        pages.answering = true
         assertTrue(household.searchableServices().any { it.service.id == YTM })
-        cloudToken = null
+        pages.answering = false
         assertTrue("and gone again", household.searchableServices().none { it.service.id == YTM })
     }
 
-    @Test fun `YouTube Music opens on its front page and searches, through the content API`() = runBlocking {
+    @Test fun `its root, containers and search go to the page source, never its SMAPI`() = runBlocking {
         connected()
-        cloudToken = "acct"
+        pages.answering = true
         val ytm = household.searchableServices().first { it.service.id == YTM }
 
-        assertEquals(listOf("Home", "Library", "My Supermix"), household.browseService(ytm).items.map { it.title })
+        assertEquals(listOf("A shelf"), household.browseService(ytm).items.map { it.title })
+        assertEquals(listOf("So What"), household.browseService(ytm, "pages:shelf").items.map { it.title })
         val category = household.serviceCategories(ytm).single()
-        val hits = household.searchService(ytm, category, "miles davis").items
-        assertEquals("Miles Davis", hits.first().title)
-        val album = hits.first { it.title == "The Very Best of Miles Davis" }
-        assertEquals("Blue in Green", household.browseService(ytm, album.id).items.first().title)
+        assertEquals("Kind Of Blue", household.searchService(ytm, category, "miles davis").items.single().title)
+        assertTrue("one page, whole", household.searchService(ytm, category, "miles davis", index = 1).items.isEmpty())
 
-        assertTrue(cloudCalls.first(), cloudCalls.first().contains("/services/72711/accounts/23/containers/root/browse"))
-        assertTrue(cloudCalls.last(), cloudCalls.last().contains("/services/72711/accounts/23/albums/ALkSOiEa3GySUW46iMf8ogmyQVIcReu89O93VVW2H6Xc2nWm/browse"))
-        assertTrue("no SMAPI call for YouTube Music", smapiCalls.none { "yt-token" in it })
+        assertEquals(listOf("home $YTM", "browse pages:shelf", "search miles davis"), pages.calls)
+        assertTrue("no SMAPI call for it", smapiCalls.none { "yt-token" in it })
     }
 
-    @Test fun `an album found through the content API plays by its own object id`() = runBlocking<Unit> {
+    @Test fun `a front page the source refuses falls back to the SMAPI root`() = runBlocking {
+        connected()
+        pages.answering = true
+        pages.refuseHome = true
+        assertEquals("ASTROWORLD", household.browseService(qobuz()).items.single().title)
+        assertEquals(listOf("home $QOBUZ"), pages.calls)
+    }
+
+    @Test fun `a page source's item plays by the object id it stands for`() = runBlocking<Unit> {
         val groupId = connected()
-        cloudToken = "acct"
+        pages.answering = true
         val ytm = household.searchableServices().first { it.service.id == YTM }
-        val album = household.searchService(ytm, household.serviceCategories(ytm).single(), "miles davis").items
-            .first { it.itemType == "album" }
+        val album = household.searchService(ytm, household.serviceCategories(ytm).single(), "miles davis").items.single()
         val started = async(Dispatchers.Default) { household.playServiceItem(groupId, ytm, album) }
         fake.awaitCommand("loadContent", 5_000)
         val load = fake.lastCommandBody("loadContent").toString()
-        assertTrue(load, "\"objectId\":\"ALkSOiEa3GySUW46iMf8ogmyQVIcReu89O93VVW2H6Xc2nWm\"" in load)
-        assertTrue(load, "cloud:" !in load)
+        assertTrue(load, "\"objectId\":\"album-9\"" in load)
         fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         started.await()
     }
