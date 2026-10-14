@@ -11,7 +11,7 @@ file is the comparison with the app; that one is the protocol.
 ## Pass of 2026-10-11 (home household)
 
 - **Sonos app** 90.00.43 (built 2026-10-06) on a moto g 5G 2024, Android 15, over USB adb.
-- **x2rocktv** release build of `e2722d5` on the Shield, driven with key events.
+- **x2rocktv** release build of `6fdb787` on the Shield, driven with key events.
 - **x2rock CLI** for service-level answers (`browse`, `search`, `link --from-household --dry-run`).
 - Every service's top level was opened in both apps and screenshotted, and "miles davis" was
   searched in both. **Nothing was played**: every room was in use (Bedroom and Dining Room playing,

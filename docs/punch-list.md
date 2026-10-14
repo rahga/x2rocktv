@@ -1,6 +1,6 @@
 # Punch list: catching up with x2rock
 
-**Open review (2026-10-11, Codex, against `6cb4e59`):**
+**Open review (2026-10-11, Codex, against `d9a45a8`):**
 [Correctness and simplification review](review-2026-10-11-codex.md). Answered by Claude Code
 the same day: R1, R3, R4 agreed as fixes (P2); R2 narrowed to P3 pending a capture; C2 and C4
 agreed small; C1 and C3 declined. Implemented the same day (R1, R3, R4/C2, C4) and R2 settled as a
@@ -56,7 +56,7 @@ from the notes below:
   Sonos app before changing anything (Tier 5, Stage 2).
 
 **Review pass of 2026-10-09** (four area reviews, each claim checked against the code before
-acting; commits ab49d0f..f72834b). Findings looked at and left alone, so the next pass does not
+acting; commits 63e57d1..5831bb8). Findings looked at and left alone, so the next pass does not
 re-raise them: the `withContext(Dispatchers.IO)` wrappers in `Upnp` and `SmapiClient` are inert
 since `awaitReply` enqueues, but they keep DIDL/SOAP parsing off the caller's dispatcher and are not
 worth the churn; `SonosSocket.open`'s `resume` without an `onCancellation` is covered, since the
@@ -69,7 +69,7 @@ first; the two control rows' places (music and TV) are near-duplicates whose foc
 enough that extracting one row was not clearly simpler.
 
 **Second review pass, same day** (household core, tests and fixtures, view models, screens and
-build; commits from be58907). Its first finding was a regression of the first pass: the modal-close
+build; commits from cda5baf). Its first finding was a regression of the first pass: the modal-close
 effect read a plain local inside `snapshotFlow`, so it never fired — the room panel now hands focus
 off as Settings does. Looked at and left alone: one `DebouncedLevels` for the four copies of
 debounce-and-pending (two absolute, two relative; a real simplification, but it moves the pane's
@@ -87,7 +87,7 @@ builder for the thirty-one test preambles (the two that could reach real SSDP ar
 `REPLY_TIMEOUT_MILLIS` as a constructor seam so ReplayTest's two 5.5s waits go; `disconnect()`
 clearing the session outside the mutex `teardown()` takes.
 
-**Review pass of 2026-10-11** (7de55c6..0384d58: T-01 to T-13; four area reviews, each claim checked
+**Review pass of 2026-10-11** (d2aa5e4..7a88c00: T-01 to T-13; four area reviews, each claim checked
 before acting). Fixed: a chapters list pushed over whatever the browser had moved to while the
 book's place was read; a write's own tone read landing in the next room's panel, aiming its switches
 at the first room; Full screen popping the home screen too on a second key inside the fade; a
@@ -273,7 +273,7 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
    speakers to it, and every other room was untouched. Sonos itself stopped Dining Room's music
    about a minute later. It also showed "websocket failed" for some seconds, because Living Room
    was the speaker the session ran through — now said as "Reconnecting…" and skipped on the way
-   back (`77492d9`). Earlier, 2026-10-01: the party had broken up before the loss was seen, so
+   back (`a7c6bac`). Earlier, 2026-10-01: the party had broken up before the loss was seen, so
    Kitchen was a coordinator by then — which found the two bugs above instead.* Group two rooms, then pull the member's power: the other rooms stay as they are and
    only that speaker's level row goes. Pulling the *coordinator's* still rebuilds.
 5. **1.3** Put a Beam on its TV input, then group another room onto it from the room panel:
@@ -285,7 +285,7 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 7. ~~**1.7**~~ *Done 2026-10-05/06, around midnight, on the Shield, never relaunched. Off: Queue,
    the sleep timer, Night Sound and Speech Enhancement, the panel's TV Input and tone all went.
    The note saying why was on every pane at first; at the owner's word it is now said once, at
-   the foot of the room list (`d80c3b9`). On again: every one came back and the note went.* Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
+   the foot of the room list (`f1f76c3`). On again: every one came back and the note went.* Same screen, UPnP off: Queue and the panel's TV Input go and the pane says why,
    without a relaunch. On again: they return.
 8. ~~**1.9**~~ *Done on the Shield: muted Kitchen, Vol + from the remote, unmuted at 24.* Mute a room, press Vol +: it unmutes and steps.
 9. ~~**1.10**~~ *Done: Bedroom's live station advertised 518 (play, pause, play/pause);
@@ -342,7 +342,7 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
   badge, the Source and "This is my TV" rows, and detection's candidates, while Night Sound
   and Speech Enhancement stay. Captured on Bedroom's Beam (connected, TV on) and Guest TV's
   (nothing plugged in). `tvPowerStatus` is there too and unused: a TV that is on could settle
-  detection further. **It did nothing on a device until a29ae24**: the event's header carries
+  detection further. **It did nothing on a device until 15ff867**: the event's header carries
   `playerId: null`, the handler needed it, and the fake had supplied one no player sends — seen
   on the Shield as Guest TV keeping its badge. Now credited to the socket it came on; on the
   Shield Guest TV's badge went and Bedroom's stayed.* Player-scoped `hdmi:1 subscribe` returns
@@ -504,7 +504,7 @@ speaker, the office One SL. These need the five rooms, a Beam, or a switch flipp
 ## Found by code review, 2026-10-03
 
 Ten findings over the commits since the last push, all checked against the code first; nine
-fixed, each with a test that fails against the old code (`c939d2f`..`acfd1a8`). The one worth
+fixed, each with a test that fails against the old code (`221c367`..`dbd1020`). The one worth
 remembering: **a hold on a row also fired its click on release**, because the hold was timed
 in `dpadLongPress` and the select key never consumed — holding a playlist row appended it and
 then replaced the queue with it. tv-material3's `Card` has its own `onLongClick`, which
@@ -527,7 +527,7 @@ countdown sat on the wall clock, which NTP steps after boot (monotonic now); an 
 could outlive its window and fail the next find's first player; and two tidy-ups. Unverified on
 a device: the default-network callback, and the resolve lock.
 
-A simplification pass followed (2026-10-04, `6be3601`..): one XML parser for UPnP and SMAPI
+A simplification pass followed (2026-10-04, `0acab7f`..): one XML parser for UPnP and SMAPI
 — the SMAPI copy still had the Android `setFeature` fault — and one of each lookup, preamble,
 notice and test helper that had been written several times; eleven REST-era models and a few
 dead parameters went. Behaviour unchanged, 404 tests green. Three behaviour changes followed once the owner
@@ -899,7 +899,7 @@ anything changed.
 
 ## Outside review, `.local-review/astra-findings.md` (2026-10-08)
 
-Seven findings, each brought with a test that failed against `d9372a6`; all eight of those tests were
+Seven findings, each brought with a test that failed against `e9dedfd`; all eight of those tests were
 run here first and failed as described, then passed with the fix. Each fix was also broken again on
 purpose to see its test fail. The tests are kept, renamed to this project's style.
 

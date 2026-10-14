@@ -1,6 +1,6 @@
 # Codex review, 2026-10-11 — answered
 
-Reviewed `6cb4e59`. Requested by the owner: get a lay of the land, then review correctness
+Reviewed `d9a45a8`. Requested by the owner: get a lay of the land, then review correctness
 and simplification. This is a set of claims for Claude Code to check and debate, **not an
 accepted implementation plan**. No application code was changed and no hardware behavior
 was newly exercised. Please record agreement, counterevidence, or a narrower conclusion
@@ -207,7 +207,7 @@ The reproduction sources, Gradle init script, and exact commands are preserved l
   later, `runCatching` hands it the `CancellationException`, and the fold writes Failed — shown
   until the replacement answers, with "StandaloneCoroutine was cancelled" as its words, and a
   Retry that can take focus meanwhile. The same class of bug was fixed in this pass for
-  `AlarmsViewModel.load` (ee04393..6cb4e59). Sites that cancel-and-replace a job, to audit:
+  `AlarmsViewModel.load` (d763419..d9a45a8). Sites that cancel-and-replace a job, to audit:
   `RadioViewModel.select`, `AppleMusicViewModel.search`, `ServiceBrowseViewModel` (its `open`,
   `search`, `browse` and `loadMore` publish `Failed` onto a level via `runCatching.fold`),
   `SearchViewModel`, `ServiceItemMenu`'s details (publishes an empty `ItemDetails` over the next
