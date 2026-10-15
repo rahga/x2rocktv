@@ -49,6 +49,9 @@ class AuthenticationTest {
         val connected = withTimeoutOrNull(3_000) { household.state.first { it.connected && it.groups.isNotEmpty() } }
         assertNull("no groups without a token", connected)
         assertNull("and none was sent", fake.lastAuthorization)
+        // What the home screen shows, naming the Sonos app's switch, rather than a speaker that did not answer.
+        assertTrue(household.state.value.authenticationRequired)
+        assertEquals(AUTHENTICATION_REQUIRED, household.state.value.error)
         household.disconnect()
     }
 

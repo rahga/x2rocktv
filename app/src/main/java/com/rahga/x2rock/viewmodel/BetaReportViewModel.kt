@@ -110,6 +110,12 @@ internal fun betaReport(
         appendLine()
         appendLine("---")
         appendLine("$app on $device")
+        // A household with Authentication on refuses every command from this app (T-29): it is how
+        // many such systems the testers have that decides whether signing in is worth offering.
+        if (state.authenticationRequired) {
+            appendLine()
+            appendLine("**Authentication is on:** the speakers refused this app (ERROR_NO_PERMISSION).")
+        }
         appendLine()
         appendLine("**Speakers**")
         // Said above the list, where cutting the end to fit cannot take it.

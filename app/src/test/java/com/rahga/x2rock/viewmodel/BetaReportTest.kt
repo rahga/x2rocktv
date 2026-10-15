@@ -88,6 +88,13 @@ class BetaReportTest {
         assertTrue(text, text.contains("LINE_IN"))
     }
 
+    /** T-29: how many testers' systems have Authentication on decides whether sign-in is worth offering. */
+    @Test fun `a household that refuses this app says so`() {
+        val refused = household.state.value.copy(error = com.rahga.x2rock.lan.AUTHENTICATION_REQUIRED)
+        assertTrue(report(refused).text, report(refused).text.contains("**Authentication is on:**"))
+        assertTrue("not otherwise", !report().text.contains("Authentication is on"))
+    }
+
     /** A household too big for one code loses capabilities first, then its end, and says so either way. */
     @Test fun `a large household is cut to fit the code`() {
         val state = household.state.value
