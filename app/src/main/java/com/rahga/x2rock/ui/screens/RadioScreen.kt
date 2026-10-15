@@ -47,6 +47,7 @@ import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
+import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.RadioViewModel
 
 /**
@@ -59,9 +60,14 @@ import com.rahga.x2rock.viewmodel.RadioViewModel
 fun RadioScreen(
     room: String,
     onBack: () -> Unit,
-    onPlayed: () -> Unit,
+    /** The activity's: its bar says what the room now plays, as Browse's does. */
+    playerViewModel: PlayerViewModel,
     viewModel: RadioViewModel = hiltViewModel(),
 ) {
+    val playerState by playerViewModel.uiState.collectAsState()
+    // A station plays and the directory stays: the next one is a press away if this one is not
+    // wanted, and Back leaves when one is (asked for 2026-10-14). It used to go back to the room.
+    val onPlayed = {}
     val selected by viewModel.selected.collectAsState()
     val stations by viewModel.stations.collectAsState()
     val starting by viewModel.starting.collectAsState()
@@ -76,7 +82,8 @@ fun RadioScreen(
     LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize()) {
+      Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f)) {
             Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
                 ScreenHeader(title = "Radio", room = room, onBack = onBack)
                 Spacer(Modifier.height(24.dp))
@@ -161,8 +168,11 @@ fun RadioScreen(
                     }
                 }
             }
-            notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            // This screen's own failures, or the bar's, which go through the player.
+            (notice ?: playerState.notice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
+        NowPlayingBar(playerState, onPlayPause = { playerViewModel.togglePlayPause() })
+      }
     }
 }
 

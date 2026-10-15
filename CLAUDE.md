@@ -658,6 +658,9 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   takes http and https only, since the speaker fetches it; typed without a scheme it is taken as
   http. The keyboard is the URL one; with it up, its GO key sends — the remote's keys are the
   keyboard's then, so a scripted Enter does nothing.
+- **A station played from Radio leaves you in Radio** (2026-10-14): the next one is a press away when
+  this one is not wanted, and Back leaves; Radio carries Browse's now-playing bar, so what started is
+  said at the foot. It used to return to the room. Browse's header reads Music Services, then Radio.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.

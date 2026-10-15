@@ -220,8 +220,7 @@ fun X2RockNavGraph() {
             RadioScreen(
                 room = room,
                 onBack = { navController.popBackStack() },
-                // Back to the room, past Favorites: the station is what it now plays.
-                onPlayed = { navController.popBackStack("home", inclusive = false) },
+                playerViewModel = playerViewModel,
             )
         }
     }

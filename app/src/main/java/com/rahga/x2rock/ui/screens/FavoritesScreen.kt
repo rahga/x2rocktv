@@ -134,12 +134,12 @@ fun FavoritesScreen(
             Box(modifier = Modifier.weight(1f)) {
                 Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
                     ScreenHeader(title = "Browse", room = room, onBack = onBack, backModifier = Modifier.focusRequester(backFocus)) {
-                        // The radio directory: stations no favourite holds, with no account and no
-                        // typing. And the household's own services, searched and browsed with its
-                        // stored login — Apple Music among them.
-                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) }, tracked("header:radio"))
-                        Spacer(Modifier.width(16.dp))
+                        // The household's own services, searched and browsed with its stored login —
+                        // Apple Music among them. Then the radio directory: stations no favourite
+                        // holds, with no account and no typing. Services first (asked for 2026-10-14).
                         IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) }, tracked("header:services"))
+                        Spacer(Modifier.width(16.dp))
+                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) }, tracked("header:radio"))
                     }
                     Spacer(Modifier.height(20.dp))
                     when (val s = state) {
