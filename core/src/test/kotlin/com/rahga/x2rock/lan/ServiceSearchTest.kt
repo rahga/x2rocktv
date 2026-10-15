@@ -354,6 +354,19 @@ class ServiceSearchTest {
         assertEquals("http://stream.example/jazz.pls", fake.lastCommandBody("loadStreamUrl")!!.get("streamUrl").asString)
     }
 
+    @Test fun `a TuneIn episode plays from its media URI, not loadContent`() = runBlocking {
+        val groupId = connected()
+        // The radio service stands in for TuneIn's id here: the rule is TuneIn's, by service id.
+        val tunein = household.searchableServices().first { it.service.id == RADIO }.let { it.copy(service = it.service.copy(id = "333")) }
+        val episode = com.rahga.x2rock.smapi.Item("t215839089:p2729788", "Jazz + Filme", "track", null, null, container = false)
+        val started = async(Dispatchers.Default) { household.playServiceItem(groupId, tunein, episode) }
+        fake.awaitCommand(5_000) { it.get("command")?.asString == "loadStreamUrl" }
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        started.await()
+        assertEquals(0, fake.commandsNamed("loadContent"))
+        assertEquals("http://stream.example/jazz.pls", fake.lastCommandBody("loadStreamUrl")!!.get("streamUrl").asString)
+    }
+
     @Test fun `a radio program plays as the room source, not loadContent or a stream`() = runBlocking {
         val groupId = connected()
         // A program (a channel) uses the credentialed service here only for its service type → cdudn.

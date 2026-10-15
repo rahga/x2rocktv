@@ -97,6 +97,16 @@ class ServiceContentTest {
         assertEquals("cloudcast%3a2191051074", ServiceContent.encodeObjectId("cloudcast:2191051074"))
     }
 
+    /** TuneIn's podcast episode: loadContent refused it, its media URI played (Kitchen, 2026-10-14). */
+    @Test fun `a TuneIn episode plays as a stream, and no other service's track does`() {
+        val episode = Item("t215839089:p2729788", "Jazz + Filme", "track", "Gabriel Salinas", null, container = false)
+        assertTrue(ServiceContent.playsAsStream(episode, "333"))
+        assertTrue(ServiceContent.playsAsStream(episode, "254"))
+        assertTrue(!ServiceContent.playsAsStream(episode, "31"))
+        assertTrue("not offered for a queue", !ServiceContent.canEnqueue(episode, "333"))
+        assertTrue(ServiceContent.canEnqueue(episode, "31"))
+    }
+
     @Test fun `iHeartRadio searches as Sonos shows it - stations, live stations, podcasts`() {
         val published = listOf("stations", "artists", "tracks", "albums", "playlists", "podcasts").map { Category(it, "m-$it") }
         assertEquals(

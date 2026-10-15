@@ -56,12 +56,24 @@ object ServiceContent {
      * plain track — a `stream` is played rather than queued, and a radio `program` is refused by
      * `AddURIToQueue` with UPnP 800 (it plays as the room's source instead, see [radioUri]).
      */
-    fun canEnqueue(item: Item): Boolean =
+    fun canEnqueue(item: Item, serviceId: String? = null): Boolean =
         if (item.container) containerHoldsTracks(item.itemType)
-        else !isStream(item) && !isRadioProgram(item)
+        else !isStream(item) && !isRadioProgram(item) && !(serviceId != null && playsAsStream(item, serviceId))
 
     /** A live stream (a radio station): played from a resolved `getMediaURI`, not queued. */
     fun isStream(item: Item): Boolean = item.itemType.equals("stream", ignoreCase = true)
+
+    /**
+     * Whether [item] of [serviceId] plays from its `getMediaURI`, as a stream does. TuneIn's episodes
+     * too: a podcast episode (`track`, `t215839089:p2729788`) answers `getMediaURI` with the same
+     * `Tune.ashx` URL a station does, and `loadContent` refuses it `ERROR_PLAYBACK_FAILED` (Kitchen,
+     * 2026-10-14), where the stream plays. So it is not queued either.
+     */
+    fun playsAsStream(item: Item, serviceId: String): Boolean =
+        isStream(item) || (serviceId in TUNEIN_SERVICE_IDS && !item.container && item.itemType.equals("track", ignoreCase = true))
+
+    /** TuneIn, and TuneIn (New). */
+    private val TUNEIN_SERVICE_IDS = setOf("254", "333")
 
     /**
      * A radio *program* — a channel or show (Radio Paradise's channels, Sonos Radio's programs).

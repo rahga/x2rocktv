@@ -44,7 +44,7 @@ class ServiceItemMenu(
             override val title get() = item.title
             override val subtitle get() = item.summary
             override val artUrl get() = item.artUrl
-            override val canQueue get() = ServiceContent.canEnqueue(item)
+            override val canQueue get() = ServiceContent.canEnqueue(item, linked.service.id)
             /** A track, a station, a book to resume — or an album or playlist, played whole. */
             val canPlay get() = !ServiceContent.opens(item) || canQueue
         }

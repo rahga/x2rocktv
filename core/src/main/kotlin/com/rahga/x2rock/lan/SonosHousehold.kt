@@ -1351,7 +1351,7 @@ class SonosHousehold(
             // A radio station is not queue content: it has no universalMusicObjectId to load, and
             // the service resolves it to a stream URL instead, which plays through `playbackSession`
             // the way the radio directory's stations do (x2rock: TuneIn and SomaFM hand back one).
-            ServiceContent.isStream(item) -> {
+            ServiceContent.playsAsStream(item, linked.service.id) -> {
                 val url = smapi.mediaUri(linked.service, linked.token, item.id)
                 playStream(groupId, url, item.title)
             }
@@ -1447,7 +1447,7 @@ class SonosHousehold(
      */
     suspend fun queueServiceItem(groupId: String, linked: LinkedService, listed: Item, next: Boolean = false) {
         val item = playable(listed)
-        require(ServiceContent.canEnqueue(item)) { "${item.title} is not something a queue can hold" }
+        require(ServiceContent.canEnqueue(item, linked.service.id)) { "${item.title} is not something a queue can hold" }
         val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
             ?: error("${linked.service.name} has no account to queue through")
         val uri = ServiceContent.enqueueUri(item, linked.service.id, linked.accountId?.removePrefix("sn_"))
