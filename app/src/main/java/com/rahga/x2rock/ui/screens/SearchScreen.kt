@@ -165,7 +165,14 @@ fun SearchScreen(
                     // Later sections slotting in above it do not pull it about while the viewer
                     // is reading.
                     LaunchedEffect(results.searched, results.leadSettled) {
-                        if (results.leadSettled && openedFrom == null) resultsFocus.requestFocusRetrying()
+                        if (results.leadSettled && openedFrom == null) {
+                            // The top section can have arrived after one now below it, and the list
+                            // keeps its place on what was first, leaving the new top above the screen
+                            // and its row not laid out: the request then failed and focus stayed on
+                            // the Search button (Streamer, Apple Music answered before Amazon, P-34).
+                            listState.scrollToItem(0)
+                            resultsFocus.requestFocusRetrying()
+                        }
                     }
                 }
                 LazyColumn(

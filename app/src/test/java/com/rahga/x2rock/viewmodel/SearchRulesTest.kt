@@ -49,6 +49,22 @@ class SearchRulesTest {
      * Preferred services lead, in this device's order, above every signed-in one — TuneIn here,
      * anonymous, ranked first because it was put first — and the rest keep their order.
      */
+    /**
+     * P-34: focus starts on the top section only once nothing still out would sort above it. Deezer
+     * answered first at the office, Amazon and the rest sorted in above it, and focus was left on a
+     * row pushed out of sight.
+     */
+    @Test fun `focus waits for any service still out that would sort above the first section`() {
+        fun section(name: String, signedIn: Boolean) = SearchViewModel.Section(name, signedIn, emptyList(), name)
+        val deezer = listOf(section("Deezer", signedIn = true))
+        assertEquals(false, SearchViewModel.leadSettled(deezer, listOf(section("Amazon Music", signedIn = true)), emptyList()))
+        assertEquals("an anonymous service sorts below", true, SearchViewModel.leadSettled(deezer, listOf(section("Hype Machine", signedIn = false)), emptyList()))
+        assertEquals("a later name sorts below", true, SearchViewModel.leadSettled(deezer, listOf(section("TIDAL", signedIn = true)), emptyList()))
+        assertEquals("a preferred service leads whatever is out", true,
+            SearchViewModel.leadSettled(deezer, listOf(section("Amazon Music", signedIn = true)), listOf("Deezer")))
+        assertEquals("nothing to start on yet", false, SearchViewModel.leadSettled(emptyList(), emptyList(), emptyList()))
+    }
+
     @Test fun `preferred services come first, in their order`() {
         val sections = listOf(
             SearchViewModel.Section("TuneIn", signedIn = false, hits = emptyList(), key = "254:anon"),

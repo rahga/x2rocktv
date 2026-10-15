@@ -102,13 +102,15 @@ class SearchViewModel @Inject constructor(
         val silent: Int = 0,
         val searched: Boolean = false,
         /**
-         * Whether the first section is where the list should start: no preferred service that
-         * would rank above it is still out. Until then focus waits, so it lands on the top
-         * preferred service rather than on whichever answered first.
+         * Whether the first section is where the list should start: no service still out would rank
+         * above it — preferred, or signed in, or merely earlier by name. Until then focus waits, so it
+         * lands on the top section rather than on whichever answered first. Only preferred services
+         * were waited for until 2026-10-14; with none set, focus went to the first to answer (Deezer
+         * at the office) and the services sorting in above it pushed it out of sight (P-34).
          */
         val leadSettled: Boolean = true,
-        /** Preferred services still out, by service id. */
-        val waiting: Set<String> = emptySet(),
+        /** The services still out, each as the section it would be: what [sectionOrder] ranks. */
+        val waiting: List<Section> = emptyList(),
     )
 
     private val _query = MutableStateFlow("")
@@ -153,24 +155,26 @@ class SearchViewModel @Inject constructor(
             }
             val apple = appleKnown.await()
             val order = preferredServices.order.value
-            val asked = services.map { it.service.id } + if (apple) listOf(PreferredServices.APPLE_MUSIC) else emptyList()
-            val waiting = asked.filter { preferredRank(it, order) != Int.MAX_VALUE }.toSet()
+            val waiting = services.map { Section(it.service.name, it.added, emptyList(), it.key()) } +
+                if (apple) listOf(Section("Apple Music", signedIn = true, hits = emptyList(), key = "apple")) else emptyList()
             _results.value = Results(
                 pending = services.size + if (apple) 1 else 0, searched = true,
-                waiting = waiting, leadSettled = waiting.isEmpty(),
+                waiting = waiting, leadSettled = false,
             )
             // At most a few services at once, per search: a household carries a hundred anonymous
             // radio services, and each search is up to two requests to every one. Its own permits,
             // so a search never waits on the one it replaced.
             val requests = Semaphore(MAX_CONCURRENT_SERVICES)
-            // Preferred services are asked first, so they hold the first permits.
+            // Asked in the order they will be shown, so the services that decide where focus starts
+            // hold the first permits: preferred, then signed in, then the rest, each by name.
             val asks = services.map { linked ->
-                linked.service.id to suspend { arrive(requests, order, linked.service.name, linked.key(), linked.added) { searchOne(linked, term) } }
-            } + if (apple) listOf(PreferredServices.APPLE_MUSIC to suspend {
+                Section(linked.service.name, linked.added, emptyList(), linked.key()) to
+                    suspend { arrive(requests, order, linked.service.name, linked.key(), linked.added) { searchOne(linked, term) } }
+            } + if (apple) listOf(Section("Apple Music", signedIn = true, hits = emptyList(), key = "apple") to suspend {
                 arrive(requests, order, "Apple Music", "apple", signedIn = true) { searchApple(term) }
             }) else emptyList()
             coroutineScope {
-                asks.sortedBy { (id, _) -> preferredRank(id, order) }.forEach { (_, ask) -> launch { ask() } }
+                asks.sortedWith(compareBy(sectionOrder(order)) { it.first }).forEach { (_, ask) -> launch { ask() } }
             }
         }
     }
@@ -188,11 +192,10 @@ class SearchViewModel @Inject constructor(
         _results.update { r ->
             val sections = if (hits.isNullOrEmpty()) r.sections
             else (r.sections + Section(name, signedIn, hits, key)).sortedWith(sectionOrder(order))
-            val waiting = r.waiting - key.substringBefore(':')
-            val firstRank = sections.firstOrNull()?.let { preferredRank(it.serviceId, order) } ?: Int.MAX_VALUE
+            val waiting = r.waiting.filterNot { it.key == key }
             r.copy(
                 sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0,
-                waiting = waiting, leadSettled = waiting.none { preferredRank(it, order) < firstRank },
+                waiting = waiting, leadSettled = leadSettled(sections, waiting, order),
             )
         }
     }
@@ -270,6 +273,15 @@ class SearchViewModel @Inject constructor(
          * This device's preferred services first, in its order; then signed-in services — the
          * household chose those — then the rest, each by name.
          */
+        /**
+         * Whether the top of [sections] is where focus should start: there is one, and none of the
+         * services still [waiting] would sort above it.
+         */
+        internal fun leadSettled(sections: List<Section>, waiting: List<Section>, preferred: List<String>): Boolean {
+            val first = sections.firstOrNull() ?: return false
+            return waiting.none { sectionOrder(preferred).compare(it, first) < 0 }
+        }
+
         internal fun sectionOrder(preferred: List<String>) =
             compareBy<Section>({ preferredRank(it.serviceId, preferred) }, { !it.signedIn }, { it.name.lowercase() })
     }
