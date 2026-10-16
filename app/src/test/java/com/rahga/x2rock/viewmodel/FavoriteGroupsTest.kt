@@ -2,7 +2,11 @@ package com.rahga.x2rock.viewmodel
 
 import com.google.gson.Gson
 import com.rahga.x2rock.lan.FakePlayer
+import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.model.FavoriteResource
+import com.rahga.x2rock.model.FavoriteService
 import com.rahga.x2rock.model.FavoritesResponse
+import com.rahga.x2rock.model.MusicObjectId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -35,5 +39,16 @@ class FavoriteGroupsTest {
         assertEquals("284:sn_23" to "ALkSOiF60SmN3aW6x6j0p5ECA5_qJlTo", favoritePage(album, setOf("284:sn_23"))?.let { it.first to it.second.take(32) })
         assertNull("YouTube Music is not browsable here", favoritePage(album, emptySet()))
         assertNull("a station plays on a press", favoritePage(favorites.first { it.name == "Love Songs Radio" }, setOf("6:sn_24")))
+    }
+
+    /** A shortcut to an artist, as `parseFavoriteShortcuts` reads FV:2/92: grouped as one, and opened. */
+    @Test fun `an artist favourite has its own group and opens on its service's page`() {
+        val artist = Favorite(
+            id = "92", name = "Miles Davis", description = "TIDAL", service = FavoriteService("174", "TIDAL"),
+            resource = FavoriteResource("ARTIST", MusicObjectId("static/artist/55", "174", "sn_27")), shortcut = true,
+        )
+        assertEquals(listOf("Favorite albums", "Favorite artists"), favoriteGroups(listOf(favorites.first { it.name == "Ryo Fukui in New York" }, artist)).map { it.first })
+        assertEquals("174:sn_27" to "static/artist/55", favoritePage(artist, setOf("174:sn_27")))
+        assertEquals("Artist · TIDAL", favoriteLine(artist))
     }
 }

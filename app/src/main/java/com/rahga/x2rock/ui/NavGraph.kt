@@ -159,7 +159,9 @@ fun X2RockNavGraph() {
                 onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
                 onOpenServices = { groupId -> navController.navigate("services?groupId=${Uri.encode(groupId)}") },
                 onOpenFavorite = { groupId, serviceKey, containerId, favorite ->
-                    openService(groupId, serviceKey, containerId, favorite.name, favorite.id)
+                    // An artist is a place, not a whole to play: it opens as search opens one.
+                    if (favorite.resource?.type == "ARTIST") openService(groupId, serviceKey, containerId, favorite.name, kind = "artist")
+                    else openService(groupId, serviceKey, containerId, favorite.name, favorite.id)
                 },
                 onPlayed = ::played,
                 playerViewModel = playerViewModel

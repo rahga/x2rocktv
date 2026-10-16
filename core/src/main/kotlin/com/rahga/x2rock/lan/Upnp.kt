@@ -1,5 +1,9 @@
 package com.rahga.x2rock.lan
 
+import com.rahga.x2rock.model.Favorite
+import com.rahga.x2rock.model.FavoriteResource
+import com.rahga.x2rock.model.FavoriteService
+import com.rahga.x2rock.model.MusicObjectId
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.model.TruePlay
 import com.rahga.x2rock.model.QueueResponse
@@ -122,6 +126,63 @@ data class Battery(val level: Int? = null, val health: String? = null, val tempe
  * populated shape is x2rock's, not a capture**: no household this was built against has a portable,
  * so a Roam or Move's real reply is owed (PUNCH P-16) — and release notes say battery is untested.
  */
+/**
+ * The Sonos favourites `getFavorites` leaves out, out of `Browse FV:2`'s DIDL. Today's Sonos app saves
+ * an album, an artist or a song as `r:type` `shortcut` with an empty `res`: the item is only in
+ * `r:resMD` — a service's own SMAPI id behind an eight-digit prefix, `/` written `__UNENCODED_SLASH__`
+ * (`10082064album__UNENCODED_SLASH__2178485`), and the service in the cdudn's type, `type / 256`
+ * (TIDAL's 44551 is service 174). The Sonos app lists them among its favourites; the Control API
+ * neither lists them nor loads them (`ERROR_INVALID_OBJECT_ID`). Captured off this household's TIDAL
+ * favourites, 2026-10-16. A station saved the same day is still `instantPlay`, and still listed.
+ *
+ * Only shortcuts to an album, artist, song or playlist: a shortcut is also what a Sonos Radio
+ * navigation entry was written as (x2rock), which is a place in the Sonos app and nothing to play.
+ * The account is not named (`-0-Token`), so it is left for the caller to find; the [Favorite.id] is
+ * the number after `FV:2/`, which is how `getFavorites` names the others.
+ */
+internal fun parseFavoriteShortcuts(didl: String): List<Favorite> {
+    if (didl.isBlank()) return emptyList()
+    val root = runCatching { Xml.parse(didl) }.getOrNull() ?: return emptyList()
+    val items = root.getElementsByTagName("item")
+    return (0 until items.length).mapNotNull { i ->
+        val item = items.item(i) as Element
+        // Only top-level favourites: resMD is text here, so its own item is not in this tree.
+        if (item.parentNode != root) return@mapNotNull null
+        fun field(tag: String) = item.getElementsByTagName(tag).item(0)?.textContent?.trim()?.takeIf { it.isNotEmpty() }
+        if (field("r:type") != "shortcut") return@mapNotNull null
+        val meta = field("r:resMD")?.let { runCatching { Xml.parse(it) }.getOrNull() } ?: return@mapNotNull null
+        val target = meta.getElementsByTagName("item").item(0) as? Element ?: return@mapNotNull null
+        val type = shortcutType(target.getElementsByTagName("upnp:class").item(0)?.textContent.orEmpty()) ?: return@mapNotNull null
+        val cdudn = target.getElementsByTagName("desc").item(0)?.textContent.orEmpty()
+        val serviceId = SHORTCUT_SERVICE.find(cdudn)?.groupValues?.get(1)?.toIntOrNull()?.let { (it / 256).toString() }
+            ?: return@mapNotNull null
+        val objectId = target.getAttribute("id").replace(SHORTCUT_PREFIX, "").replace("__UNENCODED_SLASH__", "/")
+        if (objectId.isEmpty()) return@mapNotNull null
+        val name = field("dc:title") ?: return@mapNotNull null
+        val serviceName = field("r:description")
+        Favorite(
+            id = item.getAttribute("id").removePrefix("FV:2/"),
+            name = name,
+            description = serviceName,
+            imageUrl = field("upnp:albumArtURI"),
+            service = FavoriteService(serviceId, serviceName),
+            resource = FavoriteResource(type, MusicObjectId(objectId, serviceId)),
+            shortcut = true,
+        )
+    }
+}
+
+private fun shortcutType(upnpClass: String): String? = when {
+    upnpClass.startsWith("object.container.album") -> "ALBUM"
+    upnpClass.startsWith("object.container.person") -> "ARTIST"
+    upnpClass.startsWith("object.container.playlistContainer") -> "PLAYLIST"
+    upnpClass.startsWith("object.item.audioItem.musicTrack") -> "TRACK"
+    else -> null
+}
+
+private val SHORTCUT_PREFIX = Regex("^[0-9a-f]{8}")
+private val SHORTCUT_SERVICE = Regex("^SA_RINCON(\\d+)_")
+
 internal fun parseBattery(body: String): Battery? {
     val root = runCatching { Xml.parse(body) }.getOrNull() ?: return null
     val block = root.getElementsByTagName("LocalBatteryStatus").item(0) as? Element ?: return null
@@ -598,6 +659,23 @@ class Upnp(
      * only. An item with no URI cannot be a program and is left out.
      */
     suspend fun favoritePrograms(hostname: String): List<AlarmProgram> = withContext(Dispatchers.IO) {
+        val didl = favoritesDidl(hostname)
+        if (didl.isBlank()) return@withContext emptyList()
+        val items = parse(didl).getElementsByTagName("item")
+        (0 until items.length).mapNotNull { i ->
+            val item = items.item(i) as Element
+            val uri = item.child("res") ?: return@mapNotNull null
+            AlarmProgram(title = item.child("dc:title") ?: uri, uri = uri, metaData = item.child("r:resMD").orEmpty())
+        }
+    }
+
+    /** The favourites the Control API does not list; see [parseFavoriteShortcuts]. */
+    suspend fun favoriteShortcuts(hostname: String): List<Favorite> = withContext(Dispatchers.IO) {
+        parseFavoriteShortcuts(favoritesDidl(hostname))
+    }
+
+    /** `Browse FV:2`: every Sonos favourite, as DIDL. */
+    private suspend fun favoritesDidl(hostname: String): String {
         val envelope = parse(
             soap(
                 hostname, Service.CONTENT_DIRECTORY, "Browse",
@@ -611,14 +689,7 @@ class Upnp(
                 ),
             ),
         )
-        val didl = envelope.text("Result").orEmpty()
-        if (didl.isBlank()) return@withContext emptyList()
-        val items = parse(didl).getElementsByTagName("item")
-        (0 until items.length).mapNotNull { i ->
-            val item = items.item(i) as Element
-            val uri = item.child("res") ?: return@mapNotNull null
-            AlarmProgram(title = item.child("dc:title") ?: uri, uri = uri, metaData = item.child("r:resMD").orEmpty())
-        }
+        return envelope.text("Result").orEmpty()
     }
 
     // ---------------------------------------------------------------- SOAP

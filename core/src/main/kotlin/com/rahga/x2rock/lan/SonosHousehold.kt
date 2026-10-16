@@ -17,6 +17,7 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.PlaybackError
 import com.rahga.x2rock.model.PlayerSettings
 import com.rahga.x2rock.model.PlaylistsResponse
+import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.HistoryItem
 import com.rahga.x2rock.model.HistoryResponse
 import com.rahga.x2rock.model.QueueResponse
@@ -1568,9 +1569,35 @@ class SonosHousehold(
         }
     }
 
+    /**
+     * Every Sonos favourite: what `getFavorites` lists, then the shortcuts it leaves out, read off
+     * UPnP ([Favorite.shortcut]). A shortcut does not name its account, so it takes the household's
+     * account for its service, as [replayThroughQueue] does for a gone one. A household with UPnP
+     * off, or no answer, still lists the rest.
+     */
     suspend fun favorites(): FavoritesResponse {
         val body = householdCommand("favorites:1", "getFavorites")
-        return gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
+        val listed = gson.fromJson(body, FavoritesResponse::class.java) ?: FavoritesResponse()
+        val shortcuts = favoriteShortcuts()
+        if (shortcuts.isEmpty()) return listed
+        return listed.copy(items = listed.items + shortcuts, totalItems = listed.totalItems + shortcuts.size)
+    }
+
+    private suspend fun favoriteShortcuts(): List<Favorite> {
+        val shortcuts = try {
+            upnp.favoriteShortcuts(anyHostname())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptyList()
+        }
+        if (shortcuts.isEmpty()) return shortcuts
+        val linked = try { searchableServices() } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+        return shortcuts.map { favorite ->
+            val id = favorite.resource?.id ?: return@map favorite
+            val account = linked.firstOrNull { it.service.id == id.serviceId }?.accountId ?: return@map favorite
+            favorite.copy(resource = favorite.resource.copy(id = id.copy(accountId = account)))
+        }
     }
 
     // ---------------------------------------------------------------- ratings
@@ -1937,14 +1964,24 @@ class SonosHousehold(
      * `loadFavorite` replaces without being asked held for what it was tried on, not for this.
      */
     suspend fun loadFavorite(groupId: String, favoriteId: String) {
-        groupCommand(
-            groupId, "favorites:1", "loadFavorite",
-            JsonObject().apply {
-                addProperty("favoriteId", favoriteId)
-                addProperty("playOnCompletion", true)
-                addProperty("action", "REPLACE")
-            },
-        )
+        try {
+            groupCommand(
+                groupId, "favorites:1", "loadFavorite",
+                JsonObject().apply {
+                    addProperty("favoriteId", favoriteId)
+                    addProperty("playOnCompletion", true)
+                    addProperty("action", "REPLACE")
+                },
+            )
+        } catch (e: SonosCommandException) {
+            // A shortcut's id is refused so (FV:2/93, 2026-10-16): it plays as what it points at.
+            if (!e.detail.startsWith("ERROR_INVALID_OBJECT_ID")) throw e
+            val shortcut = favoriteShortcuts().firstOrNull { it.id == favoriteId } ?: throw e
+            val resource = shortcut.resource ?: throw e
+            val id = resource.id ?: throw e
+            if (resource.type == "ARTIST") throw IOException("${shortcut.name} is an artist, which opens in its service rather than playing")
+            replay(groupId, HistoryItem(shortcut.name, resource.type.orEmpty().lowercase(), id))
+        }
     }
 
     /**

@@ -327,6 +327,11 @@ data class Favorite(
     val imageUrl: String? = null,
     val service: FavoriteService? = null,
     val resource: FavoriteResource? = null,
+    /**
+     * Saved by the Sonos app as a shortcut to a service's album, artist, song or playlist, read off
+     * UPnP because the Control API lists none and loads none (`parseFavoriteShortcuts`).
+     */
+    val shortcut: Boolean = false,
 ) {
     /**
      * Whether the household can still play this. Not a field the player sends — x2rock's
@@ -338,9 +343,9 @@ data class Favorite(
 }
 data class FavoriteService(val id: String? = null, val name: String? = null)
 /**
- * [type] is `STREAM`, `PLAYLIST`, `ALBUM`, `TRACK`, `PROGRAM` — when given. [id] names it in its
- * service: the `objectId` is the same id that service's SMAPI browse takes, which is how an album
- * favourite opens on its tracks.
+ * [type] is `STREAM`, `PLAYLIST`, `ALBUM`, `TRACK`, `PROGRAM` — when given — and `ARTIST` for a
+ * shortcut. [id] names it in its service: the `objectId` is the same id that service's SMAPI browse
+ * takes, which is how an album favourite opens on its tracks.
  */
 data class FavoriteResource(val type: String? = null, val id: MusicObjectId? = null)
 /**

@@ -523,6 +523,27 @@ every refusal for ten minutes, failed reads included: it asks a player to call b
 once loaded, offers only Save to Favorites and Browse Artist. A container that lists nothing is not
 offered Play here either.
 
+**Sonos favorites cannot be created over UPnP, and today's are shortcuts the Control API does not list**
+(home, 2026-10-16). `ContentDirectory CreateObject` on `FV:2` answers UPnP **803** on every speaker tried
+(Kitchen, Dining Room, Living Room), even for an exact copy of an existing favorite with a new title; the
+Sonos app saves through some other path, presumably its cloud. What the app wrote for an album ("Kind Of
+Blue (Legacy Edition)", TIDAL) is `r:type` **`shortcut`** with an **empty `<res>`** — older favorites are
+`instantPlay` with a URI — and the item only in `r:resMD`: id `10082064album__UNENCODED_SLASH__2178485`
+(an 8-hex prefix, then the service's own id with `/` written `__UNENCODED_SLASH__`), class
+`object.container.album.musicAlbum`, cdudn `SA_RINCON44551_X_#Svc44551-0-Token` (TIDAL's type). **The
+Control API's `favorites:1 getFavorites` leaves it out**: eight favorites there, nine in `Browse FV:2`. It
+plays through the service path as any album does (`album/2178485`, TIDAL, Dining Room).
+
+An artist and a song saved the same way are shortcuts too (`static/artist/55`, class `…person.musicArtist`;
+`track/2178486`, `…audioItem.musicTrack`); a Sonos Radio station saved alongside is still `instantPlay`
+and still listed. `loadFavorite` of a shortcut's id answers `ERROR_INVALID_OBJECT_ID`. The ids are the
+service's SMAPI ids as they stand: TIDAL's browse opens both the album and the artist on them. The service
+is the cdudn type over 256 (44551 → 174); the account is not named (`-0-Token`). So Browse lists them
+after `getFavorites`' own (`Upnp.favoriteShortcuts`), each with the household's account for its service:
+an album or artist opens on its service's page, an artist without Play; a song, or an album from a preset,
+plays through `loadContent` when `loadFavorite` refuses its id. x2rock filters shortcuts out as Sonos Radio
+navigation entries, which they also are; only one pointing at an album, artist, song or playlist is kept.
+
 **Plex plays through `loadContent`** (home, 2026-10-12, Kitchen): a track, an album and Shuffle All
 each started within 5-7s. The track came up as `x-sonos-http:…track.unknown?…&flags=0`, where the
 queue path writes `track.mp3?…&flags=24616`; it played regardless.

@@ -5,7 +5,8 @@ import com.rahga.x2rock.smapi.ServiceContent
 
 /**
  * The household's favourites in the groups the Sonos app lists them under (seen 2026-10-08):
- * playlists, albums, songs, stations, and anything else after. One flat list mixed a song, a
+ * playlists, albums, songs, stations, and anything else after; artists, which only a shortcut is
+ * (`Favorite.shortcut`), after albums. One flat list mixed a song, a
  * station and an album with nothing to tell them apart. Each keeps the household's own order.
  */
 fun favoriteGroups(items: List<Favorite>): List<Pair<String, List<Favorite>>> {
@@ -13,11 +14,12 @@ fun favoriteGroups(items: List<Favorite>): List<Pair<String, List<Favorite>>> {
     return GROUPS.mapNotNull { title -> byGroup[title]?.let { title to it } }
 }
 
-private val GROUPS = listOf("Favorite playlists", "Favorite albums", "Favorite songs", "Favorite stations", "Favorites")
+private val GROUPS = listOf("Favorite playlists", "Favorite albums", "Favorite artists", "Favorite songs", "Favorite stations", "Favorites")
 
 private fun groupOf(type: String?): String = when (type?.uppercase()) {
     "PLAYLIST" -> "Favorite playlists"
     "ALBUM" -> "Favorite albums"
+    "ARTIST" -> "Favorite artists"
     "TRACK" -> "Favorite songs"
     "STREAM", "PROGRAM" -> "Favorite stations"
     else -> "Favorites"
@@ -33,12 +35,12 @@ fun favoriteLine(favorite: Favorite): String? =
         .joinToString(" · ").ifEmpty { null }
 
 /**
- * The service key and container id an album or playlist favourite opens on, when the household
- * can browse that service here; `null` for anything else, which plays on a press as before.
+ * The service key and container id an album, playlist or artist favourite opens on, when the
+ * household can browse that service here; `null` for anything else, which plays on a press as before.
  */
 fun favoritePage(favorite: Favorite, browsable: Set<String>): Pair<String, String>? {
     val type = favorite.resource?.type?.uppercase()
-    if (type != "ALBUM" && type != "PLAYLIST") return null
+    if (type != "ALBUM" && type != "PLAYLIST" && type != "ARTIST") return null
     val id = favorite.resource?.id ?: return null
     val serviceId = id.serviceId ?: return null
     val key = "$serviceId:${id.accountId ?: "anon"}"
