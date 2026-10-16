@@ -4,6 +4,14 @@ Test builds of x2rocktv are not on Google Play yet. Each one is an APK attached 
 <https://github.com/rahga/x2rocktv/releases>, and is installed by hand ("sideloaded"). The TV has to
 be on the same network as the Sonos speakers. No Sonos account is needed or asked for.
 
+**Have an AI coding agent** (Claude Code, Codex and the like) on a computer on the same network? Give
+it this, and it can do the rest with you:
+
+> Install the latest x2rocktv test build on my TV, following
+> https://github.com/rahga/x2rocktv/blob/master/docs/install-on-google-tv.md
+
+It will still need you at the TV once, to turn on debugging and read it a pairing code.
+
 ## With the Downloader app (no computer)
 
 1. On the TV, install **Downloader** (by AFTVnews) from the Play Store.
@@ -25,6 +33,40 @@ debugging**, which some devices need pairing for), and from a computer on the sa
 adb connect <tv-address>
 adb install -r x2rocktv-<version>.apk
 ```
+
+## For an AI agent doing this
+
+Steps for an agent asked to install x2rocktv on someone's TV. Ask the person before each step on the
+TV itself, and change nothing else there.
+
+1. **Get the newest build.** Test builds are pre-releases, which GitHub's `/releases/latest` leaves
+   out, so take the first entry of the list:
+   ```sh
+   url=$(curl -s https://api.github.com/repos/rahga/x2rocktv/releases \
+     | jq -r '[.[0].assets[] | select(.name | endswith(".apk"))][0].browser_download_url')
+   curl -sLO "$url"
+   ```
+2. **Check it is ours.** Every build is signed with the same key; refuse to install one that is not.
+   With the Android SDK's `apksigner`:
+   ```sh
+   apksigner verify --print-certs x2rocktv-*.apk | grep 'SHA-256'
+   # 8d6575ab21abafbf7fe25fcca2a56550da5dff3f8aa05cb69dbbfd355f120f04
+   ```
+3. **Connect.** The person turns on Developer options (above), then debugging, and reads you what
+   the TV shows. Which switch there is depends on the device, not only its Android version:
+   - **Wireless debugging** (the Google TV Streamer, an onn stick, most newer Google TV devices):
+     **Pair device with pairing code** shows an address, a port and a six-digit code.
+     `adb pair <address>:<pairing port> <code>`, then `adb connect <address>:<port>` with the port
+     shown on the Wireless debugging screen itself, which is a different one. A plain
+     `adb connect <address>:5555` is refused on these.
+   - **ADB debugging** or **Network debugging** (Fire TV, an NVIDIA Shield, older Android TV): switch
+     it on, then `adb connect <address>:5555`, and the person accepts the prompt on the TV.
+4. **Install**: `adb -s <address>:<port> install -r x2rocktv-*.apk`. An update keeps the person's
+   settings. If it fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, an x2rocktv signed with another
+   key is installed: say so, and uninstall it only if the person agrees (that clears its settings).
+5. **Open it**: `adb shell am start -n com.rahga.x2rock/.MainActivity`. It should list the Sonos
+   rooms within seconds. If it finds none, the TV and the speakers are probably on different networks.
+6. The person can switch debugging off again afterwards; x2rocktv does not need it.
 
 ## Updating
 
