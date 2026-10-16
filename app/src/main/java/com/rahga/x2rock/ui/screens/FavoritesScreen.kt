@@ -51,6 +51,7 @@ import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.favoriteGroups
 import com.rahga.x2rock.viewmodel.favoriteLine
 import com.rahga.x2rock.viewmodel.favoritePage
@@ -77,8 +78,11 @@ fun FavoritesScreen(
     onOpenServices: (groupId: String) -> Unit,
     /** Open an album or playlist favourite on its service's page: the service, its id, the favourite. */
     onOpenFavorite: (groupId: String, serviceKey: String, containerId: String, favorite: Favorite) -> Unit,
+    /** Something started from here: back to the player, or not, as the header's [StayPin] says. */
+    onPlayed: () -> Unit,
     playerViewModel: PlayerViewModel,
-    viewModel: FavoritesViewModel = hiltViewModel()
+    viewModel: FavoritesViewModel = hiltViewModel(),
+    afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
     val presets by viewModel.presets.collectAsState()
@@ -140,6 +144,7 @@ fun FavoritesScreen(
                         IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) }, tracked("header:services"))
                         Spacer(Modifier.width(16.dp))
                         IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) }, tracked("header:radio"))
+                        StayPin(afterPlaying)
                     }
                     Spacer(Modifier.height(20.dp))
                     when (val s = state) {
@@ -160,17 +165,17 @@ fun FavoritesScreen(
                             deleteArmed = deleteArmed,
                             state = s,
                             loadingId = loadingId,
-                            onPreset = { viewModel.applyPreset(it, onDone = onBack) },
+                            onPreset = { viewModel.applyPreset(it, onDone = onPlayed) },
                             onDeletePreset = viewModel::deletePreset,
                             onPlay = { fav ->
                                 val page = favoritePage(fav, browsable)
                                 if (page != null) onOpenFavorite(viewModel.groupId, page.first, page.second, fav)
-                                else viewModel.loadFavorite(fav.id, onDone = onBack)
+                                else viewModel.loadFavorite(fav.id, onDone = onPlayed)
                             },
                             opens = { favoritePage(it, browsable) != null },
-                            onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onBack) },
+                            onPlayPlaylist = { playlist -> viewModel.loadPlaylist(playlist.id, onDone = onPlayed) },
                             onAppendPlaylist = viewModel::appendPlaylist,
-                            onReplay = { item -> viewModel.replay(item, onDone = onBack) },
+                            onReplay = { item -> viewModel.replay(item, onDone = onPlayed) },
                         )
                     }
                 }

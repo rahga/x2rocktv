@@ -50,6 +50,7 @@ import com.rahga.x2rock.store.isPrimary
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.withPrimariesFirst
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.ui.serviceLogo
@@ -83,6 +84,7 @@ fun ServiceBrowseScreen(
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     viewModel: ServiceBrowseViewModel = hiltViewModel(),
+    afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
     val services by viewModel.services.collectAsState()
     val active by viewModel.active.collectAsState()
@@ -105,7 +107,7 @@ fun ServiceBrowseScreen(
                     title = active?.title(ready?.services.orEmpty()) ?: "Music Services",
                     room = room,
                     onBack = back,
-                )
+                ) { StayPin(afterPlaying) }
                 Spacer(Modifier.height(20.dp))
 
                 val service = active

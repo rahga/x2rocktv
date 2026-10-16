@@ -28,6 +28,8 @@ import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import com.rahga.x2rock.ui.screens.FavoritesScreen
 import com.rahga.x2rock.ui.theme.X2RockTheme
+import com.rahga.x2rock.store.AfterPlaying
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.FavoritesViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -93,10 +95,12 @@ class BrowseFocusReturnTest {
                     composable("browse") {
                         FavoritesScreen(
                             room = "Kitchen", onBack = {}, onOpenRadio = {}, onOpenServices = {}, onOpenFavorite = { _, _, _, _ -> },
+                            onPlayed = {},
                             playerViewModel = remember { PlayerViewModel(household, SilentNowPlaying, testClock) },
                             viewModel = remember {
                                 FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)), PresetStore(prefs), PendingRoomDeepLink())
                             },
+                            afterPlaying = remember { AfterPlayingViewModel(AfterPlaying(prefs)) },
                         )
                     }
                     composable("elsewhere") { Text("Elsewhere") }

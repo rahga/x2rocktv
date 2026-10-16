@@ -47,6 +47,7 @@ import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.RadioViewModel
 
@@ -62,12 +63,12 @@ fun RadioScreen(
     onBack: () -> Unit,
     /** The activity's: its bar says what the room now plays, as Browse's does. */
     playerViewModel: PlayerViewModel,
+    /** A station started: back to the room, or not, as Browse's "Stay here" says. */
+    onPlayed: () -> Unit,
     viewModel: RadioViewModel = hiltViewModel(),
+    afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
     val playerState by playerViewModel.uiState.collectAsState()
-    // A station plays and the directory stays: the next one is a press away if this one is not
-    // wanted, and Back leaves when one is (asked for 2026-10-14). It used to go back to the room.
-    val onPlayed = {}
     val selected by viewModel.selected.collectAsState()
     val stations by viewModel.stations.collectAsState()
     val starting by viewModel.starting.collectAsState()
@@ -82,97 +83,97 @@ fun RadioScreen(
     LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
-      Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) {
-            Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
-                ScreenHeader(title = "Radio", room = room, onBack = onBack)
-                Spacer(Modifier.height(24.dp))
-                Row(Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier = Modifier.width(240.dp).fillMaxHeight(),
-                        contentPadding = PaddingValues(bottom = 48.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        // A stream's own address, one press up from Popular, where focus starts: the
-                        // directory is the cheap path on a remote, and typing the exception.
-                        item(key = "url") {
-                            AppButton(
-                                onClick = { viewModel.openUrl() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (byUrl) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                        else Modifier
-                                    ),
-                            ) { Text("Play a URL", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        }
-                        itemsIndexed(viewModel.categories) { index, category ->
-                            val isSelected = category == selected && !byUrl
-                            AppButton(
-                                onClick = { viewModel.select(category) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                                    .then(
-                                        if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                                        else Modifier
-                                    ),
-                            ) { Text(category.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        }
-                    }
-                    Spacer(Modifier.width(32.dp))
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        if (byUrl) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Text("A stream's address", style = MaterialTheme.typography.titleMedium)
-                            SearchField(
-                                value = address,
-                                placeholder = "http://…",
-                                onValueChange = { address = it },
-                                onSearch = { viewModel.playUrl(address, onDone = onPlayed) },
-                                url = true,
-                                modifier = Modifier.fillMaxWidth().focusRequester(addressFocus),
-                            )
-                            Text(
-                                "The speaker fetches it itself, so it has to be reachable from the speaker. " +
-                                    "It plays under its host's name.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (starting != null) Text("Starting…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                        } else when (val s = stations) {
-                            is RadioViewModel.Stations.Loading ->
-                                DotScanner(description = "Loading stations")
-                            is RadioViewModel.Stations.Failed -> Column {
-                                Text(s.message, style = MaterialTheme.typography.bodyMedium)
-                                Spacer(Modifier.height(16.dp))
-                                AppButton(onClick = { viewModel.retry() }) { Text("Retry") }
+        Column(Modifier.fillMaxSize()) {
+            Box(Modifier.weight(1f)) {
+                Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
+                    ScreenHeader(title = "Radio", room = room, onBack = onBack) { StayPin(afterPlaying) }
+                    Spacer(Modifier.height(24.dp))
+                    Row(Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            modifier = Modifier.width(240.dp).fillMaxHeight(),
+                            contentPadding = PaddingValues(bottom = 48.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            // A stream's own address, one press up from Popular, where focus starts: the
+                            // directory is the cheap path on a remote, and typing the exception.
+                            item(key = "url") {
+                                AppButton(
+                                    onClick = { viewModel.openUrl() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(
+                                            if (byUrl) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                            else Modifier
+                                        ),
+                                ) { Text("Play a URL", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                             }
-                            is RadioViewModel.Stations.Loaded ->
-                                if (s.stations.isEmpty()) {
-                                    Text("No stations here.", style = MaterialTheme.typography.titleMedium)
-                                } else {
-                                    LazyColumn(
-                                        contentPadding = PaddingValues(bottom = 48.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        items(s.stations, key = { it.url }) { station ->
-                                            StationRow(
-                                                station = station,
-                                                isStarting = starting == station.url,
-                                                onClick = { viewModel.play(station, onDone = onPlayed) },
-                                            )
+                            itemsIndexed(viewModel.categories) { index, category ->
+                                val isSelected = category == selected && !byUrl
+                                AppButton(
+                                    onClick = { viewModel.select(category) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                                        .then(
+                                            if (isSelected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
+                                            else Modifier
+                                        ),
+                                ) { Text(category.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                            }
+                        }
+                        Spacer(Modifier.width(32.dp))
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                            if (byUrl) Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text("A stream's address", style = MaterialTheme.typography.titleMedium)
+                                SearchField(
+                                    value = address,
+                                    placeholder = "http://…",
+                                    onValueChange = { address = it },
+                                    onSearch = { viewModel.playUrl(address, onDone = onPlayed) },
+                                    url = true,
+                                    modifier = Modifier.fillMaxWidth().focusRequester(addressFocus),
+                                )
+                                Text(
+                                    "The speaker fetches it itself, so it has to be reachable from the speaker. " +
+                                        "It plays under its host's name.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (starting != null) Text("Starting…", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                            } else when (val s = stations) {
+                                is RadioViewModel.Stations.Loading ->
+                                    DotScanner(description = "Loading stations")
+                                is RadioViewModel.Stations.Failed -> Column {
+                                    Text(s.message, style = MaterialTheme.typography.bodyMedium)
+                                    Spacer(Modifier.height(16.dp))
+                                    AppButton(onClick = { viewModel.retry() }) { Text("Retry") }
+                                }
+                                is RadioViewModel.Stations.Loaded ->
+                                    if (s.stations.isEmpty()) {
+                                        Text("No stations here.", style = MaterialTheme.typography.titleMedium)
+                                    } else {
+                                        LazyColumn(
+                                            contentPadding = PaddingValues(bottom = 48.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            items(s.stations, key = { it.url }) { station ->
+                                                StationRow(
+                                                    station = station,
+                                                    isStarting = starting == station.url,
+                                                    onClick = { viewModel.play(station, onDone = onPlayed) },
+                                                )
+                                            }
                                         }
                                     }
-                                }
+                            }
                         }
                     }
                 }
+                // This screen's own failures, or the bar's, which go through the player.
+                (notice ?: playerState.notice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
             }
-            // This screen's own failures, or the bar's, which go through the player.
-            (notice ?: playerState.notice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            NowPlayingBar(playerState, onPlayPause = { playerViewModel.togglePlayPause() })
         }
-        NowPlayingBar(playerState, onPlayPause = { playerViewModel.togglePlayPause() })
-      }
     }
 }
 

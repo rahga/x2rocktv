@@ -39,6 +39,7 @@ import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.AppleMusicViewModel
 
 /**
@@ -53,6 +54,7 @@ fun AppleMusicScreen(
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     viewModel: AppleMusicViewModel = hiltViewModel(),
+    afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsState()
     val kind by viewModel.kind.collectAsState()
@@ -67,7 +69,7 @@ fun AppleMusicScreen(
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
-                ScreenHeader(title = "Apple Music", room = room, onBack = onBack)
+                ScreenHeader(title = "Apple Music", room = room, onBack = onBack) { StayPin(afterPlaying) }
                 Spacer(Modifier.height(24.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     SearchField(

@@ -31,6 +31,7 @@ import com.rahga.x2rock.ui.screens.PreferredServicesScreen
 import com.rahga.x2rock.ui.screens.RadioScreen
 import com.rahga.x2rock.ui.screens.SearchScreen
 import com.rahga.x2rock.viewmodel.AccountViewModel
+import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 
@@ -39,6 +40,12 @@ fun X2RockNavGraph() {
     val navController = rememberNavController()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val homeViewModel: HomeViewModel = hiltViewModel()
+    val afterPlayingViewModel: AfterPlayingViewModel = hiltViewModel()
+    // Something started: back to the room, past Browse, where what started is shown — unless Browse's
+    // pin says stay, which leaves the viewer where they chose it (asked for 2026-10-15).
+    fun played() {
+        if (!afterPlayingViewModel.stay.value) navController.popBackStack("home", inclusive = false)
+    }
 
     // Connect once the UI is on screen. This used to gate two poll timers; there is no
     // timer now, so there is nothing to switch off when the TV moves to another input —
@@ -154,6 +161,7 @@ fun X2RockNavGraph() {
                 onOpenFavorite = { groupId, serviceKey, containerId, favorite ->
                     openService(groupId, serviceKey, containerId, favorite.name, favorite.id)
                 },
+                onPlayed = ::played,
                 playerViewModel = playerViewModel
             )
         }
@@ -166,7 +174,7 @@ fun X2RockNavGraph() {
             SearchScreen(
                 room = room,
                 onBack = { navController.popBackStack() },
-                onPlayed = { navController.popBackStack("home", inclusive = false) },
+                onPlayed = ::played,
                 onOpen = { serviceKey, item -> openService(groupId, serviceKey, item.id, item.title, kind = item.itemType) },
                 onSearchService = { serviceKey, query ->
                     navController.navigate(
@@ -196,8 +204,7 @@ fun X2RockNavGraph() {
                 room = room,
                 onOpenAppleMusic = { navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
                 onBack = { navController.popBackStack() },
-                // Back to the room, past Favorites, as Radio and Apple Music do.
-                onPlayed = { navController.popBackStack("home", inclusive = false) },
+                onPlayed = ::played,
             )
         }
 
@@ -208,8 +215,7 @@ fun X2RockNavGraph() {
             AppleMusicScreen(
                 room = room,
                 onBack = { navController.popBackStack() },
-                // Back to the room, past Favorites, as a station played from Radio does.
-                onPlayed = { navController.popBackStack("home", inclusive = false) },
+                onPlayed = ::played,
             )
         }
 
@@ -221,6 +227,7 @@ fun X2RockNavGraph() {
                 room = room,
                 onBack = { navController.popBackStack() },
                 playerViewModel = playerViewModel,
+                onPlayed = ::played,
             )
         }
     }
