@@ -71,7 +71,7 @@ android {
         targetSdk = 35
         // Must rise with every build that leaves this machine, to Play or to a TV: neither installs a
         // lower one over a higher. 3 is 0.1.0, the first closed test.
-        versionCode = 3
+        versionCode = 4
         versionName = tagVersion
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SONOS_KEY", literal(sonosIntegration?.first.orEmpty()))

@@ -53,7 +53,11 @@ class RoomsChannelSync @Inject constructor(
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !hasTvProvider) return
         synchronized(this) {
             if (groups == lastGroups && tiles == lastTiles) return
-            val channelId = ensureChannel() ?: return
+            // A device with a TV provider can still refuse a preview channel — Fire OS has one and is
+            // not Google TV — and a home-screen row must never take the app down with it.
+            val channelId = runCatching { ensureChannel() }
+                .onFailure { Log.w(TAG, "home-screen channel not made", it) }
+                .getOrNull() ?: return
             // Remember only what actually reached the provider. Recording it up front meant a
             // failed write suppressed every identical retry from then on.
             val written = runCatching { updatePrograms(channelId, groups, tiles) }

@@ -3,6 +3,12 @@
 Each release is tagged `v<version>` and its build takes that as its version name. Version codes
 rise by one with every build that leaves the developer's machine.
 
+## 0.1.1 — a home-screen row cannot close the app
+
+- A TV whose home screen refuses the app's row of rooms no longer closes the app as the rooms load.
+  Fire TV is the first such device expected: it has the Android TV provider the row is written to,
+  but is not Google TV. Untested there; a tester is about to run it.
+
 ## 0.1.0 — first test build
 
 The first release anyone outside the developer's household runs, as an APK from a GitHub
