@@ -103,7 +103,6 @@ import com.rahga.x2rock.model.followingRoom
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
-import com.rahga.x2rock.ui.components.dpadMenuKey
 import com.rahga.x2rock.ui.components.keepTaps
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.components.tapToClick
@@ -657,11 +656,10 @@ private fun RoomListItem(
     AppCard(
         // Select goes into the room, to its player, as Select does on every TV list; opening the
         // panel on it put a dialog in front of the one thing a viewer pressed to get to. The panel
-        // keeps a long press and Menu, and has a button of its own in the pane, Group.
+        // is the pane's Group button's; a hold and Menu here were dropped as unneeded (2026-10-16).
         onClick = { detailFocusRequester.requestFocusSafely() },
-        onLongClick = onOpenPanel,
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
-        // turn — the first selects, a tap on the selected room opens it — and a hold opens it.
+        // turn — the first selects, a tap on the selected room opens its panel.
         onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
         // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
         // say — so the list still says which room the controls beside it act on. Text takes the
@@ -687,7 +685,6 @@ private fun RoomListItem(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
-            .dpadMenuKey(onOpenPanel)
     ) {
         Row(
             modifier = Modifier

@@ -435,8 +435,9 @@ that opened two further dialogs — `RoomContextMenu` led to `GroupPickerDialog`
 **Select on a room enters the player pane; it does not open the panel** (2026-10-07). On a TV,
 Select on a list item means "go into this", and a dialog in front of the player was the opposite
 of what that press asked for. The panel opens from the pane's **Group** button, which a viewer can
-see, and from a long press or Menu on the room, which stay for those who know them. Closing it
-returns focus to whichever opened it. Group is in the pane's row rather than above or below the
+see (or a tap on the selected room, by touch). A long press and Menu on the room opened it too,
+for those who knew them; the owner saw no need for them and they were dropped (2026-10-16). Closing
+it returns focus to whichever opened it. Group is in the pane's row rather than above or below the
 room list, for the reason in "Nothing that acts on the selected room" below.
 
 **A Sub and surrounds are in the Sound section too** (T-16, 2026-10-11), only for a room whose
