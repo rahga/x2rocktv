@@ -288,6 +288,11 @@ class Upnp(
     internal suspend fun currentTrackFavorite(hostname: String, expected: Track): TrackFavoriteSource =
         withContext(Dispatchers.IO) { trackFavoriteSource(transport(hostname, "GetPositionInfo"), expected) }
 
+    /**
+     * Save [source] as a Sonos favourite, answering its `FV:2/<n>`. Refused **803 when the same item
+     * is already a favourite**, under any title and any form of its URI — a track saved with and
+     * without a file extension was one item (office, 2026-10-16); see [FAVORITE_EXISTS].
+     */
     internal suspend fun createTrackFavorite(hostname: String, source: TrackFavoriteSource, serviceName: String?): String =
         withContext(Dispatchers.IO) {
             val result = parse(soap(hostname, Service.CONTENT_DIRECTORY, "CreateObject", listOf(
@@ -296,6 +301,14 @@ class Upnp(
             result.text("ObjectID")?.takeIf { it.startsWith("FV:2/") }
                 ?: throw IOException("the speaker did not confirm the save; check Browse before trying again")
         }
+
+    /**
+     * Remove the Sonos favourite [objectId] (`FV:2/<n>`). An empty reply; one already gone is refused
+     * 701 (office, 2026-10-16).
+     */
+    internal suspend fun destroyFavorite(hostname: String, objectId: String): Unit = withContext(Dispatchers.IO) {
+        soap(hostname, Service.CONTENT_DIRECTORY, "DestroyObject", listOf("ObjectID" to objectId))
+    }
 
     /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */
     suspend fun clearQueue(hostname: String): Unit = withContext(Dispatchers.IO) {
@@ -826,6 +839,12 @@ class Upnp(
         private const val READ_TIMEOUT = 10L
 
         const val PORT = 1400
+
+        /** `CreateObject` on `FV:2`: the item is already a favourite. */
+        const val FAVORITE_EXISTS = "803"
+
+        /** `DestroyObject` on `FV:2/<n>`: there is no such favourite, or no longer. */
+        const val NO_SUCH_FAVORITE = "701"
 
         /** Queues run to tens of thousands of tracks; listing stops here and says so. */
         const val MAX_ITEMS = 1000

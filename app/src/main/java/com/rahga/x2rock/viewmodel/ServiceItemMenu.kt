@@ -17,8 +17,8 @@ import kotlinx.coroutines.launch
 /**
  * An item's menu — a hold or Menu on its row — and everything it can do, for the screens that list
  * a service's items: Music Services and Search. The remote's version of the Sonos app's "⋯": Play
- * now, Play next (only while the room plays from its queue, as there), Add to end of queue, then
- * what the service itself says about the item — its artist, its album, a radio built from it, and
+ * now, Play next (only while the room plays from its queue, as there), Add to end of queue, Add to
+ * or Remove from Sonos Favorites (T-32), then what the service itself says about the item — its artist, its album, a radio built from it, and
  * the account's favourites.
  *
  * [guard] is the screen's own, so a menu's press and a row's turn each other away alike; it marks
@@ -31,6 +31,8 @@ class ServiceItemMenu(
     private val scope: CoroutineScope,
     private val notice: TransientNotice,
     private val guard: StartGuard,
+    /** Settings → Beta features: Add to and Remove from Sonos Favorites are offered only with it on (T-32). */
+    val beta: StateFlow<Boolean>,
     private val keyOf: (Target) -> String,
 ) {
     /** What a menu is for: a service's item, or an Apple Music search result. */
@@ -82,6 +84,14 @@ class ServiceItemMenu(
     val playlists: StateFlow<List<Item>> = _playlists.asStateFlow()
     private val playlistsByService = mutableMapOf<String, List<Item>>()
 
+    /**
+     * The Sonos favourite the open item already is, read as a menu opens: `null` while unknown or
+     * when it is none, which offers Add — a save of one already there is answered as such.
+     */
+    private val _sonosFavorite = MutableStateFlow<String?>(null)
+    val sonosFavorite: StateFlow<String?> = _sonosFavorite.asStateFlow()
+    private var sonosFavoriteJob: Job? = null
+
     /** The picker, while open: the track, and the playlists it can go in. */
     data class Picker(val target: Target.Service, val playlists: List<Item>)
     private val _picker = MutableStateFlow<Picker?>(null)
@@ -101,6 +111,13 @@ class ServiceItemMenu(
         }
         _fromQueue.value = false
         _details.value = null
+        _sonosFavorite.value = null
+        sonosFavoriteJob?.cancel()
+        sonosFavoriteJob = (target as? Target.Service)?.takeIf { it.canQueue }?.let { service ->
+            scope.launch {
+                _sonosFavorite.value = runCatching { household.favoriteFor(service.linked, service.item)?.id }.getOrNull()
+            }
+        }
         scope.launch {
             _fromQueue.value = runCatching { household.playingFromQueue(groupId()) }.getOrDefault(false)
         }
@@ -116,6 +133,7 @@ class ServiceItemMenu(
 
     fun close() {
         detailsJob?.cancel()
+        sonosFavoriteJob?.cancel()
         _open.value = null
     }
 
@@ -158,6 +176,24 @@ class ServiceItemMenu(
             runCatching { household.setServiceFavorite(linked, item, favorite) }
                 .onSuccess { notice.post(if (favorite) "Added to your $name favourites" else "Removed from your $name favourites") }
                 .onFailure { notice.failure(if (favorite) "add to $name favourites" else "remove from $name favourites", it) }
+        }
+    }
+
+    /** Save [target] to the household's Sonos Favorites — what every controller in the house lists. */
+    fun saveSonosFavorite(target: Target.Service) {
+        scope.launch {
+            runCatching { household.saveServiceFavorite(target.linked, target.item) }
+                .onSuccess { notice.post(if (it.alreadySaved) "Already in Sonos Favorites: ${it.name}" else "Saved to Sonos Favorites: ${it.name}") }
+                .onFailure { notice.failure("save ${target.title} to Sonos Favorites", it) }
+        }
+    }
+
+    /** Take the Sonos favourite [favoriteId], which [target] is, out of the household's favourites. */
+    fun removeSonosFavorite(target: Target.Service, favoriteId: String) {
+        scope.launch {
+            runCatching { household.removeFavorite(favoriteId) }
+                .onSuccess { notice.post("Removed from Sonos Favorites: ${target.title}") }
+                .onFailure { notice.failure("remove ${target.title} from Sonos Favorites", it) }
         }
     }
 

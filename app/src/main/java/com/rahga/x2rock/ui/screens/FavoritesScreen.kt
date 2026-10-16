@@ -55,6 +55,7 @@ import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.favoriteGroups
 import com.rahga.x2rock.viewmodel.favoriteLine
 import com.rahga.x2rock.viewmodel.favoritePage
+import com.rahga.x2rock.viewmodel.favoriteKey
 import com.rahga.x2rock.viewmodel.kindLabel
 import com.rahga.x2rock.model.Favorite
 import com.rahga.x2rock.model.Playlist
@@ -119,18 +120,24 @@ fun FavoritesScreen(
         }
         (if (firstSection != null) rowFocus else backFocus).requestFocusRetrying()
     }
-    // A deleted preset takes focus with it; its neighbour gets it, as in any list a row leaves.
-    // Without this the platform chose, and chose Back.
-    var shownPresets by remember { mutableStateOf(presets) }
-    LaunchedEffect(presets) {
-        val before = shownPresets
-        shownPresets = presets
-        val gone = before.indexOfFirst { "preset:${it.id}" == focusKey }
-        if (gone < 0 || presets.any { "preset:${it.id}" == focusKey }) return@LaunchedEffect
-        val next = presets.getOrNull(gone) ?: presets.lastOrNull()
-        focusKey = next?.let { "preset:${it.id}" }
+    // A deleted preset or removed favourite takes focus with it; the row after it gets it, as in any
+    // list a row leaves. Without this the platform chose, and chose Back.
+    val rowKeys = (state as? FavoritesViewModel.UiState.Success)
+        ?.let { success -> browseKeys(presets, success).filter { it.startsWith("preset:") || it.startsWith("fav:") } }
+        .orEmpty()
+    var shownRows by remember { mutableStateOf(rowKeys) }
+    LaunchedEffect(rowKeys) {
+        val before = shownRows
+        shownRows = rowKeys
+        val gone = before.indexOf(focusKey)
+        if (gone < 0 || focusKey in rowKeys) return@LaunchedEffect
+        val next = rowKeys.getOrNull(gone) ?: rowKeys.lastOrNull()
+        focusKey = next
         // With none left the first section changes, and the effect above takes it from there.
-        if (next != null) keyFocus.requestFocusRetrying()
+        if (next != null) {
+            (state as? FavoritesViewModel.UiState.Success)?.let { listState.scrollToItem(browseKeys(presets, it).indexOf(next)) }
+            keyFocus.requestFocusRetrying()
+        }
     }
 
     Surface(modifier = Modifier.fillMaxSize()) {
@@ -167,6 +174,7 @@ fun FavoritesScreen(
                             loadingId = loadingId,
                             onPreset = { viewModel.applyPreset(it, onDone = onPlayed) },
                             onDeletePreset = viewModel::deletePreset,
+                            onRemoveFavorite = viewModel::removeFavorite,
                             onPlay = { fav ->
                                 val page = favoritePage(fav, browsable)
                                 if (page != null) onOpenFavorite(viewModel.groupId, page.first, page.second, fav)
@@ -205,6 +213,7 @@ private fun BrowseList(
     loadingId: String?,
     onPreset: (Preset) -> Unit,
     onDeletePreset: (Preset) -> Unit,
+    onRemoveFavorite: (Favorite) -> Unit,
     onPlay: (Favorite) -> Unit,
     /** Whether a favourite opens on a page of its own rather than playing at once. */
     opens: (Favorite) -> Boolean,
@@ -243,7 +252,7 @@ private fun BrowseList(
                 ) {
                     when {
                         loadingId == presetKey(preset.id) -> RowStatus("Starting…")
-                        deleteArmed == preset.id -> RowStatus("Menu again to delete", highlighted = true)
+                        deleteArmed == presetKey(preset.id) -> RowStatus("Menu again to delete", highlighted = true)
                     }
                 }
             }
@@ -259,10 +268,13 @@ private fun BrowseList(
                         artUrl = fav.imageUrl,
                         active = state.activeId == fav.id,
                         onClick = { onPlay(fav) },
+                        // Menu, twice, removes it from Sonos Favorites, as a preset is deleted.
+                        onLongClick = { onRemoveFavorite(fav) },
                         modifier = tracked("fav:${fav.id}").then(if (groupIndex == 0 && index == 0) favFocus else Modifier),
                     ) {
                         when {
                             loadingId == fav.id -> RowStatus("Starting…")
+                            deleteArmed == favoriteKey(fav.id) -> RowStatus("Menu again to remove", highlighted = true)
                             state.activeId == fav.id -> RowStatus("Now playing", highlighted = true)
                             // An album or playlist opens on its tracks, with Play and Shuffle at the head.
                             opens(fav) -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))

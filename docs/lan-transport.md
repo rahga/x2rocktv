@@ -544,10 +544,25 @@ The save action checks the selected track before and after these reads, checks e
 by URI or service/catalogue identity (including shortcuts), and never automatically retries a write.
 This was verified for individual service tracks, not arbitrary containers or radio sources.
 
-**Today's phone-created favorites are also shortcuts the Control API does not list.** Earlier
-copies of empty-resource shortcuts answered UPnP **803**, even with corrected class or no ordinal.
-That did not establish that all favorite creation was impossible; the earlier conclusion here was
-wrong. Class, id and restricted variants each succeeded with current-track resources. What the
+**A service item is saved as a queue is given it** (T-32, office One SL, 2026-10-16). The same
+wrapper, with `ServiceContent.enqueueUri` as the resource (protocol `<its scheme>:*:*:*`) and
+`enqueueDidl` in `r:resMD`, makes a favorite `getFavorites` types and names: a Saavn album as
+`x-rincon-cpcontainer:1004206cALBUM%3a48037104?sid=164&flags=8300&sn=13` (the shape the Sonos app
+wrote for another album, Irumudi) is `ALBUM`, Saavn, `sn_13`; a track as
+`x-sonosapi-hls-static:TRACK_NEW%3a-sJuFNFc?sid=164&flags=65544&sn=13` is `TRACK`. A track written as
+`x-sonos-http:` with no file extension was saved untyped, with no service; with `.mp4` and a
+`sonos.com-http` protocol it was typed — the queue's own scheme needs neither.
+
+**803 is "already a favorite".** `CreateObject` answers it whenever the item is already in `FV:2`,
+under any title and any form of its URI (with and without an extension, `%3A` or `%3a`): once the
+first copy went, the same request succeeded, and a second answered 803 again. That is what every
+803 of the night before was — copies of favorites that were there — not a refusal to create.
+
+**`DestroyObject` on `FV:2/<n>` removes one**, with an empty reply; one already gone answers **701**.
+Captures: `CreateObject.serviceTrack.xml`, `CreateObject.exists.fault803.xml`,
+`DestroyObject.favorite.xml`, `DestroyObject.gone.fault701.xml`.
+
+**Today's phone-created favorites are also shortcuts the Control API does not list.** What the
 Sonos app wrote for an album ("Kind Of
 Blue (Legacy Edition)", TIDAL) is `r:type` **`shortcut`** with an **empty `<res>`** — older favorites are
 `instantPlay` with a URI — and the item only in `r:resMD`: id `10082064album__UNENCODED_SLASH__2178485`

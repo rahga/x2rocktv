@@ -1592,8 +1592,56 @@ class SonosHousehold(
         val service = parseServices(advertised.descriptors, advertised.types).firstOrNull { it.id == id.serviceId }
         val complete = source.withIdentity(id, service?.serviceType)
         checkTrack()
-        upnp.createTrackFavorite(hostname, complete, expected.service?.name ?: service?.name)
-        SavedTrackFavorite(source.title, alreadySaved = false)
+        SavedTrackFavorite(source.title, alreadySaved = !createFavorite(hostname, complete, expected.service?.name ?: service?.name))
+    }
+
+    /**
+     * Save a service [listed] — a track, album or playlist from Browse or Search — to Sonos Favorites,
+     * as what a queue would be given for it: [ServiceContent.enqueueUri] and [ServiceContent.enqueueDidl]
+     * make a favourite the household types and names its service, as the Sonos app's own album
+     * favourites are written (office, 2026-10-16: an album and a track from Saavn).
+     */
+    suspend fun saveServiceFavorite(linked: LinkedService, listed: Item): SavedTrackFavorite {
+        val item = playable(listed)
+        require(ServiceContent.canEnqueue(item, linked.service.id)) { "${item.title} is not something a favourite can hold" }
+        val cdudn = ServiceContent.cdudn(linked.service.serviceType, linked.selector)
+            ?: error("${linked.service.name} has no account to save through")
+        val uri = ServiceContent.enqueueUri(item, linked.service.id, linked.accountId?.removePrefix("sn_"))
+        val source = TrackFavoriteSource(
+            uri, ServiceContent.enqueueDidl(item, cdudn), "${uri.substringBefore(':')}:*:*:*", item.title, item.artUrl,
+        )
+        return SavedTrackFavorite(item.title, alreadySaved = !createFavorite(anyHostname(), source, linked.service.name))
+    }
+
+    /** Whether a favourite was made; `false` when the item already was one. */
+    private suspend fun createFavorite(hostname: String, source: TrackFavoriteSource, serviceName: String?): Boolean =
+        try {
+            upnp.createTrackFavorite(hostname, source, serviceName)
+            true
+        } catch (e: UpnpRefusedException) {
+            if (e.upnpCode != Upnp.FAVORITE_EXISTS) throw e
+            false
+        }
+
+    /**
+     * The favourite that is [item] of [linked], if it is one — by service and the service's own id,
+     * which is how a favourite names it once its container prefix is off.
+     */
+    suspend fun favoriteFor(linked: LinkedService, item: Item): Favorite? {
+        val id = playable(item).id
+        return favorites().items.firstOrNull { favorite ->
+            val target = favorite.resource?.id ?: return@firstOrNull false
+            target.serviceId == linked.service.id && ServiceContent.serviceId(target.objectId) == id
+        }
+    }
+
+    /** Remove the Sonos favourite [favoriteId], as [Favorite.id] names it. One already gone is not an error. */
+    suspend fun removeFavorite(favoriteId: String) {
+        try {
+            upnp.destroyFavorite(anyHostname(), "FV:2/$favoriteId")
+        } catch (e: UpnpRefusedException) {
+            if (e.upnpCode != Upnp.NO_SUCH_FAVORITE) throw e
+        }
     }
 
     /**

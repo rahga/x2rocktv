@@ -80,7 +80,10 @@ class FavoritesViewModel @Inject constructor(
 
     private val _deleteArmed = MutableStateFlow<String?>(null)
 
-    /** The preset a second Menu press would delete, if the first was just made. */
+    /**
+     * What a second Menu press would remove — a preset ([presetKey]) or a Sonos favourite
+     * ([favoriteKey]) — if the first was just made.
+     */
     val deleteArmed: StateFlow<String?> = _deleteArmed.asStateFlow()
 
     /**
@@ -107,21 +110,43 @@ class FavoritesViewModel @Inject constructor(
      * deletes. A preset is only this device's, so deleting one touches nothing on the speakers.
      */
     fun deletePreset(preset: Preset) {
-        if (_deleteArmed.value == preset.id) {
-            presetStore.remove(preset.id)
-            _deleteArmed.value = null
-            disarm?.cancel()
-            _notice.post("Deleted \"${preset.name}\"")
-            return
+        if (!armed(presetKey(preset.id), "Press Menu again to delete \"${preset.name}\"")) return
+        presetStore.remove(preset.id)
+        _notice.post("Deleted \"${preset.name}\"")
+    }
+
+    /**
+     * Take [favorite] out of the household's Sonos Favorites, on the second of two presses as a
+     * preset is deleted: it is every controller's list, not this device's.
+     */
+    fun removeFavorite(favorite: Favorite) {
+        if (!armed(favoriteKey(favorite.id), "Press Menu again to remove \"${favorite.name}\" from Sonos Favorites")) return
+        viewModelScope.launch {
+            runCatching { household.removeFavorite(favorite.id) }
+                .onSuccess {
+                    // Dropped in place rather than read again: a reload empties the list, and focus with it.
+                    (_uiState.value as? UiState.Success)?.let { s -> _uiState.value = s.copy(items = s.items.filterNot { it.id == favorite.id }) }
+                    _notice.post("Removed \"${favorite.name}\" from Sonos Favorites")
+                }
+                .onFailure { _notice.failure("remove ${favorite.name}", it) }
         }
-        _deleteArmed.value = preset.id
-        _notice.post("Press Menu again to delete \"${preset.name}\"")
-        // One disarm at a time: an older press's timer would otherwise disarm a newer arming early.
+    }
+
+    /** Whether [key] was armed by the press before this one; if not, arm it with [prompt]. */
+    private fun armed(key: String, prompt: String): Boolean {
         disarm?.cancel()
+        if (_deleteArmed.value == key) {
+            _deleteArmed.value = null
+            return true
+        }
+        _deleteArmed.value = key
+        _notice.post(prompt)
+        // One disarm at a time: an older press's timer would otherwise disarm a newer arming early.
         disarm = viewModelScope.launch {
             delay(DELETE_ARM_MILLIS)
             _deleteArmed.value = null
         }
+        return false
     }
     private var disarm: Job? = null
 
@@ -204,6 +229,7 @@ fun recentKey(item: HistoryItem) = "recent:${item.id.serviceId}:${item.id.object
 
 /** [FavoritesViewModel.loadingFavoriteId] while a preset is being brought back. */
 fun presetKey(id: String) = "preset:$id"
+fun favoriteKey(id: String) = "favorite:$id"
 
 private const val DELETE_ARM_MILLIS = 4_000L
 

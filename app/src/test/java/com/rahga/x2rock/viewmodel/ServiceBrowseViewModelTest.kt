@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.store.BetaFeatures
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
@@ -119,7 +120,7 @@ class ServiceBrowseViewModelTest {
             accountCapture = { envelope },
         )
         runBlocking { household.connectTo(fake) }
-        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), BetaFeatures(FakePreferences()))
     }
 
     @After fun tearDown() {
@@ -356,7 +357,7 @@ class ServiceBrowseViewModelTest {
         ready()
         val fromFavorite = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
             "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "favorite" to "84",
-        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), BetaFeatures(FakePreferences()))
         val tracks = withTimeout(5_000) { fromFavorite.results.first { it is ServiceBrowseViewModel.Results.Found } }
         assertEquals("SICKO MODE", (tracks as ServiceBrowseViewModel.Results.Found).items.first().title)
         assertTrue(fromFavorite.playsWhole.value)
@@ -373,7 +374,7 @@ class ServiceBrowseViewModelTest {
         ready()
         fun opened(kind: String) = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
             "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "kind" to kind,
-        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), BetaFeatures(FakePreferences()))
         val album = opened("album")
         withTimeout(5_000) { album.results.first { it is ServiceBrowseViewModel.Results.Found } }
         assertTrue(album.playsWhole.value)

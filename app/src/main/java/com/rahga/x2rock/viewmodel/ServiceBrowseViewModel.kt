@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.StreamStart
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.smapi.Category
@@ -46,6 +47,7 @@ class ServiceBrowseViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val primaryAccounts: PrimaryAccounts,
     preferredServices: PreferredServices,
+    betaFeatures: BetaFeatures,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -386,7 +388,7 @@ class ServiceBrowseViewModel @Inject constructor(
     }
 
     /** The menu a hold or Menu on a row opens. */
-    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard) {
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard, betaFeatures.enabled) {
         (it as ServiceItemMenu.Target.Service).item.id
     }
 

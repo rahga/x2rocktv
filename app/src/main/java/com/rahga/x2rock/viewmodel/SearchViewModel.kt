@@ -7,6 +7,7 @@ import com.rahga.x2rock.apple.AppleMusicItem
 import com.rahga.x2rock.apple.ITunesSearch
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.StreamStart
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.store.RecentSearches
@@ -58,6 +59,7 @@ class SearchViewModel @Inject constructor(
     private val primaryAccounts: PrimaryAccounts,
     private val preferredServices: PreferredServices,
     private val recentSearches: RecentSearches,
+    betaFeatures: BetaFeatures,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -227,7 +229,7 @@ class SearchViewModel @Inject constructor(
     }
 
     /** The menu a hold or Menu on a hit opens: play now or next, queue, and the service's own. */
-    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard) { target ->
+    val menu = ServiceItemMenu(household, room::current, viewModelScope, _notice, guard, betaFeatures.enabled) { target ->
         when (target) {
             is ServiceItemMenu.Target.Service -> Hit.Service(target.linked, target.item).key
             is ServiceItemMenu.Target.Apple -> Hit.Apple(target.item).key
