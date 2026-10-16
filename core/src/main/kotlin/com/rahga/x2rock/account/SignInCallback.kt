@@ -1,5 +1,6 @@
 package com.rahga.x2rock.account
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
@@ -44,7 +45,7 @@ object SignInCallback {
                         // Closed under the wait: that is the closer, which runs only when this ends or is
                         // cancelled — and the cancellation can land on this thread after the socket
                         // error does, which then escaped as a failure (the test caught it under load).
-                        if (server.isClosed) throw kotlinx.coroutines.CancellationException("the sign-in's listener was closed").apply { initCause(e) }
+                        if (server.isClosed) throw CancellationException("the sign-in's listener was closed").apply { initCause(e) }
                         throw e
                     }
                     outcome = socket.use { answer(it, state) }

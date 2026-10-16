@@ -13,6 +13,7 @@ import com.rahga.x2rock.lan.SeedStore
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.smapi.AccountCapture
 import com.rahga.x2rock.smapi.RatingsStore
+import com.rahga.x2rock.smapi.suppliedServicePages
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -20,6 +21,8 @@ import dagger.hilt.components.SingletonComponent
 import com.rahga.x2rock.net.PrefsSeedStore
 import com.rahga.x2rock.net.NetworkIdentity
 import com.rahga.x2rock.radio.RadioDirectory
+import com.rahga.x2rock.store.BetaFeatures
+import com.rahga.x2rock.store.DeveloperAccount
 import com.rahga.x2rock.store.Preferences
 import com.rahga.x2rock.viewmodel.MonotonicClock
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -28,9 +31,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
 import javax.inject.Qualifier
-import com.rahga.x2rock.smapi.suppliedServicePages
-import com.rahga.x2rock.store.BetaFeatures
-import com.rahga.x2rock.store.DeveloperAccount
 import javax.inject.Singleton
 
 /** Distinguishes the plain internet [OkHttpClient] from the LAN one players get. */

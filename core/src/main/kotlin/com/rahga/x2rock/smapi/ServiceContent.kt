@@ -56,9 +56,9 @@ object ServiceContent {
      * plain track — a `stream` is played rather than queued, and a radio `program` is refused by
      * `AddURIToQueue` with UPnP 800 (it plays as the room's source instead, see [radioUri]).
      */
-    fun canEnqueue(item: Item, serviceId: String? = null): Boolean =
+    fun canEnqueue(item: Item, serviceId: String = ""): Boolean =
         if (item.container) containerHoldsTracks(item.itemType)
-        else !isStream(item) && !isRadioProgram(item) && !(serviceId != null && playsAsStream(item, serviceId))
+        else !playsAsStream(item, serviceId) && !isRadioProgram(item)
 
     /** A live stream (a radio station): played from a resolved `getMediaURI`, not queued. */
     fun isStream(item: Item): Boolean = item.itemType.equals("stream", ignoreCase = true)

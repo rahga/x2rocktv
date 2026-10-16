@@ -1320,7 +1320,7 @@ class SonosHousehold(
     /** Browse into a container of [linked] — `root` for its top level. */
     suspend fun browseService(linked: LinkedService, id: String = "root", index: Int = 0, count: Int = 100): ItemPage {
         val pages = servicePages
-        if (pages != null && pages.owns(id)) {
+        if (pages?.objectIdOf(id) != null) {
             if (index > 0) return ItemPage(emptyList(), 0)
             return pages.browse(householdId(), linked, id).let { ItemPage(it, it.size) }
         }
@@ -1336,7 +1336,7 @@ class SonosHousehold(
 
     /** [item] as a player takes it: a page source's own id turned into the object id it stands for. */
     private fun playable(item: Item): Item =
-        servicePages?.takeIf { it.owns(item.id) }?.let { item.copy(id = it.objectId(item.id)) } ?: item
+        servicePages?.objectIdOf(item.id)?.let { item.copy(id = it) } ?: item
 
     /**
      * Play a service [item] in [groupId], in place of the queue, through the household's own

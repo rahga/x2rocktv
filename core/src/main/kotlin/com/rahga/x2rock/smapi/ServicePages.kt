@@ -9,8 +9,8 @@ import java.util.ServiceLoader
  * A build can be given one from an untracked source set (`-Px2rock.cloudContent`; see CLAUDE.md,
  * "Untracked service pages"), found through [ServiceLoader] so that nothing here names it.
  *
- * Its ids are its own: [owns] says whether one is, and [objectId] turns one into the object id a
- * player plays through the household's own registration, which is how everything else plays.
+ * Its ids are its own: [objectIdOf] turns one into the object id a player plays through the
+ * household's own registration, which is how everything else plays.
  */
 interface ServicePages {
     /** Service ids listed only through this source, and only while it is [ready]. */
@@ -22,9 +22,8 @@ interface ServicePages {
     /** Whether a call here could be made now. */
     suspend fun ready(): Boolean
 
-    fun owns(id: String): Boolean
-
-    fun objectId(id: String): String
+    /** The object id [id] stands for, where it is one of this source's own; `null` for any other. */
+    fun objectIdOf(id: String): String?
 
     suspend fun home(household: String, linked: LinkedService): List<Item>
 

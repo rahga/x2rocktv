@@ -132,8 +132,7 @@ class ServiceSearchTest {
         override val onlyHere = setOf(YTM)
         override val frontPages = setOf(YTM, QOBUZ)
         override suspend fun ready() = answering
-        override fun owns(id: String) = id.startsWith("pages:")
-        override fun objectId(id: String) = id.removePrefix("pages:")
+        override fun objectIdOf(id: String) = id.removePrefix("pages:").takeIf { it != id }
         override suspend fun home(household: String, linked: com.rahga.x2rock.smapi.LinkedService): List<com.rahga.x2rock.smapi.Item> {
             calls += "home ${linked.service.id}"
             if (refuseHome) throw java.io.IOException("refused")
