@@ -6,13 +6,13 @@ It talks to the speakers directly over the local network, using the same Control
 apps use, with **no Sonos account, no sign-in and no polling**: subscribe, and the speakers push
 every change.
 
-> **Testers wanted from Monday 19 October 2026.** x2rock is heading for a closed test on Google
-> Play, which needs testers with a Google TV or Android TV device and a Sonos system on the same
-> network. Speakers neither of our households has are especially welcome: a Port, Five, Amp or
-> Play:5 with something on its line-in, or a Roam or Move. To take part,
-> [open an issue](https://github.com/rahga/x2rocktv/issues/new?title=I%27d%20like%20to%20test)
-> saying which TV device and which speakers you have, and we will reply with how to join. Please
-> don't post your email address there.
+> **Test builds are out.** x2rock is not on Google Play yet; each test build is an APK on the
+> [releases page](https://github.com/rahga/x2rocktv/releases), installed by hand as
+> [this guide](docs/install-on-google-tv.md) shows. It needs a Google TV or Android TV device and a
+> Sonos system on the same network. Speakers neither of our households has are especially welcome: a
+> Port, Five, Amp or Play:5 with something on its line-in, or a Roam or Move. Reports go through
+> **Settings → Beta features → Send a report**, or
+> [an issue](https://github.com/rahga/x2rocktv/issues/new). Please don't post your email address there.
 
 ![The room list and the player pane on an NVIDIA Shield: five rooms, Dining Room selected](docs/images/home.png)
 

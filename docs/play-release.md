@@ -1,7 +1,10 @@
-# Releasing on Google Play
+# Releasing: GitHub pre-releases now, Google Play later
 
-How a release goes from a tag to Play's closed test (T-12). The build side is done in this repo; the
-steps marked **owner** are the Play Console's and the key holder's, and cannot be done from here.
+How a release goes from a tag to a tester (T-12). Testers sideload an APK from a GitHub pre-release
+until the Play account exists; see [installing on Google TV](install-on-google-tv.md). Sideloading is
+allowed on Google TV as it stands: Google's developer verification reaches TV devices from 2027, and
+an `adb` install stays exempt even then. The steps marked **owner** are the key holder's and the Play
+Console's, and cannot be done from here.
 
 ## Checked against Play's rules (2026-10-12)
 
@@ -16,38 +19,43 @@ steps marked **owner** are the Play Console's and the key holder's, and cannot b
   required.
 - **Format**: new apps upload an Android App Bundle, `app/build/outputs/bundle/release/app-release.aab`.
 
-## The upload key (owner, once)
+## The release key (made 2026-10-16)
 
-Play signs what it delivers with its own key; the upload key only proves an upload is yours. Make it
-once, keep it and its passwords somewhere backed up, and never commit either:
-
-```sh
-keytool -genkeypair -v -keystore ~/keys/x2rock-upload.jks -alias upload \
-  -keyalg RSA -keysize 4096 -validity 10000
-```
-
-Then `keystore.properties` at the repo root (ignored by git):
+One key signs every build that leaves the developer's machine: `~/x2rocktv-release.jks`, alias
+`x2rocktv`, RSA 4096, valid to 2126, SHA-256 fingerprint
+`8D:65:75:AB:21:AB:AF:BF:7F:E2:5F:CC:A2:A5:65:50:DA:5D:FF:3F:8A:A0:5C:B6:9D:BB:FD:35:5F:12:0F:04`.
+Its password is in `keystore.properties` at the repo root, which git ignores:
 
 ```properties
-storeFile=/home/<you>/keys/x2rock-upload.jks
+storeFile=/home/<you>/x2rocktv-release.jks
 storePassword=...
-keyAlias=upload
+keyAlias=x2rocktv
 keyPassword=...
 ```
 
-**The house's TVs keep the debug key.** Release builds are signed with it unless the upload key is
-asked for, so `adb install -r` keeps working on them. A TV that installs x2rock from Play gets Play's
-signature instead, and the two cannot update each other: moving a TV from one to the other means
-uninstalling first, which clears its settings (the TV room, presets, preferred services).
+**Owner: back up the keystore and that file together, somewhere off this laptop.** A TV refuses an
+update signed by another key, so a lost key means every tester uninstalls, losing their settings.
+
+**On Play, give it as the app-signing key** ("use my own key" in Play App Signing), not as an upload
+key only. Then a build from Play carries the same signature as the APKs testers sideloaded, and
+updates them in place.
+
+**The house's TVs still take debug-key builds** from a plain `assembleRelease`, so `adb install -r`
+keeps working on them. A TV moves to the release key once, by uninstalling first (which clears its
+TV room, presets and preferred services), and from then on takes `-Px2rock.upload` builds.
 
 ## Each release
 
-1. Move `versionCode` up by one in `app/build.gradle.kts`, and write the release's section in
-   `CHANGELOG.md`, including what is still untested on hardware.
+1. Move `versionCode` up by one in `app/build.gradle.kts` if a build has left the machine since the
+   last, and write the release's section in `CHANGELOG.md`, including what is still untested on
+   hardware.
 2. Commit, then tag: `git tag -a v0.1.0 -m "0.1.0"`. The tag is the version name.
-3. Build: `./gradlew :core:test :app:testDebugUnitTest :app:bundleRelease -Px2rock.upload`.
-4. **Owner**: upload the bundle to the closed test track, with the changelog's section as its notes.
-5. Push the tag: `git push origin v0.1.0`.
+3. Build with the release key: `./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease
+   :app:bundleRelease -Px2rock.upload`. The APK is for testers, the bundle for Play.
+4. Push the commit and the tag, then make the pre-release with the APK, named
+   `x2rocktv-<version>.apk`, and the changelog's section as its notes:
+   `gh release create v0.1.0 --prerelease --title "x2rocktv 0.1.0" --notes-file … <apk>`.
+5. Later, **owner**: upload the bundle to Play's closed test track, with the same notes.
 
 ## The listing (owner, once)
 

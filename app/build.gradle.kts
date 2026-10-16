@@ -18,10 +18,11 @@ val tagVersion: String = providers.exec {
 }.standardOutput.asText.get().trim().removePrefix("v").ifEmpty { "0.0.0-dev" }
 
 /**
- * Play's upload key, used only when asked for: `./gradlew :app:bundleRelease -Px2rock.upload`. Its
- * details live in `keystore.properties` at the root, never committed (`storeFile`, `storePassword`,
- * `keyAlias`, `keyPassword`). Every other release build keeps the debug key, so it still installs
- * over what the house's TVs have: a TV refuses an update signed by a different key.
+ * The release key, used only when asked for: `./gradlew :app:assembleRelease :app:bundleRelease
+ * -Px2rock.upload` — the testers' APK and Play's bundle. Its details live in `keystore.properties` at
+ * the root, never committed (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`); see
+ * docs/play-release.md. Every other release build keeps the debug key, so it still installs over what
+ * the house's TVs have: a TV refuses an update signed by a different key.
  */
 val uploadKey: Properties? = rootProject.file("keystore.properties")
     .takeIf { providers.gradleProperty("x2rock.upload").isPresent }
