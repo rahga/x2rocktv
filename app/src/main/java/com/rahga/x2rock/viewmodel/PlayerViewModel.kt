@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.PlaybackActions
@@ -117,6 +118,8 @@ data class PlayerUiState(
      * Its presence is what draws the rating buttons.
      */
     val rating: SonosHousehold.RatingState? = null,
+    /** An identified song, rather than the title announced by a live station; only with Beta features on. */
+    val canSaveFavorite: Boolean = false,
     /**
      * One transient line: a rating's result ("Rated up on iHeartRadio"), or why a command
      * did not work. Cleared a few seconds after it lands. See [TransientNotice].
@@ -162,6 +165,7 @@ class PlayerViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val nowPlaying: NowPlayingPublisher,
     private val clock: MonotonicClock,
+    betaFeatures: BetaFeatures,
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
@@ -173,6 +177,7 @@ class PlayerViewModel @Inject constructor(
     private val _rating = MutableStateFlow<Pair<String, SonosHousehold.RatingState>?>(null)
     /** The track Prev goes to, keyed to the room it was read for, as [_rating] is. */
     private val _previous = MutableStateFlow<Pair<String, Track>?>(null)
+    private var saveFavoriteJob: Job? = null
 
     private var volumeDebounceJob: Job? = null
     private val playerVolumeDebounceJobs = mutableMapOf<String, Job>()
@@ -250,6 +255,8 @@ class PlayerViewModel @Inject constructor(
                     crossfade = state.playMode.crossfade,
                     actions = state.actions,
                     isRadio = state.isRadio,
+                    canSaveFavorite = !householdState.upnpOff && !state.onTvInput && !state.isRadio &&
+                        state.track?.id?.let { it.isReal && !it.serviceId.isNullOrBlank() } == true,
                     playbackError = state.lastError?.describe(),
                     ringingAlarm = state.ringingAlarm,
                     upnpOff = householdState.upnpOff,
@@ -276,6 +283,9 @@ class PlayerViewModel @Inject constructor(
                 nightMode = ht?.nightMode ?: false,
                 speechEnhancement = ht?.speechEnhancement ?: false,
             )
+        }.combine(betaFeatures.enabled) { state, beta ->
+            // Beta until a save has been pressed on a TV (T-31 ran on the emulator and the JVM).
+            if (beta) state else state.copy(canSaveFavorite = false)
         }.combine(_rating) { state, rating ->
             // Keyed to the room it was read for, so a switch never shows the last room's.
             state.copy(rating = rating?.takeIf { it.first == _groupId.value }?.second)
@@ -508,6 +518,21 @@ class PlayerViewModel @Inject constructor(
     }
 
     // ------------------------------------------------------------ ratings
+
+    fun saveFavorite() {
+        if (!uiState.value.canSaveFavorite || saveFavoriteJob?.isActive == true) return
+        val groupId = _groupId.value ?: return
+        val track = household.groupState(groupId).track ?: return
+        saveFavoriteJob = viewModelScope.launch {
+            notice.post("Saving to Sonos Favorites…")
+            attempt { household.saveTrackFavorite(groupId, track) }
+                .onSuccess { saved ->
+                    notice.post(if (saved.alreadySaved) "Already in Sonos Favorites: ${saved.name}"
+                        else "Saved to Sonos Favorites: ${saved.name}")
+                }
+                .onFailure { notice.failure("save to Sonos Favorites", it) }
+        }
+    }
     //
     // Unlike the transport commands above, this isn't fire-and-forget: there's no pushed
     // event for a rating, and a failure here (an unsupported service, a Live broadcast with

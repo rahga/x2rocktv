@@ -1569,6 +1569,33 @@ class SonosHousehold(
         }
     }
 
+    private val favoriteSaveLock = Mutex()
+
+    /** Save the song the viewer pressed on, without changing transport, queue or service library. */
+    suspend fun saveTrackFavorite(groupId: String, expected: Track): SavedTrackFavorite = favoriteSaveLock.withLock {
+        val id = expected.id?.takeIf { it.isReal && !it.serviceId.isNullOrBlank() }
+            ?: throw IOException("this track has no catalogue identity")
+        val hostname = coordinatorHostname(groupId)
+        fun checkTrack() {
+            val current = groupState(groupId)
+            if (current.onTvInput || current.isRadio || current.track?.id != id || current.track?.name != expected.name ||
+                coordinatorHostname(groupId) != hostname) {
+                throw IOException("the track or room changed; try saving the song now shown")
+            }
+        }
+        checkTrack()
+        val source = upnp.currentTrackFavorite(hostname, expected)
+        if (containsTrackFavorite(upnp.favoritesDidl(hostname), source, id)) {
+            return@withLock SavedTrackFavorite(source.title, alreadySaved = true)
+        }
+        val advertised = upnp.listAvailableServices(hostname)
+        val service = parseServices(advertised.descriptors, advertised.types).firstOrNull { it.id == id.serviceId }
+        val complete = source.withIdentity(id, service?.serviceType)
+        checkTrack()
+        upnp.createTrackFavorite(hostname, complete, expected.service?.name ?: service?.name)
+        SavedTrackFavorite(source.title, alreadySaved = false)
+    }
+
     /**
      * Every Sonos favourite: what `getFavorites` lists, then the shortcuts it leaves out, read off
      * UPnP ([Favorite.shortcut]). A shortcut does not name its account, so it takes the household's

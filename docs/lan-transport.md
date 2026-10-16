@@ -523,10 +523,32 @@ every refusal for ten minutes, failed reads included: it asks a player to call b
 once loaded, offers only Save to Favorites and Browse Artist. A container that lists nothing is not
 offered Play here either.
 
-**Sonos favorites cannot be created over UPnP, and today's are shortcuts the Control API does not list**
-(home, 2026-10-16). `ContentDirectory CreateObject` on `FV:2` answers UPnP **803** on every speaker tried
-(Kitchen, Dining Room, Living Room), even for an exact copy of an existing favorite with a new title; the
-Sonos app saves through some other path, presumably its cloud. What the app wrote for an album ("Kind Of
+**Current tracks can be saved as Sonos Favorites over UPnP** (T-31, home, 2026-10-16).
+`ContentDirectory CreateObject`, `ContainerID FV:2`, accepts an `object.item.sonos-favorite`
+wrapper with `r:type instantPlay`, the actual `GetPositionInfo.TrackURI` as its resource, and
+`TrackMetaData` escaped in `r:resMD`. The returned `ObjectID` confirms creation. This changes
+neither playback nor the queue. TIDAL's “So What” was created, listed by `getFavorites`, and
+seen in the Sonos phone app. The release TV app on an API 34 emulator subsequently saved
+Saavn’s “God Mode (From Karuppu)” against the office One SL (Media Room), showed the
+already-saved notice on a repeat press, and listed it under Browse → Favorite songs. Rust
+`x2rock favorites --json` also reported it as `TRACK`, `Saavn`; playback remained stopped.
+
+The current metadata may have `id="-1"` and no `cdudn` after `loadContent`. Saving it unchanged
+produces an untyped favorite that the phone hides. Supply a missing id as `00032020` plus the
+percent-encoded current track's Control API `objectId`, and a missing descriptor as
+`SA_RINCON<advertised serviceType>_X_#Svc<serviceType>-0-Token`. Preserve existing metadata,
+including any account descriptor and the resource. The advertised type comes from
+`ListAvailableServices`, not a guessed account credential. Captures: `GetPositionInfo.tidal.xml`,
+`ListAvailableServices.favorite.xml`, `CreateObject.favorite.xml`, `Browse.FV2.created-track.xml`.
+The save action checks the selected track before and after these reads, checks existing favorites
+by URI or service/catalogue identity (including shortcuts), and never automatically retries a write.
+This was verified for individual service tracks, not arbitrary containers or radio sources.
+
+**Today's phone-created favorites are also shortcuts the Control API does not list.** Earlier
+copies of empty-resource shortcuts answered UPnP **803**, even with corrected class or no ordinal.
+That did not establish that all favorite creation was impossible; the earlier conclusion here was
+wrong. Class, id and restricted variants each succeeded with current-track resources. What the
+Sonos app wrote for an album ("Kind Of
 Blue (Legacy Edition)", TIDAL) is `r:type` **`shortcut`** with an **empty `<res>`** — older favorites are
 `instantPlay` with a URI — and the item only in `r:resMD`: id `10082064album__UNENCODED_SLASH__2178485`
 (an 8-hex prefix, then the service's own id with `/` written `__UNENCODED_SLASH__`), class

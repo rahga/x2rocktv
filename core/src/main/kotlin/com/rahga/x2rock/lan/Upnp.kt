@@ -285,6 +285,18 @@ class Upnp(
             .text("Track")?.trim()?.toIntOrNull() ?: 0
     }
 
+    internal suspend fun currentTrackFavorite(hostname: String, expected: Track): TrackFavoriteSource =
+        withContext(Dispatchers.IO) { trackFavoriteSource(transport(hostname, "GetPositionInfo"), expected) }
+
+    internal suspend fun createTrackFavorite(hostname: String, source: TrackFavoriteSource, serviceName: String?): String =
+        withContext(Dispatchers.IO) {
+            val result = parse(soap(hostname, Service.CONTENT_DIRECTORY, "CreateObject", listOf(
+                "ContainerID" to "FV:2", "Elements" to source.elements(serviceName),
+            )))
+            result.text("ObjectID")?.takeIf { it.startsWith("FV:2/") }
+                ?: throw IOException("the speaker did not confirm the save; check Browse before trying again")
+        }
+
     /** Empty the queue. Asks for no `UpdateID`: there is no wrong track to remove. */
     suspend fun clearQueue(hostname: String): Unit = withContext(Dispatchers.IO) {
         transport(hostname, "RemoveAllTracksFromQueue")
@@ -675,7 +687,7 @@ class Upnp(
     }
 
     /** `Browse FV:2`: every Sonos favourite, as DIDL. */
-    private suspend fun favoritesDidl(hostname: String): String {
+    internal suspend fun favoritesDidl(hostname: String): String {
         val envelope = parse(
             soap(
                 hostname, Service.CONTENT_DIRECTORY, "Browse",
@@ -684,7 +696,7 @@ class Upnp(
                     "BrowseFlag" to "BrowseDirectChildren",
                     "Filter" to "*",
                     "StartingIndex" to "0",
-                    "RequestedCount" to "100",
+                    "RequestedCount" to "1000",
                     "SortCriteria" to "",
                 ),
             ),

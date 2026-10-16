@@ -62,7 +62,8 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── MulticastGate.kt           whatever the platform must hold for multicast
 │   ├── SeedStore.kt               the last reachable player (per network), for a warm start
 │   ├── SonosHousehold.kt          state flows, commands, subscriptions, reconnection
-│   ├── Upnp.kt                    cleartext 1400: queue, TV input, EQ, service list, alarms
+│   ├── TrackFavorites.kt          current-track favorite metadata, identity and duplicate matching
+│   ├── Upnp.kt                    cleartext 1400: queue, favorites, TV input, EQ, service list, alarms
 │   ├── Alarms.kt                  an alarm, the household clock, favourites as alarm programs
 │   ├── Xml.kt                     the one parser for UPnP and SMAPI replies, DOCTYPE refused by hand
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into

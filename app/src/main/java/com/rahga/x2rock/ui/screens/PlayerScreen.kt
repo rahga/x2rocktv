@@ -16,6 +16,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.Brush
 import androidx.tv.material3.SurfaceDefaults
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.SkipNext
@@ -695,6 +696,9 @@ private fun PlaybackControls(
                 ),
             )
             PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
+            if (state.canSaveFavorite) {
+                PlaceButton(Icons.Outlined.StarBorder, "Save favorite · Beta", viewModel::saveFavorite)
+            }
             GroupButton(onOpenGroup, groupFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.

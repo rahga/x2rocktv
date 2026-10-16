@@ -377,7 +377,8 @@ no third line, no "(current source)". **Any release notes must say Line-In is un
 real Port, Five or Amp has taken it (PUNCH P-14).
 
 **Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
-as is a portable's battery line, and each says "Beta" where it appears. With the switch on, every
+as are a portable's battery line and the player pane's Save favorite, and each says "Beta" where it
+appears. With the switch on, every
 room is also offered **another room's** line-in ("Line-In on Den"), as Sonos's own steps imply but
 never state. Anything else that has never run on a device goes behind the same switch. **Send a
 report**, under it, is a QR code to a prefilled public GitHub issue: models, versions, capabilities,
@@ -705,11 +706,12 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   pressing the book still resumes. On a track, **Add to playlist…** lists the account's playlists
   that may be written — found by the collections' own `userContent`/`readOnly`, never by guessing at
   titles — and adds at the end. Shown only where the account has such a place (Deezer does; YouTube
-  Music's SMAPI refuses outside callers). Making or deleting a service playlist is not offered: like
-  a Sonos favourite, creating content belongs to the service's own app.
+  Music's SMAPI refuses outside callers). Making or deleting a service playlist is not offered:
+  creating a service's content belongs to the service's own app.
 - **Removing a favourite is deliberately absent.** The Control API cannot, and the sibling
-  project probed and declined UPnP `DestroyObject` on the rule that creating or destroying
-  content belongs to the Sonos app. Same rule here. That is a *Sonos* favourite. A *service's*
+  project probed and declined UPnP `DestroyObject` on the rule that destroying content belongs to
+  the Sonos app. Same rule here. **Saving one is the exception, asked for by the owner** (T-31,
+  below): it adds and never removes, and a duplicate is refused. That is a *Sonos* favourite. A *service's*
   own favourites — Deezer's Favourite Tracks, Qobuz's — are the account's library in that service,
   and the item menu adds to and removes from them, as the Sonos app's does (asked for, 2026-10-08).
 
@@ -737,6 +739,14 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   page for one has no Play either.
 - **A household token the service refuses is read again once** (P-32, 2026-10-12): tokens are read per
   connection, and a TV outlives them. See `lan-transport.md`, "A household token can go stale".
+- **Save favorite in the player pane saves to household Sonos Favorites** (asked for by the owner,
+  2026-10-16). **A beta feature** until a save has been pressed on a TV: it ran on the emulator and
+  from the JVM, and its metadata rewrite (`withIdentity`, a `Transformer`) may not have run on
+  Android at all. It is offered for identified service tracks with UPnP available, not TV or radio. It captures the selected track,
+  reads its real playback metadata, avoids duplicates including modern shortcuts, and reports
+  success or refusal without changing playback. This is separate from service-library ratings.
+  `CreateObject FV:2` works for a current track; earlier empty-resource shortcut failures did not
+  prove otherwise. See `TrackFavorites.kt` and `docs/lan-transport.md` (T-31).
 - **A favourite says `REPLACE`.** `loadFavorite` appended an album to the queue without it.
 - **The content colour is provided once, at the root** (`X2RockTheme`). tv-material derives a
   transparent container's content colour from `LocalContentColor`, whose default is black, and the
