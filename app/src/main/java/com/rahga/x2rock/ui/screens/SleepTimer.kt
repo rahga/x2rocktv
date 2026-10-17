@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.rahga.x2rock.ui.theme.IconAppButton
@@ -43,51 +45,9 @@ import kotlinx.coroutines.delay
 
 // The sleep timer's button, its icon, the countdown it shows and the picker it opens. Split from
 // PlayerScreen.kt, where both control rows place it.
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-internal fun SleepTimerPickerOverlay(
-    trapped: Boolean,
-    onSelect: (Int) -> Unit,
-    onDismiss: () -> Unit
-) {
-    BackHandler { onDismiss() }
-    val firstFocus = rememberAutoFocusRequester()
+/** The sleep timer's lengths, as the Sonos app offers: up to two hours, since a film outlasts sixty minutes. */
+internal val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
 
-    Overlay(onDismiss, trapped) {
-        Column(
-            modifier = Modifier
-                .width(440.dp)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text("Sleep Timer", style = MaterialTheme.typography.titleLarge)
-            // Up to two hours, as the Sonos app offers: a film or an album outlasts sixty minutes.
-            // In pairs, so six choices fit the screen's height with Cancel still on it.
-            SLEEP_CHOICES.chunked(2).forEachIndexed { row, pair ->
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    pair.forEachIndexed { column, minutes ->
-                        AppButton(
-                            onClick = { onSelect(minutes) },
-                            modifier = Modifier
-                                .weight(1f)
-                                .then(if (row == 0 && column == 0) Modifier.focusRequester(firstFocus) else Modifier)
-                        ) {
-                            Text(sleepChoiceLabel(minutes), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-            }
-            AppButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
-                Text("Cancel", modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
-            }
-        }
-    }
-}
-
-private val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
-
-/** What the volume control needs to offer an exact level: how to open the entry, and its own focus. */
 internal fun sleepChoiceLabel(minutes: Int): String = when {
     minutes < 60 -> "$minutes minutes"
     minutes == 60 -> "1 hour"
@@ -95,46 +55,38 @@ internal fun sleepChoiceLabel(minutes: Int): String = when {
     else -> "${minutes / 60}\u00BD hours"
 }
 
-/** Each speaker's own level, for a group of more than one. Drawn under both panes' controls. */
 /**
- * The sleep timer's one button: what is left and a cancel while it runs, the picker otherwise.
- * Sonos's own timer, on AVTransport: with UPnP off there is none to set, and no button.
+ * The pane's Configure place, where Sleep timer was (2026-10-17): it opens the room's Configure
+ * panel — Source, Sleep timer, Sound, Room settings. While a sleep timer runs it says when it ends,
+ * as the Sleep button did, since nothing else on the pane would: "Configure · 8:58 PM".
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun SleepTimerButton(
-    state: PlayerUiState,
-    viewModel: PlayerViewModel,
-    onOpenSleepTimer: () -> Unit,
-    focusRequester: FocusRequester,
-) {
-    if (state.upnpOff) return
-    val sleepLeft = rememberSleepCountdown(state.sleepTimerEndsAt)
-    val context = LocalContext.current
-    Named(if (sleepLeft != null) "Cancel sleep timer" else "Sleep timer") { named ->
-        IconAppButton(
-            onClick = { if (sleepLeft != null) viewModel.cancelSleepTimer() else onOpenSleepTimer() },
-            modifier = Modifier.focusRequester(focusRequester).then(named),
-        ) {
-            Icon(
-                imageVector = SleepIcon,
-                contentDescription = if (sleepLeft != null) "Sleep timer, ${sleepLeft.toTimeString()} left. Press to cancel"
-                else "Sleep timer",
-                modifier = Modifier.size(30.dp),
-            )
-            if (sleepLeft != null) {
+internal fun ConfigureButton(state: PlayerUiState, onClick: () -> Unit, focusRequester: FocusRequester) {
+    val endsAt = rememberSleepEnd(state.sleepTimerEndsAt.takeIf { !state.upnpOff })
+    Named(if (endsAt != null) "Configure · sleep at $endsAt" else "Configure") { named ->
+        IconAppButton(onClick = onClick, modifier = Modifier.focusRequester(focusRequester).then(named)) {
+            Icon(Icons.Filled.Tune, contentDescription = "Configure", modifier = Modifier.size(30.dp))
+            if (endsAt != null) {
                 Spacer(modifier = Modifier.width(8.dp))
-                // The clock time it ends, which is what someone going to bed is asking — in the device's
-                // own 12- or 24-hour form. One short line: "14:34 · ends 8:58 PM" wrapped to four lines
-                // in the pane's button row at 1080p (Streamer, 2026-10-06). What is left stays in the
-                // description, and the time it ends does not tick.
-                val endsAt = remember(state.sleepTimerEndsAt) {
-                    android.text.format.DateFormat.getTimeFormat(context)
-                        .format(java.util.Date(System.currentTimeMillis() + sleepLeft))
-                }
+                Icon(SleepIcon, contentDescription = "Sleep timer ends at $endsAt", modifier = Modifier.size(22.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(endsAt, style = MaterialTheme.typography.labelMedium, maxLines = 1, softWrap = false)
             }
         }
+    }
+}
+
+/**
+ * The clock time a running sleep timer ends, in the device's own 12- or 24-hour form, or null for
+ * none — what someone going to bed is asking. It does not tick.
+ */
+@Composable
+internal fun rememberSleepEnd(endsAt: Long?): String? {
+    val left = rememberSleepCountdown(endsAt) ?: return null
+    val context = LocalContext.current
+    return remember(endsAt) {
+        android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date(System.currentTimeMillis() + left))
     }
 }
 
@@ -143,7 +95,7 @@ internal fun SleepTimerButton(
  * The moon is Night Sound's — the Sonos app's symbol for it, and on the TV pane the two sit a
  * row apart — and Snooze's alarm clock is already the ringing alarm's Snooze button.
  */
-private val SleepIcon: ImageVector =
+internal val SleepIcon: ImageVector =
     ImageVector.Builder(
         name = "Sleep", defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f,
     ).apply {

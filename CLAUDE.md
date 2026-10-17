@@ -430,8 +430,9 @@ prevented from doing so.
 `volumeType=1` (`PLAYBACK_TYPE_LOCAL`). A `volumeType=2` there means someone added a
 `VolumeProvider` and the keys have been hijacked.
 
-Per-room volume lives in the room panel instead, on left/right, where it is asked for
-explicitly rather than intercepted.
+Per-room volume lives in the player pane instead — the header's pill for the room, one pill per
+speaker for a grouped room — on left/right, where it is asked for explicitly rather than
+intercepted.
 
 **Taking them even in the panel is not possible on a CEC setup, as it turned out.** Fine
 control on the remote's volume keys while a panel row had focus was tried on the Streamer
@@ -443,6 +444,12 @@ them, but none in this house does that has been checked, and the Shield's showin
 `getevent` says only that the kernel saw them.
 
 ### The room panel
+
+**The room panel has two halves, each with its own button in the pane** (2026-10-17): **Group** opens
+grouping — Everywhere, Rooms in this group, Rooms not in this group, Presets — and **Configure**, in
+the place the Sleep timer button had, opens Source, Sleep timer, Sound and Room settings, in that
+order. Configure's button shows a running sleep timer's end time, as the Sleep button did. Moving a
+room between the lists hands focus to the row that takes its place, not back to the top.
 
 `RoomPanel` is everything a room can be told to do, on one surface. It replaced a context menu
 that opened two further dialogs — `RoomContextMenu` led to `GroupPickerDialog` and
@@ -469,24 +476,26 @@ horizontally anyway, since a running sleep timer's label can still push it past 
 The shape follows the sibling project's Quickshell group selector (`BarWidget.qml`, the
 `groupingPanel`), which is worth reading before changing this:
 
-- **This room** / **Playing together** — the room itself, plus whatever is grouped with it.
-  Drawn even when it is alone, because its level belongs here either way. A `leave` target
-  on every member except the coordinator: the coordinator *is* the group, so removing it
-  would dissolve the group rather than free the room.
-- **Add another** (or **Play together with** when the room is solo) — every other group,
-  joining this one. "Every room is in this group." when there is nothing left.
+- **Rooms in this group** — the room itself, plus whatever is grouped with it. Drawn even when
+  it is alone. Select on a member takes it out (a `leave` mark), on every member except the
+  coordinator: the coordinator *is* the group, so removing it would dissolve the group rather
+  than free the room.
+- **Rooms not in this group** — every other group; Select brings it in (a `join` mark).
+  "Every room is in this group." when there is nothing left.
 
-**Every room row carries a level, on left and right.** Nothing else in the panel uses those
-directions, so they were free to take. A member row moves that *speaker* (`playerVolume:1`);
-a joinable row moves that whole *group* (`groupVolume:1`), because a row in that list stands
-for a group and may be several rooms. The two stay in step with no arithmetic here: Sonos
-scales a group's members when the group moves and moves the group's average when a member
-does, and both come back as events. Draw the bar in `LocalContentColor`, not a fixed colour
-— a focused button's container *is* the primary colour, so a primary bar vanished on the one
-row being adjusted.
+**The panel carries no volume** (2026-10-17, the owner's call): it is for which rooms play
+together, and Select moving a room from one list to the other is its whole gesture. Rows had a
+level on left and right, and "Even out the levels"; both are gone. A grouped room's speakers are
+set in the player pane, each as the header's own pill (`VolumePill`). No button sits after a
+pill: Right on it is louder, so a button there could not be reached by remote.
 
 The panel opens focused on **the room's own row**, not on Party: the row most likely to be
 wanted, and one press from either neighbour.
+
+**The player pane scrolls only from the places row down** (2026-10-17): above it nothing moves,
+and from there only as far as the focused control needs (`LowerZonesOnly`). The TV's own rule
+pivots each focused control towards the upper screen, which pushed the art and title off the top
+the moment the places row had focus. Back on the transport, the pane returns to the top.
 
 **Two hoists have been removed from `sortGroups`, and nothing should reintroduce one.** The
 list was strictly alphabetical, Sonos's own order — Sonos had playback, EQ and home-theatre
@@ -625,7 +634,7 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   card focus — a slight scale and a lighter grey — read as a second language and was hard to find
   across a room; the scale went too (2026-10-09), since it made a focused row overhang its list.
 - **The pane's places are icons, each named under it while focused** (`Named`, 2026-10-09):
-  Queue, Browse, Search, Group and the sleep timer, as a TV's player controls name theirs. As
+  Queue, Browse, Search, Group and Configure, as a TV's player controls name theirs. As
   labelled buttons the row overran the pane and scrolled, leaving "Queue" cut in half at its edge.
 - **The art names its service while the volume or seek bar has focus** (2026-10-09): the service's
   logo over the cover's bottom-left fifth, from the `service` every metadata event carries. Only

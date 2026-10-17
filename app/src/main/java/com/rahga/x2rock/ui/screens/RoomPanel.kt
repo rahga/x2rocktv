@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.background
@@ -106,22 +107,11 @@ fun RoomPanel(
     rooms: Map<String, HomeViewModel.RoomInfo>,
     /** This group's speakers, id to name, coordinator first. */
     playerNames: List<Pair<String, String>>,
-    playerVolumes: Map<String, Int>,
-    /** Set every member to the group's level; offered only while their levels differ. */
-    onNormalize: () -> Unit,
-    /** The speakers whose own volume is muted, for their rows. */
-    mutedPlayers: Set<String>,
-    /** Each joinable group's own level, keyed by group id. */
-    groupVolumes: Map<String, Int>,
     /** One group holding the whole household, which is what party mode leaves behind. */
     isPartying: Boolean,
     onParty: () -> Unit,
     onStopParty: () -> Unit,
     onRemovePlayer: (playerId: String) -> Unit,
-    onAdjustPlayerVolume: (playerId: String, delta: Int) -> Unit,
-    onAdjustGroupVolume: (groupId: String, delta: Int) -> Unit,
-    onSetPlayerVolume: (playerId: String, volume: Int) -> Unit,
-    onSetGroupVolume: (groupId: String, volume: Int) -> Unit,
     onJoin: (Group) -> Unit,
     onSetTvRoom: () -> Unit,
     onUseTvInput: () -> Unit,
@@ -147,6 +137,15 @@ fun RoomPanel(
     onToggleCrossfade: () -> Unit,
     /** Keep this room's speakers, levels and favourite as a preset in Browse. */
     onSavePreset: () -> Unit,
+    /**
+     * Which half to show: false for grouping (Everywhere, the two room lists, Presets), true for
+     * Configure (Source, Sleep timer, Sound, Room settings), each opened by its own pane button.
+     */
+    configure: Boolean = false,
+    /** When a running sleep timer ends, as a clock time, or null for none. */
+    sleepEndsAt: String? = null,
+    onSetSleep: (minutes: Int) -> Unit = {},
+    onCancelSleep: () -> Unit = {},
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -161,9 +160,23 @@ fun RoomPanel(
     //
     // Keyed on having no focus rather than on the structure, so ordinary navigation between
     // rows is never yanked back to the top.
+    //
+    // A room moved from one list to the other hands focus to the row that takes its place — the
+    // next in its list, else the one before — rather than to the top: moving several used to
+    // mean walking back down from the room's own row after each (2026-10-17).
+    val rowFocus = remember { mutableMapOf<String, FocusRequester>() }
+    fun rowFocusFor(key: String) = rowFocus.getOrPut(key) { FocusRequester() }
+    var focusNext by remember { mutableStateOf<String?>(null) }
+    fun neighbour(keys: List<String>, key: String): String? {
+        val at = keys.indexOf(key)
+        return keys.getOrNull(at + 1) ?: keys.getOrNull(at - 1)?.takeIf { at > 0 }
+    }
     var panelHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(panelHasFocus) {
-        if (!panelHasFocus) firstFocus.requestFocusSafely()
+        if (panelHasFocus) return@LaunchedEffect
+        val next = focusNext?.let { rowFocus[it] }
+        focusNext = null
+        if (next?.requestFocusSafely() != true) firstFocus.requestFocusSafely()
     }
 
     Column(
@@ -190,218 +203,235 @@ fun RoomPanel(
             overflow = TextOverflow.Ellipsis,
         )
 
-        // Party mode. Nothing to gather in a one-room household, and nothing to stop
-        // unless the house is already in one group.
-        if (otherGroups.isNotEmpty() || isPartying) {
-            PanelSection("Everywhere")
-            IconLabelButton(
-                if (isPartying) Icons.AutoMirrored.Filled.CallSplit else Icons.Default.SpeakerGroup,
-                if (isPartying) "Split every room apart" else "Play everywhere",
-                if (isPartying) onStopParty else onParty,
-                Modifier.fillMaxWidth(),
-            )
-        }
-
-        // This room, and whatever is grouped with it. Drawn even when it is alone, because
-        // its level belongs here either way and it is what the panel opens onto.
-        PanelSection(if (members > 1) "Playing together" else "This room")
-        playerNames.forEachIndexed { index, (playerId, name) ->
-            val coordinator = playerId == group.coordinatorId
-            RoomRow(
-                // Coordinator first, so this is the room the panel is named after.
-                modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier,
-                name = name,
-                volume = playerVolumes[playerId],
-                muted = playerId in mutedPlayers,
-                // The coordinator *is* the group; removing it would dissolve the group
-                // rather than free the room, so it has nothing to leave.
-                action = if (coordinator) null else "leave",
-                onActivate = { if (!coordinator) onRemovePlayer(playerId) },
-                onAdjust = { delta -> onAdjustPlayerVolume(playerId, delta) },
-                onSet = { level -> onSetPlayerVolume(playerId, level) },
-            )
-        }
-
-        // Members drift apart as each is turned up on its own; one press brings them back to
-        // the group's level. Only while there is something to even out.
-        val memberLevels = playerNames.mapNotNull { (id, _) -> playerVolumes[id] }
-        if (members > 1 && memberLevels.distinct().size > 1) {
-            AppButton(onClick = onNormalize, modifier = Modifier.fillMaxWidth()) {
-                Text("Even out the levels")
-            }
-        }
-
-        // And the rooms that could join it.
-        if (otherGroups.isNotEmpty()) {
-            PanelSection(if (members > 1) "Add another" else "Play together with")
-            otherGroups.forEach { other ->
-                RoomRow(
-                    name = other.label,
-                    subtitle = rooms[other.id]?.let { roomRowLines(it, other.playbackState ?: PlaybackStates.IDLE).firstOrNull() }
-                        ?: roomActivity(other.playbackState, false).label,
-                    // A row here stands for a whole group, so its level is the group's.
-                    volume = groupVolumes[other.id],
-                    muted = rooms[other.id]?.muted == true,
-                    action = "join",
-                    onActivate = { onJoin(other) },
-                    onAdjust = { delta -> onAdjustGroupVolume(other.id, delta) },
-                    onSet = { level -> onSetGroupVolume(other.id, level) },
+        if (!configure) {
+            // Party mode. Nothing to gather in a one-room household, and nothing to stop
+            // unless the house is already in one group.
+            if (otherGroups.isNotEmpty() || isPartying) {
+                PanelSection("Everywhere")
+                IconLabelButton(
+                    if (isPartying) Icons.AutoMirrored.Filled.CallSplit else Icons.Default.SpeakerGroup,
+                    if (isPartying) "Split every room apart" else "Play everywhere",
+                    if (isPartying) onStopParty else onParty,
+                    Modifier.fillMaxWidth(),
                 )
             }
-        } else if (members > 1) {
-            Text(
-                "Every room is in this group.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-            )
-        }
 
-        // A scene to bring back with one press, from Browse: these speakers at these levels, and
-        // the favourite playing if what plays is one. Here because this is where a room's
-        // speakers and levels are set up; Browse is where it is played from.
-        PanelSection("Presets")
-        IconLabelButton(Icons.Default.BookmarkAdd, "Save as preset", onSavePreset, Modifier.fillMaxWidth())
+            // This room, and whatever is grouped with it. Drawn even when it is alone: it is what the
+            // panel opens onto.
+            PanelSection("Rooms in this group")
+            playerNames.forEachIndexed { index, (playerId, name) ->
+                val coordinator = playerId == group.coordinatorId
+                RoomRow(
+                    // Coordinator first, so this is the room the panel is named after.
+                    modifier = Modifier.focusRequester(rowFocusFor(playerId))
+                        .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier),
+                    name = name,
+                    // The coordinator *is* the group; removing it would dissolve the group
+                    // rather than free the room, so it has nothing to leave.
+                    action = if (coordinator) null else "leave",
+                    onActivate = {
+                        if (!coordinator) {
+                            focusNext = neighbour(playerNames.map { it.first }, playerId)
+                            onRemovePlayer(playerId)
+                        }
+                    },
+                )
+            }
 
-        // Both of these need an HDMI socket to mean anything, so a room without one ends at
-        // the lists above. The source comes first: it is a thing to *do*, and the setting
-        // below it is a thing to state once and never touch again.
-        // Tone, for every room: it is the speaker's, not the soundbar's. Written over UPnP, so
-        // not offered with UPnP off; and not until it has been read, since a row that guessed
-        // a level would step from the wrong one.
-        // Crossfade is the group's, over the Control API, so it needs neither the tone nor UPnP;
-        // it moved here from the pane's button row, which needed the room for Group.
-        val shownTone = tone?.takeIf { !upnpOff }
-        if (shownTone != null || info.crossfade != null) PanelSection("Sound")
-        if (shownTone != null) {
-            ToneRow("Bass", shownTone.bass, onStepBass)
-            ToneRow("Treble", shownTone.treble, onStepTreble)
-            AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
-                Text(if (shownTone.loudness) "Loudness   On" else "Loudness   Off")
-            }
-            // Only where the speaker has a calibration to turn back on; measuring is the app's.
-            shownTone.trueplay?.takeIf { it.available }?.let { trueplay ->
-                AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
+            // And the rooms that could join it.
+            if (otherGroups.isNotEmpty()) {
+                PanelSection("Rooms not in this group")
+                otherGroups.forEach { other ->
+                    RoomRow(
+                        name = other.label,
+                        subtitle = rooms[other.id]?.let { roomRowLines(it, other.playbackState ?: PlaybackStates.IDLE).firstOrNull() }
+                            ?: roomActivity(other.playbackState, false).label,
+                        action = "join",
+                        onActivate = {
+                            focusNext = neighbour(otherGroups.map { it.id }, other.id)
+                            onJoin(other)
+                        },
+                        modifier = Modifier.focusRequester(rowFocusFor(other.id)),
+                    )
                 }
+            } else if (members > 1) {
+                Text(
+                    "Every room is in this group.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                )
             }
-            // The Sonos app's Sub audio and Surround audio, only where the room has the speakers:
-            // its zone names them, which an EQ probe cannot say (SonosHousehold.satellites).
-            shownTone.satellites?.let { s ->
-                s.subOn?.let { on ->
-                    AppButton(onClick = onToggleSub, modifier = Modifier.fillMaxWidth()) { Text(if (on) "Sub   On" else "Sub   Off") }
-                }
-                s.subLevel?.let { ToneRow("Sub level", it, onStepSub) }
-                s.surroundsOn?.let { on ->
-                    AppButton(onClick = onToggleSurrounds, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (on) "Surrounds   On" else "Surrounds   Off")
+
+            // A scene to bring back with one press, from Browse: these speakers at these levels, and
+            // the favourite playing if what plays is one. Here because this is where a room's
+            // speakers and levels are set up; Browse is where it is played from.
+            PanelSection("Presets")
+            IconLabelButton(Icons.Default.BookmarkAdd, "Save as preset", onSavePreset, Modifier.fillMaxWidth())
+
+        } else {
+        Column(Modifier.focusRequester(firstFocus).focusGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // TV Input is UPnP, so with UPnP off it is not offered; Line-In is the Control API's own
+                // `loadLineIn` and needs nothing else. Either makes a Source section.
+                val tvSwitchable = info.hasTvInput && !upnpOff
+                if (tvSwitchable || info.lineIns.isNotEmpty()) PanelSection("Source")
+                if (tvSwitchable) {
+                    AppButton(
+                        onClick = onUseTvInput,
+                        // Deliberately *not* disabled while it is already the source. A disabled
+                        // button here still takes focus and draws no highlight, so pressing down
+                        // onto it left the remote sitting on an invisible row — seen on the
+                        // Streamer. Re-selecting the input it is already on is harmless anyway,
+                        // and is the obvious thing to press when the TV audio has dropped out.
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
                     }
                 }
-                s.tvLevel?.let { ToneRow("Surrounds for TV", it, onStepSurround) }
-                s.musicLevel?.let { ToneRow("Surrounds for music", it, onStepMusicSurround) }
-            }
-        }
-        info.crossfade?.let { on ->
-            AppButton(onClick = onToggleCrossfade, modifier = Modifier.fillMaxWidth()) {
-                Text(if (on) "Crossfade   On" else "Crossfade   Off")
-            }
-        }
-
-        // TV Input is UPnP, so with UPnP off it is not offered; Line-In is the Control API's own
-        // `loadLineIn` and needs nothing else. Either makes a Source section.
-        val tvSwitchable = info.hasTvInput && !upnpOff
-        if (tvSwitchable || info.lineIns.isNotEmpty()) PanelSection("Source")
-        if (tvSwitchable) {
-            AppButton(
-                onClick = onUseTvInput,
-                // Deliberately *not* disabled while it is already the source. A disabled
-                // button here still takes focus and draws no highlight, so pressing down
-                // onto it left the remote sitting on an invisible row — seen on the
-                // Streamer. Re-selecting the input it is already on is harmless anyway,
-                // and is the obvious thing to press when the TV audio has dropped out.
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (info.onTvInput) "TV Input (current source)" else "TV Input")
-            }
-        }
-        // Beta, untested on hardware: no player here has a line-in (see `LINE_IN`), and present only
-        // with Beta features on. Nothing says when a room is already on one — what such a room
-        // reports has never been seen — so these rows never claim "current source". Another room's
-        // input is offered too, as Sonos's own steps imply (T-21).
-        info.lineIns.forEach { input ->
-            AppButton(onClick = { onUseLineIn(input.playerId) }, modifier = Modifier.fillMaxWidth()) {
-                Text(if (input.own) "Line-In" else "Line-In on ${input.room}", modifier = Modifier.weight(1f))
-                BetaMark()
-            }
-        }
-
-        // The room's own speaker's switches, as the Sonos app keeps them under its settings. UPnP,
-        // so with it off they go with the Sound rows; read with them, so absent until read.
-        val light = shownTone?.statusLight
-        val locked = shownTone?.buttonsLocked
-        val limit = shownTone?.volumeLimit?.takeIf { it < 100 }
-        if (light != null || locked != null || limit != null || shownTone?.battery != null || info.hasTvInput) PanelSection("Room settings")
-        // A portable's pack, as a line: it is read, not set. Health only where it is not the usual GREEN.
-        shownTone?.battery?.let { pack ->
-            val parts = listOfNotNull(
-                pack.level?.let { "Battery $it%" } ?: "Battery",
-                when (pack.charging) { true -> "charging"; false -> "on battery"; null -> null },
-                pack.health?.takeUnless { it.equals("GREEN", ignoreCase = true) },
-                // Read only with Beta features on: never seen on a portable (T-21).
-                "Beta",
-            )
-            Text(
-                parts.joinToString(" · "),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-        }
-        // Said only where one is set, since it explains a room that seems too quiet; not a focus stop,
-        // because this connection may not change it (setPlayerSettings is refused without a sign-in).
-        limit?.let {
-            Text(
-                "Volume limit $it% · set in the Sonos app",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-            )
-        }
-        light?.let { on ->
-            AppButton(onClick = onToggleStatusLight, modifier = Modifier.fillMaxWidth()) {
-                Text(if (on) "Status light   On" else "Status light   Off")
-            }
-        }
-        // Worded as the Sonos app's Button Control: "On" means the buttons work, which is unlocked.
-        locked?.let { isLocked ->
-            AppButton(onClick = onToggleTouchControls, modifier = Modifier.fillMaxWidth()) {
-                Text(if (isLocked) "Touch controls   Off" else "Touch controls   On")
-            }
-        }
-        // The soundbar's own TV-remote settings, written to the soundbar wherever it sits in the group.
-        shownTone?.remote?.let { remote ->
-            AppButton(onClick = onToggleRemoteFeedback, modifier = Modifier.fillMaxWidth()) {
-                Text(if (remote.feedback) "Remote feedback light   On" else "Remote feedback light   Off")
-            }
-            // A third word, which the service documents and nobody here has seen, is said and not toggled.
-            when (remote.irRepeaterOn) {
-                null -> Text(
-                    "IR repeater: ${remote.irRepeater}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                )
-                else -> AppButton(onClick = onToggleIrRepeater, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (remote.irRepeaterOn == true) "IR repeater   On" else "IR repeater   Off")
+                // Beta, untested on hardware: no player here has a line-in (see `LINE_IN`), and present only
+                // with Beta features on. Nothing says when a room is already on one — what such a room
+                // reports has never been seen — so these rows never claim "current source". Another room's
+                // input is offered too, as Sonos's own steps imply (T-21).
+                info.lineIns.forEach { input ->
+                    AppButton(onClick = { onUseLineIn(input.playerId) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (input.own) "Line-In" else "Line-In on ${input.room}", modifier = Modifier.weight(1f))
+                        BetaMark()
+                    }
                 }
-            }
+
+                // The room's sleep timer, Sonos's own on AVTransport: with UPnP off there is none to set.
+                if (!upnpOff) {
+                    PanelSection("Sleep timer")
+                    if (sleepEndsAt != null) {
+                        AppButton(onClick = onCancelSleep, modifier = Modifier.fillMaxWidth()) {
+                            Text("Cancel · stops at $sleepEndsAt")
+                        }
+                    }
+                    // In pairs, as the picker had them: six lengths fit with the rest of the panel below.
+                    SLEEP_CHOICES.chunked(2).forEach { pair ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            pair.forEach { minutes ->
+                                AppButton(onClick = { onSetSleep(minutes) }, modifier = Modifier.weight(1f)) {
+                                    Text(sleepChoiceLabel(minutes), modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Both of these need an HDMI socket to mean anything, so a room without one ends at
+                // the lists above. The source comes first: it is a thing to *do*, and the setting
+                // below it is a thing to state once and never touch again.
+                // Tone, for every room: it is the speaker's, not the soundbar's. Written over UPnP, so
+                // not offered with UPnP off; and not until it has been read, since a row that guessed
+                // a level would step from the wrong one.
+                // Crossfade is the group's, over the Control API, so it needs neither the tone nor UPnP;
+                // it moved here from the pane's button row, which needed the room for Group.
+                val shownTone = tone?.takeIf { !upnpOff }
+                if (shownTone != null || info.crossfade != null) PanelSection("Sound")
+                if (shownTone != null) {
+                    ToneRow("Bass", shownTone.bass, onStepBass)
+                    ToneRow("Treble", shownTone.treble, onStepTreble)
+                    AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (shownTone.loudness) "Loudness   On" else "Loudness   Off")
+                    }
+                    // Only where the speaker has a calibration to turn back on; measuring is the app's.
+                    shownTone.trueplay?.takeIf { it.available }?.let { trueplay ->
+                        AppButton(onClick = onToggleTrueplay, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (trueplay.enabled) "TruePlay   On" else "TruePlay   Off")
+                        }
+                    }
+                    // The Sonos app's Sub audio and Surround audio, only where the room has the speakers:
+                    // its zone names them, which an EQ probe cannot say (SonosHousehold.satellites).
+                    shownTone.satellites?.let { s ->
+                        s.subOn?.let { on ->
+                            AppButton(onClick = onToggleSub, modifier = Modifier.fillMaxWidth()) { Text(if (on) "Sub   On" else "Sub   Off") }
+                        }
+                        s.subLevel?.let { ToneRow("Sub level", it, onStepSub) }
+                        s.surroundsOn?.let { on ->
+                            AppButton(onClick = onToggleSurrounds, modifier = Modifier.fillMaxWidth()) {
+                                Text(if (on) "Surrounds   On" else "Surrounds   Off")
+                            }
+                        }
+                        s.tvLevel?.let { ToneRow("Surrounds for TV", it, onStepSurround) }
+                        s.musicLevel?.let { ToneRow("Surrounds for music", it, onStepMusicSurround) }
+                    }
+                }
+                info.crossfade?.let { on ->
+                    AppButton(onClick = onToggleCrossfade, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (on) "Crossfade   On" else "Crossfade   Off")
+                    }
+                }
+
+                // The room's own speaker's switches, as the Sonos app keeps them under its settings. UPnP,
+                // so with it off they go with the Sound rows; read with them, so absent until read.
+                val light = shownTone?.statusLight
+                val locked = shownTone?.buttonsLocked
+                val limit = shownTone?.volumeLimit?.takeIf { it < 100 }
+                if (light != null || locked != null || limit != null || shownTone?.battery != null || info.hasTvInput) PanelSection("Room settings")
+                // A portable's pack, as a line: it is read, not set. Health only where it is not the usual GREEN.
+                shownTone?.battery?.let { pack ->
+                    val parts = listOfNotNull(
+                        pack.level?.let { "Battery $it%" } ?: "Battery",
+                        when (pack.charging) { true -> "charging"; false -> "on battery"; null -> null },
+                        pack.health?.takeUnless { it.equals("GREEN", ignoreCase = true) },
+                        // Read only with Beta features on: never seen on a portable (T-21).
+                        "Beta",
+                    )
+                    Text(
+                        parts.joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                }
+                // Said only where one is set, since it explains a room that seems too quiet; not a focus stop,
+                // because this connection may not change it (setPlayerSettings is refused without a sign-in).
+                limit?.let {
+                    Text(
+                        "Volume limit $it% · set in the Sonos app",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
+                }
+                light?.let { on ->
+                    AppButton(onClick = onToggleStatusLight, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (on) "Status light   On" else "Status light   Off")
+                    }
+                }
+                // Worded as the Sonos app's Button Control: "On" means the buttons work, which is unlocked.
+                locked?.let { isLocked ->
+                    AppButton(onClick = onToggleTouchControls, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (isLocked) "Touch controls   Off" else "Touch controls   On")
+                    }
+                }
+                // The soundbar's own TV-remote settings, written to the soundbar wherever it sits in the group.
+                shownTone?.remote?.let { remote ->
+                    AppButton(onClick = onToggleRemoteFeedback, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (remote.feedback) "Remote feedback light   On" else "Remote feedback light   Off")
+                    }
+                    // A third word, which the service documents and nobody here has seen, is said and not toggled.
+                    when (remote.irRepeaterOn) {
+                        null -> Text(
+                            "IR repeater: ${remote.irRepeater}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        )
+                        else -> AppButton(onClick = onToggleIrRepeater, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (remote.irRepeaterOn == true) "IR repeater   On" else "IR repeater   Off")
+                        }
+                    }
+                }
+                if (info.hasTvInput) {
+                    // Detection fills this in on its own but has been seen to answer wrongly and
+                    // then keep the answer, so it has to be correctable by hand. There is no
+                    // un-naming: the crown simply moves to whichever room is named next.
+                    AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
+                        Text("This is my TV")
+                    }
+                }
         }
-        if (info.hasTvInput) {
-            // Detection fills this in on its own but has been seen to answer wrongly and
-            // then keep the answer, so it has to be correctable by hand. There is no
-            // un-naming: the crown simply moves to whichever room is named next.
-            AppButton(onClick = onSetTvRoom, modifier = Modifier.fillMaxWidth()) {
-                Text("This is my TV")
-            }
         }
     }
 }
@@ -418,86 +448,34 @@ private fun PanelSection(title: String) {
 }
 
 /**
- * One room, in either list: its level on left and right, and Enter for what [action] says.
- *
- * On a remote the level is a read-out rather than something to aim at, because a remote has
- * no drag — left and right are the whole gesture, and the bar is there to be watched while
- * they are held. By touch the bar is the slider: [onSet] takes where it was touched. Both
- * lists use this so a level is never somewhere a room is not.
+ * One room, in either list, as a pill: Select moves it to the other list — a member leaves the
+ * group, an outside room joins it — and the mark at its end says which. No level any more
+ * (2026-10-17, the owner's call): a speaker's level is the player pane's, and this panel is for
+ * which rooms play together.
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun RoomRow(
     name: String,
-    volume: Int?,
     /** "join", "leave", or none — the coordinator has nothing to leave. */
     action: String?,
     onActivate: () -> Unit,
-    onAdjust: (Int) -> Unit,
-    onSet: (Int) -> Unit,
     subtitle: String? = null,
-    /** Kept at its level and dimmed, the way the desktop widget draws a muted room. */
-    muted: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    AppButton(
-        onClick = onActivate,
-        modifier = modifier
-            .fillMaxWidth()
-            .onKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                val delta = when (event.key) {
-                    Key.DirectionLeft -> -VOLUME_STEP
-                    Key.DirectionRight -> +VOLUME_STEP
-                    else -> return@onKeyEvent false
-                }
-                // Only once the speaker has said where it is: adjusting from a level we do
-                // not know would aim from zero and turn it down. Still consumed either way,
-                // so a press does not wander out of the panel while it is unknown.
-                if (volume != null) onAdjust(delta)
-                true
-            },
-    ) {
+    AppButton(onClick = onActivate, modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                // The level sits at the end of the last line of text, so it is always
-                // directly above the right end of its own bar rather than off beside the
-                // action — a number next to "join" read as part of the action.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (subtitle == null) VolumeLevel(volume, muted)
-                }
+                Text(name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (subtitle != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false),
-                        )
-                        VolumeLevel(volume, muted)
-                    }
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
-                VolumeBar(volume, muted, onSet)
             }
-            // What Enter does to this row, as a mark that reads across a room: the 12sp words
+            // What Select does to this row, as a mark that reads across a room: the 12sp words
             // "join" and "leave" at the row's far end were the smallest text in the panel.
             if (action != null) {
                 Spacer(Modifier.width(16.dp))
@@ -510,72 +488,6 @@ private fun RoomRow(
         }
     }
 }
-
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun VolumeLevel(volume: Int?, muted: Boolean = false) {
-    Text(
-        text = when {
-            volume == null -> "—"
-            muted -> "$volume muted"
-            else -> volume.toString()
-        },
-        style = MaterialTheme.typography.titleMedium,
-    )
-}
-
-/**
- * Painted in the row's *content* colour rather than a fixed one.
- *
- * A focused button's container is already the primary colour, so a primary fill on it was
- * very nearly invisible — on the one row a viewer is actually adjusting. Taking the content
- * colour makes the bar invert along with the label.
- */
-@OptIn(ExperimentalTvMaterial3Api::class)
-@Composable
-private fun VolumeBar(volume: Int?, muted: Boolean, onSet: (Int) -> Unit) {
-    // Muted keeps the level and dims it: the speaker remembers where it was, and so does this.
-    val ink = mutedInk(muted)
-    val set by rememberUpdatedState(onSet)
-    // A tap or a drag on the bar sets the level under the finger. It takes the touch before
-    // the row does, so touching the bar never also joins or leaves. The strip is taller than
-    // the 4dp it draws, which no finger would hit.
-    fun levelAt(x: Float, width: Int) = (x / width * 100).roundToInt().coerceIn(0, 100)
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(Unit) { detectTapGestures { set(levelAt(it.x, size.width)) } }
-            .pointerInput(Unit) {
-                detectHorizontalDragGestures(
-                    onDragStart = { set(levelAt(it.x, size.width)) },
-                    onHorizontalDrag = { change, _ ->
-                        change.consume()
-                        set(levelAt(change.position.x, size.width))
-                    },
-                )
-            }
-            .padding(vertical = 10.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(ink.copy(alpha = 0.25f)),
-        ) {
-            if (volume != null && volume > 0) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(volume / 100f)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(ink),
-                )
-            }
-        }
-    }
-}
-
 
 /**
  * Bass or treble: left and right step it, as a level row does, since nothing else in the

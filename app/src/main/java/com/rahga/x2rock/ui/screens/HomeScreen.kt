@@ -170,7 +170,10 @@ fun HomeScreen(
     // The pane's Group button, and whether the open panel came from it: closing the panel goes
     // back to whatever opened it, the button or the room.
     val groupFocus = remember { FocusRequester() }
+    val configureFocus = remember { FocusRequester() }
     var panelFromPane by remember { mutableStateOf(false) }
+    // Which half of the room panel is open: grouping (the Group button) or Configure.
+    var panelConfigure by remember { mutableStateOf(false) }
     // Settings opens from its own button at the foot of the list, and closing it goes back there.
     val settingsButtonFocus = remember { FocusRequester() }
     var opener by rememberSaveable { mutableStateOf<Opener?>(null) }
@@ -259,7 +262,10 @@ fun HomeScreen(
     var panelReleasing by remember { mutableStateOf(false) }
     fun closePanel() {
         closeScope.launch {
-            handOffFocus({ panelReleasing = it }, { panelGroup = null }, if (panelFromPane) groupFocus else sidebarFocusRequester)
+            handOffFocus(
+                { panelReleasing = it }, { panelGroup = null },
+                if (!panelFromPane) sidebarFocusRequester else if (panelConfigure) configureFocus else groupFocus,
+            )
         }
     }
     BackHandler(enabled = panelGroup != null) { closePanel() }
@@ -321,7 +327,7 @@ fun HomeScreen(
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
                 onFocused = ::rowFocused,
-                onOpenPanel = { panelFromPane = false; panelGroup = it },
+                onOpenPanel = { panelFromPane = false; panelConfigure = false; panelGroup = it },
                 roomRanks = roomRanks,
                 movingGroupId = movingGroupId,
                 partyAsked = partyAsked,
@@ -391,8 +397,12 @@ fun HomeScreen(
                         onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
                         onOpenNowPlaying = { opener = Opener.NOW_PLAYING; onOpenNowPlaying(selectedGroupId!!) },
                         onOpenGroup = {
-                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelGroup = it }
+                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelConfigure = false; panelGroup = it }
                         },
+                        onOpenConfigure = {
+                            groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelConfigure = true; panelGroup = it }
+                        },
+                        configureFocusRequester = configureFocus,
                     )
                 }
             }
@@ -468,10 +478,9 @@ fun HomeScreen(
         }
         if (liveGroup != null) {
             val playerNames = remember(liveGroup) { homeViewModel.playerNamesForGroup(liveGroup) }
-            val volumes by homeViewModel.playerVolumes.collectAsState()
-            val groupVolumes by homeViewModel.groupVolumes.collectAsState()
-            val mutedPlayers by homeViewModel.mutedPlayers.collectAsState()
             val tone by homeViewModel.tone.collectAsState()
+            // The pane's own view model is on this room already: the panel opens from its buttons.
+            val playerState by playerViewModel.uiState.collectAsState()
             LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }
             Overlay(onDismiss = ::closePanel, trapped = !panelReleasing) {
                 RoomPanel(
@@ -481,10 +490,6 @@ fun HomeScreen(
                         .filter { it.id != liveGroup.id },
                     rooms = rooms,
                     playerNames = playerNames,
-                    playerVolumes = volumes,
-                    mutedPlayers = mutedPlayers,
-                    onNormalize = { homeViewModel.normalizeGroup(liveGroup.id) },
-                    groupVolumes = groupVolumes,
                     isPartying = groups.size == 1 && liveGroup.playerIds.size > 1,
                     onParty = {
                         homeViewModel.partyMode(liveGroup.id)
@@ -497,10 +502,6 @@ fun HomeScreen(
                     // Grouping stays open: building a group is several presses, and closing
                     // after each one would mean reopening the panel to make the next.
                     onRemovePlayer = { homeViewModel.removePlayerFromGroup(liveGroup.id, it) },
-                    onAdjustPlayerVolume = homeViewModel::adjustPlayerVolume,
-                    onAdjustGroupVolume = homeViewModel::adjustGroupVolume,
-                    onSetPlayerVolume = homeViewModel::setPlayerVolume,
-                    onSetGroupVolume = homeViewModel::setGroupVolume,
                     onJoin = { homeViewModel.joinGroup(it.id, liveGroup.id) },
                     onSetTvRoom = { homeViewModel.setTvSoundbar(liveGroup.id) },
                     onUseTvInput = {
@@ -528,6 +529,10 @@ fun HomeScreen(
                     onToggleTouchControls = homeViewModel::toggleTouchControls,
                     onToggleCrossfade = { homeViewModel.toggleCrossfade(liveGroup.id) },
                     onSavePreset = { homeViewModel.savePreset(liveGroup.id) },
+                    configure = panelConfigure,
+                    sleepEndsAt = rememberSleepEnd(playerState.sleepTimerEndsAt),
+                    onSetSleep = { minutes -> playerViewModel.setSleepTimer(minutes); closePanel() },
+                    onCancelSleep = { playerViewModel.cancelSleepTimer(); closePanel() },
                 )
             }
         }

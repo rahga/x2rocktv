@@ -135,30 +135,58 @@ private fun HeaderVolume(
     onToggleMute: () -> Unit,
     onExitLeft: () -> Unit,
     entry: VolumeEntry,
+) = VolumePill(
+    volume = state.volume,
+    muted = state.isMuted,
+    fixed = state.volumeFixed,
+    onStep = onStep,
+    onToggleMute = onToggleMute,
+    onExitLeft = onExitLeft,
+    onSetExactly = entry.open,
+    modifier = Modifier.focusRequester(entry.focus),
+    onFocused = { entry.focused.value = it },
+)
+
+/**
+ * The volume control as one pill, the room's in the header and each speaker's in a grouped room's
+ * rows alike, so a level reads and answers the same wherever it is. See [HeaderVolume] for the
+ * presses. [onSetExactly], where given, is a hold's or Menu's.
+ */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+internal fun VolumePill(
+    volume: Int?,
+    muted: Boolean,
+    fixed: Boolean,
+    onStep: (Int) -> Unit,
+    onToggleMute: () -> Unit,
+    onExitLeft: () -> Unit,
+    modifier: Modifier = Modifier,
+    onSetExactly: (() -> Unit)? = null,
+    onFocused: (Boolean) -> Unit = {},
 ) {
     var focused by remember { mutableStateOf(false) }
     // A fixed line-out has no level to step: the view model says so if a step is tried.
-    val showSteps = !state.volumeFixed && stepMarksShown(focused)
+    val showSteps = !fixed && stepMarksShown(focused)
     // A hold, or Menu, sets an exact level — where stepping there by fives would take a while.
     // Not for a fixed line-out, which has no level to set.
-    val setExactly = entry.open.takeIf { !state.volumeFixed }
+    val setExactly = onSetExactly.takeIf { !fixed }
     Surface(
         onClick = onToggleMute,
         onLongClick = setExactly,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         // Focus shows in its colour; tv-material3's grow on focus pushed it past its own row.
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
-        modifier = Modifier
-            .focusRequester(entry.focus)
+        modifier = modifier
             .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)
-            .onFocusChanged { focused = it.isFocused; entry.focused.value = it.isFocused }
+            .onFocusChanged { focused = it.isFocused; onFocused(it.isFocused) }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     // A fixed line-out has no level to step, so left does what it does from any
                     // row's leftmost control: back to the room list. Otherwise every press only
                     // posted the "fixed" notice and the remote stayed put.
-                    Key.DirectionLeft -> { if (state.volumeFixed) onExitLeft() else onStep(-VOLUME_STEP); true }
+                    Key.DirectionLeft -> { if (fixed) onExitLeft() else onStep(-VOLUME_STEP); true }
                     Key.DirectionRight -> { onStep(+VOLUME_STEP); true }
                     else -> false
                 }
@@ -172,12 +200,12 @@ private fun HeaderVolume(
         ) {
             StepMark("\u2212", showSteps, MaterialTheme.typography.titleMedium) { onStep(-VOLUME_STEP) }
             Icon(
-                imageVector = if (state.isMuted) Icons.AutoMirrored.Filled.VolumeOff
+                imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff
                 else Icons.AutoMirrored.Filled.VolumeUp,
-                contentDescription = if (state.isMuted) "Unmute" else "Mute",
+                contentDescription = if (muted) "Unmute" else "Mute",
                 modifier = Modifier.size(30.dp),
             )
-            if (!state.volumeFixed) VolumeWedge(state.volume, state.isMuted)
+            if (!fixed) VolumeWedge(volume, muted)
             // The size a level is read at across a room: the remote's own keys go to the
             // television over CEC, so this is the one level on screen for the room itself.
             val levelStyle = MaterialTheme.typography.headlineSmall
@@ -191,9 +219,9 @@ private fun HeaderVolume(
             }
             Text(
                 text = when {
-                    state.volumeFixed -> "Fixed"
-                    state.volume == null -> "\u2014"
-                    else -> state.volume.toString()
+                    fixed -> "Fixed"
+                    volume == null -> "\u2014"
+                    else -> volume.toString()
                 },
                 style = levelStyle,
                 textAlign = TextAlign.Center,

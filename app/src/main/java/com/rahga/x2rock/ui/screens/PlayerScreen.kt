@@ -1,5 +1,12 @@
 package com.rahga.x2rock.ui.screens
 
+import kotlin.math.abs
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.BringIntoViewSpec
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
 import kotlinx.coroutines.flow.drop
 import androidx.compose.runtime.snapshotFlow
@@ -100,7 +107,7 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.upNextLine
 import com.rahga.x2rock.viewmodel.previousLine
 
-@OptIn(ExperimentalTvMaterial3Api::class)
+@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun PlayerPane(
     viewModel: PlayerViewModel,
@@ -127,6 +134,9 @@ fun PlayerPane(
     onOpenNowPlaying: () -> Unit,
     /** Open the room panel: grouping, then the room's settings. */
     onOpenGroup: () -> Unit,
+    /** The room's Configure panel — Source, Sleep timer, Sound, Room settings — and its button's focus. */
+    onOpenConfigure: () -> Unit,
+    configureFocusRequester: FocusRequester,
     /**
      * Where focus starts instead, when this pane is composed on the way back from a screen one of
      * its buttons opened: that button. See the note on the grab below.
@@ -142,7 +152,6 @@ fun PlayerPane(
         animationSpec = tween(600),
         label = "artTint",
     )
-    var showSleepTimerPicker by remember { mutableStateOf(false) }
     // The exact-level entry, opened by a hold on the volume; focus goes back to the volume after.
     var showSetVolume by remember { mutableStateOf(false) }
     val volumeFocusRequester = remember { FocusRequester() }
@@ -210,7 +219,6 @@ fun PlayerPane(
 
     // The picker traps focus, so closing it hands focus back to Zzz, the button that opened it,
     // where the remote was; the pane's first control only if Zzz has gone meanwhile.
-    val sleepFocusRequester = remember { FocusRequester() }
 
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
@@ -223,12 +231,21 @@ fun PlayerPane(
         ) {
             // Scrolls, because a grouped room's speaker rows run off the bottom: with a five-room
             // party on the Shield they were drawn below the screen and focus could not reach
-            // them. A focused control in a scrolling column is brought into view as the remote
-            // moves, so nothing else is needed for D-pad.
+            // them. But only from the places row down, and only as far as the focused control
+            // needs (2026-10-17, asked for by the owner): a TV's own rule pivots every focused
+            // control towards the screen's upper part, which pushed the art and title off the top
+            // the moment the places row had focus. Back up to the transport, it returns to the top.
+            val paneZones = remember { PaneZones() }
+            val paneScroll = rememberScrollState()
+            LaunchedEffect(paneZones.lower) { if (!paneZones.lower) paneScroll.animateScrollTo(0) }
+            CompositionLocalProvider(
+                LocalPaneZones provides paneZones,
+                LocalBringIntoViewSpec provides remember { LowerZonesOnly(paneZones) },
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
+                    .verticalScroll(paneScroll)
                     .padding(horizontal = 48.dp, vertical = 32.dp),
                 // Tight enough that the second row of buttons sits inside the screen's safe area
                 // at 1080p with a two-line title; at 32dp it touched the bottom edge.
@@ -248,8 +265,8 @@ fun PlayerPane(
                         firstFocusRequester = detailFocusRequester,
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenFavorites = onOpenFavorites,
-                        onOpenSleepTimer = { showSleepTimerPicker = true },
-                        sleepFocusRequester = sleepFocusRequester,
+                        onOpenConfigure = onOpenConfigure,
+                        configureFocusRequester = configureFocusRequester,
                         browseFocusRequester = browseFocusRequester,
                         searchFocusRequester = searchFocusRequester,
                         onOpenSearch = onOpenSearch,
@@ -276,8 +293,8 @@ fun PlayerPane(
                         exitLeftFocusRequester = sidebarFocusRequester,
                         onOpenQueue = onOpenQueue,
                         onOpenFavorites = onOpenFavorites,
-                        onOpenSleepTimer = { showSleepTimerPicker = true },
-                        sleepFocusRequester = sleepFocusRequester,
+                        onOpenConfigure = onOpenConfigure,
+                        configureFocusRequester = configureFocusRequester,
                         queueFocusRequester = queueFocusRequester,
                         browseFocusRequester = browseFocusRequester,
                         searchFocusRequester = searchFocusRequester,
@@ -291,6 +308,7 @@ fun PlayerPane(
                         alarm = if (state.ringingAlarm != null) { { AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester) } } else null,
                     )
                 }
+            }
             }
         }
 
@@ -312,16 +330,6 @@ fun PlayerPane(
             )
         }
 
-        if (showSleepTimerPicker) {
-            SleepTimerPickerOverlay(
-                trapped = !overlayReleasing,
-                onSelect = { minutes ->
-                    viewModel.setSleepTimer(minutes)
-                    closeOverlay({ showSleepTimerPicker = false }, sleepFocusRequester, detailFocusRequester)
-                },
-                onDismiss = { closeOverlay({ showSleepTimerPicker = false }, sleepFocusRequester, detailFocusRequester) }
-            )
-        }
     }
 }
 
@@ -518,8 +526,8 @@ private fun PlaybackControls(
     exitLeftFocusRequester: FocusRequester,
     onOpenQueue: () -> Unit,
     onOpenFavorites: () -> Unit,
-    onOpenSleepTimer: () -> Unit,
-    sleepFocusRequester: FocusRequester,
+    onOpenConfigure: () -> Unit,
+    configureFocusRequester: FocusRequester,
     queueFocusRequester: FocusRequester,
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
@@ -671,6 +679,7 @@ private fun PlaybackControls(
             // so it reaches LABEL_OVERHANG past the pane on both sides and its content is inset by
             // the same, leaving the buttons where they were and room for a name at either end.
             modifier = Modifier
+                .lowerZone("places")
                 .overhang(LABEL_OVERHANG)
                 .focusGroup()
                 .horizontalScroll(rememberScrollState())
@@ -703,7 +712,7 @@ private fun PlaybackControls(
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
-                SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
+                ConfigureButton(state, onOpenConfigure, configureFocusRequester)
             }
             // The room's music on the whole screen, for an hour of listening; with nothing loaded
             // there is nothing to show there.
@@ -775,8 +784,8 @@ private fun TvControls(
     firstFocusRequester: FocusRequester,
     exitLeftFocusRequester: FocusRequester,
     onOpenFavorites: () -> Unit,
-    onOpenSleepTimer: () -> Unit,
-    sleepFocusRequester: FocusRequester,
+    onOpenConfigure: () -> Unit,
+    configureFocusRequester: FocusRequester,
     browseFocusRequester: FocusRequester,
     searchFocusRequester: FocusRequester,
     onOpenSearch: () -> Unit,
@@ -824,7 +833,7 @@ private fun TvControls(
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
-            modifier = Modifier.focusGroup(),
+            modifier = Modifier.lowerZone("places").focusGroup(),
         ) {
             // The way out of the television and back into music. Sonos's own TV screen has no
             // such row, but a room on its HDMI input is exactly where wanting to put music on
@@ -838,7 +847,7 @@ private fun TvControls(
             )
             PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             GroupButton(onOpenGroup, groupFocusRequester)
-            SleepTimerButton(state, viewModel, onOpenSleepTimer, sleepFocusRequester)
+            ConfigureButton(state, onOpenConfigure, configureFocusRequester)
         }
 
         SpeakerRows(state, viewModel, exitLeftFocusRequester)
@@ -853,6 +862,11 @@ private fun TvControls(
  */
 
 /** A setting and the value it currently holds, the way the Sonos app draws these two. */
+/**
+ * One speaker of a grouped room: its name and its level as the header's pill (left and right step
+ * it, Select mutes). Grouping is the Group button's, not this row's: on a remote, Right on the pill
+ * is louder, so a button after it could not be reached (2026-10-17).
+ */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PlayerVolumeRow(
@@ -872,40 +886,14 @@ private fun PlayerVolumeRow(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        // A fixed line-out has no level to step: −/+ are not drawn, and Mute is the left exit.
-        if (!entry.fixed) {
-            AppButton(
-                onClick = { viewModel.adjustPlayerVolume(entry.playerId, -5) },
-                // Not disabled while muted: a step unmutes, and a disabled button here would
-                // be this row's left exit with no highlight to show the remote was on it.
-                // The leftmost control of this row, and these rows appear whenever the room
-                // is grouped. Without it a left press falls through to the pane's
-                // `focusProperties`, which does not govern the search — so focus left the
-                // pane and was lost.
-                modifier = Modifier.exitLeftTo(exitLeftFocusRequester),
-            ) { Icon(Icons.Filled.Remove, contentDescription = "Quieter") }
-        }
-        Text(
-            text = when {
-                entry.fixed -> "fixed"
-                entry.muted -> "${entry.volume} (muted)"
-                else -> "${entry.volume}"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            // Wide enough for "100 (muted)" on one line.
-            modifier = Modifier.width(104.dp)
+        VolumePill(
+            volume = entry.volume,
+            muted = entry.muted,
+            fixed = entry.fixed,
+            onStep = { viewModel.adjustPlayerVolume(entry.playerId, it) },
+            onToggleMute = { viewModel.togglePlayerMute(entry.playerId) },
+            onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
         )
-        if (!entry.fixed) {
-            AppButton(
-                onClick = { viewModel.adjustPlayerVolume(entry.playerId, +5) },
-            ) { Icon(Icons.Filled.Add, contentDescription = "Louder") }
-        }
-        AppButton(
-            onClick = { viewModel.togglePlayerMute(entry.playerId) },
-            modifier = if (entry.fixed) Modifier.exitLeftTo(exitLeftFocusRequester) else Modifier,
-        ) {
-            Text(if (entry.muted) "Unmute" else "Mute")
-        }
     }
 }
 
@@ -916,8 +904,44 @@ private fun SpeakerRows(state: PlayerUiState, viewModel: PlayerViewModel, exitLe
     Spacer(modifier = Modifier.height(24.dp))
     Text("Speakers", style = MaterialTheme.typography.titleSmall)
     Spacer(modifier = Modifier.height(8.dp))
-    state.playerVolumes.forEach { entry ->
-        PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
+    Column(Modifier.lowerZone("speakers")) {
+        state.playerVolumes.forEach { entry ->
+            PlayerVolumeRow(entry, viewModel, exitLeftFocusRequester)
+        }
+    }
+}
+
+/** Which of the pane's lower parts hold focus; the pane scrolls only while one does. */
+private class PaneZones {
+    private val focused = mutableStateMapOf<String, Boolean>()
+    val lower: Boolean get() = focused.values.any { it }
+    fun set(zone: String, hasFocus: Boolean) { focused[zone] = hasFocus }
+}
+
+private val LocalPaneZones = staticCompositionLocalOf { PaneZones() }
+
+@Composable
+private fun Modifier.lowerZone(zone: String): Modifier {
+    val zones = LocalPaneZones.current
+    return onFocusChanged { zones.set(zone, it.hasFocus) }
+}
+
+/**
+ * The pane's scroll: none while focus is above the places row, and from there down only as far as
+ * the focused control needs to be wholly on screen — the platform's own reach, without the TV's
+ * pivot. See where it is provided.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private class LowerZonesOnly(private val zones: PaneZones) : BringIntoViewSpec {
+    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
+        if (!zones.lower) return 0f
+        val trailing = offset + size
+        return when {
+            offset >= 0 && trailing <= containerSize -> 0f
+            offset < 0 && trailing > containerSize -> 0f
+            abs(offset) < abs(trailing - containerSize) -> offset
+            else -> trailing - containerSize
+        }
     }
 }
 
