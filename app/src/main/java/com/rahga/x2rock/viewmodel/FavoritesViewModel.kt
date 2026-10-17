@@ -110,7 +110,7 @@ class FavoritesViewModel @Inject constructor(
      * deletes. A preset is only this device's, so deleting one touches nothing on the speakers.
      */
     fun deletePreset(preset: Preset) {
-        if (!armed(presetKey(preset.id), "Press Menu again to delete \"${preset.name}\"")) return
+        if (!armed(presetKey(preset.id), "Hold again to delete \"${preset.name}\"")) return
         presetStore.remove(preset.id)
         _notice.post("Deleted \"${preset.name}\"")
     }
@@ -120,7 +120,7 @@ class FavoritesViewModel @Inject constructor(
      * preset is deleted: it is every controller's list, not this device's.
      */
     fun removeFavorite(favorite: Favorite) {
-        if (!armed(favoriteKey(favorite.id), "Press Menu again to remove \"${favorite.name}\" from Sonos Favorites")) return
+        if (!armed(favoriteKey(favorite.id), "Hold again to remove \"${favorite.name}\" from Sonos Favorites")) return
         viewModelScope.launch {
             runCatching { household.removeFavorite(favorite.id) }
                 .onSuccess {

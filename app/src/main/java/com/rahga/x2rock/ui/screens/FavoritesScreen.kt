@@ -252,7 +252,7 @@ private fun BrowseList(
                 ) {
                     when {
                         loadingId == presetKey(preset.id) -> RowStatus("Starting…")
-                        deleteArmed == presetKey(preset.id) -> RowStatus("Menu again to delete", highlighted = true)
+                        deleteArmed == presetKey(preset.id) -> RowStatus("Hold again to delete", highlighted = true)
                     }
                 }
             }
@@ -274,7 +274,7 @@ private fun BrowseList(
                     ) {
                         when {
                             loadingId == fav.id -> RowStatus("Starting…")
-                            deleteArmed == favoriteKey(fav.id) -> RowStatus("Menu again to remove", highlighted = true)
+                            deleteArmed == favoriteKey(fav.id) -> RowStatus("Hold again to remove", highlighted = true)
                             state.activeId == fav.id -> RowStatus("Now playing", highlighted = true)
                             // An album or playlist opens on its tracks, with Play and Shuffle at the head.
                             opens(fav) -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))

@@ -133,7 +133,7 @@ fun PreferredServicesScreen(onBack: () -> Unit, viewModel: PreferredServicesView
                             ServiceRow(
                                 name = service.name,
                                 detail = if (isMoving) "Moving: Up or Down, then Select to put it down"
-                                else "${index + 1} · Select to move, Menu to remove",
+                                else "${index + 1} · Select to move, hold to remove",
                                 onClick = { viewModel.toggleMoving(service.id) },
                                 onMenu = { handOver(service.id, preferredIds, otherIds) { viewModel.remove(service.id) } },
                                 opens = false,

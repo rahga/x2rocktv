@@ -102,7 +102,7 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
                             Text(
                                 "Times are this system's clock, now ${clock.time}." +
                                     (if (clock.timeZoneSet) "" else " It has no time zone set, so they are UTC.") +
-                                    " Select turns one on or off; Menu changes or removes it.",
+                                    " Select turns one on or off; a hold changes or removes it.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
