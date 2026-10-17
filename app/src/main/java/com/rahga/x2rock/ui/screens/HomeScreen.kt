@@ -104,6 +104,11 @@ import com.rahga.x2rock.model.followingRoom
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
+import com.rahga.x2rock.ui.components.dpadMenuKey
+import com.rahga.x2rock.ui.components.ItemMenu
+import com.rahga.x2rock.ui.components.MenuAction
+import com.rahga.x2rock.ui.components.MenuSection
+import com.rahga.x2rock.store.RoomOrder
 import com.rahga.x2rock.ui.components.keepTaps
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.components.tapToClick
@@ -147,9 +152,13 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val upnpOff by homeViewModel.upnpOff.collectAsState()
     val betaEnabled by homeViewModel.betaEnabled.collectAsState()
+    val roomOrder by homeViewModel.roomOrder.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
+    // The room list's sort menu, from a hold or Menu on a room (P-20).
+    var showSortMenu by remember { mutableStateOf(false) }
+    var sortMenuReleasing by remember { mutableStateOf(false) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
@@ -264,7 +273,7 @@ fun HomeScreen(
     }
 
     // Both modals hand focus back as they close, above; nothing is left to place afterwards.
-    val modalVisible = showSettings || panelGroup != null
+    val modalVisible = showSettings || panelGroup != null || showSortMenu
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
     // losing it all left focus on the first thing Compose finds — the first room's row: a cold
@@ -316,6 +325,8 @@ fun HomeScreen(
                 detailFocusRequester = detailFocusRequester,
                 onFocused = ::rowFocused,
                 onOpenPanel = { panelFromPane = false; panelGroup = it },
+                roomOrder = roomOrder,
+                onSortMenu = { showSortMenu = true },
                 onSettingsClick = { showSettings = true },
                 settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
@@ -432,6 +443,26 @@ fun HomeScreen(
             )
         }
 
+        if (showSortMenu) {
+            // Closed by handing focus to the selected room first, as the panel is: the row that was
+            // held. Closing outright left focus to fall on the first row, which selects on focus.
+            fun closeSortMenu() {
+                focusScope.launch { handOffFocus({ sortMenuReleasing = it }, { showSortMenu = false }, sidebarFocusRequester) }
+            }
+            ItemMenu(
+                title = "Sort rooms",
+                subtitle = "On this TV",
+                artUrl = null,
+                sections = listOf(MenuSection(null, RoomOrder.entries.map { order ->
+                    MenuAction(order.label, if (order == roomOrder) "${order.detail} · now" else order.detail) {
+                        homeViewModel.setRoomOrder(order)
+                    }
+                })),
+                onDismiss = ::closeSortMenu,
+                trapped = !sortMenuReleasing,
+            )
+        }
+
         val panel = panelGroup
         // Re-read from the live list rather than the captured group: a regroup mints new
         // ids, and this panel is the surface most likely to be open while one happens —
@@ -457,7 +488,7 @@ fun HomeScreen(
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
-                    otherGroups = sortGroups(groups)
+                    otherGroups = sortGroups(groups, roomOrder)
                         .filter { it.id != liveGroup.id },
                     rooms = rooms,
                     playerNames = playerNames,
@@ -529,6 +560,8 @@ private fun RoomSidebar(
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
     onOpenPanel: (Group) -> Unit,
+    roomOrder: RoomOrder,
+    onSortMenu: () -> Unit,
     onSettingsClick: () -> Unit,
     settingsFocusRequester: FocusRequester,
     onRetry: () -> Unit,
@@ -540,8 +573,8 @@ private fun RoomSidebar(
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val sorted = remember(groups) {
-        sortGroups(groups)
+    val sorted = remember(groups, roomOrder) {
+        sortGroups(groups, roomOrder)
     }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
@@ -610,7 +643,8 @@ private fun RoomSidebar(
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
-                            onOpenPanel = { onOpenPanel(group) }
+                            onOpenPanel = { onOpenPanel(group) },
+                            onSortMenu = onSortMenu,
                         )
                     }
                 }
@@ -650,15 +684,18 @@ private fun RoomListItem(
     /** Right from a room crosses into the player pane, at its primary control. */
     detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
-    onOpenPanel: () -> Unit
+    onOpenPanel: () -> Unit,
+    onSortMenu: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val activity = roomActivity(group.playbackState, info.hasSource)
     AppCard(
         // Select goes into the room, to its player, as Select does on every TV list; opening the
         // panel on it put a dialog in front of the one thing a viewer pressed to get to. The panel
-        // is the pane's Group button's; a hold and Menu here were dropped as unneeded (2026-10-16).
+        // is the pane's Group button's. A hold or Menu here sorts the list instead (P-20,
+        // 2026-10-17): the list is the one thing a room row stands in, and nothing else asks a hold.
         onClick = { detailFocusRequester.requestFocusSafely() },
+        onLongClick = onSortMenu,
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
         // turn — the first selects, a tap on the selected room opens its panel.
         onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
@@ -686,6 +723,7 @@ private fun RoomListItem(
                 focused = it.isFocused
                 if (it.isFocused) onFocused()
             }
+            .dpadMenuKey(onSortMenu)
     ) {
         Row(
             modifier = Modifier

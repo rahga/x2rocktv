@@ -44,17 +44,20 @@ import com.rahga.x2rock.model.TruePlay
 import kotlinx.coroutines.sync.withLock
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
+import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.store.RoomOrder
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /**
- * Sidebar order: Sonos's own, which is alphabetical and nothing else.
+ * Sidebar order: Sonos's own alphabetical by default, or [RoomOrder.PLAYING_FIRST] where this
+ * device chose it — rooms playing (or about to) first, each part alphabetical. The Sonos app
+ * gained these sorts in 2026 (P-20); they are the app's, not the household's, so each controller
+ * keeps its own, and this one keeps its per device.
  *
- * Sonos sorts rooms alphabetically and offers no ordering of its own — it has playback, EQ
- * and home-theatre settings but nothing positional — so there is no shared order to match
- * and nothing to reorder *to*. Hoisting a room here would make this list disagree with every
- * other controller in the house for no gain.
+ * Only what a viewer reads follows the choice: the first-launch default and the home-screen
+ * channel stay alphabetical, since an order that moves with playback would move them too.
  *
  * There were two hoists once. Favourites went first, then a pinned "primary room", which had
  * quietly become the second of two answers to "which room does this device belong to" — and
@@ -64,7 +67,13 @@ import kotlin.math.roundToInt
  *
  * Kept as a function rather than inlined so the decision has somewhere to live.
  */
-fun sortGroups(groups: List<Group>): List<Group> = groups.sortedBy { it.name }
+fun sortGroups(groups: List<Group>, order: RoomOrder = RoomOrder.ALPHABETICAL): List<Group> = when (order) {
+    RoomOrder.ALPHABETICAL -> groups.sortedBy { it.name }
+    RoomOrder.PLAYING_FIRST -> groups.sortedWith(compareBy({ !it.isActive() }, { it.name }))
+}
+
+/** Playing, or buffering on its way to it: a room just started should not sink for a moment first. */
+private fun Group.isActive() = playbackState == PlaybackStates.PLAYING || playbackState == PlaybackStates.BUFFERING
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -342,6 +351,9 @@ class HomeViewModel @Inject constructor(
     fun clearNavigateToRoom() { _navigateToRoom.value = false }
 
     fun setTheme(theme: AppColorTheme) = themeStore.setTheme(theme)
+
+    val roomOrder: StateFlow<RoomOrder> = roomPrefsStore.roomOrder
+    fun setRoomOrder(order: RoomOrder) = roomPrefsStore.setRoomOrder(order)
 
     fun selectGroup(id: String) { _selectedGroupId.value = id }
 

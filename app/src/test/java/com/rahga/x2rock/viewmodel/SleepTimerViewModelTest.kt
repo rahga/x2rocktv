@@ -1,6 +1,5 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
@@ -70,7 +69,7 @@ class SleepTimerViewModelTest {
         scope = CoroutineScope(SupervisorJob())
         val book = PlayerAddressBook()
         household = fakeHousehold(fake, scope, addressBook = book, upnpPort = upnp.port)
-        viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock, BetaFeatures(FakePreferences()))
+        viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
         runBlocking { household.connectTo(fake) }
         groupId = fake.groupId(household)
     }

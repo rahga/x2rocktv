@@ -50,6 +50,8 @@ fun ItemMenu(
     sections: List<MenuSection>,
     onDismiss: () -> Unit,
     note: String? = null,
+    /** False while focus is handed back through [handOffFocus], as the room panel's is. */
+    trapped: Boolean = true,
 ) {
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
@@ -62,7 +64,7 @@ fun ItemMenu(
     }
     val first = rows.indexOfFirst { it is MenuAction }
 
-    Overlay(onDismiss) {
+    Overlay(onDismiss, trapped) {
         Column(
             modifier = Modifier
                 .width(520.dp)

@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
+import com.rahga.x2rock.store.RoomOrder
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
 import com.google.gson.JsonObject
@@ -631,6 +632,13 @@ class HomeViewModelTest {
 
         assertEquals(AppColorTheme.EMBER, ThemeStore(prefs).theme.value)
         assertEquals("RINCON_TEST", RoomPreferencesStore(prefs).tvPlayerId.value)
+    }
+
+    /** The room order is this device's: chosen once, it is still the order after a restart. */
+    @Test fun `the room order survives a new store, and starts alphabetical`() {
+        assertEquals(RoomOrder.ALPHABETICAL, viewModel.roomOrder.value)
+        viewModel.setRoomOrder(RoomOrder.PLAYING_FIRST)
+        assertEquals(RoomOrder.PLAYING_FIRST, RoomPreferencesStore(prefs).roomOrder.value)
     }
 
     @Test fun `losing the household surfaces an error`() = runBlocking<Unit> {

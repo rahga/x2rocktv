@@ -697,7 +697,7 @@ private fun PlaybackControls(
             )
             PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             if (state.canSaveFavorite) {
-                PlaceButton(Icons.Outlined.StarBorder, "Save favorite · Beta", viewModel::saveFavorite)
+                PlaceButton(Icons.Outlined.StarBorder, "Save favorite", viewModel::saveFavorite)
             }
             GroupButton(onOpenGroup, groupFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the

@@ -84,7 +84,7 @@ class FocusChoreographyTest {
 
     private fun buildViewModels() {
         home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs))
-        player = PlayerViewModel(household, SilentNowPlaying, testClock, BetaFeatures(prefs))
+        player = PlayerViewModel(household, SilentNowPlaying, testClock)
     }
 
     @After fun tearDown() {

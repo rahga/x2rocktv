@@ -1,6 +1,5 @@
 package com.rahga.x2rock
 
-import com.rahga.x2rock.store.BetaFeatures
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.remember
 import androidx.compose.ui.input.key.Key
@@ -97,7 +96,7 @@ class BrowseFocusReturnTest {
                         FavoritesScreen(
                             room = "Kitchen", onBack = {}, onOpenRadio = {}, onOpenServices = {}, onOpenFavorite = { _, _, _, _ -> },
                             onPlayed = {},
-                            playerViewModel = remember { PlayerViewModel(household, SilentNowPlaying, testClock, BetaFeatures(prefs)) },
+                            playerViewModel = remember { PlayerViewModel(household, SilentNowPlaying, testClock) },
                             viewModel = remember {
                                 FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to groupId)), PresetStore(prefs), PendingRoomDeepLink())
                             },

@@ -2,7 +2,6 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.lan.SonosHousehold
 import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.PlaybackActions
@@ -165,7 +164,6 @@ class PlayerViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val nowPlaying: NowPlayingPublisher,
     private val clock: MonotonicClock,
-    betaFeatures: BetaFeatures,
 ) : ViewModel() {
 
     private val _groupId = MutableStateFlow<String?>(null)
@@ -283,9 +281,6 @@ class PlayerViewModel @Inject constructor(
                 nightMode = ht?.nightMode ?: false,
                 speechEnhancement = ht?.speechEnhancement ?: false,
             )
-        }.combine(betaFeatures.enabled) { state, beta ->
-            // Beta until a save has been pressed on a TV (T-31 ran on the emulator and the JVM).
-            if (beta) state else state.copy(canSaveFavorite = false)
         }.combine(_rating) { state, rating ->
             // Keyed to the room it was read for, so a switch never shows the last room's.
             state.copy(rating = rating?.takeIf { it.first == _groupId.value }?.second)

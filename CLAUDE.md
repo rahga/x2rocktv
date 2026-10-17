@@ -383,8 +383,8 @@ no third line, no "(current source)". **Any release notes must say Line-In is un
 real Port, Five or Amp has taken it (PUNCH P-14).
 
 **Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
-as are a portable's battery line, the player pane's Save favorite and the item menu's Sonos Favorites
-actions, and each says "Beta" where it appears (the menu's, which are rows among others, do not). With the switch on, every
+as are a portable's battery line and the item menu's Sonos Favorites actions (the player pane's Save
+favorite left Beta on 2026-10-17, after saves on the Shield), and each says "Beta" where it appears (the menu's, which are rows among others, do not). With the switch on, every
 room is also offered **another room's** line-in ("Line-In on Den"), as Sonos's own steps imply but
 never state. Anything else that has never run on a device goes behind the same switch. **Send a
 report**, under it, is a QR code to a prefilled public GitHub issue: models, versions, capabilities,
@@ -442,7 +442,8 @@ that opened two further dialogs — `RoomContextMenu` led to `GroupPickerDialog`
 Select on a list item means "go into this", and a dialog in front of the player was the opposite
 of what that press asked for. The panel opens from the pane's **Group** button, which a viewer can
 see (or a tap on the selected room, by touch). A long press and Menu on the room opened it too,
-for those who knew them; the owner saw no need for them and they were dropped (2026-10-16). Closing
+for those who knew them; the owner saw no need for them and they were dropped (2026-10-16). They
+now open **Sort rooms** instead (2026-10-17, below). Closing
 it returns focus to whichever opened it. Group is in the pane's row rather than above or below the
 room list, for the reason in "Nothing that acts on the selected room" below.
 
@@ -478,14 +479,21 @@ The panel opens focused on **the room's own row**, not on Party: the row most li
 wanted, and one press from either neighbour.
 
 **Two hoists have been removed from `sortGroups`, and nothing should reintroduce one.** The
-list is now strictly alphabetical, which is Sonos's own order and the only order there is —
-Sonos has playback, EQ and home-theatre settings but nothing positional. "If it doesn't let
-us reorder in the Sonos app, I don't think we should either."
+list was strictly alphabetical, Sonos's own order — Sonos had playback, EQ and home-theatre
+settings but nothing positional. "If it doesn't let us reorder in the Sonos app, I don't think we
+should either."
 
 **The Sonos app has since gained room sorting** (seen 2026-10-11, app 90.00): Actively playing (its
-default), Frequently used, Alphabetical, and Pin. The premise below, that Sonos has no order, is no
-longer true of the app; whether to follow is the owner's call (PUNCH P-20). Until then, nothing
-changes here.
+default), Frequently used, Alphabetical, and Pin. So, by the rule just quoted, **this list sorts too**
+(P-20, decided 2026-10-17): a hold or Menu on any room opens **Sort rooms**, offering **Alphabetical**
+(the default) and **Playing first** — rooms playing or buffering, then the rest, each part
+alphabetical. Frequently used and Pin were offered and declined. The choice is this device's
+(`RoomPreferencesStore.roomOrder`), as the Sonos app's is that app's. It orders what a viewer reads —
+the room list and the panel's rooms to join — but not the first-launch default or the home-screen
+channel, which stay alphabetical so playback does not keep moving them. The menu closes by handing
+focus to the selected room first (`handOffFocus`), since focus left to fall lands on the first row,
+which selects on focus. Sorting is still not a hoist: nothing is pinned, and no room is put first
+for what it *is*.
 
 - **Favourites**, a second sort rank with a star in the list. The owner's verdict on the
   feature it mirrored: "probably the least used Sonos feature on the planet." If it returns
@@ -752,9 +760,9 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
 - **A household token the service refuses is read again once** (P-32, 2026-10-12): tokens are read per
   connection, and a TV outlives them. See `lan-transport.md`, "A household token can go stale".
 - **Save favorite in the player pane saves to household Sonos Favorites** (asked for by the owner,
-  2026-10-16). **A beta feature** until a save has been pressed on a TV: it ran on the emulator and
-  from the JVM, and its metadata rewrite (`withIdentity`, a `Transformer`) may not have run on
-  Android at all. It is offered for identified service tracks with UPnP available, not TV or radio. It captures the selected track,
+  2026-10-16). **Out of Beta since 2026-10-17**: saves pressed on the Shield (a release build, so
+  `withIdentity`'s `Transformer` ran under R8), a duplicate press answered "Already", and a saved
+  track played from Browse. It is offered for identified service tracks with UPnP available, not TV or radio. It captures the selected track,
   reads its real playback metadata, avoids duplicates including modern shortcuts, and reports
   success or refusal without changing playback. This is separate from service-library ratings.
   `CreateObject FV:2` works for a current track; earlier empty-resource shortcut failures did not

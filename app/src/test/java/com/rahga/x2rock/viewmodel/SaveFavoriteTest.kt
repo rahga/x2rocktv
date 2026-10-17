@@ -1,6 +1,5 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.store.BetaFeatures
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.rahga.x2rock.lan.*
@@ -32,7 +31,6 @@ class SaveFavoriteTest {
     @Volatile private var refuse = false
     @Volatile private var hold: CountDownLatch? = null
     private val readStarted = CountDownLatch(1)
-    private val beta = BetaFeatures(FakePreferences()).apply { setEnabled(true) }
 
     @Before fun setUp() {
         fake = FakePlayer().also { it.start() }
@@ -63,7 +61,7 @@ class SaveFavoriteTest {
         }
         scope = CoroutineScope(SupervisorJob())
         household = fakeHousehold(fake, scope, upnpPort = server.port)
-        viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock, beta)
+        viewModel = PlayerViewModel(household, RecordingNowPlaying(), testClock)
         runBlocking { household.connectTo(fake) }
         group = household.state.value.groups.first().id
         viewModel.selectGroup(group, "Test room")
@@ -144,15 +142,6 @@ class SaveFavoriteTest {
         assertFalse(viewModel.uiState.value.canSaveFavorite)
         viewModel.saveFavorite()
         assertEquals(0, requests.count { it.first == "CreateObject" })
-    }
-
-    /** Beta until a save has been pressed on a TV: off, there is no save, and pressing sends nothing. */
-    @Test fun `with Beta features off there is no save`() = runBlocking<Unit> {
-        beta.setEnabled(false)
-        withTimeout(5_000) { viewModel.uiState.first { !it.canSaveFavorite } }
-        viewModel.saveFavorite()
-        delay(300)
-        assertEquals(0, requests.count { it.first == "CreateObject" || it.first == "GetPositionInfo" })
     }
 
     @Test fun `refused save reports failure and is not retried`() = runBlocking<Unit> {

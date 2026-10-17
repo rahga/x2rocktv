@@ -2,15 +2,13 @@ package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.PlaybackStates
+import com.rahga.x2rock.store.RoomOrder
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The sidebar's order: Sonos's own, which is alphabetical and nothing else.
- *
- * Two hoists have been removed from above this — favourites, then a pinned primary room.
- * Sonos offers no ordering of its own, so there is nothing to reorder *to*, and a list that
- * disagrees with every other controller in the house needs a better reason than either had.
+ * The sidebar's order: Sonos's alphabetical by default, or playing rooms first where this device
+ * chose it (P-20) — the two sorts the Sonos app offers that the owner wanted here.
  */
 class GroupSortingTest {
 
@@ -31,5 +29,24 @@ class GroupSortingTest {
     @Test
     fun `order does not depend on the order the household reported them in`() {
         assertEquals(sortGroups(all), sortGroups(all.reversed()))
+    }
+
+    /**
+     * Playing rooms first, each part alphabetical. Study plays and Kitchen buffers, so both sort
+     * above Attic and Bedroom, which alphabetical order puts first: a sort that ignored playback
+     * would put Attic on top and fail.
+     */
+    @Test
+    fun `playing first puts playing and buffering rooms on top, each part alphabetical`() {
+        val playing = all.map {
+            when (it) {
+                study -> it.copy(playbackState = PlaybackStates.PLAYING)
+                kitchen -> it.copy(playbackState = PlaybackStates.BUFFERING)
+                bedroom -> it.copy(playbackState = PlaybackStates.PAUSED)
+                else -> it
+            }
+        }
+        assertEquals(listOf("Kitchen", "Study", "Attic", "Bedroom"), sortGroups(playing, RoomOrder.PLAYING_FIRST).map { it.name })
+        assertEquals(listOf("Attic", "Bedroom", "Kitchen", "Study"), sortGroups(playing).map { it.name })
     }
 }

@@ -1,6 +1,5 @@
 package com.rahga.x2rock.viewmodel
 
-import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
@@ -49,7 +48,7 @@ class PlayerViewModelTest {
         val book = PlayerAddressBook()
         household = fakeHousehold(fake, scope, addressBook = book)
         publisher = RecordingNowPlaying()
-        viewModel = PlayerViewModel(household, publisher, testClock, BetaFeatures(FakePreferences()))
+        viewModel = PlayerViewModel(household, publisher, testClock)
 
         runBlocking {
             household.connect(
