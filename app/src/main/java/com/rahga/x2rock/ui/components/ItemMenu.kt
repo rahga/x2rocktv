@@ -14,6 +14,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
@@ -35,7 +44,7 @@ data class MenuSection(val title: String?, val actions: List<MenuAction>)
  * Everything that can be done with one item, opened by a hold or the Menu key on its row — the
  * remote's version of the Sonos app's "⋯". Sonos's own actions first (play now, play next, add to
  * the queue), then the service's under its name (browse the artist, open the album), as the Sonos
- * app lays them out. Focus starts on the first action; Back or a tap outside closes it, and so
+ * app lays them out. Focus starts on the first action (or [focusedAction]); Back or a tap outside closes it, and so
  * does any action, after it is sent.
  *
  * [note] stands in for a section still being asked for, so the menu opens at once rather than
@@ -52,6 +61,8 @@ fun ItemMenu(
     note: String? = null,
     /** False while focus is handed back through [handOffFocus], as the room panel's is. */
     trapped: Boolean = true,
+    /** Which action takes first focus, counted across sections: a choice opens on what is chosen. */
+    focusedAction: Int = 0,
 ) {
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
@@ -62,11 +73,24 @@ fun ItemMenu(
         }
         note?.let { add(Note(it)) }
     }
-    val first = rows.indexOfFirst { it is MenuAction }
+    val actionRows = rows.indices.filter { rows[it] is MenuAction }
+    val first = actionRows.getOrElse(focusedAction) { actionRows.firstOrNull() ?: -1 }
 
+    // A hold opens this menu on the select key's repeat, and the same key's release then arrives
+    // here: on the first action, which clicks on release. Only a release whose press began inside
+    // the menu counts. Seen on the Shield (2026-10-17): the room list's sort menu closed as it opened.
+    var selectDown by remember { mutableStateOf(false) }
     Overlay(onDismiss, trapped) {
         Column(
             modifier = Modifier
+                .onPreviewKeyEvent { event ->
+                    if (event.key !in SELECT_KEYS) return@onPreviewKeyEvent false
+                    when (event.type) {
+                        KeyEventType.KeyDown -> { selectDown = true; false }
+                        KeyEventType.KeyUp -> !selectDown.also { selectDown = false }
+                        else -> false
+                    }
+                }
                 .width(520.dp)
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(24.dp),
@@ -116,3 +140,5 @@ fun ItemMenu(
 }
 
 private class Note(val text: String)
+
+private val SELECT_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)

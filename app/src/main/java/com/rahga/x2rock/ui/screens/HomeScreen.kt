@@ -460,6 +460,7 @@ fun HomeScreen(
                 })),
                 onDismiss = ::closeSortMenu,
                 trapped = !sortMenuReleasing,
+                focusedAction = roomOrder.ordinal,
             )
         }
 

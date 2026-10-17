@@ -749,7 +749,10 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   "Search <service>" is one press up. A searchable service used to open on its search and hid every
   library behind it.
 - **Hold or Menu on an item is its menu** (`ServiceItemMenu`), Sonos's actions first and the
-  service's under its name. **Play next only while the room plays from its queue**, as the Sonos
+  service's under its name. **An `ItemMenu` ignores a select release it did not see pressed**
+  (2026-10-17): a hold opens it on the key's repeat, and the release then clicked its first action,
+  so the menu closed as it opened and the row underneath, pressed but never released, ignored Select
+  until focus moved. Seen on the Shield's sort menu after a cold start; elsewhere timing hid it. **Play next only while the room plays from its queue**, as the Sonos
   app; it is a queue slot, not a flag. **Add to Sonos Favorites** follows Add to end of queue for
   what a queue can hold — a track, an album, a playlist — or **Remove from Sonos Favorites** once the
   item is found among them by its service's id (T-32, Beta). Browse and Search share the menu.
