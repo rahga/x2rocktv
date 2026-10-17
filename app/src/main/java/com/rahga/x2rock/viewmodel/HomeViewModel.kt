@@ -97,6 +97,8 @@ class HomeViewModel @Inject constructor(
         val inputFormat: String = "",
         /** Whether this room has an HDMI input at all, from any of its speakers. */
         val hasTvInput: Boolean = false,
+        /** This device's television's room: it holds the soundbar stated or detected (T-33). */
+        val isThisTv: Boolean = false,
         /**
          * The line-ins this room can play: its own speaker's first, then every other room's. Empty
          * unless Beta features is on, since none has run on hardware: see `LINE_IN` (T-21).
@@ -139,7 +141,7 @@ class HomeViewModel @Inject constructor(
      * something actually changes and at no other time.
      */
     val uiState: StateFlow<UiState> =
-        combine(household.state, household.groupStates, betaFeatures.enabled) { state, groupStates, beta ->
+        combine(household.state, household.groupStates, betaFeatures.enabled, roomPrefsStore.tvPlayerId) { state, groupStates, beta, tvPlayer ->
             val error = state.error
             when {
                 error != null -> UiState.Error(error, state.householdChoices)
@@ -158,6 +160,7 @@ class HomeViewModel @Inject constructor(
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,
                             hasTvInput = state.hasTvInput(group),
+                            isThisTv = tvPlayer != null && tvPlayer in group.playerIds,
                             lineIns = if (!beta) emptyList() else state.lineInPlayers
                                 .map { LineIn(it.id, it.name, own = it.id in group.playerIds) }
                                 .sortedByDescending { it.own },

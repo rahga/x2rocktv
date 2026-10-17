@@ -16,6 +16,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import com.rahga.x2rock.store.PresetStore
@@ -538,6 +539,26 @@ class HomeViewModelTest {
 
         assertTrue("the crown did not move", second != first)
         assertTrue("it did not land in the room that was named", second in withTv[1].playerIds)
+    }
+
+    /**
+     * The row that wears this device's TV mark is the named room's, and only it: naming another
+     * moves the mark, which is the one sign a press of "This is my TV" took (T-33).
+     */
+    @Test fun `the TV room's row is marked, and the mark follows the naming`() = runBlocking<Unit> {
+        val state = connect()
+        val withTv = state.groups.filter { state.rooms[it.id]?.hasTvInput == true }
+        assertTrue("this test needs two rooms with soundbars", withTv.size >= 2)
+
+        for (named in withTv.take(2)) {
+            viewModel.setTvSoundbar(named.id)
+            val marked = withTimeout(5_000) {
+                viewModel.uiState.map { s ->
+                    (s as? HomeViewModel.UiState.Success)?.rooms?.filterValues { it.isThisTv }?.keys
+                }.first { it == setOf(named.id) }
+            }
+            assertEquals(setOf(named.id), marked)
+        }
     }
 
     /** A room with no soundbar has nothing to name, so the press does nothing. */

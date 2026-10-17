@@ -59,6 +59,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.tv.material3.Icon
+import androidx.tv.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
@@ -780,16 +781,19 @@ private fun RoomListItem(
                 // playing already says so by its quieted art and text.
                 PlayingGlyph(activity)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    // Which rooms even have a television attached. Shown only while the room is
-                    // *not* on that input: once it is, the art tile carries the same glyph and
-                    // the line says "TV Audio", so a badge here would be the third telling of
-                    // one fact. Dim, because it is a capability rather than a state.
-                    if (info.hasTvInput && !info.onTvInput) {
+                    // This device's television, in the accent colour and always: no other row
+                    // says which room it is, and it moves when "This is my TV" is pressed, which
+                    // is that press's only sign it took (T-33). Any other room with a television
+                    // attached wears it dim and neutral, a capability rather than a state, and
+                    // only while *not* on that input: once it is, the art tile carries the same
+                    // glyph and the line says "TV Audio", so a badge would be a third telling.
+                    if (info.isThisTv || (info.hasTvInput && !info.onTvInput)) {
                         Icon(
                             imageVector = Icons.Default.Tv,
-                            contentDescription = "Has a TV input",
+                            contentDescription = if (info.isThisTv) "This TV's room" else "Has a TV input",
                             modifier = Modifier.size(18.dp),
-                            tint = glyphTint(),
+                            tint = if (info.isThisTv) MaterialTheme.colorScheme.primary
+                            else LocalContentColor.current.copy(alpha = 0.5f),
                         )
                     }
                     // A bonded speaker gone from the network: the room plays on without it and

@@ -367,6 +367,12 @@ have a television attached", which nothing else says; once the room is actually 
 the art tile carries the same glyph and the third line reads "TV Audio", so a badge would be
 the third telling of one fact. Dim, because it is a capability rather than a state.
 
+**This device's own TV room wears the badge in the accent colour, always** (T-33, 2026-10-17), on
+its input or not: there it says something the art tile does not — *this* television's room — and
+it moves when "This is my TV" is pressed, which is that press's only sign it took. The other rooms'
+badge is drawn in a neutral dim colour so the two cannot be confused. A room whose soundbar reports
+nothing on its HDMI gets no badge at all (the owner's Guest TV, rarely plugged in): keep it so.
+
 **Line-In is offered beside TV Input, and is untested on hardware** (2026-10-10). A room whose
 player reports `LINE_IN` gets a Line-In row in the panel's Source section, sending the Control
 API's own `playback:1 loadLineIn` with that player as `deviceId` — x2rock saw a Beam refuse it as
