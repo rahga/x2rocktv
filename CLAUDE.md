@@ -92,9 +92,11 @@ claim in it was run against real hardware.
 - The **queue is not in the Control API at all** (`ERROR_UNSUPPORTED_NAMESPACE`). It lives
   behind UPnP on cleartext port 1400 — see `Upnp` — and is asked for rather than pushed,
   re-read when the room's pushed `queueVersion` moves.
-- Docs in `/docs/` mirror Sonos's own reference for the namespaces and body shapes, which
-  are the same over either transport. `docs/sonos-auth.md` describes the account flow this
-  project no longer uses; it is kept for reference only.
+- **No copy of Sonos's own reference is kept in the repo** (removed 2026-10-17, T-30 item 7):
+  three pages scraped from Sonos's developer site lived in `docs/`, and their provenance could
+  not be vouched for. Everything the code relies on is in `docs/lan-transport.md` and the
+  captured fixtures, all of it observed on hardware. Read Sonos's public pages where they are;
+  do not save copies here, and nothing from behind the portal login at all.
 
 ## Architecture
 - MVVM in `:app`; `:core`'s `lan` package is everything that talks to a speaker
