@@ -257,6 +257,13 @@ Two things this costs, both of which were wrong once:
   throughout and sat frozen. Setup subscribes groups one by one for the same reason — Sonos
   lists an unplugged speaker for minutes, and one unreachable coordinator used to fail the
   whole session.
+- **A group is spoken for by its coordinator alone.** Group-scoped events (`playback:1`,
+  `playbackMetadata:1`, `groupVolume:1`, `sleepTimer:1`) are taken only from the socket of the
+  group's coordinator. A member leaving a party answered a subscription to its *new* group with a
+  snapshot whose header still named the group it was leaving, with no track; applied by header,
+  it blanked the host's row and pane to "Playing" for good, because a host keeps its group id
+  through a party and its split and so is never subscribed afresh (Shield, 2026-10-17;
+  `MemberEventTest`). Ids seen through a cycle: members get a new id each time, the host none.
 - **A selected group can simply cease to exist.** `HomeViewModel` follows the *speakers*
   rather than the id: whichever group now holds them is the same room to a listener, even
   though it is a different group. Only if that fails does it fall back to the sorted first.

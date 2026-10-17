@@ -316,6 +316,22 @@ class FakePlayer(
         emit(namespaceFor(type), type, fixture("event.$type.json"), groupId)
     }
 
+    /**
+     * Push a group's event on a *member's* socket rather than the coordinator's, as a real member
+     * does: subscribed to its own new group as a split went through, Guest TV answered with a
+     * snapshot whose header still named the group it was leaving (Shield logcat, 2026-10-17).
+     */
+    fun pushGroupEventFromMember(memberId: String, groupId: String, type: String) {
+        val header = JsonObject().apply {
+            addProperty("namespace", namespaceFor(type))
+            addProperty("type", type)
+            addProperty("householdId", householdId)
+            addProperty("groupId", groupId)
+        }
+        val ws = sockets[PlayerNames.localHostname(memberId)!!.lowercase()] ?: error("no connection open to $memberId")
+        ws.send(JsonArray(2).apply { add(header); add(fixture("event.$type.json")) }.toString())
+    }
+
     /** Push an unsolicited event — no `success`, which is what makes it an event. */
     fun push(namespace: String, type: String, body: String, groupId: String? = null, playerId: String? = null) =
         emit(namespace, type, JsonParser.parseString(body), groupId, playerId)

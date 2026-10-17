@@ -289,6 +289,9 @@ class HouseholdChoiceNeeded(count: Int) :
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
 
+/** The namespaces whose events speak for a group, and so are taken only from its coordinator. */
+private val GROUP_SCOPED = setOf("playback:1", "playbackMetadata:1", "groupVolume:1", "sleepTimer:1")
+
 /**
  * The capability of a player with an analog line-in — a Port, a Five, an Amp, a Play:5.
  *
@@ -1950,6 +1953,21 @@ class SonosHousehold(
         _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
 
     /** The players whose certificate name is [hostname]: one socket per speaker, so usually one. */
+    /**
+     * Whether a group-scoped event came in on the socket of the group's coordinator, the only
+     * player that speaks for a group. A member can name a group it does not lead: subscribing
+     * Guest TV's new group as a split went through, Guest TV answered with a snapshot whose
+     * header still named the group it was leaving — Living Room's, whose id a host keeps —
+     * and no track, which blanked Living Room's row and pane for good, since that id never
+     * changes and so is never subscribed afresh (Shield, 2026-10-17). Unknown groups and
+     * events with no socket are let through, as before.
+     */
+    private fun fromCoordinator(groupId: String?, from: String?): Boolean {
+        if (groupId == null || from == null) return true
+        val coordinator = _state.value.groups.firstOrNull { it.id == groupId }?.coordinatorId ?: return true
+        return PlayerNames.localHostname(coordinator).equals(from, ignoreCase = true)
+    }
+
     private fun playersOn(hostname: String): List<String> =
         _state.value.players.map { it.id }.filter { PlayerNames.localHostname(it).equals(hostname, ignoreCase = true) }
 
@@ -2456,6 +2474,7 @@ class SonosHousehold(
     /** [from] is the hostname of the socket [event] came in on: see `hdmi:1`. */
     private fun apply(event: SonosEvent, from: String? = null) {
         val groupId = event.header.groupId
+        if (event.namespace in GROUP_SCOPED && !fromCoordinator(groupId, from)) return
         when (event.namespace) {
             "groups:1" -> {
                 val groups = gson.fromJson(event.body, GroupsResponse::class.java) ?: return
