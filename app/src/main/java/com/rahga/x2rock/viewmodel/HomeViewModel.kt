@@ -44,36 +44,43 @@ import com.rahga.x2rock.model.TruePlay
 import kotlinx.coroutines.sync.withLock
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
-import com.rahga.x2rock.model.PlaybackStates
-import com.rahga.x2rock.store.RoomOrder
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.roundToInt
 
 /**
- * Sidebar order: Sonos's own alphabetical by default, or [RoomOrder.PLAYING_FIRST] where this
- * device chose it — rooms playing (or about to) first, each part alphabetical. The Sonos app
- * gained these sorts in 2026 (P-20); they are the app's, not the household's, so each controller
- * keeps its own, and this one keeps its per device.
+ * Sidebar order: the rooms this device has placed ([ranks], player ids, first to last), then every
+ * other room alphabetically, which is Sonos's own order. A group stands where its best-placed
+ * speaker does, so grouping two rooms never sinks either. The Sonos app lets its rooms be
+ * reordered now (P-20); this order is this device's, set in Room order.
  *
- * Only what a viewer reads follows the choice: the first-launch default and the home-screen
- * channel stay alphabetical, since an order that moves with playback would move them too.
- *
- * There were two hoists once. Favourites went first, then a pinned "primary room", which had
- * quietly become the second of two answers to "which room does this device belong to" — and
- * the louder one: setting it stopped [TvSoundbar] detection from ever choosing where the app
- * opens, because that only moves a selection still equal to the default. Naming the
- * television's room says the same thing better, and without disagreeing with Sonos.
- *
- * Kept as a function rather than inlined so the decision has somewhere to live.
+ * Two hoists were removed from here once — favourites, then a pinned "primary room" that quietly
+ * switched off [TvSoundbar] detection. Neither came back: placing a room is the viewer's own
+ * order, and the first-launch default ([defaultSelection]) stays alphabetical regardless.
  */
-fun sortGroups(groups: List<Group>, order: RoomOrder = RoomOrder.ALPHABETICAL): List<Group> = when (order) {
-    RoomOrder.ALPHABETICAL -> groups.sortedBy { it.name }
-    RoomOrder.PLAYING_FIRST -> groups.sortedWith(compareBy({ !it.isActive() }, { it.name }))
+fun sortGroups(groups: List<Group>, ranks: List<String> = emptyList()): List<Group> {
+    fun rank(group: Group) = group.playerIds.mapNotNull { id -> ranks.indexOf(id).takeIf { it >= 0 } }.minOrNull()
+    return groups.sortedWith(compareBy<Group>({ rank(it) ?: Int.MAX_VALUE }, { it.name }))
 }
 
-/** Playing, or buffering on its way to it: a room just started should not sink for a moment first. */
-private fun Group.isActive() = playbackState == PlaybackStates.PLAYING || playbackState == PlaybackStates.BUFFERING
+/**
+ * The ranks after moving [groupId] [by] places in the list as shown. Every room from the top down to
+ * where it lands — and down to the last room already placed — is placed, in the order now shown,
+ * so the list after a move is exactly the list the viewer saw: a room put among the unplaced ones
+ * does not jump above them, and the unplaced below it stay alphabetical. Each group writes all its
+ * speakers, so a room keeps its place when a group splits; speakers not in any group now keep theirs.
+ */
+fun movedRanks(groups: List<Group>, ranks: List<String>, groupId: String, by: Int): List<String> {
+    val shown = sortGroups(groups, ranks).toMutableList()
+    val from = shown.indexOfFirst { it.id == groupId }.takeIf { it >= 0 } ?: return ranks
+    val to = (from + by).coerceIn(0, shown.lastIndex)
+    if (to == from) return ranks
+    shown.add(to, shown.removeAt(from))
+    val lastPlaced = shown.indexOfLast { g -> g.playerIds.any { it in ranks } }
+    val placed = shown.take(maxOf(to, lastPlaced) + 1).flatMap { it.playerIds }
+    val away = ranks.filter { id -> groups.none { id in it.playerIds } }
+    return placed + away
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -326,9 +333,10 @@ class HomeViewModel @Inject constructor(
         // list's order, each with its tile. Without its playback state, which every play or pause
         // anywhere moved and so rewrote every tile — a tile changes for its subtitle and art only.
         viewModelScope.launch(Dispatchers.IO) {
-            uiState.collect { state ->
+            // In this device's room order, which is the viewer's own and moves only when they move it.
+            combine(uiState, roomPrefsStore.roomRanks) { state, ranks -> state to ranks }.collect { (state, ranks) ->
                 if (state is UiState.Success) {
-                    channelSync.sync(sortGroups(state.groups).map { it.copy(playbackState = null) }, state.tiles)
+                    channelSync.sync(sortGroups(state.groups, ranks).map { it.copy(playbackState = null) }, state.tiles)
                 }
             }
         }
@@ -352,8 +360,16 @@ class HomeViewModel @Inject constructor(
 
     fun setTheme(theme: AppColorTheme) = themeStore.setTheme(theme)
 
-    val roomOrder: StateFlow<RoomOrder> = roomPrefsStore.roomOrder
-    fun setRoomOrder(order: RoomOrder) = roomPrefsStore.setRoomOrder(order)
+    /** The rooms this device has placed, in order; see [sortGroups]. */
+    val roomRanks: StateFlow<List<String>> = roomPrefsStore.roomRanks
+
+    /** Move [groupId] [by] places in the room list; see [movedRanks]. */
+    fun moveRoom(groupId: String, by: Int) {
+        roomPrefsStore.setRoomRanks(movedRanks(household.state.value.groups, roomPrefsStore.roomRanks.value, groupId, by))
+    }
+
+    /** Back to Sonos's alphabetical order. */
+    fun resetRoomOrder() = roomPrefsStore.setRoomRanks(emptyList())
 
     fun selectGroup(id: String) { _selectedGroupId.value = id }
 

@@ -23,28 +23,21 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
         _tvPlayerId.value = playerId
     }
 
-    /** How this device's room list is ordered; Sonos's own alphabetical unless chosen otherwise. */
-    private val _roomOrder = MutableStateFlow(
-        prefs.getString(KEY_ROOM_ORDER)?.let { saved -> RoomOrder.entries.firstOrNull { it.name == saved } } ?: RoomOrder.ALPHABETICAL
-    )
-    val roomOrder: StateFlow<RoomOrder> = _roomOrder.asStateFlow()
+    /**
+     * The rooms this device has placed, first to last, as **player** ids — a regroup mints new
+     * group ids, while the speakers stay put. Every room not named here sorts after them,
+     * alphabetically. Empty until a room is moved in Settings → Room order.
+     */
+    private val _roomRanks = MutableStateFlow(prefs.getString(KEY_ROOM_RANKS)?.split(',')?.filter { it.isNotBlank() }.orEmpty())
+    val roomRanks: StateFlow<List<String>> = _roomRanks.asStateFlow()
 
-    fun setRoomOrder(order: RoomOrder) {
-        prefs.putString(KEY_ROOM_ORDER, order.name)
-        _roomOrder.value = order
+    fun setRoomRanks(playerIds: List<String>) {
+        prefs.putString(KEY_ROOM_RANKS, playerIds.joinToString(",").ifEmpty { null })
+        _roomRanks.value = playerIds
     }
 
     private companion object {
         const val KEY_TV_PLAYER = "tv_player_id"
-        const val KEY_ROOM_ORDER = "room_order"
+        const val KEY_ROOM_RANKS = "room_ranks"
     }
-}
-
-/**
- * The room list's order, chosen per device from a hold on a room (P-20, 2026-10-17). The Sonos app
- * offers these two among its sorts; Frequently used and Pin were left out by the owner's choice.
- */
-enum class RoomOrder(val label: String, val detail: String) {
-    ALPHABETICAL("Alphabetical", "As Sonos names them"),
-    PLAYING_FIRST("Playing first", "Rooms playing now, then the rest"),
 }

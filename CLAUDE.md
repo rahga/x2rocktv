@@ -444,7 +444,7 @@ Select on a list item means "go into this", and a dialog in front of the player 
 of what that press asked for. The panel opens from the pane's **Group** button, which a viewer can
 see (or a tap on the selected room, by touch). A long press and Menu on the room opened it too,
 for those who knew them; the owner saw no need for them and they were dropped (2026-10-16). They
-now open **Sort rooms** instead (2026-10-17, below). Closing
+now pick the room up to move it in the list (2026-10-17, below). Closing
 it returns focus to whichever opened it. Group is in the pane's row rather than above or below the
 room list, for the reason in "Nothing that acts on the selected room" below.
 
@@ -485,16 +485,18 @@ settings but nothing positional. "If it doesn't let us reorder in the Sonos app,
 should either."
 
 **The Sonos app has since gained room sorting** (seen 2026-10-11, app 90.00): Actively playing (its
-default), Frequently used, Alphabetical, and Pin. So, by the rule just quoted, **this list sorts too**
-(P-20, decided 2026-10-17): a hold or Menu on any room opens **Sort rooms**, offering **Alphabetical**
-(the default) and **Playing first** — rooms playing or buffering, then the rest, each part
-alphabetical. Frequently used and Pin were offered and declined. The choice is this device's
-(`RoomPreferencesStore.roomOrder`), as the Sonos app's is that app's. It orders what a viewer reads —
-the room list and the panel's rooms to join — but not the first-launch default or the home-screen
-channel, which stay alphabetical so playback does not keep moving them. The menu closes by handing
-focus to the selected room first (`handOffFocus`), since focus left to fall lands on the first row,
-which selects on focus. Sorting is still not a hoist: nothing is pinned, and no room is put first
-for what it *is*.
+default), Frequently used, Alphabetical, and Pin, and lets rooms be reordered. So, by the rule just
+quoted, **this list can be reordered too** (P-20, 2026-10-17), in the list itself, with no menu: a
+**hold** (or Menu) on a room picks it up — its second line reads "Moving · Up or Down, then Select" —
+Up and Down carry it, and Select or Back puts it down. Preset sorts (Alphabetical / Playing first in a
+menu) were built first and dropped by the owner the same day: two fixed orders are not what is wanted,
+and a hold that must be *kept* held is not a gesture on a remote whose select key sits inside the
+D-pad — a hold only starts things. **Placed rooms come first in their order; every room never placed
+follows alphabetically** (`sortGroups`, `movedRanks`). A move places the moved room and everything
+above it as shown, so nothing jumps. Ranks are **player** ids, as the TV room is; a group stands where
+its best-placed speaker does. The order is this device's (Sonos's own cannot be read over the LAN) and
+is used by the list, the panel's rooms to join and the home-screen channel; the first-launch default
+stays alphabetical. **Settings → Reset room order** appears only once a room has been placed.
 
 - **Favourites**, a second sort rank with a star in the list. The owner's verdict on the
   feature it mirrored: "probably the least used Sonos feature on the planet." If it returns

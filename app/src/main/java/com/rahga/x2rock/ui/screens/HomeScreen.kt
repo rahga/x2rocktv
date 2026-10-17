@@ -105,10 +105,6 @@ import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.dpadMenuKey
-import com.rahga.x2rock.ui.components.ItemMenu
-import com.rahga.x2rock.ui.components.MenuAction
-import com.rahga.x2rock.ui.components.MenuSection
-import com.rahga.x2rock.store.RoomOrder
 import com.rahga.x2rock.ui.components.keepTaps
 import com.rahga.x2rock.ui.components.modalFocusTrap
 import com.rahga.x2rock.ui.components.tapToClick
@@ -152,13 +148,12 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val upnpOff by homeViewModel.upnpOff.collectAsState()
     val betaEnabled by homeViewModel.betaEnabled.collectAsState()
-    val roomOrder by homeViewModel.roomOrder.collectAsState()
+    val roomRanks by homeViewModel.roomRanks.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
-    // The room list's sort menu, from a hold or Menu on a room (P-20).
-    var showSortMenu by remember { mutableStateOf(false) }
-    var sortMenuReleasing by remember { mutableStateOf(false) }
+    // The room being moved in the list, picked up by a hold or Menu on it (P-20).
+    var movingGroupId by remember { mutableStateOf<String?>(null) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
@@ -273,7 +268,7 @@ fun HomeScreen(
     }
 
     // Both modals hand focus back as they close, above; nothing is left to place afterwards.
-    val modalVisible = showSettings || panelGroup != null || showSortMenu
+    val modalVisible = showSettings || panelGroup != null
 
     // Focus goes to the selected room's row whenever the list has it again. Three ways of
     // losing it all left focus on the first thing Compose finds — the first room's row: a cold
@@ -325,8 +320,10 @@ fun HomeScreen(
                 detailFocusRequester = detailFocusRequester,
                 onFocused = ::rowFocused,
                 onOpenPanel = { panelFromPane = false; panelGroup = it },
-                roomOrder = roomOrder,
-                onSortMenu = { showSortMenu = true },
+                roomRanks = roomRanks,
+                movingGroupId = movingGroupId,
+                onMoving = { movingGroupId = it },
+                onMove = homeViewModel::moveRoom,
                 onSettingsClick = { showSettings = true },
                 settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
@@ -425,6 +422,8 @@ fun HomeScreen(
                     showSettings = false
                     onOpenAbout()
                 },
+                roomsPlaced = roomRanks.isNotEmpty(),
+                onResetRoomOrder = homeViewModel::resetRoomOrder,
                 betaEnabled = betaEnabled,
                 onToggleBeta = { homeViewModel.setBetaEnabled(!betaEnabled) },
                 onOpenReport = {
@@ -440,27 +439,6 @@ fun HomeScreen(
                     onOpenAccount()
                 },
                 onThemeSelected = { homeViewModel.setTheme(it) }
-            )
-        }
-
-        if (showSortMenu) {
-            // Closed by handing focus to the selected room first, as the panel is: the row that was
-            // held. Closing outright left focus to fall on the first row, which selects on focus.
-            fun closeSortMenu() {
-                focusScope.launch { handOffFocus({ sortMenuReleasing = it }, { showSortMenu = false }, sidebarFocusRequester) }
-            }
-            ItemMenu(
-                title = "Sort rooms",
-                subtitle = "On this TV",
-                artUrl = null,
-                sections = listOf(MenuSection(null, RoomOrder.entries.map { order ->
-                    MenuAction(order.label, if (order == roomOrder) "${order.detail} · now" else order.detail) {
-                        homeViewModel.setRoomOrder(order)
-                    }
-                })),
-                onDismiss = ::closeSortMenu,
-                trapped = !sortMenuReleasing,
-                focusedAction = roomOrder.ordinal,
             )
         }
 
@@ -489,7 +467,7 @@ fun HomeScreen(
                 RoomPanel(
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
-                    otherGroups = sortGroups(groups, roomOrder)
+                    otherGroups = sortGroups(groups, roomRanks)
                         .filter { it.id != liveGroup.id },
                     rooms = rooms,
                     playerNames = playerNames,
@@ -561,8 +539,11 @@ private fun RoomSidebar(
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
     onOpenPanel: (Group) -> Unit,
-    roomOrder: RoomOrder,
-    onSortMenu: () -> Unit,
+    roomRanks: List<String>,
+    /** The room picked up to be moved, if any: Up and Down carry it, Select or Back puts it down. */
+    movingGroupId: String?,
+    onMoving: (String?) -> Unit,
+    onMove: (groupId: String, by: Int) -> Unit,
     onSettingsClick: () -> Unit,
     settingsFocusRequester: FocusRequester,
     onRetry: () -> Unit,
@@ -574,9 +555,11 @@ private fun RoomSidebar(
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
-    val sorted = remember(groups, roomOrder) {
-        sortGroups(groups, roomOrder)
+    val sorted = remember(groups, roomRanks) {
+        sortGroups(groups, roomRanks)
     }
+    // Back puts a moved room down, before anything else takes it.
+    BackHandler(enabled = movingGroupId != null) { onMoving(null) }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 
@@ -645,7 +628,9 @@ private fun RoomSidebar(
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
                             onOpenPanel = { onOpenPanel(group) },
-                            onSortMenu = onSortMenu,
+                            moving = group.id == movingGroupId,
+                            onMoving = { if (it) onMoving(group.id) else if (movingGroupId == group.id) onMoving(null) },
+                            onMove = { by -> onMove(group.id, by) },
                         )
                     }
                 }
@@ -686,17 +671,20 @@ private fun RoomListItem(
     detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
     onOpenPanel: () -> Unit,
-    onSortMenu: () -> Unit,
+    /** Picked up to be moved within the list. */
+    moving: Boolean,
+    onMoving: (Boolean) -> Unit,
+    onMove: (by: Int) -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
     val activity = roomActivity(group.playbackState, info.hasSource)
     AppCard(
         // Select goes into the room, to its player, as Select does on every TV list; opening the
         // panel on it put a dialog in front of the one thing a viewer pressed to get to. The panel
-        // is the pane's Group button's. A hold or Menu here sorts the list instead (P-20,
-        // 2026-10-17): the list is the one thing a room row stands in, and nothing else asks a hold.
-        onClick = { detailFocusRequester.requestFocusSafely() },
-        onLongClick = onSortMenu,
+        // is the pane's Group button's. A hold or Menu here picks the room up, to move it within the
+        // list (P-20, 2026-10-17); Select then puts it down rather than going into the room.
+        onClick = { if (moving) onMoving(false) else detailFocusRequester.requestFocusSafely() },
+        onLongClick = { onMoving(!moving) },
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
         // turn — the first selects, a tap on the selected room opens its panel.
         onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
@@ -722,9 +710,19 @@ private fun RoomListItem(
             .exitOnKey(Key.DirectionRight, detailFocusRequester)
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) onFocused()
+                if (it.isFocused) onFocused() else if (moving) onMoving(false)
             }
-            .dpadMenuKey(onSortMenu)
+            .dpadMenuKey { onMoving(!moving) }
+            // While picked up, Up and Down carry the room instead of moving focus. Seen first, so the
+            // list's own focus search never runs; the row keeps focus as it moves, being keyed.
+            .onPreviewKeyEvent { event ->
+                if (!moving || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionUp -> { onMove(-1); true }
+                    Key.DirectionDown -> { onMove(+1); true }
+                    else -> false
+                }
+            }
     ) {
         Row(
             modifier = Modifier
@@ -795,7 +793,8 @@ private fun RoomListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val lines = roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
+                val lines = if (moving) listOf("Moving · Up or Down, then Select")
+                else roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
                 lines.forEachIndexed { index, line ->
                     Text(
                         text = line,
@@ -898,6 +897,9 @@ private fun SettingsPanel(
     onOpenPreferredServices: () -> Unit,
     onOpenAlarms: () -> Unit,
     onOpenAbout: () -> Unit,
+    /** Whether any room has been moved in the list, so there is an order to reset. */
+    roomsPlaced: Boolean,
+    onResetRoomOrder: () -> Unit,
     betaEnabled: Boolean,
     onToggleBeta: () -> Unit,
     onOpenReport: () -> Unit,
@@ -938,6 +940,17 @@ private fun SettingsPanel(
             // a list needs more room than this panel has.
             AppButton(onClick = onOpenPreferredServices, modifier = Modifier.fillMaxWidth()) {
                 Text("Preferred services")
+            }
+            // Rooms are ordered in the list itself, by a hold on one; this only undoes it. Shown only
+            // once there is something to undo, so it is never a row that does nothing.
+            if (roomsPlaced) {
+                Spacer(Modifier.height(8.dp))
+                AppButton(onClick = onResetRoomOrder, modifier = Modifier.fillMaxWidth()) {
+                    Column {
+                        Text("Reset room order")
+                        Text("Back to alphabetical", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
             Spacer(Modifier.height(32.dp))
             Text("Household", style = MaterialTheme.typography.titleMedium)
