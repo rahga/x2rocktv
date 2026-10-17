@@ -24,6 +24,8 @@ Console's, and cannot be done from here.
 One key signs every build that leaves the developer's machine: `~/x2rocktv-release.jks`, alias
 `x2rocktv`, RSA 4096, valid to 2126, SHA-256 fingerprint
 `8D:65:75:AB:21:AB:AF:BF:7F:E2:5F:CC:A2:A5:65:50:DA:5D:FF:3F:8A:A0:5C:B6:9D:BB:FD:35:5F:12:0F:04`.
+`install-on-google-tv.md` checks builds against it too (in lower case, without colons): change
+both if the key ever changes.
 Its password is in `keystore.properties` at the repo root, which git ignores:
 
 ```properties
