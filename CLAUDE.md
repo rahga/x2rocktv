@@ -42,11 +42,12 @@ claim in it was run against real hardware.
   with Sonos's **Authentication** switch on refuses every command without an account token
   (`ERROR_NO_PERMISSION`), so a build can carry its owner's registered Control integration and
   sign the TV in from a phone: a QR code to Sonos's consent page, whose redirect page
-  (`rahga.github.io/x2rock/callback.html`) forwards the phone to the TV's LAN address, where the
+  (`rahga.github.io/x2rocktv/callback.html`, x2rocktv's own since 2026-10-17) forwards the phone to the TV's LAN address, where the
   app listens once and redeems the code. The token then rides in each WebSocket command's header
   as `authorization: Bearer …`. **No key or secret is ever committed, and none goes in the Play
-  bundle**: a build has one only with `-Px2rock.sonosIntegration` (it reads `~/sonos.api.key`
-  and `~/sonos.api.secret`), and the Settings row exists only then, with Beta features on.
+  bundle**: a build has one only with `-Px2rock.sonosIntegration` (it reads `~/x2rocktv-sonos.api.key`
+  and `~/x2rocktv-sonos.api.secret`: x2rocktv's own integration, not the x2rock CLI's, per Sonos's
+  Terms 1(c)), and the Settings row exists only then, with Beta features on.
   Without it nothing changes: no account, no token, no call to Sonos. **Run end to end on the
   Streamer at home, 2026-10-13**: the phone's browser followed the page's hop from HTTPS to the
   TV's plain-HTTP LAN address, the TV redeemed the code, and the household (Authentication off)

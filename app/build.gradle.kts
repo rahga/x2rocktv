@@ -34,7 +34,8 @@ val uploadKey: Properties? = rootProject.file("keystore.properties")
 /**
  * A developer's own Sonos Control integration (T-27), compiled in only when asked for:
  * `-Px2rock.sonosIntegration`, or that line in `~/.gradle/gradle.properties` for every build of one's
- * own. It reads `~/sonos.api.key` and `~/sonos.api.secret` (or `x2rock.sonosKeyFile` /
+ * own. It reads `~/x2rocktv-sonos.api.key` and `~/x2rocktv-sonos.api.secret` — x2rocktv's own
+ * integration, not the x2rock CLI's (Sonos Terms 1(c); T-30) — (or `x2rock.sonosKeyFile` /
  * `x2rock.sonosSecretFile`) and the integration's redirect URL (`x2rock.sonosRedirect`).
  *
  * **Never in the repo, and never in the Play bundle.** Anything compiled into an APK can be read out
@@ -52,9 +53,9 @@ val sonosIntegration: Triple<String, String, String>? =
             return file.readText().trim().also { require(it.isNotEmpty()) { "$file is empty" } }
         }
         Triple(
-            read("x2rock.sonosKeyFile", "$home/sonos.api.key"),
-            read("x2rock.sonosSecretFile", "$home/sonos.api.secret"),
-            providers.gradleProperty("x2rock.sonosRedirect").getOrElse("https://rahga.github.io/x2rock/callback.html"),
+            read("x2rock.sonosKeyFile", "$home/x2rocktv-sonos.api.key"),
+            read("x2rock.sonosSecretFile", "$home/x2rocktv-sonos.api.secret"),
+            providers.gradleProperty("x2rock.sonosRedirect").getOrElse("https://rahga.github.io/x2rocktv/callback.html"),
         )
     }
 
