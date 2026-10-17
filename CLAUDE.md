@@ -487,7 +487,7 @@ should either."
 **The Sonos app has since gained room sorting** (seen 2026-10-11, app 90.00): Actively playing (its
 default), Frequently used, Alphabetical, and Pin, and lets rooms be reordered. So, by the rule just
 quoted, **this list can be reordered too** (P-20, 2026-10-17), in the list itself, with no menu: a
-**hold** (or Menu) on a room picks it up — its lines read "Moving · Up/Down, Select" and "Left: play everywhere" —
+**hold** (of Select or of Left, or Menu) on a room picks it up — its lines read "Moving · Up/Down, Select" and "Left: play everywhere" —
 Up and Down carry it, and Select or Back puts it down. **Left on a picked-up room offers to play
 everywhere from it** (2026-10-17, asked for by the owner): the row asks "Play everywhere? Select" over "Left: also even volume";
 Select confirms, a second Left confirms *and* first sets every speaker to that room's level (before any

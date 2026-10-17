@@ -753,7 +753,15 @@ private fun RoomListItem(
             // Back (the list's BackHandler) puts it all down. Seen first, so the list's own focus
             // search never runs; the row keeps focus as it moves, being keyed.
             .onPreviewKeyEvent { event ->
-                if (!moving || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                // Holding Left picks the room up too (2026-10-17, asked for by the owner): the key's
+                // first repeat is the hold. Every later repeat is swallowed, or a held Left would go on
+                // to ask for the party and then confirm it.
+                if (event.key == Key.DirectionLeft && event.nativeKeyEvent.repeatCount > 0) {
+                    if (!moving && holdable && event.nativeKeyEvent.repeatCount == 1) onMoving(true)
+                    return@onPreviewKeyEvent moving || holdable
+                }
+                if (!moving) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionUp, Key.DirectionDown -> {
                         if (!partyAsked) onMove(if (event.key == Key.DirectionUp) -1 else +1)
