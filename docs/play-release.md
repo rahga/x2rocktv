@@ -57,6 +57,9 @@ TV room, presets and preferred services), and from then on takes `-Px2rock.uploa
 4. Push the commit and the tag, then make the pre-release with the APK, named
    `x2rocktv-<version>.apk`, and the changelog's section as its notes:
    `gh release create v0.1.0 --prerelease --title "x2rocktv 0.1.0" --notes-file … <apk>`.
+   Before uploading, check the APK is not a private build: `aapt2 dump badging <apk> | grep versionName`
+   must not say `+hardcore` (a build with `-Px2rock.sonosIntegration` or `-Px2rock.cloudContent`, which
+   carries untracked code and is for the owner's own TVs only).
 5. Later, **owner**: upload the bundle to Play's closed test track, with the same notes.
 
 ## The listing (owner, once)

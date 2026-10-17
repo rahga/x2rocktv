@@ -39,13 +39,17 @@ val uploadKey: Properties? = rootProject.file("keystore.properties")
  * `x2rock.sonosSecretFile`) and the integration's redirect URL (`x2rock.sonosRedirect`).
  *
  * **Never in the repo, and never in the Play bundle.** Anything compiled into an APK can be read out
- * of it, so a build carrying a secret is for the TVs of whoever owns the integration; one signed for
- * Play refuses to carry it. Without it every field is empty and the feature does not exist. Anyone
+ * of it, so a build carrying a secret is for the TVs of whoever owns the integration, and a bundle —
+ * Play's — refuses to carry it. An APK may take the release key (2026-10-17), so the owner's
+ * "hardcore" build installs over the test builds on the owner's TVs and back without losing settings; its
+ * version name says `+hardcore`, and such an APK is never uploaded anywhere. Without it every field is empty and the feature does not exist. Anyone
  * who registers with Sonos and signs its agreement can build with their own.
  */
 val sonosIntegration: Triple<String, String, String>? =
     if (!providers.gradleProperty("x2rock.sonosIntegration").isPresent) null else {
-        require(uploadKey == null) { "a Play bundle must not carry a Sonos secret: drop -Px2rock.sonosIntegration" }
+        require(gradle.startParameter.taskNames.none { it.contains("bundle", ignoreCase = true) }) {
+            "a Play bundle must not carry a Sonos secret: drop -Px2rock.sonosIntegration"
+        }
         val home = System.getProperty("user.home")
         fun read(property: String, default: String): String {
             val file = File(providers.gradleProperty(property).getOrElse(default))
@@ -73,7 +77,9 @@ android {
         // Must rise with every build that leaves this machine, to Play or to a TV: neither installs a
         // lower one over a higher. 3 is 0.1.0, the first closed test.
         versionCode = 4
-        versionName = tagVersion
+        // The maintainer's private build says so wherever a version is shown, so it is never mistaken
+        // for, or uploaded as, a test build.
+        versionName = tagVersion + if (sonosIntegration != null || providers.gradleProperty("x2rock.cloudContent").isPresent) "+hardcore" else ""
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SONOS_KEY", literal(sonosIntegration?.first.orEmpty()))
         buildConfigField("String", "SONOS_SECRET", literal(sonosIntegration?.second.orEmpty()))
