@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -412,14 +413,26 @@ class HomeViewModel @Inject constructor(
      *
      * The host is named rather than chosen, because party mode hinges on a source: the room
      * whose panel this was opened from is the one the house follows.
+     *
+     * With [evenVolume], every speaker is first set to the host room's level — the level of
+     * what is being heard where the viewer is — and only then do the rooms join, so nothing
+     * starts loud, as a preset is applied. A fixed line-out is left alone.
      */
-    fun partyMode(hostGroupId: String) {
+    fun partyMode(hostGroupId: String, evenVolume: Boolean = false) {
         val groups = (uiState.value as? UiState.Success)?.groups ?: return
         if (groups.size < 2) return
         val host = groups.firstOrNull { it.id == hostGroupId } ?: return
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
+        val level = household.groupState(host.id).volume?.volume.takeIf { evenVolume }
+        val pushed = household.playerVolumes.value
         viewModelScope.launch {
+            if (level != null) {
+                coroutineScope {
+                    groups.flatMap { it.playerIds }.filter { pushed[it]?.fixed != true }
+                        .map { async { runCatching { household.setPlayerVolume(it, level) } } }.awaitAll()
+                }
+            }
             runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
                 .onFailure { _notice.failure("start the party", it) }
         }

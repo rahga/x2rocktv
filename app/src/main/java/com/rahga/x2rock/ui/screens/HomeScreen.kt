@@ -152,8 +152,10 @@ fun HomeScreen(
 
     var showSettings by remember { mutableStateOf(false) }
     var panelGroup by remember { mutableStateOf<Group?>(null) }
-    // The room being moved in the list, picked up by a hold or Menu on it (P-20).
+    // The room being moved in the list, picked up by a hold or Menu on it (P-20), and whether
+    // Left from there has offered to party from it.
     var movingGroupId by remember { mutableStateOf<String?>(null) }
+    var partyAsked by remember { mutableStateOf(false) }
 
     val detailFocusRequester = remember { FocusRequester() }
     val sidebarFocusRequester = remember { FocusRequester() }
@@ -322,8 +324,16 @@ fun HomeScreen(
                 onOpenPanel = { panelFromPane = false; panelGroup = it },
                 roomRanks = roomRanks,
                 movingGroupId = movingGroupId,
-                onMoving = { movingGroupId = it },
+                partyAsked = partyAsked,
+                onMoving = { movingGroupId = it; partyAsked = false },
                 onMove = homeViewModel::moveRoom,
+                onAskParty = { partyAsked = it },
+                onParty = { groupId, even ->
+                    movingGroupId = null
+                    partyAsked = false
+                    homeViewModel.partyMode(groupId, evenVolume = even)
+                },
+                canParty = groups.size > 1,
                 onSettingsClick = { showSettings = true },
                 settingsFocusRequester = settingsButtonFocus,
                 onRetry = { homeViewModel.connect() },
@@ -542,8 +552,14 @@ private fun RoomSidebar(
     roomRanks: List<String>,
     /** The room picked up to be moved, if any: Up and Down carry it, Select or Back puts it down. */
     movingGroupId: String?,
+    /** Left on the picked-up room asked to play everywhere from it; Select or Left confirms. */
+    partyAsked: Boolean,
     onMoving: (String?) -> Unit,
     onMove: (groupId: String, by: Int) -> Unit,
+    onAskParty: (Boolean) -> Unit,
+    onParty: (groupId: String, evenVolume: Boolean) -> Unit,
+    /** More than one group, so there is somebody to join. */
+    canParty: Boolean,
     onSettingsClick: () -> Unit,
     settingsFocusRequester: FocusRequester,
     onRetry: () -> Unit,
@@ -560,6 +576,8 @@ private fun RoomSidebar(
     }
     // Back puts a moved room down, before anything else takes it.
     BackHandler(enabled = movingGroupId != null) { onMoving(null) }
+    // A picked-up room that is no longer one of several — the house grouped into it — is put down.
+    LaunchedEffect(sorted.size) { if (sorted.size < 2 && movingGroupId != null) onMoving(null) }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 
@@ -629,8 +647,14 @@ private fun RoomSidebar(
                             onFocused = { onFocused(group) },
                             onOpenPanel = { onOpenPanel(group) },
                             moving = group.id == movingGroupId,
+                            partyAsked = group.id == movingGroupId && partyAsked,
                             onMoving = { if (it) onMoving(group.id) else if (movingGroupId == group.id) onMoving(null) },
                             onMove = { by -> onMove(group.id, by) },
+                            onAskParty = { onAskParty(true) },
+                            // One room — a single speaker, or every room already playing together —
+                            // has nothing to be ordered against and nobody to invite: no hold at all.
+                            holdable = canParty,
+                            onParty = { even -> onParty(group.id, even) },
                         )
                     }
                 }
@@ -673,8 +697,13 @@ private fun RoomListItem(
     onOpenPanel: () -> Unit,
     /** Picked up to be moved within the list. */
     moving: Boolean,
+    partyAsked: Boolean,
     onMoving: (Boolean) -> Unit,
     onMove: (by: Int) -> Unit,
+    onAskParty: () -> Unit,
+    onParty: (evenVolume: Boolean) -> Unit,
+    /** Whether a hold or Menu picks the room up; false while it is the only room in the list. */
+    holdable: Boolean,
 ) {
     var focused by remember { mutableStateOf(false) }
     val activity = roomActivity(group.playbackState, info.hasSource)
@@ -683,8 +712,14 @@ private fun RoomListItem(
         // panel on it put a dialog in front of the one thing a viewer pressed to get to. The panel
         // is the pane's Group button's. A hold or Menu here picks the room up, to move it within the
         // list (P-20, 2026-10-17); Select then puts it down rather than going into the room.
-        onClick = { if (moving) onMoving(false) else detailFocusRequester.requestFocusSafely() },
-        onLongClick = { onMoving(!moving) },
+        onClick = {
+            when {
+                partyAsked -> onParty(false)
+                moving -> onMoving(false)
+                else -> detailFocusRequester.requestFocusSafely()
+            }
+        },
+        onLongClick = if (holdable) ({ onMoving(!moving) }) else null,
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
         // turn — the first selects, a tap on the selected room opens its panel.
         onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
@@ -712,14 +747,19 @@ private fun RoomListItem(
                 focused = it.isFocused
                 if (it.isFocused) onFocused() else if (moving) onMoving(false)
             }
-            .dpadMenuKey { onMoving(!moving) }
-            // While picked up, Up and Down carry the room instead of moving focus. Seen first, so the
-            // list's own focus search never runs; the row keeps focus as it moves, being keyed.
+            .then(if (holdable) Modifier.dpadMenuKey { onMoving(!moving) } else Modifier)
+            // While picked up, Up and Down carry the room instead of moving focus, and Left offers to
+            // play everywhere from it: then Select confirms, Left confirms and evens the volume, and
+            // Back (the list's BackHandler) puts it all down. Seen first, so the list's own focus
+            // search never runs; the row keeps focus as it moves, being keyed.
             .onPreviewKeyEvent { event ->
                 if (!moving || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
-                    Key.DirectionUp -> { onMove(-1); true }
-                    Key.DirectionDown -> { onMove(+1); true }
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        if (!partyAsked) onMove(if (event.key == Key.DirectionUp) -1 else +1)
+                        true
+                    }
+                    Key.DirectionLeft -> { if (partyAsked) onParty(true) else onAskParty(); true }
                     else -> false
                 }
             }
@@ -793,8 +833,11 @@ private fun RoomListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                val lines = if (moving) listOf("Moving · Up or Down, then Select")
-                else roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
+                val lines = when {
+                    partyAsked -> listOf("Play everywhere? Select", "Left: also even volume")
+                    moving -> listOf("Moving · Up/Down, Select", "Left: play everywhere")
+                    else -> null
+                } ?: roomRowLines(info, group.playbackState ?: PlaybackStates.IDLE)
                 lines.forEachIndexed { index, line ->
                     Text(
                         text = line,

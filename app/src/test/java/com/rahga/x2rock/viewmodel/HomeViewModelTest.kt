@@ -408,6 +408,29 @@ class HomeViewModelTest {
         )
     }
 
+    /**
+     * Party with the volume evened: every speaker is set to the host room's level, and all of it
+     * before any room joins, so nothing joins loud. Without the evening no level is sent at all.
+     */
+    @Test fun `party mode can even every speaker to the host's level first`() = runBlocking<Unit> {
+        val state = connect()
+        val host = state.groups.first { it.name == "Kitchen" }
+        val speakers = state.groups.flatMap { it.playerIds }
+        fake.pushGroupVolume(host.id, 12)
+        withTimeout(5_000) { household.groupStates.first { it[host.id]?.volume?.volume == 12 } }
+
+        fake.clearHistory()
+        viewModel.partyMode(host.id)
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "modifyGroupMembers" }
+        assertEquals("a plain party set a level", 0, fake.commandsNamed("setVolume"))
+
+        fake.clearHistory()
+        viewModel.partyMode(host.id, evenVolume = true)
+        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "modifyGroupMembers" }
+        assertEquals("not every speaker was set before the rooms joined", speakers.size, fake.commandsNamed("setVolume"))
+        assertEquals(12, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+    }
+
     // ---------------------------------------------------------- member volumes
 
     private suspend fun awaitPlayerVolume(playerId: String, volume: Int) = withTimeout(5_000) {
