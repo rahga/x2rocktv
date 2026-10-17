@@ -55,7 +55,6 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
 import com.rahga.x2rock.ui.components.StepMark
-import com.rahga.x2rock.ui.components.VOLUME_STEP
 import com.rahga.x2rock.ui.components.mutedInk
 import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.components.tapToClick
@@ -108,7 +107,7 @@ internal fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLe
         }
         HeaderVolume(
             state,
-            onStep = { viewModel.adjustVolume(it) },
+            onStep = { viewModel.stepVolume(it) },
             onToggleMute = { viewModel.toggleMute() },
             onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
             entry = volumeEntry,
@@ -158,6 +157,7 @@ internal fun VolumePill(
     volume: Int?,
     muted: Boolean,
     fixed: Boolean,
+    /** One press, -1 or +1; the view model sizes it. */
     onStep: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onExitLeft: () -> Unit,
@@ -186,8 +186,8 @@ internal fun VolumePill(
                     // A fixed line-out has no level to step, so left does what it does from any
                     // row's leftmost control: back to the room list. Otherwise every press only
                     // posted the "fixed" notice and the remote stayed put.
-                    Key.DirectionLeft -> { if (fixed) onExitLeft() else onStep(-VOLUME_STEP); true }
-                    Key.DirectionRight -> { onStep(+VOLUME_STEP); true }
+                    Key.DirectionLeft -> { if (fixed) onExitLeft() else onStep(-1); true }
+                    Key.DirectionRight -> { onStep(+1); true }
                     else -> false
                 }
             }
@@ -198,7 +198,7 @@ internal fun VolumePill(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StepMark("\u2212", showSteps, MaterialTheme.typography.titleMedium) { onStep(-VOLUME_STEP) }
+            StepMark("\u2212", showSteps, MaterialTheme.typography.titleMedium) { onStep(-1) }
             Icon(
                 imageVector = if (muted) Icons.AutoMirrored.Filled.VolumeOff
                 else Icons.AutoMirrored.Filled.VolumeUp,
@@ -227,7 +227,7 @@ internal fun VolumePill(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.widthIn(min = levelWidth),
             )
-            StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+VOLUME_STEP) }
+            StepMark("+", showSteps, MaterialTheme.typography.titleMedium) { onStep(+1) }
         }
     }
 }

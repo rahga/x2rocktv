@@ -669,6 +669,25 @@ class PlayerViewModel @Inject constructor(
      * this job, possibly with the command already in flight — starts a new total rather than
      * resending this one or losing its own.
      */
+    private val volumeBurst = VolumeBurst(clock)
+    private val playerBursts = mutableMapOf<String, VolumeBurst>()
+
+    /**
+     * One press of the room's volume, [direction] +1 or -1: its size climbs within a burst and is
+     * finer when quiet — see [VolumeBurst]. Aimed from the level the presses so far will leave.
+     */
+    fun stepVolume(direction: Int) {
+        val level = (uiState.value.volume ?: return) + pendingVolumeDelta
+        adjustVolume(volumeBurst.step(level, direction))
+    }
+
+    /** One press of one speaker's volume, as [stepVolume]. */
+    fun stepPlayerVolume(playerId: String, direction: Int) {
+        val entry = uiState.value.playerVolumes.firstOrNull { it.playerId == playerId } ?: return
+        val level = entry.volume + (pendingPlayerDeltas[playerId] ?: 0)
+        adjustPlayerVolume(playerId, playerBursts.getOrPut(playerId) { VolumeBurst(clock) }.step(level, direction))
+    }
+
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
         // The player refuses a level it does not control; say so instead of asking it.

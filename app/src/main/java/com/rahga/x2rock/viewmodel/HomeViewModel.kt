@@ -21,7 +21,6 @@ import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CancellationException
 import com.rahga.x2rock.model.followingRoom
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -191,46 +190,6 @@ class HomeViewModel @Inject constructor(
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading())
-
-    // What a press just asked for, per speaker, until the player confirms it. Without this
-    // the level would snap back to the pushed one between the press and the event, and a
-    // second press inside the debounce window would aim from the stale value — the same bug
-    // the group volume had, one scope down.
-    private val _pendingPlayerVolumes = MutableStateFlow<Map<String, Int>>(emptyMap())
-    private val playerVolumeJobs = mutableMapOf<String, Job>()
-
-    // The same, for whole groups: a row in the panel's "add another" list stands for a
-    // group rather than a speaker, so it carries the group's level.
-    private val _pendingGroupVolumes = MutableStateFlow<Map<String, Int>>(emptyMap())
-    private val groupVolumeJobs = mutableMapOf<String, Job>()
-
-    /**
-     * Each group's level, for the rooms a panel offers to join.
-     *
-     * Pushed off `groupVolume:1`, and overlaid with whatever a press just asked for the same
-     * way [playerVolumes] is.
-     */
-    val groupVolumes: StateFlow<Map<String, Int>> =
-        combine(household.groupStates, _pendingGroupVolumes) { states, pending ->
-            states.mapNotNull { (id, state) -> state.volume?.let { id to it.volume } }.toMap() + pending
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
-
-    /**
-     * Each speaker's own level, for the room panel's "playing together" list.
-     *
-     * Pushed off `playerVolume:1`, so it follows someone turning a speaker up from the
-     * Sonos app rather than needing a re-read. Overlaid with whatever a press just asked
-     * for, until the speaker confirms it — see [setPlayerVolume].
-     */
-    val playerVolumes: StateFlow<Map<String, Int>> =
-        combine(household.playerVolumes, _pendingPlayerVolumes) { pushed, pending ->
-            pushed.mapValues { it.value.volume } + pending
-        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
-
-    /** Speakers whose own volume is muted, for the room panel's member rows. */
-    val mutedPlayers: StateFlow<Set<String>> = household.playerVolumes
-        .map { volumes -> volumes.filterValues { it.muted }.keys }
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
     val selectedTheme: StateFlow<AppColorTheme> = themeStore.theme
 
@@ -488,63 +447,6 @@ class HomeViewModel @Inject constructor(
         roomPrefsStore.setTvPlayer(soundbar)
     }
 
-    /** A whole group's level, from a row that offers to join it. */
-    fun adjustGroupVolume(groupId: String, delta: Int) {
-        // From the sources, not [groupVolumes]: that is derived a step behind, and a press inside
-        // the step added to the level before the last press and was lost (P-17, 2026-10-11).
-        val current = _pendingGroupVolumes.value[groupId] ?: household.groupState(groupId).volume?.volume ?: return
-        setGroupVolume(groupId, current + delta)
-    }
-
-    /** A group's level set outright, as a touch on its bar does; presses go through here too. */
-    fun setGroupVolume(groupId: String, volume: Int) {
-        if (household.groupState(groupId).volume?.fixed == true) return _notice.post(FIXED_VOLUME)
-        // Unknown until the speaker has said; a level set from nothing would be a guess.
-        if (household.groupState(groupId).volume == null) return
-        val target = volume.coerceIn(0, 100)
-        _pendingGroupVolumes.update { it + (groupId to target) }
-        groupVolumeJobs[groupId]?.cancel()
-        groupVolumeJobs[groupId] = viewModelScope.launch {
-            delay(VOLUME_DEBOUNCE_MILLIS)
-            if (groupVolumeJobs[groupId] === coroutineContext[Job]) groupVolumeJobs.remove(groupId)
-            val sent = runCatching { household.setGroupVolume(groupId, target) }.onFailure { _notice.failure("change the volume", it) }
-            // Only if it is still ours — see [setPlayerVolume].
-            if (sent.exceptionOrNull() is CancellationException) return@launch
-            _pendingGroupVolumes.update { if (it[groupId] == target) it - groupId else it }
-        }
-    }
-
-    /** One speaker's own level, accumulating presses the way the group volume does. */
-    fun adjustPlayerVolume(playerId: String, delta: Int) {
-        // From the sources, as [adjustGroupVolume]: four quick presses from 30 sent 45, one lost.
-        val current = _pendingPlayerVolumes.value[playerId] ?: household.playerVolumes.value[playerId]?.volume ?: return
-        setPlayerVolume(playerId, current + delta)
-    }
-
-    /** One speaker's level set outright; see [setGroupVolume]. */
-    fun setPlayerVolume(playerId: String, volume: Int) {
-        if (household.playerVolumes.value[playerId]?.fixed == true) return _notice.post(FIXED_VOLUME)
-        if (household.playerVolumes.value[playerId] == null) return
-        val target = volume.coerceIn(0, 100)
-        _pendingPlayerVolumes.update { it + (playerId to target) }
-        playerVolumeJobs[playerId]?.cancel()
-        playerVolumeJobs[playerId] = viewModelScope.launch {
-            delay(VOLUME_DEBOUNCE_MILLIS)
-            // Past the debounce the send is this job's alone: a newer press starts its own rather
-            // than cancelling a frame already written, or one waiting on the socket lock.
-            if (playerVolumeJobs[playerId] === coroutineContext[Job]) playerVolumeJobs.remove(playerId)
-            val sent = runCatching { household.setPlayerVolume(playerId, target) }
-                .onFailure { _notice.failure("change that speaker's volume", it) }
-            // Only if it is still ours. `runCatching` catches the CancellationException a
-            // newer press throws in here, and that press has already written its own target —
-            // the same one, possibly — so clearing unconditionally would delete it, leaving
-            // the row on the stale pushed level and the press after it aiming from there,
-            // which is the very accumulation this exists to prevent.
-            if (sent.exceptionOrNull() is CancellationException) return@launch
-            _pendingPlayerVolumes.update { if (it[playerId] == target) it - playerId else it }
-        }
-    }
-
     /** UPnP switched off for the household: the room panel has no TV input to offer. */
     val upnpOff: StateFlow<Boolean> = household.state.map { it.upnpOff }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
@@ -564,25 +466,6 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.setPlayMode(groupId, mode.copy(crossfade = !mode.crossfade)) }
                 .onFailure { _notice.failure("change Crossfade", it) }
-        }
-    }
-
-    /**
-     * Every speaker in [groupId] set to the group's own level — the desktop widget's
-     * *Normalize*, and x2rock's `vol normalize`. `playerVolume:1 setVolume` per member: Sonos
-     * then moves the group's level to their average, which is already the level each was set
-     * to, so the group stays where it was. Fixed line-outs are left alone.
-     */
-    fun normalizeGroup(groupId: String) {
-        val group = findGroup(groupId) ?: return
-        val level = household.groupState(groupId).volume?.volume ?: return
-        val pushed = household.playerVolumes.value
-        val members = group.playerIds.filter { pushed[it]?.fixed != true }
-        viewModelScope.launch {
-            members.forEach { playerId ->
-                runCatching { household.setPlayerVolume(playerId, level) }
-                    .onFailure { _notice.failure("even out ${household.playerName(playerId)}", it) }
-            }
         }
     }
 

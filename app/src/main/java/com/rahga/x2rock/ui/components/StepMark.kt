@@ -39,8 +39,6 @@ fun StepMark(mark: String, shown: Boolean, style: TextStyle = LocalTextStyle.cur
 fun stepMarksShown(focused: Boolean): Boolean =
     focused || LocalInputModeManager.current.inputMode == InputMode.Touch
 
-/** The step a remote press moves a volume by, in the player pane's header and the room panel alike. */
-const val VOLUME_STEP = 5
 
 /**
  * A level's ink, dimmed while muted: the speaker keeps its level through mute, and so does what

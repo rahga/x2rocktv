@@ -25,7 +25,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import com.rahga.x2rock.ui.components.StepMark
-import com.rahga.x2rock.ui.components.VOLUME_STEP
 import com.rahga.x2rock.ui.components.mutedInk
 import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.theme.requestFocusSafely

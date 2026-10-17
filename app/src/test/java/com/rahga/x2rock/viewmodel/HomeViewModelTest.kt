@@ -264,31 +264,6 @@ class HomeViewModelTest {
 
     // ---------------------------------------------------------------- grouping
 
-    /** Each member to the group's level, on its own socket; a fixed line-out left alone. */
-    @Test fun `evening out sets every member to the group's level`() = runBlocking<Unit> {
-        connect()
-        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
-        val group = withTimeout(10_000) {
-            viewModel.uiState.first { s ->
-                (s as? HomeViewModel.UiState.Success)?.groups?.any { it.playerIds.size > 1 } == true
-            } as HomeViewModel.UiState.Success
-        }.groups.first { it.playerIds.size > 1 }
-        val (first, second) = group.playerIds
-        fake.pushGroupVolume(group.id, 30)
-        withTimeout(5_000) { household.groupStates.first { it[group.id]?.volume?.volume == 30 } }
-        fake.pushPlayerVolume(first, 20)
-        fake.pushPlayerVolume(second, 40, fixed = true)
-        withTimeout(5_000) { household.playerVolumes.first { it[first] != null && it[second] != null } }
-        fake.clearHistory()
-
-        viewModel.normalizeGroup(group.id)
-
-        fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "setVolume" && it.get("playerId")?.asString == first }
-        assertEquals(30, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
-        delay(500)
-        assertEquals("a fixed line-out was set", 1, fake.commandsNamed("setVolume"))
-    }
-
     /** The captured zones event, Bedroom's surround unplugged: Bedroom's row says so, no other. */
     @Test fun `a room with a bonded speaker offline is marked, and only that room`() = runBlocking<Unit> {
         val state = connect()
@@ -315,16 +290,14 @@ class HomeViewModelTest {
         assertNull(tone.trueplay)
     }
 
-    /** Mute reaches the room list and the panel's speaker rows, both pushed. */
-    @Test fun `a muted group and a muted speaker are both shown as muted`() = runBlocking<Unit> {
+    /** A muted group's mute reaches the room list, pushed. */
+    @Test fun `a muted group is shown as muted`() = runBlocking<Unit> {
         val state = connect()
         val kitchen = state.groups.first { it.name == "Kitchen" }
         fake.pushGroupVolume(kitchen.id, 30, muted = true)
         withTimeout(5_000) {
             viewModel.uiState.first { (it as? HomeViewModel.UiState.Success)?.rooms?.get(kitchen.id)?.muted == true }
         }
-        fake.pushPlayerVolume(kitchen.coordinatorId, 30, muted = true)
-        withTimeout(5_000) { viewModel.mutedPlayers.first { kitchen.coordinatorId in it } }
     }
 
     /** The panel stays open while grouping, so a failed join has to be said, not swallowed. */
@@ -431,85 +404,6 @@ class HomeViewModelTest {
         assertEquals(12, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
     }
 
-    // ---------------------------------------------------------- member volumes
-
-    private suspend fun awaitPlayerVolume(playerId: String, volume: Int) = withTimeout(5_000) {
-        viewModel.playerVolumes.first { it[playerId] == volume }
-    }
-
-    @Test fun `a speaker's own level follows what the player pushed`() = runBlocking<Unit> {
-        connect()
-        fake.pushPlayerVolume(fake.id, volume = 37)
-        awaitPlayerVolume(fake.id, 37)
-    }
-
-    /**
-     * The same accumulation the group volume needed: the level is purely pushed, so several
-     * presses inside the debounce window would otherwise all read the same unchanged value
-     * and the speaker would move one step instead of four.
-     */
-    @Test fun `repeated presses on a member accumulate into one command`() = runBlocking<Unit> {
-        connect()
-        fake.pushPlayerVolume(fake.id, volume = 30)
-        awaitPlayerVolume(fake.id, 30)
-        fake.clearHistory()
-
-        repeat(4) { viewModel.adjustPlayerVolume(fake.id, +5) }
-
-        fake.awaitCommand("setVolume", 5_000)
-        assertEquals(50, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
-        delay(600)
-        assertEquals(1, fake.commandsNamed("setVolume"))
-    }
-
-    @Test fun `member presses are clamped to the usable range`() = runBlocking<Unit> {
-        connect()
-        fake.pushPlayerVolume(fake.id, volume = 96)
-        awaitPlayerVolume(fake.id, 96)
-        repeat(3) { viewModel.adjustPlayerVolume(fake.id, +5) }
-        fake.awaitCommand("setVolume", 5_000)
-        assertEquals(100, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
-    }
-
-    /** Aiming from a level nobody has stated would aim from zero and turn the speaker down. */
-    @Test fun `adjusting a member before its level is known sends nothing`() = runBlocking<Unit> {
-        connect()
-        fake.clearHistory()
-        viewModel.adjustPlayerVolume(fake.id, +5)
-        delay(600)
-        assertEquals(0, fake.commandsNamed("setVolume"))
-    }
-
-    /**
-     * A drag on the room panel's bar sets a level at every move. Only where the finger came
-     * to rest reaches the speaker: one command, not one per frame of the drag.
-     */
-    @Test fun `a drag across a member's bar sends only where it ended`() = runBlocking<Unit> {
-        connect()
-        fake.pushPlayerVolume(fake.id, volume = 30)
-        awaitPlayerVolume(fake.id, 30)
-        fake.clearHistory()
-
-        listOf(34, 41, 55, 62).forEach { viewModel.setPlayerVolume(fake.id, it) }
-
-        fake.awaitCommand("setVolume", 5_000)
-        assertEquals(62, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
-        delay(600)
-        assertEquals(1, fake.commandsNamed("setVolume"))
-    }
-
-    /**
-     * A touch on the bar names a level outright, so unlike a press it is not aiming from an
-     * unknown one — but the bar it was aimed on was drawn empty, so it is still a guess.
-     */
-    @Test fun `setting a member before its level is known sends nothing`() = runBlocking<Unit> {
-        connect()
-        fake.clearHistory()
-        viewModel.setPlayerVolume(fake.id, 62)
-        delay(600)
-        assertEquals(0, fake.commandsNamed("setVolume"))
-    }
-
     // -------------------------------------------------- naming the TV's soundbar
 
     /**
@@ -590,44 +484,6 @@ class HomeViewModelTest {
         val noSoundbar = state.groups.first { state.rooms[it.id]?.hasTvInput != true }
         viewModel.setTvSoundbar(noSoundbar.id)
         assertNull(roomPrefs.tvPlayerId.value)
-    }
-
-    /**
-     * A press landing while the previous one's command is in flight must not lose a step.
-     *
-     * The newer press cancels the debounced job, and `runCatching` swallows the
-     * `CancellationException` that throws inside it — so the clear that followed used to
-     * delete the target the newer press had just written. The row fell back to the level the
-     * speaker last stated, and the press after it aimed from there: 20 → 25 → 30 → **25**.
-     *
-     * The fake is told to hold its reply, because in-process it answers far too fast for
-     * that window to be reachable by waiting.
-     */
-    @Test fun `a press during the previous command keeps accumulating`() = runBlocking<Unit> {
-        connect()
-        fake.pushPlayerVolume(fake.id, volume = 20)
-        awaitPlayerVolume(fake.id, 20)
-        fake.clearHistory()
-        fake.holdRepliesTo("setVolume")
-
-        viewModel.adjustPlayerVolume(fake.id, +5)                        // 25
-        fake.awaitCommand("setVolume", 5_000)
-        // Now suspended inside that command, which is the only place the bug lives.
-        viewModel.adjustPlayerVolume(fake.id, +5)                        // 30, cancels it
-        delay(60)
-
-        assertEquals(
-            "the cancelled job cleared the newer press's target",
-            30,
-            viewModel.playerVolumes.value[fake.id],
-        )
-
-        // And the press after it must aim from 30, not from the 20 the speaker stated.
-        viewModel.adjustPlayerVolume(fake.id, +5)                        // 35
-        fake.releaseReplies()
-        withTimeout(5_000) {
-            while (fake.lastCommandBody("setVolume")?.get("volume")?.asInt != 35) delay(20)
-        }
     }
 
     // ---------------------------------------------------------------- TV input

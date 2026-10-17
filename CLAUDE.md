@@ -492,6 +492,11 @@ pill: Right on it is louder, so a button there could not be reached by remote.
 The panel opens focused on **the room's own row**, not on Party: the row most likely to be
 wanted, and one press from either neighbour.
 
+**A volume press climbs like a seek press** (2026-10-17, `VolumeBurst`): within a burst, 2, then 3,
+then 5; a pause of 1.5s or a turn the other way starts again at 2. Quiet is finer whatever the
+burst: at most 2 below 10 and 1 below 4, judged by where the level is going. No cap at the top,
+where 98 and 100 sound the same. The pills send a direction; the view model sizes the step.
+
 **The player pane scrolls only from the places row down** (2026-10-17): above it nothing moves,
 and from there only as far as the focused control needs (`LowerZonesOnly`). The TV's own rule
 pivots each focused control towards the upper screen, which pushed the art and title off the top

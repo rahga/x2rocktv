@@ -890,7 +890,7 @@ private fun PlayerVolumeRow(
             volume = entry.volume,
             muted = entry.muted,
             fixed = entry.fixed,
-            onStep = { viewModel.adjustPlayerVolume(entry.playerId, it) },
+            onStep = { viewModel.stepPlayerVolume(entry.playerId, it) },
             onToggleMute = { viewModel.togglePlayerMute(entry.playerId) },
             onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
         )
