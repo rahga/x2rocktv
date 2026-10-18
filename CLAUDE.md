@@ -792,6 +792,11 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   endpoint, read with the account's token — Sonos Radio's shelves, Spotify's and Deezer's personal
   ones — then SMAPI's root rows after them, so nothing the root reached is lost. A shelf's albums
   and playlists open; stations play. See `lan-transport.md` for the 401-and-refresh path.
+- **Apple Music is listed only where the household has it** (owner's rule, 2026-10-18;
+  `AppleMusicSetting`): the speakers store an Apple Music sign-in (read with the other stored sign-ins,
+  which also names its `sn_` account), or an app-link key exists (not built). Otherwise only with
+  Settings → Advanced → Apple Music on, a switch shown only when neither holds. Play history alone no
+  longer lists it; it still supplies the account for playing when no stored sign-in names one.
 - **A service opens on its library, never on a keyboard.** Browsing is the cheap path on a remote;
   "Search <service>" is one press up. A searchable service used to open on its search and hid every
   library behind it.

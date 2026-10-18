@@ -58,6 +58,7 @@ class SearchViewModel @Inject constructor(
     private val primaryAccounts: PrimaryAccounts,
     private val preferredServices: PreferredServices,
     private val recentSearches: RecentSearches,
+    private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -150,7 +151,7 @@ class SearchViewModel @Inject constructor(
         job?.cancel()
         job = viewModelScope.launch {
             // Side by side: neither needs the other, and the Apple answer is a speaker round trip.
-            val appleKnown = async { attempt { household.appleMusicAccount() }.getOrNull() != null }
+            val appleKnown = async { attempt { appleMusic.shown() }.getOrDefault(false) }
             // A service's primary account alone, where this device has one: see searchedAccounts.
             val services = attempt { searchedAccounts(household.searchableServices(), primaryAccounts.primaries.value) }.getOrElse {
                 _results.value = Results(searched = true)

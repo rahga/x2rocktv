@@ -46,6 +46,7 @@ class ServiceBrowseViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val primaryAccounts: PrimaryAccounts,
     preferredServices: PreferredServices,
+    private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
     private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
@@ -206,7 +207,7 @@ class ServiceBrowseViewModel @Inject constructor(
         viewModelScope.launch {
             // Side by side: the Apple answer is a speaker round trip neither the list nor an entry
             // container needs to wait for.
-            val apple = async { attempt { household.appleMusicAccount() != null }.getOrDefault(false) }
+            val apple = async { attempt { appleMusic.shown() }.getOrDefault(false) }
             val services = attempt { household.searchableServices() }
             entry?.let { (key, container, title) ->
                 services.getOrNull()?.firstOrNull { it.key() == key }?.let { service ->

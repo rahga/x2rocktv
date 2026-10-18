@@ -785,6 +785,7 @@ class SonosHousehold(
         clearSession { runCatching { it.cancel() } }
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
+        storedAppleRead = false
         lastReread = null
         categoryCache.clear()
         appleAccount = null
@@ -1131,8 +1132,32 @@ class SonosHousehold(
      * Recently Played may be switched off (Personalization), so its refusal is not an answer.
      */
     suspend fun appleMusicAccount(): String? = appleAccount
+        ?: storedAppleMusicAccount()?.also { appleAccount = it }
         ?: AppleMusic.accountIn(runCatching { history() }.getOrDefault(emptyList()), _groupStates.value.values.map { it.track })
             .also { appleAccount = it }
+
+    /**
+     * The household's Apple Music account as its speakers store it (`sn_<serial>`), read with the other
+     * stored sign-ins; `null` when the speakers hold none for Apple, or could not be read. This, not
+     * what was played lately, is what says the household has Apple Music at all.
+     */
+    suspend fun storedAppleMusicAccount(): String? {
+        if (storedAppleRead) return storedApple
+        // Only the sign-ins, not the whole service list: nothing else here needs it.
+        val read = runCatching {
+            val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
+            storedAccounts(hostnameOf(coordinator), householdId())
+        }.onFailure { if (it is CancellationException) throw it }.getOrNull() ?: return null
+        noteStoredApple(read)
+        return storedApple
+    }
+    @Volatile private var storedApple: String? = null
+    /** Whether the sign-ins were read this connection, so a household without Apple is not asked again. */
+    @Volatile private var storedAppleRead = false
+    private fun noteStoredApple(accounts: List<StoredAccount>) {
+        storedApple = accounts.firstOrNull { it.serviceId.toString() == AppleMusic.SERVICE_ID }?.let { "sn_${it.serial}" }
+        storedAppleRead = true
+    }
 
     /**
      * Kept once known, for the connection: Search, Music Services and the Apple Music screen all
@@ -1203,8 +1228,8 @@ class SonosHousehold(
         val household = householdId()
         val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
         val hostname = hostnameOf(coordinator)
-        val answer = upnp.listAvailableServices(hostname)
-        val services = parseServices(answer.descriptors, answer.types)
+        // The sign-ins first: Apple Music's is read from them, and a household whose service list
+        // cannot be read (UPnP off, a speaker that does not answer) still has them.
         val accounts = try {
             storedAccounts(hostname, household)
         } catch (e: CancellationException) {
@@ -1215,6 +1240,9 @@ class SonosHousehold(
         } catch (e: Exception) {
             emptyList()
         }
+        noteStoredApple(accounts)
+        val answer = upnp.listAvailableServices(hostname)
+        val services = parseServices(answer.descriptors, answer.types)
         // Three services carry a token but still dead-end here, so they are dropped rather than shown
         // and left to fail: Apple Music, whose stored credential has an empty key and whose SMAPI
         // refuses every call (searched through iTunes on its own screen instead); YouTube Music,

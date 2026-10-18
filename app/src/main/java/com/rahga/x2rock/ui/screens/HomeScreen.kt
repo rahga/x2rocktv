@@ -148,6 +148,8 @@ fun HomeScreen(
     val selectedGroupId by homeViewModel.selectedGroupId.collectAsState()
     val upnpOff by homeViewModel.upnpOff.collectAsState()
     val betaEnabled by homeViewModel.betaEnabled.collectAsState()
+    val appleStored by homeViewModel.appleStored.collectAsState()
+    val appleForced by homeViewModel.appleForced.collectAsState()
     val roomRanks by homeViewModel.roomRanks.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
@@ -272,7 +274,10 @@ fun HomeScreen(
 
     val settingsFocus = remember { FocusRequester() }
     LaunchedEffect(showSettings) {
-        if (showSettings) settingsFocus.requestFocusSafely()
+        if (showSettings) {
+            settingsFocus.requestFocusSafely()
+            homeViewModel.readAppleStored()
+        }
     }
 
     // Both modals hand focus back as they close, above; nothing is left to place afterwards.
@@ -446,6 +451,9 @@ fun HomeScreen(
                 onResetRoomOrder = homeViewModel::resetRoomOrder,
                 betaEnabled = betaEnabled,
                 onToggleBeta = { homeViewModel.setBetaEnabled(!betaEnabled) },
+                appleStored = appleStored,
+                appleForced = appleForced,
+                onToggleAppleForced = { homeViewModel.setAppleForced(!appleForced) },
                 onOpenReport = {
                     opener = Opener.SETTINGS
                     showSettings = false
@@ -958,6 +966,10 @@ private fun SettingsPanel(
     onResetRoomOrder: () -> Unit,
     betaEnabled: Boolean,
     onToggleBeta: () -> Unit,
+    /** Whether the speakers store an Apple Music sign-in; `null` until read. */
+    appleStored: Boolean?,
+    appleForced: Boolean,
+    onToggleAppleForced: () -> Unit,
     onOpenReport: () -> Unit,
     accountOffered: Boolean,
     accountSignedIn: Boolean,
@@ -1019,6 +1031,22 @@ private fun SettingsPanel(
             // Every speaker, what it runs, and whether an update waits — read, never applied.
             AppButton(onClick = onOpenAbout, modifier = Modifier.fillMaxWidth()) {
                 Text("About this system")
+            }
+            // Apple Music is listed by itself where the speakers store its sign-in. Where they do not,
+            // it can still be switched on here: a household may play it without that sign-in readable.
+            if (appleStored == false) {
+                Spacer(Modifier.height(32.dp))
+                Text("Advanced", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(12.dp))
+                AppButton(onClick = onToggleAppleForced, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (appleForced) "Apple Music   On" else "Apple Music   Off")
+                }
+                Text(
+                    "This system's speakers hold no Apple Music sign-in. Turn this on to search Apple Music anyway; it plays through the system's own Apple Music.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
             }
             Spacer(Modifier.height(32.dp))
             Text("Beta", style = MaterialTheme.typography.titleMedium)

@@ -89,7 +89,7 @@ class AlarmPaneTest {
 
     @Test fun aRingingAlarmLeavesThePaneOnTheScreen() {
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
-        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs))
+        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs), com.rahga.x2rock.store.AppleMusicSetting(prefs, household))
         val player = PlayerViewModel(household, SilentNowPlaying, testClock)
         compose.setContent {
             X2RockTheme {

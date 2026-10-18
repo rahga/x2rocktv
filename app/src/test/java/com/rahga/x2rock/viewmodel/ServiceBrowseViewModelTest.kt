@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.store.AppleMusicSetting
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.store.PrimaryAccounts
 import com.rahga.x2rock.store.PreferredServices
@@ -119,7 +120,7 @@ class ServiceBrowseViewModelTest {
             accountCapture = { envelope },
         )
         runBlocking { household.connectTo(fake) }
-        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        viewModel = ServiceBrowseViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), AppleMusicSetting(FakePreferences(), household))
     }
 
     @After fun tearDown() {
@@ -134,11 +135,14 @@ class ServiceBrowseViewModelTest {
         (withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Found } }
             as ServiceBrowseViewModel.Results.Found).items
 
-    /** The captured history holds an Apple Music album, so this household's account is known. */
-    @Test fun `Apple Music is offered where the household has played from it`() = runBlocking<Unit> {
+    /**
+     * The captured history holds an Apple Music album, but the speakers here store no Apple Music
+     * sign-in: play history alone does not list it (owner's rule, 2026-10-18; see AppleMusicSettingTest).
+     */
+    @Test fun `Apple Music is not offered from play history alone`() = runBlocking<Unit> {
         val ready = withTimeout(5_000) { viewModel.services.first { it is ServiceBrowseViewModel.Services.Ready } }
             as ServiceBrowseViewModel.Services.Ready
-        org.junit.Assert.assertTrue(ready.appleMusic)
+        org.junit.Assert.assertFalse(ready.appleMusic)
     }
 
     /**
@@ -356,7 +360,7 @@ class ServiceBrowseViewModelTest {
         ready()
         val fromFavorite = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
             "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "favorite" to "84",
-        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), AppleMusicSetting(FakePreferences(), household))
         val tracks = withTimeout(5_000) { fromFavorite.results.first { it is ServiceBrowseViewModel.Results.Found } }
         assertEquals("SICKO MODE", (tracks as ServiceBrowseViewModel.Results.Found).items.first().title)
         assertTrue(fromFavorite.playsWhole.value)
@@ -373,7 +377,7 @@ class ServiceBrowseViewModelTest {
         ready()
         fun opened(kind: String) = ServiceBrowseViewModel(household, SavedStateHandle(mapOf(
             "groupId" to groupId, "service" to "31:sn_14", "container" to "album:9", "title" to "ASTROWORLD", "kind" to kind,
-        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()))
+        )), PrimaryAccounts(FakePreferences()), PreferredServices(FakePreferences()), AppleMusicSetting(FakePreferences(), household))
         val album = opened("album")
         withTimeout(5_000) { album.results.first { it is ServiceBrowseViewModel.Results.Found } }
         assertTrue(album.playsWhole.value)

@@ -330,6 +330,19 @@ class ServiceSearchTest {
         assertEquals("the speaker sent none", household.accountsRead.value?.problem)
     }
 
+    /** The speakers' stored Apple Music sign-in is the household's Apple account, read with the rest. */
+    @Test fun `the stored Apple Music sign-in names the household's Apple account`() = runBlocking {
+        connected()
+        assertEquals("sn_19", household.storedAppleMusicAccount())
+        assertEquals("and it is the account Apple Music plays with", "sn_19", household.appleMusicAccount())
+    }
+
+    @Test fun `no stored Apple Music sign-in means no stored Apple account`() = runBlocking {
+        envelope = null
+        connected()
+        assertNull(household.storedAppleMusicAccount())
+    }
+
     @Test fun `a search carries the stored token and parses the hits`() = runBlocking {
         connected()
         val page = household.searchService(qobuz(), Category("tracks", "track"), term = "sicko")

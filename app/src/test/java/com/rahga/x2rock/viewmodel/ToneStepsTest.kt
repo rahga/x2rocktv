@@ -100,6 +100,7 @@ class ToneStepsTest {
             pendingRoomDeepLink = PendingRoomDeepLink(),
             presetStore = PresetStore(prefs),
             betaFeatures = BetaFeatures(prefs),
+            appleMusic = com.rahga.x2rock.store.AppleMusicSetting(prefs, household),
         )
         runBlocking {
             household.connect(fake.seed)

@@ -22,6 +22,7 @@ import javax.inject.Inject
 class PreferredServicesViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val preferred: PreferredServices,
+    private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
     /** One service, whichever accounts the household holds for it. */
@@ -44,7 +45,7 @@ class PreferredServicesViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val apple = async { runCatching { household.appleMusicAccount() != null }.getOrDefault(false) }
+            val apple = async { runCatching { appleMusic.shown() }.getOrDefault(false) }
             _services.value = runCatching { household.searchableServices() }.fold(
                 onSuccess = { linked ->
                     val appleMusic = if (apple.await()) listOf(Service(PreferredServices.APPLE_MUSIC, "Apple Music", added = true)) else emptyList()

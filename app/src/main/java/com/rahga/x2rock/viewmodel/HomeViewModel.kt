@@ -91,6 +91,7 @@ class HomeViewModel @Inject constructor(
     private val pendingRoomDeepLink: PendingRoomDeepLink,
     private val presetStore: PresetStore,
     private val betaFeatures: BetaFeatures,
+    private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
     /**
@@ -197,6 +198,19 @@ class HomeViewModel @Inject constructor(
     val betaEnabled: StateFlow<Boolean> = betaFeatures.enabled
 
     fun setBetaEnabled(on: Boolean) = betaFeatures.setEnabled(on)
+
+    /**
+     * Settings → Advanced → Apple Music, for a household whose speakers store no Apple Music sign-in;
+     * [appleStored] is `null` until read, true where the switch is not offered. See [AppleMusicSetting].
+     */
+    val appleForced: StateFlow<Boolean> = appleMusic.forced
+    private val _appleStored = MutableStateFlow<Boolean?>(null)
+    val appleStored: StateFlow<Boolean?> = _appleStored.asStateFlow()
+    fun setAppleForced(on: Boolean) = appleMusic.setForced(on)
+    /** Asked as Settings opens: the sign-ins are read once a connection, so this is cheap after the first. */
+    fun readAppleStored() {
+        viewModelScope.launch { _appleStored.value = runCatching { appleMusic.stored() }.getOrNull() }
+    }
 
     private val _selectedGroupId = MutableStateFlow<String?>(null)
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()

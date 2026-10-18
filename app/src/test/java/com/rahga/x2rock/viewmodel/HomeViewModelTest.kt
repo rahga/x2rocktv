@@ -68,6 +68,7 @@ class HomeViewModelTest {
             pendingRoomDeepLink = deepLink,
             presetStore = PresetStore(prefs),
             betaFeatures = BetaFeatures(prefs),
+            appleMusic = com.rahga.x2rock.store.AppleMusicSetting(prefs, household),
         )
     }
 
