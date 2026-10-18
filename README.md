@@ -91,6 +91,10 @@ x2rock is free software under the [GNU General Public License, version 3](LICENS
 (`GPL-3.0-only`): use it, change it and share it, and anything you distribute that is built on
 it is released under the same terms, with its source.
 
-**Commercial licences are available on request** for closed-source or branded builds, such as an
-integrator's own edition for its clients. Ask through GitHub:
-[github.com/rahga](https://github.com/rahga).
+## Caveats 
+Features rely on Sonos Firmware and especially how Content Providers allow SMAPI access.
+Apple music Search does not rely on SMAPI, and providers like YouTube Music are not available
+under Sonos S2 for most browse and search features, except through the offical Sonos app.
+
+Maintainer contact here:
+[github.com/rahga](https://github.com/rahga)
