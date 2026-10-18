@@ -206,7 +206,9 @@ class QueueViewModelTest {
         loads.clear()
         viewModel.moveDown(1)
         withTimeout(5_000) { while (loads.isEmpty()) delay(20) }
-        withTimeout(5_000) { viewModel.notice.first { it != null } }
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }
+        // In words, not as the HTTP fault: on a station only the player knew the queue had moved.
+        assertTrue("$said", "choose the track again" in "$said")
         delay(300)
         assertEquals(1, loads.size)
     }

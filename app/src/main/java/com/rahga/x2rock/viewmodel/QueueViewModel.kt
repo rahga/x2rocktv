@@ -10,6 +10,7 @@ import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.model.QueueItem
 import com.rahga.x2rock.lan.GroupState
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.UpnpRefusedException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -220,14 +221,14 @@ class QueueViewModel @Inject constructor(
      */
     private fun edit(what: String, trackNumber: Int?, openedAt: String? = null, block: suspend () -> Unit) {
         if (openedAt != null && openedAt != updateId) {
-            _notice.post("The queue changed before that could be done; choose the track again")
+            _notice.post(QUEUE_CHANGED)
             return
         }
         val pressed = trackNumber?.let { n -> entries().firstOrNull { it.trackNumber == n }?.item?.track }
         viewModelScope.launch {
             edits.withLock {
                 if (trackNumber != null && entries().firstOrNull { it.trackNumber == trackNumber }?.item?.track != pressed) {
-                    _notice.post("The queue changed before that could be done; choose the track again")
+                    _notice.post(QUEUE_CHANGED)
                     return@withLock
                 }
                 val before = updateId
@@ -238,7 +239,10 @@ class QueueViewModel @Inject constructor(
                         if (!reread) read(quiet = true)
                     }
                     .onFailure {
-                        _notice.failure(what, it)
+                        // 1028 is the player's own stale-list refusal: on a station the queue's version
+                        // is not pushed, so only the player saw the change (Streamer, 2026-10-18).
+                        if ((it as? UpnpRefusedException)?.upnpCode == "1028") _notice.post(QUEUE_CHANGED)
+                        else _notice.failure(what, it)
                         read(quiet = true)
                     }
             }
@@ -285,5 +289,6 @@ class QueueViewModel @Inject constructor(
         const val CLEAR_CONFIRM_MILLIS = 4_000L
         /** How long an edit waits for the pushed version's re-read before reading itself. */
         const val EDIT_SETTLE_MILLIS = 3_000L
+        const val QUEUE_CHANGED = "The queue changed before that could be done; choose the track again"
     }
 }
