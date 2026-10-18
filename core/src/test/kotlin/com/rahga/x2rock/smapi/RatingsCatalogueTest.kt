@@ -24,12 +24,15 @@ class RatingsCatalogueTest {
     private lateinit var server: MockWebServer
     private val store = MemoryStore()
     private lateinit var catalogue: RatingsCatalogue
+    @Volatile private var outage = true
 
     @Before fun setUp() {
         server = MockWebServer().apply {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                     "/manifest/ratings" -> MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map/ratings")}"}}""")
+                    "/manifest/flaky" -> if (outage) MockResponse().setResponseCode(503)
+                        else MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map/ratings")}"}}""")
                     "/manifest/plain" -> MockResponse().setBody("""{"presentationMap":{"uri":"${url("/map/plain")}"}}""")
                     "/map/ratings" -> MockResponse().setBody(
                         """<Presentation><PresentationMap type="NowPlayingRatings">""" +
@@ -76,5 +79,18 @@ class RatingsCatalogueTest {
         val before = server.requestCount
         assertTrue(catalogue.ratingsFor(svc).isEmpty())
         assertEquals(before, server.requestCount)
+    }
+
+    /**
+     * A manifest the CDN could not serve is not a service with no ratings: nothing is kept, and once
+     * the CDN answers again the ratings are there (P-45). Kept as "none", they were gone for good.
+     */
+    @Test fun `a failed fetch is not remembered as none`() = runBlocking {
+        val svc = service("7", "/manifest/flaky")
+        val failed = runCatching { catalogue.ratingsFor(svc) }
+        assertTrue("a 503 read as an answer", failed.isFailure)
+        assertTrue("a failure was kept", store.held["7"] == null)
+        outage = false
+        assertEquals(listOf("unselected"), catalogue.ratingsFor(svc).map { it.propname })
     }
 }

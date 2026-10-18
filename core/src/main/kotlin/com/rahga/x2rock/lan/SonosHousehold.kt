@@ -1358,7 +1358,10 @@ class SonosHousehold(
      */
     suspend fun setServiceFavorite(linked: LinkedService, item: Item, favorite: Boolean) {
         val wanted = if (favorite) SAVE_TRACK else DELETE_TRACK
-        val rating = ratingsCatalogue.ratingsFor(linked.service)
+        // A map that could not be read is not one without ratings, but either way the service's own
+        // favourite call is the way left to try.
+        val rating = runCatching { ratingsCatalogue.ratingsFor(linked.service) }
+            .onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
             .flatMap { it.ratings }.firstOrNull { it.stringId == wanted }
         if (rating != null) smapi.rateItem(linked.service, linked.token, item.id, rating.id)
         else smapi.setFavorite(linked.service, linked.token, item.id, favorite)

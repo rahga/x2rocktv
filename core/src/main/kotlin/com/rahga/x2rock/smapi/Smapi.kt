@@ -448,14 +448,22 @@ class SmapiClient(
     }
 
     /** The presentation map body, or `null` when the service publishes no manifest for one. */
+    /**
+     * The service's presentation map, or `null` when it publishes none: no manifest, or a manifest
+     * naming no map. A manifest or map that could not be had — an HTTP error, a CDN's 503 — is not
+     * that answer and throws, so nothing caches it as "no ratings" or "no search" (P-45).
+     */
     private suspend fun presentationMap(service: Service): String? {
         val manifestUri = service.manifestUri ?: return null
-        val manifestBody = get(manifestUri) ?: return null
+        val manifestBody = getOrThrow(manifestUri, "${service.name}'s manifest")
         val mapUri = runCatching { JsonParser.parseString(manifestBody) }.getOrNull()
             ?.asJsonObject?.getAsJsonObject("presentationMap")?.get("uri")?.takeIf { it.isJsonPrimitive }
             ?.asString ?: return null
-        return get(mapUri)
+        return getOrThrow(mapUri, "${service.name}'s presentation map")
     }
+
+    private suspend fun getOrThrow(url: String, what: String): String =
+        fetch(url, null).let { it.body ?: throw java.io.IOException("$what answered HTTP ${it.code}") }
 
     private suspend fun get(url: String): String? = fetch(url, null).body
 

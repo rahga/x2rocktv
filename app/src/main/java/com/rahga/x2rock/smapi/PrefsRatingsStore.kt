@@ -30,6 +30,8 @@ class PrefsRatingsStore @Inject constructor(private val prefs: Preferences) : Ra
     private fun key(serviceId: String) = "$KEY_PREFIX$serviceId"
 
     private companion object {
-        const val KEY_PREFIX = "ratings_"
+        // "ratings2_" since 2026-10-18: entries under the old prefix may record a failed fetch as "no
+        // ratings" (P-45), so they are left unread and every service is fetched afresh once.
+        const val KEY_PREFIX = "ratings2_"
     }
 }
