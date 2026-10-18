@@ -157,8 +157,8 @@ data class HomeTheaterOptions(
  * `settings:1 getPlayerSettings` — player-scoped, and answered without an account, unlike
  * `getSettings`, which wants a `userId` this account-less model has no way to supply.
  *
- * Only the home-theatre block is read; the object carries more (room name, volume mode,
- * spatial audio) that nothing here has a use for.
+ * Read here: the home-theatre block, the tone and the volume limit. The object carries more
+ * (room name, volume mode, spatial audio) that nothing here has a use for.
  */
 data class PlayerSettings(
     val homeTheater: HomeTheaterOptions? = null,

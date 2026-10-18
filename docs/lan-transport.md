@@ -135,6 +135,11 @@ was reachable throughout. Multicast filtering of that group is real and the app 
 fallback, so a first run on such a network finds nothing. mDNS is the natural answer: one
 `_sonos._tcp` TXT record carries `uuid`, `location` and `mhhid` — a complete seed.
 
+*Since 2026-10-06 that fallback exists*: when SSDP's window draws nothing, `SonosHousehold` asks
+`MdnsDiscovery` (`NsdMdnsDiscovery` over `NsdManager` in `:app`) and seeds from the TXT record
+(`Discovery.fromSonosTxt`). Run on a moto g (Android 15) at the office with SSDP switched off: it
+found Media Room and connected. The paragraph above is the finding as it stood before.
+
 ---
 
 ## The message protocol
@@ -417,6 +422,11 @@ with titles, artists and item types parsed. Amazon Music answered its `search` H
 saw the same); its catalogue is finicky. **Not yet run on a TV device**: the inbound GENA socket
 and `.local`→IP path want one run on a Shield/Streamer, as the mDNS fallback did — the capture is
 the same JVM code either way.
+
+*Since run on TVs*: the stored-token capture, search and browse are what Music Services and Search
+use on the Shield and the Streamer — the service-by-service comparison of 2026-10-11 ran on the
+Shield (`docs/sonos-app-comparison.md`), and on 2026-10-18 a build with a deliberately wrong salt
+showed the "sign-ins could not be read" note there while the normal build listed the accounts again.
 
 ---
 

@@ -16,11 +16,13 @@ A Sonos controller for Google TV / Android TV, written in Kotlin with Jetpack Co
 x2rock controls Sonos speakers from a TV remote. There is no sign-in: a player is found on
 the local network by SSDP (or remembered from last time) and answers without an account.
 
-Rooms are listed in a sidebar, alphabetically, as Sonos lists them. Selecting a room shows
+Rooms are listed in a sidebar, alphabetically until the viewer moves one (a hold picks a room
+up; the order is this device's). Selecting a room shows
 what it is playing with the controls its source permits; a room on its soundbar's TV input
-gets its own pane with Night Sound and Speech Enhancement instead. The pane's Group button, or a
-long press or Menu on a room, opens its room panel: party mode, the rooms playing together and their levels, the rooms that could
-join, and — for a room with a soundbar — the TV input and "This is my TV". The queue and the
+gets its own pane with Night Sound and Speech Enhancement instead. The room panel has two halves,
+each opened by its own pane button: **Group** — play everywhere, the rooms playing together, the
+rooms that could join, presets — and **Configure** — source (TV input, line-in), sleep timer,
+sound, and room settings with "This is my TV". The queue and the
 household's favourites each have a screen. A track on a service that publishes ratings can be
 rated up or down. There are five dark colour themes.
 
@@ -142,7 +144,8 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── HeaderVolume.kt        the pane's header: room, volume wedge, the set-level overlay
 │       ├── SleepTimer.kt          the sleep timer's button, icon, countdown and picker
 │       ├── PaneButtons.kt         Named places, Group, the mode and rating buttons, the overhang
-│       ├── RoomPanel.kt           everything one room can be told to do
+│       │                          (Configure, in Sleep timer's old place, is in SleepTimer.kt)
+│       ├── RoomPanel.kt           everything one room can be told to do, in two halves: Group, Configure
 │       ├── QueueScreen.kt         the queue — click to jump, long-press to remove
 │       ├── FavoritesScreen.kt     Browse: presets, favourites by kind, playlists, recently played;
 │       │                          Radio and Music Services one press up
@@ -211,7 +214,9 @@ exists. Posters are the speaker's art by address (`PosterArt`), since the launch
   (three for a soundbar on its input), a dotted level meter on a room that is playing (nothing
   on one that is not), and a dim TV badge on a room that has an HDMI input but is not on it. A room not playing is
   drawn quieter; the selected room keeps a tint while focus is in the pane. Selection follows
-  focus. Select enters the player pane; a long press or the Menu key opens `RoomPanel`.
+  focus. Select enters the player pane; a hold or the Menu key picks the room up to move it in
+  the list (Left then offers to play everywhere from it). The pane's Group and Configure buttons
+  open `RoomPanel`.
 - Right: `PlayerScreen` for the selected room.
 
 **PlayerScreen** — the player pane — draws one of two panes under a shared header: the room's
@@ -221,8 +226,8 @@ mutes, left and right step it while focused). Behind it, a tint from the cover.
   where there is a duration, then two rows — transport, flanked by shuffle and repeat as icons
   the way the Sonos app draws them (each only where `availablePlaybackActions` permits it, plus
   the rating thumbs where a press can succeed), all icons, and places (Queue, Browse, Search,
-  sleep timer) with crossfade's icon at the end — with a row per speaker when the room is
-  grouped. A room with nothing loaded says so and offers Browse.
+  Group, Configure, full screen) — with a volume pill per speaker in the header when the room
+  is grouped. A room with nothing loaded says so and offers Browse.
 - **TV:** a television glyph with the input format, Night Sound and Speech Enhancement, and a
   way back into music through Browse and Search.
 
@@ -268,20 +273,23 @@ Five things are asked for rather than pushed, each because nothing pushes it:
 ## ViewModels
 
 ### HomeViewModel
-Derives the room list from the household's flows, sorted alphabetically and nothing else, and
+Derives the room list from the household's flows — placed rooms in this device's order, the
+rest alphabetically after them (`sortGroups`, `movedRanks`) — and
 connects on first display. Tracks the selected group, sidebar visibility and the television's
 soundbar. Follows the *speakers* rather than the group id when a regroup mints new ids. Moves
 the selection to the television's room once it is known, but only while the selection is still
-the app's own default choice. Handles party mode, joining, leaving, TV input, "This is my TV",
-the panel's level adjustments and the theme.
+the app's own default choice. Handles moving a room, party mode (optionally evening the levels
+first), joining, leaving, TV input, "This is my TV", the panel's sound and room settings and the
+theme.
 
 ### PlayerViewModel
 Derives everything visible for the selected group from pushed state, and feeds
 `NowPlayingPublisher` so media keys and the TV's transport controls work. It never takes the
 volume keys. Manages:
 - Volume and seek debouncing: 300ms, accumulating, so a held key sends one command by the
-  total rather than one per repeat. Volume buttons send `setRelativeVolume` (Sonos's rule for
-  stateless controls); the room panel's level bar sends `setVolume`
+  total rather than one per repeat. A volume press is sized by `VolumeBurst` (larger within a
+  burst, finer when quiet) and sent as `setRelativeVolume` (Sonos's rule for stateless
+  controls); the header's set-level overlay sends `setVolume`
 - The home-theatre reading and its optimistic toggles
 - The rating state
 - A notice line: a rating's result, or why a command failed
@@ -458,7 +466,16 @@ Two suites; `CLAUDE.md` explains why both exist and how to run the live one.
 ## Build
 
 - Language: Kotlin only
-- Min SDK 23; compile and target SDK 35 (`app/build.gradle.kts` is the source of truth)
+- Min SDK 26; compile and target SDK 35 (`app/build.gradle.kts` is the source of truth)
 - Build system: Gradle with Kotlin DSL; modules `:core` (Kotlin/JVM) and `:app` (Android)
 - Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
+- Build inputs that are not in the repository, each opt-in, none needed for a complete build:
+  - `-Px2rock.upload` signs with the release key named in `keystore.properties` (the testers'
+    APK and Play's bundle); without it, release signs with the local debug key.
+  - `~/x2rock-sonos.speaker.salt` (or `-Px2rock.speakerSaltFile`): the salt that reads the
+    household's stored sign-ins. Any build on a machine with the file carries it; without it
+    services needing an account drop out of Music Services and Search, and say so.
+  - `-Px2rock.sonosIntegration`: the owner's own Sonos integration (T-27), from
+    `~/x2rocktv-sonos.api.*`. `-Px2rock.cloudContent`: the untracked `core/src/cloud` page
+    source (T-28). Both are for the owner's TVs only, and a bundle refuses either.
 - Key dependencies: Compose for TV, Dagger Hilt, OkHttp, Gson, Coil, Jetpack Navigation

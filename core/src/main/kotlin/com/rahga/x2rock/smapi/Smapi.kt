@@ -20,19 +20,20 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * SMAPI: rating a track directly against the music service that carries it — not a Sonos
- * API. Sonos is the client here and the service is the server, so this is the one part of
- * the app that leaves both the LAN and Sonos itself: a service's presentation map and
- * manifest live on Sonos's CDN, and `getExtendedMetadata`/`rateItem` go straight to the
- * service's own endpoint.
+ * SMAPI: talking directly to the music service that carries an item — not a Sonos API. Sonos
+ * is the client here and the service is the server, so this is the one part of the app that
+ * leaves both the LAN and Sonos itself: a service's presentation map and manifest live on
+ * Sonos's CDN, and every call here goes straight to the service's own endpoint.
  *
- * Ported from x2rock's `sonos/smapi.rs`, verified there against a real household's
- * iHeartRadio account on 2026-09-12, and trimmed to what a rating button needs — no search,
- * no browse. [Auth] and [Token] carry the full shape a device-linked service needs even though
- * nothing mints a token yet; every call here is `token = null`, which only an
- * [Auth.ANONYMOUS] service accepts. **iHeartRadio is not one**: the home household lists it
- * as `DeviceLink` (checked 2026-10-01), and x2rock rated it with a linked token. So until a
- * device link exists here, iHeartRadio tracks show no rating buttons at all.
+ * It began as x2rock's `sonos/smapi.rs`, verified there against a real household's iHeartRadio
+ * account on 2026-09-12, as rating alone, and has grown into everything Browse, Search and the
+ * item menu ask of a service: `getMetadata`, `search`, `getExtendedMetadata`, `getMediaURI`,
+ * `rateItem`, a service's favourites and playlists, and its manifest's `browse` shelves.
+ *
+ * A call carries a [Token] only where the service wants an account. None is minted here: the
+ * household already stores one per signed-in account, read off a player ([StoredAccounts]),
+ * so a device-link service such as iHeartRadio is reached with the household's own sign-in
+ * and no linking on the TV. An [Auth.ANONYMOUS] service is called with `token = null`.
  */
 
 private const val NS = "http://www.sonos.com/Services/1.1"

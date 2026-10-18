@@ -846,7 +846,7 @@ class Upnp(
         /** `DestroyObject` on `FV:2/<n>`: there is no such favourite, or no longer. */
         const val NO_SUCH_FAVORITE = "701"
 
-        /** Queues run to tens of thousands of tracks; listing stops here and says so. */
+        /** The most a single browse is asked for. A longer queue is read in pages of it ([SonosHousehold.queue]). */
         const val MAX_ITEMS = 1000
         /** Bass and treble, as the player accepts them. */
         val TONE_RANGE = -10..10

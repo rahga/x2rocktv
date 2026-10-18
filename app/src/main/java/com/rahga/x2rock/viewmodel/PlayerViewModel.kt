@@ -119,7 +119,7 @@ data class PlayerUiState(
      * Its presence is what draws the rating buttons.
      */
     val rating: SonosHousehold.RatingState? = null,
-    /** An identified song, rather than the title announced by a live station; only with Beta features on. */
+    /** An identified song, rather than the title announced by a live station, with UPnP reachable. */
     val canSaveFavorite: Boolean = false,
     /**
      * One transient line: a rating's result ("Rated up on iHeartRadio"), or why a command
