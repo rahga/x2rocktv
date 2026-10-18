@@ -19,10 +19,11 @@ import com.rahga.x2rock.lan.StoredAccountsRead
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SignInsNote(read: StoredAccountsRead?, modifier: Modifier = Modifier) {
-    val problem = read?.problem ?: return
+    // Plain words here; the reason, technical as it is, goes in the beta report.
+    read?.problem ?: return
     Text(
-        "No music-service sign-ins could be read from this system ($problem), so only services that " +
-            "need no account are listed.",
+        "This system's music-service sign-ins couldn't be used, so only services that need no account " +
+            "are listed. Settings → Beta features → Send a report says why.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = modifier.padding(bottom = 12.dp),
