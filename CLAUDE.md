@@ -51,7 +51,11 @@ claim in it was run against real hardware.
   Without it nothing changes: no account, no token, no call to Sonos. **Run end to end on the
   Streamer at home, 2026-10-13**: the phone's browser followed the page's hop from HTTPS to the
   TV's plain-HTTP LAN address, the TV redeemed the code, and the household (Authentication off)
-  went on answering every command carrying the token. Not yet seen: a household with it on. Anyone who registers with
+  went on answering every command carrying the token. Since 2026-10-17 a build carries **x2rocktv's own integration** (its key files and
+  `rahga.github.io/x2rocktv/callback.html`), signed in end to end on the Streamer. The TV's listener
+  reads the whole request and ends the connection properly before closing: closing with the headers
+  unread reset the connection and threw away the queued "Signed in" page, so the phone sat on a
+  blank tab over a sign-in that had worked (logged on the TV; loopback tests never show it). Not yet seen: a household with it on. Anyone who registers with
   Sonos and signs its agreement can build with their own.
 
   **Untracked service pages (T-28).** `SonosHousehold` can route a service's root, containers

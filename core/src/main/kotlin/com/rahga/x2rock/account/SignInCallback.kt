@@ -61,6 +61,11 @@ object SignInCallback {
     private fun answer(socket: Socket, state: String): Result<String>? {
         socket.soTimeout = READ_TIMEOUT_MILLIS
         val line = runCatching { readRequestLine(socket) }.getOrNull()
+        // The rest of the request too, before answering: a socket closed with any of it unread is
+        // reset rather than ended, and the reset throws away a reply still waiting to be sent. On
+        // the Streamer's Wi-Fi the page was still queued, and the phone's Chrome sat on a blank tab
+        // over a sign-in that had worked (2026-10-17, logged on the TV: 267 bytes written, none seen).
+        if (line != null) runCatching { readHeaders(socket) }
         val target = line?.split(' ')?.getOrNull(1)
         if (line == null || !line.startsWith("GET ") || target == null || !target.startsWith("/callback?")) {
             respond(socket, 404, "Not here", "This is x2rock on a TV, waiting for a Sonos sign-in.")
@@ -84,6 +89,12 @@ object SignInCallback {
         }
         respond(socket, 200, "Signed in", "Back to the TV: it finishes from here. You can close this page.")
         return Result.success(code)
+    }
+
+    /** Read and drop the request's headers, up to the blank line that ends them. */
+    private fun readHeaders(socket: Socket) {
+        var read = 0
+        while (read < MAX_REQUEST && readRequestLine(socket).also { read += it.length + 2 }.isNotEmpty()) Unit
     }
 
     private fun readRequestLine(socket: Socket): String {
@@ -122,6 +133,11 @@ object SignInCallback {
                 write(bytes)
                 flush()
             }
+            // End our side and wait for the browser to end its own, so the page is delivered before the
+            // socket goes: a close straight after the write could still reset it. Bounded by the read
+            // timeout; a browser that keeps the connection open is let go then.
+            socket.shutdownOutput()
+            runCatching { while (socket.getInputStream().read() != -1) Unit }
         }
     }
 }
