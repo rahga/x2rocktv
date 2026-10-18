@@ -397,8 +397,8 @@ no third line, no "(current source)". **Any release notes must say Line-In is un
 real Port, Five or Amp has taken it (PUNCH P-14).
 
 **Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
-as are a portable's battery line and the item menu's Sonos Favorites actions (the player pane's Save
-favorite left Beta on 2026-10-17, after saves on the Shield), and each says "Beta" where it appears (the menu's, which are rows among others, do not). With the switch on, every
+as is a portable's battery line, and each says "Beta" where it appears. Save favorite and the item
+menu's Sonos Favorites actions left Beta on 2026-10-17, after saves, adds and removes on the Shield. With the switch on, every
 room is also offered **another room's** line-in ("Line-In on Den"), as Sonos's own steps imply but
 never state. Anything else that has never run on a device goes behind the same switch. **Send a
 report**, under it, is a QR code to a prefilled public GitHub issue: models, versions, capabilities,
@@ -762,7 +762,7 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   belongs to the Sonos app; this project no longer follows that rule for Sonos favourites. Removing is
   two presses of Menu (or two holds) on a Browse row, as a preset is deleted — it is every
   controller's list — and focus goes to the next row. Adding is the item menu's, and the player
-  pane's star for the song playing; both are Beta until pressed on a TV. A duplicate is never made:
+  pane's star for the song playing; both pressed on a TV and out of Beta. A duplicate is never made:
   the player refuses one (803). That is a *Sonos* favourite. A *service's*
 own favourites — Deezer's Favourite Tracks, Qobuz's — are the account's library in that service,
   and the item menu adds to and removes from them, as the Sonos app's does (asked for, 2026-10-08).
@@ -783,13 +783,14 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   "Search <service>" is one press up. A searchable service used to open on its search and hid every
   library behind it.
 - **Hold or Menu on an item is its menu** (`ServiceItemMenu`), Sonos's actions first and the
-  service's under its name. **An `ItemMenu` ignores a select release it did not see pressed**
-  (2026-10-17): a hold opens it on the key's repeat, and the release then clicked its first action,
-  so the menu closed as it opened and the row underneath, pressed but never released, ignored Select
-  until focus moved. Seen on the Shield's sort menu after a cold start; elsewhere timing hid it. **Play next only while the room plays from its queue**, as the Sonos
+  service's under its name. **Every button and card ignores a select release it did not see
+  pressed** (`ignoreUnpressedRelease`, 2026-10-17): tv-material3 clicks on the release, and a hold
+  that opens, removes or replaces the focused control hands focus to another, which then clicked on
+  that hold's release — the item menu closed as it opened (P-38), and deleting Browse's last preset
+  clicked the header's Back (P-37). First fixed in the menu alone, then for every control. **Play next only while the room plays from its queue**, as the Sonos
   app; it is a queue slot, not a flag. **Add to Sonos Favorites** follows Add to end of queue for
   what a queue can hold — a track, an album, a playlist — or **Remove from Sonos Favorites** once the
-  item is found among them by its service's id (T-32, Beta). Browse and Search share the menu.
+  item is found among them by its service's id (T-32). Browse and Search share the menu.
 - **An album's tracks carry their numbers; a playlist's do not** (T-24, 2026-10-12), as the Sonos
   app draws them: in a playlist a track's number is its own album's. **A container that lists nothing
   offers no Play or Shuffle** (P-23): SoundCloud's albums say `canPlay` and hold nothing, and the app's

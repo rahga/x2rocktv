@@ -1,5 +1,14 @@
 package com.rahga.x2rock.ui.theme
 
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import android.os.Build
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
@@ -203,11 +212,34 @@ fun AppButton(
     Button(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.tapToClick(onClick, onLongClick),
+        modifier = modifier.ignoreUnpressedRelease().tapToClick(onClick, onLongClick),
         colors = appButtonColors(),
         content = content
     )
 }
+
+/**
+ * A select key's release counts only if its press began here. tv-material3 clicks on the release,
+ * and a hold that removes or replaces the focused control hands focus to another one — whose click
+ * then fired on that hold's release: the item menu closed as it opened (P-38), and deleting Browse's
+ * last preset clicked the header's Back and left the screen (P-37). Every button and card has this.
+ */
+@Composable
+fun Modifier.ignoreUnpressedRelease(): Modifier {
+    var pressed by remember { mutableStateOf(false) }
+    return this
+        .onFocusChanged { if (!it.isFocused) pressed = false }
+        .onPreviewKeyEvent { event ->
+            if (event.key !in SELECT_KEYS) return@onPreviewKeyEvent false
+            when (event.type) {
+                KeyEventType.KeyDown -> { pressed = true; false }
+                KeyEventType.KeyUp -> !pressed.also { pressed = false }
+                else -> false
+            }
+        }
+}
+
+private val SELECT_KEYS = setOf(Key.DirectionCenter, Key.Enter, Key.NumPadEnter)
 
 /** A focused or pressed button is filled with the primary colour: the one focus language. */
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -232,7 +264,7 @@ fun IconAppButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.tapToClick(onClick),
+        modifier = modifier.ignoreUnpressedRelease().tapToClick(onClick),
         contentPadding = PaddingValues(12.dp),
         colors = appButtonColors(),
         content = content
@@ -258,7 +290,7 @@ fun AppCard(
     Card(
         onClick = onClick,
         onLongClick = onLongClick,
-        modifier = modifier.tapToClick(onTap, onLongClick),
+        modifier = modifier.ignoreUnpressedRelease().tapToClick(onTap, onLongClick),
         border = appCardBorder(),
         // The border is the focus. tv-material3 also grows a focused card, which made a list's
         // focused row overhang the list on both sides and was the second focus language anyway.

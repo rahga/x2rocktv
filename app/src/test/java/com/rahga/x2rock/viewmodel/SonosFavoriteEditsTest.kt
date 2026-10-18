@@ -19,7 +19,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -39,8 +38,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * Sonos Favorites added and removed from the app (T-32): Browse's rows remove on two presses, and the
- * item menu offers Add, or Remove where the item already is one (with Beta features on, which the
- * overlay reads from [ServiceItemMenu.beta]). Replies are the office One SL's
+ * item menu offers Add, or Remove where the item already is one. Replies are the office One SL's
  * (see `FavoriteEditsTest`); the favourites are the fake household's captured `getFavorites`.
  */
 class SonosFavoriteEditsTest {
@@ -129,7 +127,7 @@ class SonosFavoriteEditsTest {
 
     private fun menu(): ServiceItemMenu {
         val notice = TransientNotice(scope)
-        return ServiceItemMenu(household, { groupId }, scope, notice, StartGuard(scope, notice), MutableStateFlow(true)) { it.title }
+        return ServiceItemMenu(household, { groupId }, scope, notice, StartGuard(scope, notice)) { it.title }
     }
 
     @Test fun `the menu knows an item already a Sonos favourite, and removes it`() = runBlocking<Unit> {

@@ -31,8 +31,6 @@ class ServiceItemMenu(
     private val scope: CoroutineScope,
     private val notice: TransientNotice,
     private val guard: StartGuard,
-    /** Settings → Beta features: Add to and Remove from Sonos Favorites are offered only with it on (T-32). */
-    val beta: StateFlow<Boolean>,
     private val keyOf: (Target) -> String,
 ) {
     /** What a menu is for: a service's item, or an Apple Music search result. */

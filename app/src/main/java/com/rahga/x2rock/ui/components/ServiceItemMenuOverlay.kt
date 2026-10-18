@@ -1,7 +1,7 @@
 package com.rahga.x2rock.ui.components
 
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.smapi.ItemDetails
 import com.rahga.x2rock.smapi.LinkedService
@@ -30,13 +30,12 @@ fun ServiceItemMenuOverlay(
     val service = (target as? ServiceItemMenu.Target.Service)
     val playlists by menu.playlists.collectAsState()
     val sonosFavorite by menu.sonosFavorite.collectAsState()
-    val beta by menu.beta.collectAsState()
     ItemMenu(
         title = target.title,
         subtitle = target.subtitle,
         artUrl = target.artUrl,
         sections = listOf(
-            MenuSection(null, playActions(menu, target, room, fromQueue, onOpen, onPlayed, onChapters) + favoriteActions(menu, service.takeIf { beta }, sonosFavorite)),
+            MenuSection(null, playActions(menu, target, room, fromQueue, onOpen, onPlayed, onChapters) + favoriteActions(menu, service, sonosFavorite)),
             MenuSection(
                 service?.linked?.service?.name,
                 if (service != null && details != null) {
@@ -77,8 +76,8 @@ private fun playActions(
 
 /**
  * The household's Sonos Favorites, for what a queue could hold — a track, an album, a playlist: Add,
- * or Remove once it is known to be one. Sonos's own, so in Sonos's half, under the queue. Beta until
- * pressed on a TV: the save was proved on the office One SL from the JVM, never from a screen.
+ * or Remove once it is known to be one. Sonos's own, so in Sonos's half, under the queue. Out of Beta
+ * since 2026-10-17, after adds and removes pressed on the Shield.
  */
 private fun favoriteActions(menu: ServiceItemMenu, target: ServiceItemMenu.Target.Service?, favoriteId: String?): List<MenuAction> =
     when {
