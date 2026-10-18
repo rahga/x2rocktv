@@ -42,9 +42,10 @@ update signed by another key, so a lost key means every tester uninstalls, losin
 key only. Then a build from Play carries the same signature as the APKs testers sideloaded, and
 updates them in place.
 
-**The house's TVs still take debug-key builds** from a plain `assembleRelease`, so `adb install -r`
-keeps working on them. A TV moves to the release key once, by uninstalling first (which clears its
-TV room, presets and preferred services), and from then on takes `-Px2rock.upload` builds.
+**Both house TVs now use the release key** (2026-10-17). Build updates for them with
+`-Px2rock.upload`; plain `assembleRelease` still uses the debug key and will be refused there.
+Keep their settings by updating in place. A device still on a debug key requires a one-time
+uninstall before moving to the release key, which clears its settings.
 
 ## Each release
 
@@ -54,6 +55,9 @@ TV room, presets and preferred services), and from then on takes `-Px2rock.uploa
 2. Commit, then tag: `git tag -a v0.1.0 -m "0.1.0"`. The tag is the version name.
 3. Build with the release key: `./gradlew :core:test :app:testDebugUnitTest :app:assembleRelease
    :app:bundleRelease -Px2rock.upload`. The APK is for testers, the bundle for Play.
+   The maintainer's distributed build includes the salt from `~/x2rock-sonos.speaker.salt`, used
+   for reading LAN service sign-ins and public SMAPI. It is separate from the private integration
+   and cloud-content flags; a source build without that file intentionally has fewer services.
 4. Push the commit and the tag, then make the pre-release with the APK, named
    `x2rocktv-<version>.apk`, and the changelog's section as its notes:
    `gh release create v0.1.0 --prerelease --title "x2rocktv 0.1.0" --notes-file … <apk>`.
@@ -73,3 +77,16 @@ TV room, presets and preferred services), and from then on takes `-Px2rock.uploa
 - **Closed test**: a new personal developer account needs at least 12 testers opted in for 14 days
   before it can apply for production. Testers are added by email or Google Group in the Console,
   never in a public issue.
+
+Rechecked 2026-10-18: those are **14 consecutive days**, not weeks, and testers must remain opted
+in continuously. Applying for production includes questions about testing, feedback and engagement;
+meeting the count and time alone does not grant production access. GitHub sideload testers do not
+count as Play closed-test opt-ins.
+[Google's testing requirements](https://support.google.com/googleplay/android-developer/answer/14151465).
+An organization account requires organization/identity verification, including a D-U-N-S number
+in the usual case; obtaining the number alone is not Play approval.
+[Google's verification requirements](https://support.google.com/googleplay/android-developer/answer/10841920).
+
+The [2026-10-18 release-readiness review](review-2026-10-18-codex.md) records proposed fixes and
+checks before wider distribution, including a bypass in the current private-bundle guard. Until
+that is resolved, use the full task names above and inspect the actual artifacts before upload.

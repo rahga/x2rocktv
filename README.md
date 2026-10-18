@@ -74,6 +74,13 @@ Open in Android Studio and run `:app`, or:
 A debug build is several times slower on a TV box than a release one, so judge speed from
 `./gradlew :app:assembleRelease`.
 
+The maintainer's released APK includes a local build input used to read music-service sign-ins
+from the speakers and communicate with public SMAPI endpoints. That speaker salt is not included
+in the source package: a source build without `~/x2rock-sonos.speaker.salt` still controls the
+rooms and plays favourites, but has fewer services to browse/search and says so on screen.
+This is separate from the private developer-integration and experimental cloud-content builds,
+which are not distributed. See [release notes for builders](docs/play-release.md).
+
 ## Tests
 
 ```sh
@@ -95,9 +102,9 @@ x2rock is free software under the [GNU General Public License, version 3](LICENS
 it is released under the same terms, with its source.
 
 ## Caveats 
-Features rely on LAN compatability with Sonos Firmware and Content Providers that allow direct 
-SMAPI access. Apple music Search does not rely on SMAPI, and providers like YouTube Music stopped
-supporting browse and search features except through the offical Sonos V2 app.
+Features rely on LAN compatibility with Sonos firmware and content providers that allow direct
+SMAPI access. Apple Music search uses Apple's public catalogue instead. Providers such as YouTube
+Music do not allow this app's direct SMAPI browse/search; their catalogues are not offered here.
 
 Maintainer contact here:
 [github.com/rahga](https://github.com/rahga)

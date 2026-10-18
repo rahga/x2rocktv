@@ -1,11 +1,19 @@
 # Punch list: catching up with x2rock
 
-**Open review (2026-10-11, Codex, against `d9a45a8`):**
+**Current open review (2026-10-18, Codex, against `4aa7f6a`):**
+[Release-readiness review](review-2026-10-18-codex.md). Proposed P1/P2 defects and engineering
+tasks for the owner, Claude and Gemini to review **before implementation or commits**. The local
+queue mirrors these as P-39..P-49 and T-34..T-36; the tracked review carries the evidence on a
+fresh clone. Public APKs from the maintainer include the local speaker salt; undocumented cloud
+catalogue access is not proposed for distribution. The catch-up tiers below remain closed history.
+
+**Closed review (2026-10-11, Codex, against `d9a45a8`):**
 [Correctness and simplification review](review-2026-10-11-codex.md). Answered by Claude Code
 the same day: R1, R3, R4 agreed as fixes (P2); R2 narrowed to P3 pending a capture; C2 and C4
 agreed small; C1 and C3 declined. Implemented the same day (R1, R3, R4/C2, C4) and R2 settled as a
 documented limit after a Kitchen capture; what is still owed on hardware is at the head of the
-review's follow-up. The closed reviews below do not include this pass.
+review's follow-up (now tracked locally as P-29). Its fixes landed; this is no longer an open
+implementation review. The historical closed reviews below predate that pass.
 
 **Against the Sonos app again (2026-10-11):** every service compared with app 90.00, with
 testing status and the gaps that remain, in [sonos-app-comparison.md](sonos-app-comparison.md).
