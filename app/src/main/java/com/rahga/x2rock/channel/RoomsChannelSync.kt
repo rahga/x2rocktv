@@ -3,7 +3,6 @@ package com.rahga.x2rock.channel
 import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
-import android.os.Build
 import android.util.Log
 import androidx.tvprovider.media.tv.Channel
 import androidx.tvprovider.media.tv.PreviewProgram
@@ -50,7 +49,7 @@ class RoomsChannelSync @Inject constructor(
     private var lastTiles: Map<String, RoomTile> = emptyMap()
 
     override fun sync(groups: List<Group>, tiles: Map<String, RoomTile>) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !hasTvProvider) return
+        if (!hasTvProvider) return
         synchronized(this) {
             if (groups == lastGroups && tiles == lastTiles) return
             // A device with a TV provider can still refuse a preview channel — Fire OS has one and is

@@ -2867,7 +2867,7 @@ fun monotonicMillis(): Long = System.nanoTime() / 1_000_000
 
 /**
  * An ISO 8601 duration as milliseconds — `sleepTimer:1` sends `PT0H15M0S` — or null for
- * anything else. By hand rather than `java.time.Duration`, which this app's minSdk predates.
+ * anything else.
  */
 internal fun isoDurationMillis(text: String): Long? {
     val match = ISO_DURATION.matchEntire(text.trim()) ?: return null

@@ -3,9 +3,6 @@ package com.rahga.x2rock.net
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
-import android.os.Build
 import com.rahga.x2rock.lan.SonosHousehold
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -56,14 +53,7 @@ class NetworkMonitor @Inject constructor(
         // under the Wi-Fi's key. Registering delivers onAvailable for the current network
         // straight away, which is harmless: the household ignores it when nothing is connected.
         runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                manager.registerDefaultNetworkCallback(cb)
-            } else {
-                val request = NetworkRequest.Builder()
-                    .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                    .build()
-                manager.registerNetworkCallback(request, cb)
-            }
+            manager.registerDefaultNetworkCallback(cb)
         }.onSuccess { callback = cb }
     }
 }

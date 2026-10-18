@@ -22,7 +22,7 @@ If the directory is missing on a fresh clone, there is no queue here; ask the ow
 
 ## Language & Platform
 - Kotlin only — no Java
-- `:app` — Google TV / Android TV (Jetpack Compose for TV), min SDK 23, compile/target SDK 35
+- `:app` — Google TV / Android TV (Jetpack Compose for TV), min SDK 26, compile/target SDK 35
   (`app/build.gradle.kts` is the source of truth; this line has been wrong before)
 - `:core` — plain Kotlin/JVM, no Android dependency; `:app` depends on it
 - Build system: Gradle with Kotlin DSL (`build.gradle.kts`)

@@ -101,7 +101,9 @@ android {
 
     defaultConfig {
         applicationId = "com.rahga.x2rock"
-        minSdk = 23
+        // 26 (Android 8): the oldest Google TV runs 10, and the code uses java.util.Base64 and other
+        // calls from 24 and 26 (P-39). Claiming 23 let Android 6 and 7 install it and crash.
+        minSdk = 26
         targetSdk = 35
         // Must rise with every build that leaves this machine, to Play or to a TV: neither installs a
         // lower one over a higher. 3 is 0.1.0, the first closed test.
