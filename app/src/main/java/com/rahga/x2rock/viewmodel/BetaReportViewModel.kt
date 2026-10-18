@@ -127,7 +127,7 @@ internal fun betaReport(
             appendLine()
             appendLine(
                 if (it.problem == null) "**Service sign-ins:** ${it.withSignIns} read"
-                else "**Service sign-ins:** none usable, ${it.problem}"
+                else "**Service sign-ins:** none usable, ${redactIdentifiers(it.problem.orEmpty())}"
             )
         }
         appendLine()
@@ -142,7 +142,7 @@ internal fun betaReport(
         }
         refusal?.let {
             appendLine()
-            appendLine("**Last refusal:** $it")
+            appendLine("**Last refusal:** ${redactIdentifiers(it)}")
         }
     }.trimEnd()
     fun url(body: String) = "$REPORT_ISSUES?title=${queryEncode("Beta report: $app")}&body=${queryEncode(body)}"
@@ -164,3 +164,22 @@ internal fun queryEncode(value: String): String = buildString {
         else append('%').append("%02X".format(b.toInt() and 0xFF))
     }
 }
+
+/**
+ * Free text with every identifier the report promises to leave out replaced, for the fields whose
+ * words come from elsewhere — an exception's message, a read's reason. A socket error names the
+ * speaker it failed on (`sonos-<MAC>.local`), and others can carry a player, group or household id,
+ * an address or a link (P-48). Room names are not touched; they are what make a report readable.
+ */
+internal fun redactIdentifiers(text: String): String = REDACTIONS.fold(text) { t, (pattern, mark) -> t.replace(pattern, mark) }
+
+private val REDACTIONS = listOf(
+    Regex("""https?://\S+""", RegexOption.IGNORE_CASE) to "<link>",
+    Regex("""RINCON_[0-9A-F]{12,}(?:[_:][0-9A-Za-z]+)*""", RegexOption.IGNORE_CASE) to "<player>",
+    Regex("""Sonos_[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?""") to "<household>",
+    Regex("""sonos-[0-9A-F]{12}(?:\.local)?""", RegexOption.IGNORE_CASE) to "<speaker>",
+    Regex("""\b(?:[0-9A-F]{2}[:-]){5}[0-9A-F]{2}\b""", RegexOption.IGNORE_CASE) to "<mac>",
+    Regex("""\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b""") to "<address>",
+    Regex("""\[?\b[0-9A-F]{0,4}(?::[0-9A-F]{0,4}){2,7}\b\]?(?::\d+)?""", RegexOption.IGNORE_CASE) to "<address>",
+)
+

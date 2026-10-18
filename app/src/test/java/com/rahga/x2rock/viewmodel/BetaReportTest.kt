@@ -101,6 +101,25 @@ class BetaReportTest {
         assertTrue("said above the speakers, out of reach of the cut", bad.text.indexOf("Service sign-ins") < bad.text.indexOf("**Speakers**"))
     }
 
+    /**
+     * Free text from elsewhere — a refusal's message, a sign-in read's reason — loses every identifier
+     * the report promises to leave out, in the text shown and the issue draft alike (P-48).
+     */
+    @Test fun `identifiers in free text are redacted from the shown report and the link`() {
+        val state = household.state.value
+        val refusal = "Line-In (Kitchen): failed to connect to sonos-48A6B818D138.local/192.168.86.26 (port 1443) " +
+            "from /fe80::1c2b:3aff:fe4d:5e6f%wlan0 for RINCON_48A6B818D13801400:1546804781 in " +
+            "Sonos_BgzkDDCeWajFguqqdHEXzFKe3x.Zv1xanSF at http://192.168.86.26:1400/x?token=abc, mac 34-7E-5C-31-AF-74"
+        val r = betaReport("x2rocktv 1.0 (2)", "TV", state, household.groupStates.value, speakers(state), refusal,
+            com.rahga.x2rock.lan.StoredAccountsRead(0, "they could not be read (no reply from 10.0.0.7 / RINCON_542A1B83318001400)"))
+        val draft = URLDecoder.decode(r.url.substringAfter("body="), "UTF-8")
+        for (leak in listOf("48A6B818D138", "192.168.86.26", "10.0.0.7", "fe80:", "RINCON_", "Sonos_Bgzk", "token=abc", "34-7E-5C")) {
+            assertFalse("$leak in the shown report", r.text.contains(leak, ignoreCase = true))
+            assertFalse("$leak in the issue draft", draft.contains(leak, ignoreCase = true))
+        }
+        assertTrue("the room name stays: ${r.text}", r.text.contains("Line-In (Kitchen)"))
+    }
+
     @Test fun `a household that refuses this app says so`() {
         val refused = household.state.value.copy(error = com.rahga.x2rock.lan.AUTHENTICATION_REQUIRED)
         assertTrue(report(refused).text, report(refused).text.contains("**Authentication is on:**"))
