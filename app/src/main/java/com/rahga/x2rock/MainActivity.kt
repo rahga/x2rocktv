@@ -1,5 +1,6 @@
 package com.rahga.x2rock
 
+import android.annotation.SuppressLint
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.remember
@@ -67,7 +68,13 @@ class MainActivity : ComponentActivity() {
      * Esc is Back, as it is on ChromeOS: a keyboard has no Back key, and without this a dialog
      * opened from one could not be left at all. Rewritten as a Back event rather than handled
      * here, so everything that answers Back answers Esc too, with no second list to keep.
+     *
+     * The lint suppression is for a false positive: this is the platform's public
+     * `Activity.dispatchKeyEvent`, overridden as documented, but lint attributes it to
+     * `androidx.core.app.ComponentActivity`, the internal base class (`@RestrictTo(LIBRARY_GROUP_PREFIX)`
+     * on the whole class) between `androidx.activity.ComponentActivity` and `Activity`.
      */
+    @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         transportKey(event) || super.dispatchKeyEvent(
             if (event.keyCode != KeyEvent.KEYCODE_ESCAPE) event
