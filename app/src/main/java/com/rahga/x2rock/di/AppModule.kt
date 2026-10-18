@@ -124,6 +124,8 @@ object AppModule {
         // A debug launch can hand over a host-captured envelope, for the emulator whose NAT drops
         // the player's callback the way it drops discovery: see DebugSwitches.serviceEnvelope.
         accountCapture = { ip -> DebugSwitches.serviceEnvelope ?: AccountCapture.captureEnvelope(ip) },
+        // From ~/x2rock-sonos.speaker.salt at build time; not part of the GPL-licensed source package.
+        speakerSalt = com.rahga.x2rock.smapi.StoredAccounts.parseSalt(com.rahga.x2rock.BuildConfig.SPEAKER_SALT),
         // Only where the build carries a developer integration and this TV is signed in (T-27).
         authorization = developerAccount.account?.let { account -> { account.bearer() } },
         // A source of service pages, only where the build was given one (T-28, untracked) and has an

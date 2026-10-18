@@ -33,15 +33,20 @@ import javax.crypto.spec.SecretKeySpec
 object StoredAccounts {
 
     /**
-     * The fixed salt Sonos mixes with the household id to derive the blob key. A
-     * reverse-engineered constant, public in SoCo #1010 and identical in every household; a
-     * firmware change would make the integrity check below start failing and say so, rather
-     * than returning garbage — the `2:` prefix is what pins the format.
+     * The salt mixed with the household id to derive the blob key, from its text form: 32 hex digits,
+     * as `~/x2rock-sonos.speaker.salt` holds it. `null` for anything else.
+     *
+     * The salt is not part of the GPL-licensed source package; a build reads it from that file.
      */
-    private val SALT = byteArrayOf(
-        0x1a, 0x01, 0xa7.toByte(), 0x31, 0xc9.toByte(), 0x6e, 0x9e.toByte(), 0xbd.toByte(),
-        0xe8.toByte(), 0x47, 0x51, 0x82.toByte(), 0xb2.toByte(), 0x74, 0xb7.toByte(), 0x0e,
-    )
+    fun parseSalt(hex: String?): ByteArray? {
+        val digits = hex?.trim()?.lowercase() ?: return null
+        if (!Regex("[0-9a-f]{32}").matches(digits)) return null
+        return ByteArray(16) { digits.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
+    }
+
+    /** The salt from [file], by default `~/x2rock-sonos.speaker.salt`; `null` if absent or malformed. */
+    fun saltFromFile(file: java.io.File = java.io.File(System.getProperty("user.home"), "x2rock-sonos.speaker.salt")): ByteArray? =
+        runCatching { parseSalt(file.readText()) }.getOrNull()
 
     /**
      * Decrypt the `ThirdPartyMediaServersX` envelope into the accounts it holds.
@@ -50,14 +55,14 @@ object StoredAccounts {
      * returns it — not the long form the SMAPI/Control header wants. A wrong household id
      * fails the integrity check rather than returning nonsense.
      */
-    fun decryptAccounts(encoded: String, householdId: String): List<StoredAccount> =
-        parseAccounts(decryptPayload(encoded, householdId))
+    fun decryptAccounts(encoded: String, householdId: String, salt: ByteArray): List<StoredAccount> =
+        parseAccounts(decryptPayload(encoded, householdId, salt))
 
     /**
      * The `2:`-prefixed, base64'd `iv + AES-128-CBC(ciphertext)` envelope, decoded and
      * verified, returning the account XML bytes.
      */
-    private fun decryptPayload(encoded: String, householdId: String): ByteArray {
+    private fun decryptPayload(encoded: String, householdId: String, salt: ByteArray): ByteArray {
         val body = encoded.trim().removePrefix("2:").also {
             require(it != encoded.trim()) { "unexpected account envelope version (want a `2:` prefix)" }
         }
@@ -70,7 +75,7 @@ object StoredAccounts {
         val ciphertext = raw.copyOfRange(16, raw.size)
 
         // key = md5(iv + md5(household + salt))
-        val global = md5(householdId.toByteArray(Charsets.UTF_8), SALT)
+        val global = md5(householdId.toByteArray(Charsets.UTF_8), salt)
         val blobKey = md5(iv, global)
         val plain = Cipher.getInstance("AES/CBC/NoPadding").run {
             init(Cipher.DECRYPT_MODE, SecretKeySpec(blobKey, "AES"), IvParameterSpec(iv))

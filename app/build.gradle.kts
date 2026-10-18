@@ -63,6 +63,21 @@ val sonosIntegration: Triple<String, String, String>? =
         )
     }
 
+/**
+ * The salt the household's stored music-service sign-ins are sealed with, as 32 hex digits from
+ * `~/x2rock-sonos.speaker.salt` (or `-Px2rock.speakerSaltFile`). Not part of the GPL-licensed source
+ * package. Any build from a machine with the file carries it; without it, the app reads no stored
+ * sign-ins and says so.
+ */
+val speakerSalt: String = run {
+    val home = System.getProperty("user.home")
+    val file = File(providers.gradleProperty("x2rock.speakerSaltFile").getOrElse("$home/x2rock-sonos.speaker.salt"))
+    if (!file.canRead()) return@run ""
+    file.readText().trim().lowercase().also {
+        require(Regex("[0-9a-f]{32}").matches(it)) { "$file must hold the salt as 32 hex digits" }
+    }
+}
+
 /** A Kotlin/Java string literal for a BuildConfig field. */
 fun literal(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -81,6 +96,7 @@ android {
         // for, or uploaded as, a test build.
         versionName = tagVersion + if (sonosIntegration != null || providers.gradleProperty("x2rock.cloudContent").isPresent) "+hardcore" else ""
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "SPEAKER_SALT", literal(speakerSalt))
         buildConfigField("String", "SONOS_KEY", literal(sonosIntegration?.first.orEmpty()))
         buildConfigField("String", "SONOS_SECRET", literal(sonosIntegration?.second.orEmpty()))
         buildConfigField("String", "SONOS_REDIRECT", literal(sonosIntegration?.third.orEmpty()))

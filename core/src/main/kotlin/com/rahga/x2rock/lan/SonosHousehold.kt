@@ -374,6 +374,11 @@ class SonosHousehold(
      */
     private val accountCapture: suspend (String) -> String? = { AccountCapture.captureEnvelope(it) },
     /**
+     * The salt the household's stored sign-ins are sealed with; `null` reads none, and says so. Not
+     * part of the GPL-licensed source package: see [StoredAccounts.parseSalt].
+     */
+    private val speakerSalt: ByteArray? = null,
+    /**
      * The signed-in Sonos account's token, sent with each command (T-27); `null` when no account
      * exists, which is every build without a developer integration and every device not signed in.
      */
@@ -1228,12 +1233,14 @@ class SonosHousehold(
      * and search with no word why.
      */
     private suspend fun storedAccounts(hostname: String, household: String): List<StoredAccount> {
+        val salt = speakerSalt
+            ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "this build has no speaker salt") }
         val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
         val envelope = ip?.let { accountCapture(it) }
             ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "the speaker sent none") }
         val accounts = try {
             // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
-            StoredAccounts.decryptAccounts(envelope, household.substringBefore('.'))
+            StoredAccounts.decryptAccounts(envelope, household.substringBefore('.'), salt)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

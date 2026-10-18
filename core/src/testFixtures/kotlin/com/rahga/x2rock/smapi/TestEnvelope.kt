@@ -13,15 +13,14 @@ import javax.crypto.spec.SecretKeySpec
  * tests both reach it through testFixtures.
  *
  * It mirrors the decrypt exactly: payload + 4-byte `md5` tail, PKCS#7 to the block, then
- * `iv + AES-128-CBC`, base64'd under a `2:` prefix. The SALT is the same protocol constant the
- * decrypt uses — a round trip through both is what proves the decrypt right.
+ * `iv + AES-128-CBC`, base64'd under a `2:` prefix. It seals with
+ * the tests' own [SALT], handed to the decrypt the way a build hands it the real one — a round trip
+ * through both is what proves the decrypt right.
  */
 object TestEnvelope {
 
-    private val SALT = byteArrayOf(
-        0x1a, 0x01, 0xa7.toByte(), 0x31, 0xc9.toByte(), 0x6e, 0x9e.toByte(), 0xbd.toByte(),
-        0xe8.toByte(), 0x47, 0x51, 0x82.toByte(), 0xb2.toByte(), 0x74, 0xb7.toByte(), 0x0e,
-    )
+    /** A salt of the tests' own; the real one is not part of the GPL-licensed source package. */
+    val SALT: ByteArray = ByteArray(16) { (0x30 + it).toByte() }
 
     /** Seal [accountXml] for [householdId] (the short `Sonos_xxx` form), with a fixed-byte IV. */
     fun seal(accountXml: String, householdId: String, iv: ByteArray = ByteArray(16) { 4 }): String {

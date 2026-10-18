@@ -42,6 +42,7 @@ fun fakeHousehold(
     accountCapture: suspend (String) -> String? = { null },
     authorization: (suspend () -> String?)? = null,
     servicePages: com.rahga.x2rock.smapi.ServicePages? = null,
+    speakerSalt: ByteArray? = com.rahga.x2rock.smapi.TestEnvelope.SALT,
 ): SonosHousehold = SonosHousehold(
     scope = scope,
     addressBook = addressBook,
@@ -57,4 +58,5 @@ fun fakeHousehold(
     accountCapture = accountCapture,
     authorization = authorization,
     servicePages = servicePages,
+    speakerSalt = speakerSalt,
 )

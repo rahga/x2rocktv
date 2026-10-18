@@ -281,7 +281,9 @@ look right while testing nothing, because a household that never re-subscribes p
 ## Known Gaps / Deferred Work
 
 **Browse and search for services with an account depend on reading the household's stored sign-ins**
-(`StoredAccounts`, SoCo #1010's method). A firmware change could stop that, and nothing else in the
+(`StoredAccounts`, SoCo #1010's method). The salt that reading needs is not part of the GPL-licensed source package
+(2026-10-18): a build reads it from `~/x2rock-sonos.speaker.salt`, any build on a machine with the file
+carries it, and tests seal with a salt of their own (`TestEnvelope.SALT`). Never write it into the repo. A firmware change could stop that, and nothing else in the
 public build stands in: services needing an account would drop out of Music Services and Search, while
 playback, favourites, grouping and everything over the Control API go on working. So it is never
 silent (2026-10-18): each read is recorded (`SonosHousehold.accountsRead`), Music Services and Search

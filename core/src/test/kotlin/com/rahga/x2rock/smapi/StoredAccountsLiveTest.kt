@@ -27,6 +27,10 @@ import java.net.URI
  */
 class StoredAccountsLiveTest {
 
+    /** The real salt, from `~/x2rock-sonos.speaker.salt`; the test is skipped on a machine without it. */
+    private fun realSalt(): ByteArray =
+        StoredAccounts.saltFromFile().also { assumeTrue("no ~/x2rock-sonos.speaker.salt on this machine", it != null) }!!
+
     private val player: String? = System.getProperty("x2rock.capture")?.takeIf { it.isNotBlank() }
 
     @Before fun requireHardware() {
@@ -42,7 +46,7 @@ class StoredAccountsLiveTest {
         val ip = player!!
         val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000)) { "no account event" }
-        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'), realSalt())
         val answer = soapListServices(ip)
         val services = parseServices(answer.first, answer.second)
         val linked = linkedServices(services, accounts, longId)
@@ -82,7 +86,7 @@ class StoredAccountsLiveTest {
         val term = System.getProperty("x2rock.term") ?: "Dune"
         val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
-        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'), realSalt())
         val answer = soapListServices(ip)
         val linked = linkedServices(parseServices(answer.first, answer.second), accounts, longId)
         val svc = linked.first { it.service.name.contains(name!!, ignoreCase = true) }
@@ -150,7 +154,7 @@ class StoredAccountsLiveTest {
         val ip = player!!
         val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000))
-        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'), realSalt())
         val answer = soapListServices(ip)
         val linked = linkedServices(parseServices(answer.first, answer.second), accounts, longId)
         val client = SmapiClient(OkHttpClient())
@@ -212,7 +216,7 @@ class StoredAccountsLiveTest {
 
         val envelope = AccountCapture.captureEnvelope(ip, timeoutMillis = 15_000)
         requireNotNull(envelope) { "no account event arrived — is inbound TCP allowed from the player?" }
-        val accounts = StoredAccounts.decryptAccounts(envelope, shortId)
+        val accounts = StoredAccounts.decryptAccounts(envelope, shortId, realSalt())
 
         println("Household ${shortId}: ${accounts.size} account records")
         accounts.forEach { a ->
@@ -233,7 +237,7 @@ class StoredAccountsLiveTest {
         val ip = player!!
         val longId = householdIdOf(ip)
         val envelope = requireNotNull(AccountCapture.captureEnvelope(ip, 15_000)) { "no account event arrived" }
-        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'))
+        val accounts = StoredAccounts.decryptAccounts(envelope, longId.substringBefore('.'), realSalt())
 
         // Upnp addresses players by .local name only; a test on a bare IP posts the SOAP itself.
         val listReply = OkHttpClient().newCall(
