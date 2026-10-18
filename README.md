@@ -14,6 +14,9 @@ every change.
 > **Settings → Beta features → Send a report**, or
 > [an issue](https://github.com/rahga/x2rocktv/issues/new). Please don't post your email address there.
 
+> We'll need to track 12 testers for 14 consecutive days before this can reach Google Play store,
+> and this market is niche-yet-upscale. Your help counts!
+
 ![The room list and the player pane on an NVIDIA Shield: five rooms, Dining Room selected](docs/images/home.png)
 
 *Every room down the left with what it is playing, a soundbar on its TV input among them; the
