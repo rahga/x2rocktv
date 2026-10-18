@@ -15,7 +15,7 @@ every change.
 > [an issue](https://github.com/rahga/x2rocktv/issues/new). Please don't post your email address there.
 
 > We'll need to track 12 testers for 14 consecutive days before this can reach Google Play store,
-> and this 'market' for this project is niche-yet-upscale. Your help counts!
+> where it will be posted for free with no advertisements. There is no moat.
 
 ![The room list and the player pane on an NVIDIA Shield: five rooms, Dining Room selected](docs/images/home.png)
 
