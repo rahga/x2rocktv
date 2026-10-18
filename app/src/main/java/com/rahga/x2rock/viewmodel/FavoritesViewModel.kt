@@ -32,7 +32,7 @@ class FavoritesViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** The room this screen plays into; the Radio screen is opened on the same one. */
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
 
     /** The room's current group, for the screens opened from here; see [RoomTarget]. */
     val groupId: String get() = room.forNavigation()

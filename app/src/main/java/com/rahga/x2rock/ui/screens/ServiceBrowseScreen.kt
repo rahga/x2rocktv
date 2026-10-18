@@ -81,7 +81,8 @@ import com.rahga.x2rock.viewmodel.ServiceBrowseViewModel
 @Composable
 fun ServiceBrowseScreen(
     room: String,
-    onOpenAppleMusic: () -> Unit,
+    /** With the room's current group: see ServiceBrowseViewModel.groupId. */
+    onOpenAppleMusic: (groupId: String) -> Unit,
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     viewModel: ServiceBrowseViewModel = hiltViewModel(),
@@ -123,7 +124,7 @@ fun ServiceBrowseScreen(
                         onOpen = { opened = Entry.Service(it).key; viewModel.open(it) },
                         onMenu = { opened = Entry.Service(it).key; viewModel.openServiceMenu(it) },
                         menuOpen = serviceMenu != null,
-                        onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic() },
+                        onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic(viewModel.groupId) },
                     )
                 } else {
                     ServicePage(viewModel, service, room, onPlayed)

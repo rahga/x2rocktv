@@ -49,7 +49,10 @@ class ServiceBrowseViewModel @Inject constructor(
     private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
+
+    /** The room's group now, for the next screen to open on: never the route's own after a regroup (P-42). */
+    val groupId: String get() = room.forNavigation()
 
     /**
      * Opened from search on one container — an album, an artist — rather than on the service list:

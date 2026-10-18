@@ -27,7 +27,7 @@ class RadioViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
 
     /** One way into the directory. At most one of [tag] and [countryCode]; neither is "Popular". */
     data class Category(val label: String, val tag: String? = null, val countryCode: String? = null)

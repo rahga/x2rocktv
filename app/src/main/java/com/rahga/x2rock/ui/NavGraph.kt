@@ -171,14 +171,15 @@ fun X2RockNavGraph() {
         composable(
             route = "search?groupId={groupId}",
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) { entry ->
-            val groupId = entry.arguments?.getString("groupId").orEmpty()
+        ) {
             SearchScreen(
                 room = room,
                 onBack = { navController.popBackStack() },
                 onPlayed = ::played,
-                onOpen = { serviceKey, item -> openService(groupId, serviceKey, item.id, item.title, kind = item.itemType) },
-                onSearchService = { serviceKey, query ->
+                // The room's group as it is now, from the screen, not the route's: a regroup since
+                // Search opened mints a new one, and a page opened on the old could not find the room.
+                onOpen = { groupId, serviceKey, item -> openService(groupId, serviceKey, item.id, item.title, kind = item.itemType) },
+                onSearchService = { groupId, serviceKey, query ->
                     navController.navigate(
                         "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}&query=${Uri.encode(query)}"
                     )
@@ -200,11 +201,10 @@ fun X2RockNavGraph() {
                 navArgument("favorite") { type = NavType.StringType; defaultValue = "" },
                 navArgument("kind") { type = NavType.StringType; defaultValue = "" },
             )
-        ) { entry ->
-            val groupId = entry.arguments?.getString("groupId").orEmpty()
+        ) {
             ServiceBrowseScreen(
                 room = room,
-                onOpenAppleMusic = { navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
+                onOpenAppleMusic = { groupId -> navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
                 onBack = { navController.popBackStack() },
                 onPlayed = ::played,
             )

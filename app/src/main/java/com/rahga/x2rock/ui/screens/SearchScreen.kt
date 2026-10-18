@@ -86,9 +86,10 @@ fun SearchScreen(
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     /** Open a service's container in its own browser: the service's key, and the container. */
-    onOpen: (serviceKey: String, item: Item) -> Unit,
+    /** The room's current group comes first: see SearchViewModel.groupId. */
+    onOpen: (groupId: String, serviceKey: String, item: Item) -> Unit,
     /** Open one service's own search for [query]: every category, every page. */
-    onSearchService: (serviceKey: String, query: String) -> Unit,
+    onSearchService: (groupId: String, serviceKey: String, query: String) -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsState()
@@ -236,7 +237,7 @@ fun SearchScreen(
                                         onClick = {
                                             viewModel.select(hit, onPlayed) { linked, item ->
                                                 openedFrom = key
-                                                onOpen(linked.key(), item)
+                                                onOpen(viewModel.groupId, linked.key(), item)
                                             }
                                         },
                                         onMenu = { menuFrom = hit.key; viewModel.openMenu(hit) },
@@ -249,7 +250,7 @@ fun SearchScreen(
                                 // Two categories and eight hits a service is what keeps one search
                                 // across every service affordable; the rest is its own search away.
                                 if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
-                                    val more = { openedFrom = "more:${section.key}"; onSearchService(section.key, query.trim()) }
+                                    val more = { openedFrom = "more:${section.key}"; onSearchService(viewModel.groupId, section.key, query.trim()) }
                                     MediaRow(
                                         title = "More from ${section.name}",
                                         subtitle = "Every kind, every page",
@@ -276,11 +277,11 @@ fun SearchScreen(
                 ServiceItemMenuOverlay(
                     menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
                     here = null,
-                    onOpen = service?.let { { onOpen(it.linked.key(), it.item) } },
+                    onOpen = service?.let { { onOpen(viewModel.groupId, it.linked.key(), it.item) } },
                     // An album says so, so the page it opens on has Play and Shuffle at its head.
                     onOpenRelated = { id, title, album ->
                         val kind = if (album) "album" else "container"
-                        service?.let { onOpen(it.linked.key(), Item(id, title, kind, null, null, container = true)) }
+                        service?.let { onOpen(viewModel.groupId, it.linked.key(), Item(id, title, kind, null, null, container = true)) }
                     },
                     onPlayed = onPlayed,
                 )

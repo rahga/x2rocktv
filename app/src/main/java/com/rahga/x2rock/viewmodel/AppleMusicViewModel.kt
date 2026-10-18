@@ -26,7 +26,7 @@ class AppleMusicViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
 
     sealed interface Results {
         data object Idle : Results

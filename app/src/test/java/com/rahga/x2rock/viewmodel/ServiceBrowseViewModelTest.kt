@@ -135,6 +135,17 @@ class ServiceBrowseViewModelTest {
         (withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Found } }
             as ServiceBrowseViewModel.Results.Found).items
 
+    /** The next screen opens on the room's group as it is now, not the route's, after a regroup (P-42). */
+    @Test fun `a page opened after a regroup is handed the room's current group`() = runBlocking<Unit> {
+        val opened = fake.groupId(household)
+        val room = household.state.value.groups.first { it.id == opened }
+        val other = household.state.value.groups.first { it.id != opened }
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = other.name, memberRoom = room.name))
+        val now = withTimeout(5_000) { household.state.first { s -> s.groups.none { it.id == opened } } }
+            .groups.first { room.coordinatorId in it.playerIds }.id
+        assertEquals(now, viewModel.groupId)
+    }
+
     /**
      * The captured history holds an Apple Music album, but the speakers here store no Apple Music
      * sign-in: play history alone does not list it (owner's rule, 2026-10-18; see AppleMusicSettingTest).

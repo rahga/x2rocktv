@@ -42,7 +42,7 @@ class NowPlayingViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
 
     val uiState: StateFlow<NowPlayingUi> =
         combine(household.state, household.groupStates) { householdState, states ->

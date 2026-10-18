@@ -61,7 +61,10 @@ class SearchViewModel @Inject constructor(
     private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
 ) : ViewModel() {
 
-    private val room = RoomTarget(household, checkNotNull(savedStateHandle["groupId"]))
+    private val room = RoomTarget(household, savedStateHandle)
+
+    /** The room's group now, for the next screen to open on: never the route's own after a regroup (P-42). */
+    val groupId: String get() = room.forNavigation()
 
     /** One result, whichever search it came from. */
     sealed interface Hit {
