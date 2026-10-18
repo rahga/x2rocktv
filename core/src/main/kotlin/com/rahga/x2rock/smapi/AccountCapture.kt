@@ -1,9 +1,9 @@
 package com.rahga.x2rock.smapi
 
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.job
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 import java.io.IOException
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -36,6 +36,12 @@ object AccountCapture {
     private const val READ_TIMEOUT_MILLIS = 5_000
 
     /**
+     * The most of one HTTP message read. A household's NOTIFY carries its whole topology and is
+     * tens of kilobytes; this listener is open to the LAN, so nothing on it may make us hold more.
+     */
+    private const val MAX_MESSAGE_BYTES = 1 shl 20
+
+    /**
      * The `ThirdPartyMediaServersX` envelope from the player at [playerIp], or `null` if none
      * arrives within [timeoutMillis]. Feed it to [StoredAccounts.decryptAccounts] with the
      * household's **short** id.
@@ -49,11 +55,13 @@ object AccountCapture {
                 server.bind(InetSocketAddress(0))
                 // `accept` cannot be interrupted by cancellation, only by closing what it
                 // waits on: a caller that left — a search replaced by another — otherwise held
-                // this thread, and the service lock above it, for the whole deadline.
-                val letGo = coroutineContext.job.invokeOnCompletion { runCatching { server.close() } }
+                // this thread, and the service lock above it, for the whole deadline. A child is
+                // cancelled the moment its parent is, while the parent's own completion waits for
+                // this blocked body to return — which is why a completion handler closed it too late (P-46).
+                val letGo = launch { try { awaitCancellation() } finally { runCatching { server.close() } } }
                 val localIp = localIpToward(playerIp)
                 val callback = "<http://$localIp:${server.localPort}/notify>"
-                val sid = subscribe(playerIp, playerPort, callback) ?: return@withContext null
+                val sid = subscribe(playerIp, playerPort, callback) ?: run { letGo.cancel(); return@withContext null }
                 try {
                     // The deadline is the sockets', not a coroutine timeout's: `accept` and `read`
                     // block, and `withTimeoutOrNull` cannot interrupt either — so a player that never
@@ -83,7 +91,7 @@ object AccountCapture {
                         found
                     }
                 } finally {
-                    letGo.dispose()
+                    letGo.cancel()
                     runCatching { unsubscribe(playerIp, playerPort, sid) }
                 }
             }
@@ -144,6 +152,7 @@ object AccountCapture {
                 val want = header(head, "Content-Length")?.toIntOrNull() ?: 0
                 if (bytes.size >= headEnd + 4 + want) break
             }
+            if (bytes.size >= MAX_MESSAGE_BYTES) break
             val n = try { input.read(chunk) } catch (_: IOException) { break }
             if (n <= 0) break
             raw.write(chunk, 0, n)

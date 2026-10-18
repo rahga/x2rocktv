@@ -2,6 +2,8 @@ package com.rahga.x2rock.smapi
 
 import org.junit.Assert.assertTrue
 import kotlin.concurrent.thread
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -10,8 +12,9 @@ import org.junit.Test
 /**
  * Tests for the pure half of the account capture — extracting the envelope from a GENA NOTIFY
  * body, reading an HTTP message, and finding a header. Ported from x2rock's `sonos/stored.rs`
- * test module; the network half ([AccountCapture.captureEnvelope]) needs a real player and a
- * device to open a listening socket, and is verified there, not here.
+ * test module. The network half ([AccountCapture.captureEnvelope]) is checked here only for how it
+ * lets go — a deadline, a refusal, a caller leaving — against a stand-in on loopback; capturing a
+ * real envelope needs a real player, and is verified there, not here.
  */
 class AccountCaptureTest {
 
@@ -74,5 +77,59 @@ class AccountCaptureTest {
         answering.join(2_000)
         assertNull(envelope)
         assertTrue("took ${took}ms", took in 900..5_000)
+    }
+
+    /** A stand-in player on loopback that answers every SUBSCRIBE with [reply] and never calls back. */
+    private fun silentPlayer(reply: String): java.net.ServerSocket {
+        val player = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        thread(isDaemon = true) {
+            runCatching {
+                while (true) player.accept().use { s ->
+                    AccountCapture.readHttpMessage(s.getInputStream())
+                    s.getOutputStream().write(reply.toByteArray())
+                }
+            }
+        }
+        return player
+    }
+
+    /**
+     * A caller that leaves — a search replaced by another — must let go of the listener at once,
+     * not when the player's deadline runs out: the capture holds the service lock above it (P-46).
+     */
+    @Test(timeout = 20_000) fun `a cancelled capture lets go at once rather than at the deadline`() = runBlocking {
+        val player = silentPlayer("HTTP/1.1 200 OK\r\nSID: uuid:test\r\nContent-Length: 0\r\n\r\n")
+        val capture = launch(kotlinx.coroutines.Dispatchers.Default) {
+            AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 10_000, playerPort = player.localPort)
+        }
+        kotlinx.coroutines.delay(500)
+        val started = System.currentTimeMillis()
+        capture.cancelAndJoin()
+        val took = System.currentTimeMillis() - started
+        player.close()
+        assertTrue("took ${took}ms", took < 3_000)
+    }
+
+    @Test(timeout = 20_000) fun `a player that refuses the subscription answers null without waiting`() = runBlocking {
+        val player = silentPlayer("HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\n\r\n")
+        val started = System.currentTimeMillis()
+        val envelope = AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 10_000, playerPort = player.localPort)
+        val took = System.currentTimeMillis() - started
+        player.close()
+        assertNull(envelope)
+        assertTrue("took ${took}ms", took < 3_000)
+    }
+
+    @Test(timeout = 20_000) fun `a message is not read past its bound`() {
+        val endless = object : java.io.InputStream() {
+            var served = 0L
+            override fun read(): Int { served++; return 'a'.code }
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                java.util.Arrays.fill(b, off, off + len, 'a'.code.toByte()); served += len; return len
+            }
+        }
+        val message = AccountCapture.readHttpMessage(endless)
+        assertTrue("read ${endless.served} bytes", endless.served <= (1 shl 20) + 4096)
+        assertTrue(message.isNotEmpty())
     }
 }
