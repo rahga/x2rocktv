@@ -409,12 +409,29 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
                     }
                     if (r.hasMore) {
                         item(key = "more") {
-                            Text(
-                                "Loading more of ${r.total}…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(16.dp),
-                            )
+                            val failed = r.moreFailed
+                            if (failed == null) {
+                                Text(
+                                    "Loading more of ${r.total}…",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(16.dp),
+                                )
+                            } else {
+                                // A focus stop, so the remote can reach it from the last row (P-49).
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier.padding(16.dp),
+                                ) {
+                                    AppButton(onClick = viewModel::retryMore) { Text("Try again") }
+                                    Text(
+                                        "Couldn't load more of ${r.total}: $failed",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         }
                     }
                 }

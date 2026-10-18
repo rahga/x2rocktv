@@ -113,8 +113,14 @@ class ServiceBrowseViewModel @Inject constructor(
          * [total] is what the service says the whole list holds; [items] may be only its first
          * pages. [nextIndex] is how many the service has sent, repeats included — where its next
          * page starts, which the distinct [items] fall short of when it named one twice.
+         * [moreFailed] says why the next page did not come; it is asked for again only on [retryMore].
          */
-        data class Found(val items: List<Item>, val total: Int = items.size, val nextIndex: Int = items.size) : Results {
+        data class Found(
+            val items: List<Item>,
+            val total: Int = items.size,
+            val nextIndex: Int = items.size,
+            val moreFailed: String? = null,
+        ) : Results {
             val hasMore: Boolean get() = items.size < total
         }
         data class Failed(val message: String) : Results
@@ -347,12 +353,24 @@ class ServiceBrowseViewModel @Inject constructor(
     /**
      * Fetch the next page of what is showing, once the list nears its end. A service answers 100
      * at a time; a playlist of 300 used to stop at the hundredth row with nothing to say so.
+     *
+     * A page that fails stays failed until [retryMore]: the list asks for more as rows compose, and
+     * asking again from there would hammer a service that is down (P-49).
      */
     fun loadMore() {
+        val shown = (trail.lastOrNull()?.results as? Results.Found) ?: return
+        if (shown.moreFailed == null) fetchMore()
+    }
+
+    /** The footer's Try again, after the next page failed. */
+    fun retryMore() = fetchMore()
+
+    private fun fetchMore() {
         val service = _active.value ?: return
         val level = trail.lastOrNull() ?: return
         val shown = level.results as? Results.Found ?: return
         if (!shown.hasMore || moreJob?.isActive == true) return
+        if (shown.moreFailed != null) publish(level, shown.copy(moreFailed = null))
         moreJob = viewModelScope.launch {
             val next = attempt {
                 if (level.isSearch) {
@@ -361,7 +379,10 @@ class ServiceBrowseViewModel @Inject constructor(
                 } else {
                     household.browseService(service, level.id!!, index = shown.nextIndex)
                 }
-            }.getOrNull() ?: return@launch
+            }.getOrElse {
+                publish(level, shown.copy(moreFailed = it.message ?: it.toString()))
+                return@launch
+            }
             // A service that answers an empty page past where it said the list ended has no more,
             // whatever its total claimed; believing the total would ask again on every frame.
             val total = if (next.items.isEmpty()) shown.items.size else shown.total

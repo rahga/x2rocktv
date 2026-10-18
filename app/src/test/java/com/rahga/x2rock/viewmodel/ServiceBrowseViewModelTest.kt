@@ -13,6 +13,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.Dispatcher
@@ -22,6 +23,7 @@ import okhttp3.mockwebserver.RecordedRequest
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -47,6 +49,8 @@ class ServiceBrowseViewModelTest {
     @Volatile private var emptyRoot = false
     /** Whether the service's manifest names a browse endpoint, as Sonos Radio's does. */
     @Volatile private var shelvesOn = false
+    /** The second page of "long" answers 503 while this is set. */
+    @Volatile private var pageTwoDown = false
     /** The page the browse endpoint answers with; Sonos Radio's unless a test says otherwise. */
     @Volatile private var browsePage = "sonosradio.browse.json"
     /** A captured SMAPI root to answer with, in place of the made-up children. */
@@ -74,7 +78,8 @@ class ServiceBrowseViewModelTest {
                     "/smapi" -> {
                         val body = request.body.readUtf8()
                         smapiCalls += body
-                        MockResponse().setBody(when {
+                        if (pageTwoDown && "<id>long</id><index>2</index>" in body) MockResponse().setResponseCode(503)
+                        else MockResponse().setBody(when {
                             "<addToContainer" in body -> FakePlayer.fixtureText("smapi.deezer.addToContainer.xml")
                             "<id>$PLAYLIST</id>" in body -> FakePlayer.fixtureText("smapi.deezer.playlist.oneTrack.xml")
                             "<id>$ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.plex.albumTracks.xml")
@@ -435,6 +440,41 @@ class ServiceBrowseViewModelTest {
             viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.size == 3 }
         } as ServiceBrowseViewModel.Results.Found
         assertEquals(listOf("t0", "t1", "t2"), all.items.map { it.id })
+        assertFalse(all.hasMore)
+    }
+
+    /**
+     * A next page that fails says so and waits for Try again, keeping what is shown: it used to
+     * leave "Loading more" standing for good, with nothing to press (P-49). The list asking again
+     * as rows compose must not retry on its own, nor may the retry append anything twice.
+     */
+    @Test fun `a failed next page waits for a retry and then completes the list`() = runBlocking {
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        found()
+        pageTwoDown = true
+        viewModel.browse("long", "Long")
+        withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.total == 3 } }
+
+        viewModel.loadMore()
+        val failed = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.moreFailed != null }
+        } as ServiceBrowseViewModel.Results.Found
+        assertEquals(listOf("t0", "t1"), failed.items.map { it.id })
+        assertTrue(failed.hasMore)
+
+        val asked = smapiCalls.count { "<id>long</id><index>2</index>" in it }
+        viewModel.loadMore()
+        delay(300)
+        assertEquals("no retry until asked", asked, smapiCalls.count { "<id>long</id><index>2</index>" in it })
+
+        pageTwoDown = false
+        viewModel.retryMore()
+        val all = withTimeout(5_000) {
+            viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.size == 3 }
+        } as ServiceBrowseViewModel.Results.Found
+        assertEquals(listOf("t0", "t1", "t2"), all.items.map { it.id })
+        assertNull(all.moreFailed)
         assertFalse(all.hasMore)
     }
 
