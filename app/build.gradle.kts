@@ -76,7 +76,7 @@ android {
         targetSdk = 35
         // Must rise with every build that leaves this machine, to Play or to a TV: neither installs a
         // lower one over a higher. 3 is 0.1.0, the first closed test.
-        versionCode = 4
+        versionCode = 5
         // The maintainer's private build says so wherever a version is shown, so it is never mistaken
         // for, or uploaded as, a test build.
         versionName = tagVersion + if (sonosIntegration != null || providers.gradleProperty("x2rock.cloudContent").isPresent) "+hardcore" else ""

@@ -3,6 +3,46 @@
 Each release is tagged `v<version>` and its build takes that as its version name. Version codes
 rise by one with every build that leaves the developer's machine.
 
+## 0.1.2 — your own room order, Configure, and a fix for split parties
+
+### New
+
+- **Order the rooms yourself.** Hold Select (or Left) on a room to pick it up, move it with Up and
+  Down, and put it down with Select or Back. Rooms you have placed come first, every other room
+  follows alphabetically. Settings → Reset room order puts it back.
+- **Play everywhere from the room list.** With a room picked up, Left asks to play everywhere from
+  it: Select confirms, a second Left confirms and first sets every speaker to that room's volume.
+- **This TV's room is marked** in the list with a coloured TV badge, which moves when you press
+  "This is my TV".
+- **Configure**, in the player's button row where Sleep timer was: Source, Sleep timer, Sound and
+  Room settings for the room. Group now holds only which rooms play together.
+- **Volume presses speed up** the way seeking does: 2, then 3, then 5, and finer when quiet (2 at
+  a time below 10, 1 at a time below 4).
+- **Saving to Sonos Favorites is out of Beta**: the player's star, and Add to and Remove from Sonos
+  Favorites in an item's menu.
+
+### Fixed
+
+- After splitting a party, the room that hosted it could show "Playing" with no track or art
+  until the app restarted. A speaker leaving the group sent an empty report naming the host's
+  group, and the app took it as the host's own.
+- A hold that changed what had focus could "click" whatever focus landed on when the button was
+  let go: an item's menu closing as it opened, or Browse closing after its last preset was deleted.
+- The player no longer scrolls the art away when you reach its lower row of buttons.
+- A grouped room's speakers each get a full volume control, the same as the room's own.
+
+### Thanks
+
+To [@BookCatKid](https://github.com/BookCatKid), whose research into how today's Sonos controllers
+reach the music services ([SoCo #1010](https://github.com/SoCo/SoCo/pull/1010)) saved this project a
+great deal of time and effort.
+
+### Still untested on hardware
+
+Unchanged from 0.1.0, less saving to Sonos Favorites: Line-In, a portable's battery, a soundbar
+that stalls while a room joins it, a satellite that drops off later, a change of network between two
+Sonos systems, and alarms in a household with no time zone set.
+
 ## 0.1.1 — a home-screen row cannot close the app
 
 - A TV whose home screen refuses the app's row of rooms no longer closes the app as the rooms load.
