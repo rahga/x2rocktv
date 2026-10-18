@@ -33,7 +33,7 @@ rise by one with every build that leaves the developer's machine.
 
 ### Thanks
 
-To [@BookCatKid](https://github.com/BookCatKid), whose research into how today's Sonos controllers
+To @BookCatKid, whose research into how today's Sonos controllers
 reach the music services ([SoCo #1010](https://github.com/SoCo/SoCo/pull/1010)) saved this project a
 great deal of time and effort.
 
