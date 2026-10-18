@@ -76,6 +76,27 @@ class PlayerViewModelTest {
      * Regression: volume defaulted to 0, so the app claimed a speaker sitting at 12 was at
      * zero for the moment before its first `groupVolume` snapshot.
      */
+    /**
+     * Nothing re-selects the room while another screen is in front, yet the media keys and the
+     * now-playing bar act through this view model. After a regroup elsewhere it must follow its
+     * speakers to their new group by itself, rather than name the old one and be refused (P-43).
+     */
+    @Test fun `the room is followed across a regroup with nothing re-selecting it`() = runBlocking<Unit> {
+        val mine = household.state.value.groups.first { it.id == groupId }
+        val other = household.state.value.groups.first { it.id != groupId }
+        fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = other.name, memberRoom = mine.name))
+        val moved = withTimeout(5_000) {
+            household.state.first { s -> s.groups.none { it.id == groupId } }
+        }.groups.first { mine.coordinatorId in it.playerIds }
+        withTimeout(5_000) { viewModel.uiState.first { it.groupName == moved.name } }
+        fake.clearHistory()
+
+        viewModel.adjustVolume(+5)
+
+        val sent = fake.awaitCommand(timeoutMillis = 5_000) { it.get("namespace")?.asString == "groupVolume:1" }
+        assertEquals("the command named the room's new group", moved.id, sent.get("groupId").asString)
+    }
+
     @Test fun `volume is null until the speaker has said, not zero`() {
         assertNull("volume was reported before the speaker said anything", viewModel.uiState.value.volume)
     }

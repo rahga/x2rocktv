@@ -1,5 +1,7 @@
 package com.rahga.x2rock.viewmodel
 
+import kotlinx.coroutines.flow.map
+import com.rahga.x2rock.model.followingRoom
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
@@ -345,6 +347,31 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    /**
+     * The room follows its speakers across a regroup by itself, not only when the home screen says
+     * so. The home screen is not composed while Queue, Browse or Full screen is in front, yet the
+     * media keys, the media session and the now-playing bar all act through this view model: after
+     * another controller regrouped the room they went on naming its old group and were refused
+     * ("no group …", P-43). By the one rule every screen follows a room by, coordinator first.
+     */
+    private var lastGroup: com.rahga.x2rock.model.Group? = null
+
+    init {
+        viewModelScope.launch {
+            household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
+                val id = _groupId.value ?: return@collect
+                val now = groups.firstOrNull { it.id == id }
+                if (now != null) {
+                    lastGroup = now
+                    if (_groupName.value != now.name) _groupName.value = now.name
+                    return@collect
+                }
+                val was = lastGroup ?: return@collect
+                groups.followingRoom(was.coordinatorId, was.playerIds)?.let { selectGroup(it.id, it.name) }
+            }
+        }
+    }
+
     private suspend fun loadRating(groupId: String) {
         _rating.value = household.ratingState(groupId)?.let { groupId to it }
     }
@@ -358,6 +385,7 @@ class PlayerViewModel @Inject constructor(
         if (_groupId.value == id) return
         _groupId.value?.let { settlePending(it) }
         _groupId.value = id
+        household.state.value.groups.firstOrNull { it.id == id }?.let { lastGroup = it }
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
