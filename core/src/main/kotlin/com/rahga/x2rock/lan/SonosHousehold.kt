@@ -2220,6 +2220,19 @@ class SonosHousehold(
      * A player not in the household now fails the whole thing with its id, rather than
      * gathering the rest and calling that the preset.
      */
+    /**
+     * Each speaker in [levels] set to its level, all at once, before it joins anything: a room that
+     * joins plays at once, at whatever level it was left on. The speakers that could not be set —
+     * refused, or no reply in time — which a caller must not then join (P-40). A fixed line-out is
+     * not asked, its level being the amplifier's, and is never among them.
+     */
+    suspend fun setLevelsBeforeJoining(levels: Map<String, Int>): Set<String> = coroutineScope {
+        val volumes = _playerVolumes.value
+        levels.filter { (id, _) -> volumes[id]?.fixed != true }
+            .map { (id, level) -> async { id.takeIf { runCatching { setPlayerVolume(id, level) }.isFailure } } }
+            .awaitAll().filterNotNull().toSet()
+    }
+
     suspend fun gatherRooms(playerIds: List<String>): String {
         require(playerIds.isNotEmpty()) { "no rooms to gather" }
         val wanted = playerIds.toSet()

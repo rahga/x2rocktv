@@ -283,6 +283,11 @@ class FakePlayer(
         refused[command] = errorCode
     }
 
+    /** Refuse [command] only when it names [playerId], as one speaker refusing while the rest accept. */
+    fun refuseFor(command: String, playerId: String, errorCode: String = "ERROR_COMMAND_FAILED") {
+        refused["$command@$playerId"] = errorCode
+    }
+
     /** Stop refusing [command]. */
     fun allow(command: String) {
         refused.remove(command)
@@ -509,7 +514,8 @@ class FakePlayer(
 
         // Refusals are keyed by command, or by "namespace/command" for one namespace's — "subscribe"
         // alone would refuse every subscription in the house.
-        (refused["$namespace/$command"] ?: refused[command ?: ""])?.let { errorCode ->
+        val namedPlayer = request.get("playerId")?.takeIf { !it.isJsonNull }?.asString
+        (refused["$command@$namedPlayer"] ?: refused["$namespace/$command"] ?: refused[command ?: ""])?.let { errorCode ->
             respond(
                 webSocket, cmdId, namespace, "globalError", success = false,
                 body = JsonObject().apply { addProperty("errorCode", errorCode) },

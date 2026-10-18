@@ -166,6 +166,57 @@ class FavoritesViewModelTest {
         fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
     }
 
+    /** A speaker whose level was refused is left out of the regroup, and the notice names it (P-40). */
+    @Test fun `a preset leaves out a speaker whose volume was refused`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        val guest = groups.first { it.name == "Guest TV" }.coordinatorId
+        val preset = Preset("p3", "Kitchen + Guest TV", listOf(kitchen, guest), mapOf(kitchen to 12, guest to 8), "84")
+        fake.refuseFor("setVolume", guest)
+        fake.clearHistory()
+        var done = false
+
+        viewModel.applyPreset(preset) { done = true }
+
+        fake.awaitCommand("loadFavorite", 10_000)
+        withTimeout(5_000) { while (!done) kotlinx.coroutines.delay(20) }
+        assertEquals("Guest TV was regrouped", 0, fake.commandsNamed("modifyGroupMembers"))
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.startsWith("Left out Guest TV"))
+    }
+
+    /** Every speaker refused: nothing regroups and nothing starts, and it says why. */
+    @Test fun `a preset whose every level is refused starts nothing`() = runBlocking<Unit> {
+        val leader = fake.id
+        val preset = Preset("p4", "Kitchen", listOf(leader), mapOf(leader to 12), "84")
+        fake.refuseFor("setVolume", leader)
+        fake.clearHistory()
+        var done = false
+
+        viewModel.applyPreset(preset) { done = true }
+
+        val said = withTimeout(10_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.contains("couldn't set the volume in"))
+        assertEquals(0, fake.commandsNamed("loadFavorite"))
+        assertFalse("a failed start must not leave the list", done)
+    }
+
+    /** An adjustable speaker the preset holds no level for is left out rather than joined at an unknown level. */
+    @Test fun `a preset leaves out an adjustable speaker it has no level for`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        val guest = groups.first { it.name == "Guest TV" }.coordinatorId
+        val preset = Preset("p5", "Kitchen + Guest TV", listOf(kitchen, guest), mapOf(kitchen to 12), "84")
+        fake.clearHistory()
+
+        viewModel.applyPreset(preset) {}
+
+        fake.awaitCommand("loadFavorite", 10_000)
+        assertEquals(0, fake.commandsNamed("modifyGroupMembers"))
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.startsWith("Left out Guest TV"))
+    }
+
     @Test fun `Browse opened before a regroup still plays into the same room`() = runBlocking<Unit> {
         val original = household.state.value.groups.first { it.id == viewModel.groupId }
         val member = household.state.value.groups.first { it.id != original.id }

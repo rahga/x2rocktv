@@ -95,14 +95,19 @@ class FavoritesViewModel @Inject constructor(
      */
     fun applyPreset(preset: Preset, onDone: () -> Unit) =
         startOne(presetKey(preset.id), "start ${preset.name}", onDone) {
-            // All at once, each to its own speaker; one fixed line-out or a refused level must not
-            // stop the rest of the preset.
-            coroutineScope {
-                preset.volumes.map { (player, level) -> async { runCatching { household.setPlayerVolume(player, level) } } }.awaitAll()
-            }
-            val groupId = household.gatherRooms(preset.playerIds)
+            // All at once, each to its own speaker. One whose level could not be set stays out, as does
+            // an adjustable one the preset holds no level for: either would play at once at whatever
+            // level it was left on (P-40). A fixed line-out is the amplifier's and always comes.
+            val failed = household.setLevelsBeforeJoining(preset.volumes)
+            val fixed = household.playerVolumes.value.filterValues { it.fixed }.keys
+            val leftOut = preset.playerIds.filter { it in failed || (it !in preset.volumes && it !in fixed) }
+            val joining = preset.playerIds - leftOut.toSet()
+            val names = leftOut.joinToString { household.playerName(it) }
+            if (joining.isEmpty()) error("couldn't set the volume in $names")
+            val groupId = household.gatherRooms(joining)
             preset.favoriteId?.let { household.loadFavorite(groupId, it) }
-            roomLink.set(preset.playerIds.first())
+            roomLink.set(joining.first())
+            if (leftOut.isNotEmpty()) _notice.post("Left out $names: couldn't set its volume")
         }
 
     /**

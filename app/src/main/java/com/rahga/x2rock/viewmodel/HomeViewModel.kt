@@ -384,15 +384,15 @@ class HomeViewModel @Inject constructor(
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
         val level = household.groupState(host.id).volume?.volume.takeIf { evenVolume }
-        val pushed = household.playerVolumes.value
         viewModelScope.launch {
-            if (level != null) {
-                coroutineScope {
-                    groups.flatMap { it.playerIds }.filter { pushed[it]?.fixed != true }
-                        .map { async { runCatching { household.setPlayerVolume(it, level) } } }.awaitAll()
-                }
-            }
-            runCatching { household.modifyGroupMembers(host.id, add = joiners, remove = emptyList()) }
+            // A speaker whose level could not be set stays out: joining, it would play at once at
+            // whatever level it was left on, which is what evening out was for (P-40).
+            val failed = level?.let { household.setLevelsBeforeJoining(groups.flatMap { it.playerIds }.associateWith { level }) }.orEmpty()
+            val joining = joiners.filter { it !in failed }
+            val leftOut = joiners.filter { it in failed }.joinToString { household.playerName(it) }
+            if (joining.isEmpty()) return@launch _notice.post("Couldn't set the volume in $leftOut, so no room joined")
+            runCatching { household.modifyGroupMembers(host.id, add = joining, remove = emptyList()) }
+                .onSuccess { if (leftOut.isNotEmpty()) _notice.post("Left out $leftOut: couldn't set its volume") }
                 .onFailure { _notice.failure("start the party", it) }
         }
     }

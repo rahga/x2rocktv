@@ -22,6 +22,7 @@ import kotlinx.coroutines.withTimeout
 import com.rahga.x2rock.store.PresetStore
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -402,6 +403,62 @@ class HomeViewModelTest {
         fake.awaitCommand(timeoutMillis = 5_000) { it.get("command")?.asString == "modifyGroupMembers" }
         assertEquals("not every speaker was set before the rooms joined", speakers.size, fake.commandsNamed("setVolume"))
         assertEquals(12, fake.lastCommandBody("setVolume")!!.get("volume").asInt)
+    }
+
+    /**
+     * A speaker whose level could not be set does not join: it would play at once at whatever level
+     * it was left on, which is what evening out was for. The rest join, and the notice names it (P-40).
+     */
+    @Test fun `a party leaves out a speaker whose volume was refused, and says so`() = runBlocking<Unit> {
+        val state = connect()
+        val host = state.groups.first { it.name == "Kitchen" }
+        val refusing = state.groups.first { it.name == "Guest TV" }.coordinatorId
+        fake.pushGroupVolume(host.id, 12)
+        withTimeout(5_000) { household.groupStates.first { it[host.id]?.volume?.volume == 12 } }
+        fake.refuseFor("setVolume", refusing)
+        fake.clearHistory()
+
+        viewModel.partyMode(host.id, evenVolume = true)
+
+        fake.awaitCommand(timeoutMillis = 10_000) { it.get("command")?.asString == "modifyGroupMembers" }
+        val added = fake.lastCommandBody("modifyGroupMembers")!!.getAsJsonArray("playerIdsToAdd").map { it.asString }
+        assertFalse("the refusing speaker joined", refusing in added)
+        assertTrue("the others still joined", added.isNotEmpty())
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.startsWith("Left out Guest TV"))
+    }
+
+    /** Every joiner refused: nobody joins, and the notice says so. */
+    @Test fun `a party with every joiner's volume refused joins nobody`() = runBlocking<Unit> {
+        val state = connect()
+        val host = state.groups.first { it.name == "Kitchen" }
+        fake.pushGroupVolume(host.id, 12)
+        withTimeout(5_000) { household.groupStates.first { it[host.id]?.volume?.volume == 12 } }
+        state.groups.filter { it.id != host.id }.flatMap { it.playerIds }.forEach { fake.refuseFor("setVolume", it) }
+        fake.clearHistory()
+
+        viewModel.partyMode(host.id, evenVolume = true)
+
+        val said = withTimeout(10_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.endsWith("so no room joined"))
+        assertEquals("a room joined", 0, fake.commandsNamed("modifyGroupMembers"))
+    }
+
+    /** No reply is not "set": a speaker that never answers about its level does not join either. */
+    @Test fun `a party leaves out a speaker that never answers about its volume`() = runBlocking<Unit> {
+        val state = connect()
+        val host = state.groups.first { it.name == "Kitchen" }
+        fake.pushGroupVolume(host.id, 12)
+        withTimeout(5_000) { household.groupStates.first { it[host.id]?.volume?.volume == 12 } }
+        fake.holdRepliesTo("setVolume")
+        fake.clearHistory()
+
+        viewModel.partyMode(host.id, evenVolume = true)
+
+        val said = withTimeout(15_000) { viewModel.notice.first { it != null } }!!
+        fake.releaseReplies()
+        assertTrue(said, said.endsWith("so no room joined"))
+        assertEquals("a room joined", 0, fake.commandsNamed("modifyGroupMembers"))
     }
 
     // -------------------------------------------------- naming the TV's soundbar
