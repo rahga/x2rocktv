@@ -72,8 +72,11 @@ uninstall before moving to the release key, which clears its settings.
 - **Data safety**: the facts are in `PRIVACY.md`. Nothing goes to the developer; search terms go to
   the music services the household already uses, and a report goes to GitHub only if the tester
   submits it. How Play's form classes those is the owner's call.
-- **Graphics**: the TV banner (1280×720) and the feature graphic (1024×500) are still to make, from
-  the wordmark; TV screenshots at 1920×1080 are in `docs/images/`.
+- **Graphics** (first run 2026-10-18, from `~/x2rock.png`; remake from a better master when there is
+  one): `docs/images/play/icon-512.png` (the brushed X2), `feature-1024x500.png` (wordmark and "Every
+  room, on the big screen"), `tv-banner-1280x720.png` (the wordmark, as the in-app banner). White on
+  black, as the app's icon and banner. The master is 752×229, so the wordmark is upscaled about 1.1×
+  in the banner. TV screenshots at 1920×1080 are in `docs/images/`.
 - **Closed test**: a new personal developer account needs at least 12 testers opted in for 14 days
   before it can apply for production. Testers are added by email or Google Group in the Console,
   never in a public issue.
