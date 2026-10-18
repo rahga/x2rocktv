@@ -40,16 +40,13 @@ val uploadKey: Properties? = rootProject.file("keystore.properties")
  *
  * **Never in the repo, and never in the Play bundle.** Anything compiled into an APK can be read out
  * of it, so a build carrying a secret is for the TVs of whoever owns the integration, and a bundle —
- * Play's — refuses to carry it. An APK may take the release key (2026-10-17), so the owner's
+ * Play's — refuses to carry it (see [privateBuild]). An APK may take the release key (2026-10-17), so the owner's
  * "hardcore" build installs over the test builds on the owner's TVs and back without losing settings; its
  * version name says `+hardcore`, and such an APK is never uploaded anywhere. Without it every field is empty and the feature does not exist. Anyone
  * who registers with Sonos and signs its agreement can build with their own.
  */
 val sonosIntegration: Triple<String, String, String>? =
     if (!providers.gradleProperty("x2rock.sonosIntegration").isPresent) null else {
-        require(gradle.startParameter.taskNames.none { it.contains("bundle", ignoreCase = true) }) {
-            "a Play bundle must not carry a Sonos secret: drop -Px2rock.sonosIntegration"
-        }
         val home = System.getProperty("user.home")
         fun read(property: String, default: String): String {
             val file = File(providers.gradleProperty(property).getOrElse(default))
@@ -78,6 +75,23 @@ val speakerSalt: String = run {
     }
 }
 
+/**
+ * Whether this build carries a private input: the developer integration's secret or the untracked
+ * cloud content. Such a build may make an APK for the owner's TVs, never a bundle. The refusal is on
+ * the tasks that write a bundle, at execution, so it holds however the bundle was asked for: a full
+ * task name, an abbreviation (`bR`), or a task that depends on one (P-47).
+ */
+val privateBuild = sonosIntegration != null || providers.gradleProperty("x2rock.cloudContent").isPresent
+if (privateBuild) {
+    tasks.matching { it.name.matches(Regex("package\\w*Bundle")) }.configureEach {
+        doFirst {
+            throw GradleException(
+                "a bundle must not carry private inputs: drop -Px2rock.sonosIntegration and -Px2rock.cloudContent"
+            )
+        }
+    }
+}
+
 /** A Kotlin/Java string literal for a BuildConfig field. */
 fun literal(value: String) = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
 
@@ -94,7 +108,7 @@ android {
         versionCode = 5
         // The maintainer's private build says so wherever a version is shown, so it is never mistaken
         // for, or uploaded as, a test build.
-        versionName = tagVersion + if (sonosIntegration != null || providers.gradleProperty("x2rock.cloudContent").isPresent) "+hardcore" else ""
+        versionName = tagVersion + if (privateBuild) "+hardcore" else ""
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SPEAKER_SALT", literal(speakerSalt))
         buildConfigField("String", "SONOS_KEY", literal(sonosIntegration?.first.orEmpty()))
