@@ -134,7 +134,13 @@ class QueueViewModel @Inject constructor(
     }
 
     /** Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`). */
-    fun removeItem(trackNumber: Int) = edit("remove that track", trackNumber) {
+    /**
+     * [openedAt] is the queue's version when the item's menu opened, where a menu did: an edit pressed
+     * after the queue changed under the open menu is refused rather than sent to whatever now sits in
+     * the slot. Another controller removing an earlier track moved every slot up one, and Remove then
+     * took the next track (P-41).
+     */
+    fun removeItem(trackNumber: Int, openedAt: String? = null) = edit("remove that track", trackNumber, openedAt) {
         household.removeFromQueue(room.current(), trackNumber, updateId)
     }
 
@@ -142,10 +148,10 @@ class QueueViewModel @Inject constructor(
      * Move a track past the one shown above or below it. The neighbour is found when the edit runs,
      * against the list as it then is, not as it was when pressed.
      */
-    fun moveUp(trackNumber: Int) = edit("move that track", trackNumber) {
+    fun moveUp(trackNumber: Int, openedAt: String? = null) = edit("move that track", trackNumber, openedAt) {
         neighbourSlots(entries(), trackNumber).first?.let { household.moveInQueue(room.current(), trackNumber, it, updateId) }
     }
-    fun moveDown(trackNumber: Int) = edit("move that track", trackNumber) {
+    fun moveDown(trackNumber: Int, openedAt: String? = null) = edit("move that track", trackNumber, openedAt) {
         neighbourSlots(entries(), trackNumber).second?.let { household.moveInQueue(room.current(), trackNumber, it, updateId) }
     }
 
@@ -193,6 +199,8 @@ class QueueViewModel @Inject constructor(
     /** The queue's `UpdateID` as the list on screen was read; every edit quotes it. */
     private val _updateId = MutableStateFlow("0")
     private val updateId: String get() = _updateId.value
+    /** The queue's version as last read, for a menu to note when it opens; see [removeItem]. */
+    val queueVersion: String get() = _updateId.value
 
     /** One edit at a time: see [edit]. */
     private val edits = Mutex()
@@ -210,7 +218,11 @@ class QueueViewModel @Inject constructor(
      * `queueVersion`, and reading here as well costs a second Browse. A refusal still re-reads
      * here, and so does an edit with no version push (including while a station plays).
      */
-    private fun edit(what: String, trackNumber: Int?, block: suspend () -> Unit) {
+    private fun edit(what: String, trackNumber: Int?, openedAt: String? = null, block: suspend () -> Unit) {
+        if (openedAt != null && openedAt != updateId) {
+            _notice.post("The queue changed before that could be done; choose the track again")
+            return
+        }
         val pressed = trackNumber?.let { n -> entries().firstOrNull { it.trackNumber == n }?.item?.track }
         viewModelScope.launch {
             edits.withLock {

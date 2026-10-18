@@ -89,6 +89,7 @@ fun QueueScreen(
                         onRemoveItem = viewModel::removeItem,
                         onMoveUp = viewModel::moveUp,
                         onMoveDown = viewModel::moveDown,
+                        queueVersion = { viewModel.queueVersion },
                         clearArmed = clearArmed,
                         onClear = viewModel::clearQueue,
                         onSave = viewModel::saveAsPlaylist,
@@ -114,9 +115,11 @@ private fun QueueList(
     inUse: Boolean,
     onBack: () -> Unit,
     onPlayItem: (Int) -> Unit,
-    onRemoveItem: (Int) -> Unit,
-    onMoveUp: (Int) -> Unit,
-    onMoveDown: (Int) -> Unit,
+    onRemoveItem: (Int, String?) -> Unit,
+    onMoveUp: (Int, String?) -> Unit,
+    onMoveDown: (Int, String?) -> Unit,
+    /** The queue's version now, noted as a menu opens so its edit can tell the queue moved under it. */
+    queueVersion: () -> String,
     clearArmed: Boolean,
     onClear: () -> Unit,
     onSave: () -> Unit,
@@ -124,6 +127,13 @@ private fun QueueList(
     val firstFocus = remember { FocusRequester() }
     val listState = rememberLazyListState()
     var contextMenuEntry by remember { mutableStateOf<QueueEntry?>(null) }
+    var menuOpenedAt by remember { mutableStateOf<String?>(null) }
+    // A menu's track gone from its slot, by another controller's edit: the menu closes, rather than
+    // offering actions that now name something else (P-41).
+    LaunchedEffect(entries, contextMenuEntry) {
+        val open = contextMenuEntry ?: return@LaunchedEffect
+        if (entries.firstOrNull { it.trackNumber == open.trackNumber }?.item?.track != open.item.track) contextMenuEntry = null
+    }
 
     // The menu traps focus, so closing it has to hand focus back: to the slot of the row it was
     // opened on — where a removed track's successor now sits — or the slot a moved track went to.
@@ -190,7 +200,7 @@ private fun QueueList(
                         entry = entry,
                         isCurrent = currentTrackName != null && entry.item.track?.name == currentTrackName,
                         onClick = { onPlayItem(entry.trackNumber) },
-                        onLongPress = { contextMenuEntry = entry },
+                        onLongPress = { menuOpenedAt = queueVersion(); contextMenuEntry = entry },
                         modifier = Modifier
                             .then(if (index == focusTargetIndex) Modifier.focusRequester(firstFocus) else Modifier)
                             .then(if (entry.trackNumber == returnTo) Modifier.focusRequester(returnFocus) else Modifier)
@@ -210,10 +220,10 @@ private fun QueueList(
                 subtitle = listOfNotNull(track?.artist?.name, track?.album?.name).joinToString(" · ").ifEmpty { null },
                 artUrl = track?.imageUrl,
                 sections = listOf(MenuSection(null, listOfNotNull(
-                    MenuAction("Remove from Queue") { onRemoveItem(menuEntry.trackNumber); returnTo = menuEntry.trackNumber },
+                    MenuAction("Remove from Queue") { onRemoveItem(menuEntry.trackNumber, menuOpenedAt); returnTo = menuEntry.trackNumber },
                     // Offered only where there is somewhere to move to, rather than disabled.
-                    neighbours.first?.let { up -> MenuAction("Move up") { onMoveUp(menuEntry.trackNumber); returnTo = up } },
-                    neighbours.second?.let { down -> MenuAction("Move down") { onMoveDown(menuEntry.trackNumber); returnTo = down } },
+                    neighbours.first?.let { up -> MenuAction("Move up") { onMoveUp(menuEntry.trackNumber, menuOpenedAt); returnTo = up } },
+                    neighbours.second?.let { down -> MenuAction("Move down") { onMoveDown(menuEntry.trackNumber, menuOpenedAt); returnTo = down } },
                 ))),
                 onDismiss = { if (returnTo == null) returnTo = menuEntry.trackNumber; contextMenuEntry = null },
             )

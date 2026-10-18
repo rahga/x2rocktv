@@ -177,6 +177,29 @@ class QueueViewModelTest {
         assertEquals(1, loads.size)
     }
 
+    /**
+     * A menu opened on a track, then the queue changed under it — another controller removed an
+     * earlier track, so every slot moved up one. Remove pressed in that menu must not reach the slot,
+     * which now holds the next track: refused, and the viewer asked to choose again (P-41).
+     */
+    @Test fun `an edit from a menu opened before the queue changed is refused`() = runBlocking<Unit> {
+        fake.pushFixture("playbackStatus", groupId)
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.queueVersion == "8" } }
+        delay(300)
+        val openedAt = viewModel.queueVersion
+        updateId = "60"
+        fake.pushPlaybackStatus(groupId, queueVersion = "9")
+        withTimeout(5_000) { while (viewModel.queueVersion == openedAt) delay(20) }
+        actions.clear()
+
+        viewModel.removeItem(2, openedAt)
+
+        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        assertTrue(said, said.startsWith("The queue changed"))
+        delay(300)
+        assertTrue("an edit went out: $actions", actions.none { it == "RemoveTrackFromQueue" || it == "ReorderTracksInQueue" })
+    }
+
     /** Refused as stale (1028): the list must show what the queue moved to. */
     @Test fun `a refused edit re-reads the queue and says so`() = runBlocking<Unit> {
         refuseEdits = true
