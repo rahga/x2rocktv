@@ -32,6 +32,32 @@ jobs:
       - name: Assemble
         run: ./gradlew --no-daemon :app:assembleDebug
 
+      # The public release configuration, as a tester's APK and Play's bundle are made: R8 shrinking
+      # on, no private inputs. No release key here, so it signs with the debug key, and no speaker
+      # salt, so it reads no stored sign-ins; neither changes what is checked (T-34).
+      - name: Release build and lint
+        run: ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease :app:lintRelease
+
+      - name: The public APK is not a private build
+        run: |
+          apk=app/build/outputs/apk/release/app-release.apk
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)aapt2
+          name=$("$aapt2" dump badging "$apk" | grep -o "versionName='[^']*'")
+          echo "$name"
+          if grep -q hardcore <<<"$name"; then echo "the public APK is marked +hardcore"; exit 1; fi
+
+      # P-47: a build with the developer integration must refuse to write a bundle, however the bundle
+      # is asked for. Dummy key files, never real ones; an abbreviated task name, as the bypass was.
+      - name: A private bundle is refused
+        run: |
+          printf 'dummy-key\n' > "$RUNNER_TEMP/key"; printf 'dummy-secret\n' > "$RUNNER_TEMP/secret"
+          if ./gradlew --no-daemon :app:bR -Px2rock.sonosIntegration \
+              -Px2rock.sonosKeyFile="$RUNNER_TEMP/key" -Px2rock.sonosSecretFile="$RUNNER_TEMP/secret" > guard.log 2>&1; then
+            cat guard.log; echo "a bundle was built with private inputs"; exit 1
+          fi
+          grep -q "a bundle must not carry private inputs" guard.log || { cat guard.log; echo "failed, but not on the guard"; exit 1; }
+          echo "refused, as it should be"
+
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
@@ -39,3 +65,5 @@ jobs:
           path: |
             core/build/reports/tests/
             app/build/reports/tests/
+            app/build/reports/lint-results-release.*
+            guard.log
