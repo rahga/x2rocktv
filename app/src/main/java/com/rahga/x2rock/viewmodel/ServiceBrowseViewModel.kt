@@ -192,6 +192,9 @@ class ServiceBrowseViewModel @Inject constructor(
     val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
+    /** The last read of the household's stored service sign-ins; see [SignInsNote]. */
+    val signIns: StateFlow<com.rahga.x2rock.lan.StoredAccountsRead?> = household.accountsRead
+
     private val trail = ArrayDeque<Level>()
 
     /** The service's own page, where its SMAPI root is empty — see [SonosHousehold.serviceShelves]. */

@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.components.SignInsNote
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -112,6 +113,8 @@ fun ServiceBrowseScreen(
 
                 val service = active
                 if (service == null) {
+                    val signIns by viewModel.signIns.collectAsState()
+                    SignInsNote(signIns)
                     ServiceList(
                         services,
                         primaries = primaries,

@@ -160,6 +160,22 @@ class LiveHouseholdTest {
         assertTrue("no groups", state.groups.isNotEmpty())
     }
 
+    /**
+     * The household's stored service sign-ins still decrypt (SoCo #1010's format). A firmware that
+     * changed the format would otherwise show only as services vanishing from browse and search, so
+     * this is where it should first be caught. Read-only. A speaker that sends none is skipped rather
+     * than failed: the capture needs the speaker to call back into this machine, which a firewall
+     * here can stop, and a household may simply have none.
+     */
+    @Test fun `the household's stored service sign-ins still decrypt`() = runBlocking<Unit> {
+        connected()
+        household.searchableServices()
+        val read = household.accountsRead.value
+        assumeTrue("the speaker sent no sign-ins to read (firewall here, or none stored): ${read?.problem}",
+            read?.problem != "the speaker sent none")
+        assertTrue("the stored sign-ins no longer decrypt: ${read?.problem}", read?.problem?.startsWith("they could not be read") != true)
+    }
+
     @Test fun `every group has a coordinator that is a known player`() {
         val state = connected()
         val playerIds = state.players.map { it.id }.toSet()

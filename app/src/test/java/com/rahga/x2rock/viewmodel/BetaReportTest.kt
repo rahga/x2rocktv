@@ -89,6 +89,18 @@ class BetaReportTest {
     }
 
     /** T-29: how many testers' systems have Authentication on decides whether sign-in is worth offering. */
+    /** Whether the stored service sign-ins could be read: a firmware that breaks it should show here. */
+    @Test fun `it says whether the service sign-ins could be read`() {
+        val state = household.state.value
+        val good = betaReport("x2rocktv 1.0 (2)", "TV", state, household.groupStates.value, speakers(state), null,
+            com.rahga.x2rock.lan.StoredAccountsRead(4, null))
+        assertTrue(good.text, good.text.contains("**Service sign-ins:** 4 read"))
+        val bad = betaReport("x2rocktv 1.0 (2)", "TV", state, household.groupStates.value, speakers(state), null,
+            com.rahga.x2rock.lan.StoredAccountsRead(0, "they could not be read (integrity check failed)"))
+        assertTrue(bad.text, bad.text.contains("**Service sign-ins:** none usable, they could not be read (integrity check failed)"))
+        assertTrue("said above the speakers, out of reach of the cut", bad.text.indexOf("Service sign-ins") < bad.text.indexOf("**Speakers**"))
+    }
+
     @Test fun `a household that refuses this app says so`() {
         val refused = household.state.value.copy(error = com.rahga.x2rock.lan.AUTHENTICATION_REQUIRED)
         assertTrue(report(refused).text, report(refused).text.contains("**Authentication is on:**"))

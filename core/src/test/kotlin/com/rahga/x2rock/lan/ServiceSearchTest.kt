@@ -118,7 +118,7 @@ class ServiceSearchTest {
     @Volatile private var refusal = TOKEN_REFUSAL
 
     /** The account store a player hands over, and how many times one was asked for. */
-    @Volatile private var envelope = ""
+    @Volatile private var envelope: String? = ""
     private val captures = java.util.concurrent.atomic.AtomicInteger()
 
     /**
@@ -300,6 +300,34 @@ class ServiceSearchTest {
         assertTrue("Mixcloud, a token like it, is listed", byId.containsKey(MIXCLOUD))
         assertEquals("Qb1", byId.getValue(QOBUZ).nickname)
         assertEquals("sn_14", byId.getValue(QOBUZ).accountId)
+    }
+
+    /**
+     * Each read of the stored sign-ins is recorded, so a firmware that stops publishing them, or
+     * changes their format, shows as a reason rather than as services silently vanishing.
+     */
+    @Test fun `a read of the stored sign-ins records how many it found`() = runBlocking {
+        connected()
+        household.searchableServices()
+        val read = household.accountsRead.value
+        assertNull("a good read has no problem", read?.problem)
+        assertTrue("it counted the sign-ins", (read?.withSignIns ?: 0) > 0)
+    }
+
+    @Test fun `stored sign-ins in a format that does not decrypt are recorded as unreadable`() = runBlocking {
+        envelope = "2:" + java.util.Base64.getEncoder().encodeToString(ByteArray(64) { it.toByte() })
+        connected()
+        val services = household.searchableServices()
+        assertNull("no account survives", services.firstOrNull { it.token != null })
+        val problem = household.accountsRead.value?.problem
+        assertTrue("expected an unreadable reason, got $problem", problem?.startsWith("they could not be read") == true)
+    }
+
+    @Test fun `a speaker that sends no sign-ins is recorded as such`() = runBlocking {
+        envelope = null
+        connected()
+        household.searchableServices()
+        assertEquals("the speaker sent none", household.accountsRead.value?.problem)
     }
 
     @Test fun `a search carries the stored token and parses the hits`() = runBlocking {

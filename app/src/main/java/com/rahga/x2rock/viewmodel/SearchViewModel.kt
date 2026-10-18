@@ -125,6 +125,9 @@ class SearchViewModel @Inject constructor(
     val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
+    /** The last read of the household's stored service sign-ins; see [SignInsNote]. */
+    val signIns: StateFlow<com.rahga.x2rock.lan.StoredAccountsRead?> = household.accountsRead
+
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null
 

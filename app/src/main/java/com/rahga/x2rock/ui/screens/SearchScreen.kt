@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.components.SignInsNote
 import androidx.compose.foundation.focusGroup
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.focusProperties
@@ -140,6 +141,8 @@ fun SearchScreen(
             Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
                 ScreenHeader(title = "Search", room = room, onBack = onBack)
                 Spacer(Modifier.height(20.dp))
+                val signIns by viewModel.signIns.collectAsState()
+                SignInsNote(signIns)
                 // A fresh search is not a return from an album: the old row key would hold focus in the field.
                 val search = { openedFrom = null; viewModel.search() }
                 Row(verticalAlignment = Alignment.CenterVertically) {

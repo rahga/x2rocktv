@@ -1221,14 +1221,37 @@ class SonosHousehold(
             .also { if (generation == session) searchable = it }
     }
 
-    /** The accounts the household stores, read off the player at [hostname]; empty when it sends none. */
+    /**
+     * The accounts the household stores, read off the player at [hostname]; empty when it sends none.
+     * Each read is recorded in [accountsRead], since an empty answer is how a firmware that stops
+     * publishing them, or changes their format, would first show — as services vanishing from browse
+     * and search with no word why.
+     */
     private suspend fun storedAccounts(hostname: String, household: String): List<StoredAccount> {
         val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
-        return ip?.let { accountCapture(it) }
+        val envelope = ip?.let { accountCapture(it) }
+            ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "the speaker sent none") }
+        val accounts = try {
             // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
-            ?.let { StoredAccounts.decryptAccounts(it, household.substringBefore('.')) }
-            ?: emptyList()
+            StoredAccounts.decryptAccounts(envelope, household.substringBefore('.'))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _accountsRead.value = StoredAccountsRead(0, "they could not be read (${e.message ?: e.javaClass.simpleName})")
+            throw e
+        }
+        val withTokens = accounts.count { it.hasToken }
+        _accountsRead.value = StoredAccountsRead(withTokens, "the speaker sent none with a sign-in".takeIf { withTokens == 0 })
+        return accounts
     }
+
+    /**
+     * What the household's stored music-service sign-ins were found to be, the last time they were
+     * read; `null` until a read has been tried. [StoredAccountsRead.problem] says why none could be
+     * used, for the screens that list services and for the beta report.
+     */
+    val accountsRead: StateFlow<StoredAccountsRead?> get() = _accountsRead.asStateFlow()
+    private val _accountsRead = MutableStateFlow<StoredAccountsRead?>(null)
 
     private val rereadLock = Mutex()
     /** The last re-read, when it was taken and what it found; `null` accounts for a read that failed. */
@@ -2837,3 +2860,10 @@ internal fun isoDurationMillis(text: String): Long? {
 }
 
 private val ISO_DURATION = Regex("""P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?""")
+
+/**
+ * One read of the household's stored music-service sign-ins: how many carry a sign-in, and why none
+ * could be used when that is so — the speaker sent none, or they could not be read (SoCo #1010's
+ * format, which a firmware could change).
+ */
+data class StoredAccountsRead(val withSignIns: Int, val problem: String?)

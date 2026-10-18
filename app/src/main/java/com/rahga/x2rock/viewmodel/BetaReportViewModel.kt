@@ -41,6 +41,8 @@ class BetaReportViewModel @Inject constructor(
         viewModelScope.launch {
             // A speaker that does not answer is still listed, as About this system lists it.
             val speakers = runCatching { household.aboutSystem() }.getOrDefault(emptyList())
+            // Read the stored service sign-ins if nothing has yet, so the report can say whether they work.
+            if (household.accountsRead.value == null) runCatching { household.searchableServices() }
             _uiState.value = UiState.Ready(
                 betaReport(
                     app = "x2rocktv ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
@@ -49,6 +51,7 @@ class BetaReportViewModel @Inject constructor(
                     groupStates = household.groupStates.value,
                     speakers = speakers,
                     refusal = betaFeatures.lastRefusal.value,
+                    signIns = household.accountsRead.value,
                 )
             )
         }
@@ -82,6 +85,8 @@ internal fun betaReport(
     groupStates: Map<String, GroupState>,
     speakers: List<SonosHousehold.SpeakerAbout>,
     refusal: String?,
+    /** The last read of the household's stored service sign-ins; `null` if none could be tried. */
+    signIns: com.rahga.x2rock.lan.StoredAccountsRead? = null,
 ): BetaReport {
     val capabilities = state.players.associate { it.id to it.capabilities }
     fun speakerLines(withCapabilities: Boolean) = speakers.map { s ->
@@ -115,6 +120,15 @@ internal fun betaReport(
         if (state.authenticationRequired) {
             appendLine()
             appendLine("**Authentication is on:** the speakers refused this app (ERROR_NO_PERMISSION).")
+        }
+        // Whether the stored service sign-ins could be read (SoCo #1010's way), which a firmware could
+        // change: said above the speakers, where cutting the end to fit cannot take it.
+        signIns?.let {
+            appendLine()
+            appendLine(
+                if (it.problem == null) "**Service sign-ins:** ${it.withSignIns} read"
+                else "**Service sign-ins:** none usable, ${it.problem}"
+            )
         }
         appendLine()
         appendLine("**Speakers**")

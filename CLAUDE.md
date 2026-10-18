@@ -280,6 +280,17 @@ look right while testing nothing, because a household that never re-subscribes p
 
 ## Known Gaps / Deferred Work
 
+**Browse and search for services with an account depend on reading the household's stored sign-ins**
+(`StoredAccounts`, SoCo #1010's method). A firmware change could stop that, and nothing else in the
+public build stands in: services needing an account would drop out of Music Services and Search, while
+playback, favourites, grouping and everything over the Control API go on working. So it is never
+silent (2026-10-18): each read is recorded (`SonosHousehold.accountsRead`), Music Services and Search
+say when none could be used (`SignInsNote`), the beta report carries a "Service sign-ins" line, and
+the live suite asserts the household's sign-ins still decrypt (skipped when a speaker sends none, as
+a firewall on the machine running it can cause). The owner's hardcore builds have the cloud page
+source (T-28) as a partial stand-in; porting x2rock's per-service device link is the public option,
+deferred until it is needed.
+
 **The catch-up list, `docs/punch-list.md`, is closed** (2026-10-09): every item is done or decided
 out, and the outside reviews are answered in it. Its head gathers what is still open — checks owed
 on hardware, one open question, things not built — so start there before picking up new work; the
