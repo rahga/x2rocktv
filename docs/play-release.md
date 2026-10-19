@@ -78,6 +78,9 @@ different artifact and are not recorded here.
   is present, as `BuildConfig.SPEAKER_SALT`. The downloaded asset is byte-identical to the one tested.
 - Installed fresh on the API-34 Google TV emulator (first connect timed out once, Retry connected) and
   on a moto g 5G 2024 (Android 15): opens from the launcher, connects, clear of the system bars.
+- **Stored sign-ins on the artifact itself** (the gap left open for 0.1.2, P-50): on that phone, on the
+  office LAN, Music Services listed the household's signed-in services by account (Amazon Music by its
+  user name, Audible, Deezer, iHeartRadio), and Deezer opened on its own Favorites and Recently played.
 
 **`x2rocktv-0.1.2.apk`** (2026-10-18, T-35), SHA-256 `c35bb4d7…6e017fe2`:
 - Signed v1+v2 by the release key (`CN=Richard Hoelscher, O=x2rock`, cert SHA-256 `8d6575ab…5f120f04`,
