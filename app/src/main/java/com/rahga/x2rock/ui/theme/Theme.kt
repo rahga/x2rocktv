@@ -16,6 +16,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalInputModeManager
+import androidx.compose.ui.input.InputMode
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
@@ -130,6 +133,9 @@ fun X2RockTheme(
         AppColorTheme.FOREST -> ForestScheme
         AppColorTheme.ORCHID -> OrchidScheme
     }
+    // Kept where [requestFocusSafely] can read it, which has no composition of its own (P-55).
+    val inputMode = LocalInputModeManager.current.inputMode
+    SideEffect { touchInput = inputMode == InputMode.Touch }
     MaterialTheme(colorScheme = colorScheme, typography = TenFootTypography) {
         // The content colour, provided once at the root. tv-material derives a transparent
         // container's content colour from LocalContentColor, whose default is black, and the home
@@ -319,11 +325,21 @@ private fun appCardBorder(): CardBorder = CardDefaults.border(
 val CardShape = RoundedCornerShape(8.dp)
 
 /**
+ * Whether the screen is being touched rather than driven by keys, from Compose's input mode, kept by
+ * [X2RockTheme]. A focus request made in code draws the whole focus highlight, which on a remote is the
+ * point and on a touchscreen reads as a choice nobody made: Configure opened with "15 minutes" filled
+ * (P-55, a phone). So in touch mode code requests no focus, and the first key pressed brings focus in
+ * the usual way, except for a text field (`evenOnTouch`), whose focus is what opens the keyboard. A TV
+ * is never in touch mode, so nothing there changes.
+ */
+internal var touchInput by mutableStateOf(false)
+
+/**
  * Focus is requested from effects that can run a frame before the target node attaches — on TV
  * that is routine. Only that specific failure is ignored; anything else should still surface.
  */
-fun FocusRequester.requestFocusSafely(): Boolean =
-    try {
+fun FocusRequester.requestFocusSafely(evenOnTouch: Boolean = false): Boolean =
+    if (touchInput && !evenOnTouch) false else try {
         requestFocus()
         true
     } catch (_: IllegalStateException) {
@@ -335,9 +351,9 @@ fun FocusRequester.requestFocusSafely(): Boolean =
  * [requestFocusSafely], retried a frame at a time while the target is not yet attached — which on
  * TV is routine for anything inside a list that has just received its items. True once it took.
  */
-suspend fun FocusRequester.requestFocusRetrying(attempts: Int = 10): Boolean {
+suspend fun FocusRequester.requestFocusRetrying(attempts: Int = 10, evenOnTouch: Boolean = false): Boolean {
     repeat(attempts) {
-        if (requestFocusSafely()) return true
+        if (requestFocusSafely(evenOnTouch)) return true
         withFrameNanos { }
     }
     return false
@@ -358,9 +374,9 @@ fun IconLabelButton(icon: ImageVector, label: String, onClick: () -> Unit, modif
 }
 
 @Composable
-fun rememberAutoFocusRequester(): FocusRequester {
+fun rememberAutoFocusRequester(evenOnTouch: Boolean = false): FocusRequester {
     val requester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { requester.requestFocusSafely() }
+    LaunchedEffect(Unit) { requester.requestFocusSafely(evenOnTouch) }
     return requester
 }
 

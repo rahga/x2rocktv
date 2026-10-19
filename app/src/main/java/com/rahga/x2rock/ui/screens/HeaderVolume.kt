@@ -274,7 +274,7 @@ internal fun SetVolumeOverlay(room: String, current: Int?, trapped: Boolean, onS
     BackHandler { onDismiss() }
     var text by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
-    val fieldFocus = rememberAutoFocusRequester()
+    val fieldFocus = rememberAutoFocusRequester(evenOnTouch = true)
     val submit = {
         when (val level = text.trim().toIntOrNull()) {
             null -> problem = "Type a level from 0 to 100"

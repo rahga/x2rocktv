@@ -77,7 +77,7 @@ fun RadioScreen(
     var address by rememberSaveable { mutableStateOf("") }
     val addressFocus = remember { FocusRequester() }
     // The field takes focus as it opens, which brings the keyboard up: opening it is asking to type.
-    LaunchedEffect(byUrl) { if (byUrl) addressFocus.requestFocusRetrying() }
+    LaunchedEffect(byUrl) { if (byUrl) addressFocus.requestFocusRetrying(evenOnTouch = true) }
     val firstFocus = remember { FocusRequester() }
     BackHandler { onBack() }
     LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }

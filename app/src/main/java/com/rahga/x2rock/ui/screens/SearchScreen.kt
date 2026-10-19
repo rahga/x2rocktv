@@ -104,7 +104,7 @@ fun SearchScreen(
     LaunchedEffect(recent) {
         if (!forgot) return@LaunchedEffect
         forgot = false
-        if (recent.isEmpty()) fieldFocus.requestFocusRetrying() else recentFocus.requestFocusRetrying()
+        if (recent.isEmpty()) fieldFocus.requestFocusRetrying(evenOnTouch = true) else recentFocus.requestFocusRetrying()
     }
     val resultsFocus = remember { FocusRequester() }
     val menuTarget by viewModel.menu.open.collectAsState()
@@ -130,7 +130,7 @@ fun SearchScreen(
     LaunchedEffect(Unit) {
         // Not on a return from an opened album, where the results are already there to go back to.
         if (results.sections.isEmpty()) {
-            fieldFocus.requestFocusSafely()
+            fieldFocus.requestFocusSafely(evenOnTouch = true)
             return@LaunchedEffect
         }
         val section = results.sections.indexOfFirst { cellKeys(it).contains(openedFrom) }

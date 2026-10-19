@@ -64,7 +64,7 @@ fun AppleMusicScreen(
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
     BackHandler { onBack() }
-    LaunchedEffect(Unit) { fieldFocus.requestFocusSafely() }
+    LaunchedEffect(Unit) { fieldFocus.requestFocusSafely(evenOnTouch = true) }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {

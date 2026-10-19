@@ -281,7 +281,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
     // opening the service, which used to cover half the screen with a keyboard before anything was
     // asked for. Retried, because the field is composed in the same frame the flag turns.
     LaunchedEffect(service.key(), searching) {
-        if (searching) fieldFocus.requestFocusRetrying()
+        if (searching) fieldFocus.requestFocusRetrying(evenOnTouch = true)
     }
 
     if (searching) {
