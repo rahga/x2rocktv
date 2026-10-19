@@ -230,7 +230,7 @@ class PlayerViewModel @Inject constructor(
                 PlayerUiState(
                     groupName = groupName,
                     isLoading = householdState.error == null && !householdState.connected,
-                    error = householdState.error,
+                    error = householdState.error?.let { plainConnectionProblem(it, householdState.householdChoices.isNotEmpty()) },
                     // Household-wide, so known before any one room has said anything.
                     upnpOff = householdState.upnpOff,
                 )
@@ -275,7 +275,7 @@ class PlayerViewModel @Inject constructor(
                         }
                         .orEmpty(),
                     isLoading = false,
-                    error = householdState.error,
+                    error = householdState.error?.let { plainConnectionProblem(it, householdState.householdChoices.isNotEmpty()) },
                 )
             }
         }.combine(_sleepEndsAt) { state, endsAt ->

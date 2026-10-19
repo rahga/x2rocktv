@@ -121,6 +121,11 @@ internal fun betaReport(
             appendLine()
             appendLine("**Authentication is on:** the speakers refused this app (ERROR_NO_PERMISSION).")
         }
+        // The connection's own words, which the screen no longer shows (P-56): what failed, for us.
+        state.error?.takeIf { !state.authenticationRequired && state.householdChoices.isEmpty() }?.let {
+            appendLine()
+            appendLine("**Connection:** ${redactIdentifiers(it)}")
+        }
         // Whether the stored service sign-ins could be read (SoCo #1010's way), which a firmware could
         // change: said above the speakers, where cutting the end to fit cannot take it.
         signIns?.let {

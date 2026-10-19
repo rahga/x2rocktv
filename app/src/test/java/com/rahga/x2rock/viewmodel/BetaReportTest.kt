@@ -64,6 +64,18 @@ class BetaReportTest {
         }
     }
 
+    /** P-56: what the screen no longer says goes to the report, with the speaker's name taken out. */
+    @Test fun `a connection failure is reported in its own words, redacted`() {
+        val failed = household.state.value.copy(connected = false, error = "no reply from sonos-48A6B81853E0.local within 5000ms")
+        val r = report(failed)
+        assertTrue(r.text, r.text.contains("**Connection:** no reply from <speaker> within 5000ms"))
+        assertFalse(r.text, r.text.contains("48A6B81853E0"))
+    }
+
+    @Test fun `a working connection reports no connection line`() {
+        assertFalse(report().text.contains("**Connection:**"))
+    }
+
     /**
      * The issue opens holding exactly what the screen showed, even where the text holds what a query
      * means something by: a room called "Rock & Roll" would otherwise end the body at its `&`.

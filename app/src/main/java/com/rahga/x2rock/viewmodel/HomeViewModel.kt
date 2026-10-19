@@ -163,7 +163,7 @@ class HomeViewModel @Inject constructor(
         combine(household.state, household.groupStates, betaFeatures.enabled, roomPrefsStore.tvPlayerId) { state, groupStates, beta, tvPlayer ->
             val error = state.error
             when {
-                error != null -> UiState.Error(error, state.householdChoices)
+                error != null -> UiState.Error(plainConnectionProblem(error, state.householdChoices.isNotEmpty()), state.householdChoices)
                 !state.connected -> UiState.Loading(reconnecting = state.reconnecting)
                 else -> UiState.Success(
                     groups = state.groups,

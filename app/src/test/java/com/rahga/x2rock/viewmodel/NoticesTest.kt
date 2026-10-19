@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.lan.AUTHENTICATION_REQUIRED
 import com.rahga.x2rock.lan.SonosCommandException
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
@@ -19,6 +20,19 @@ class NoticesTest {
         val notice = failureNotice("skip", SonosCommandException("skipToNextTrack", "ERROR_NO_PERMISSION"))!!
         assertTrue(notice, notice.startsWith("Couldn't skip: this system requires authentication"))
         assertTrue(notice, "Connection Security" in notice)
+    }
+
+    /** P-56: the connection's own text was shown as it was, lowercase and naming a speaker's MAC. */
+    @Test fun `a connection failure is said in plain words, with no speaker named`() {
+        val shown = plainConnectionProblem("no reply from sonos-48A6B81853E0.local within 5000ms", choosing = false)
+        assertTrue(shown, shown.startsWith("Couldn't reach the Sonos speakers."))
+        assertTrue(shown, "sonos-" !in shown)
+    }
+
+    @Test fun `authentication and a choice of systems keep their own words`() {
+        assertEquals(AUTHENTICATION_REQUIRED, plainConnectionProblem(AUTHENTICATION_REQUIRED, choosing = false))
+        val choose = "2 Sonos systems answer on this network. Choose one."
+        assertEquals(choose, plainConnectionProblem(choose, choosing = true))
     }
 
     @Test fun `any other failure carries its own words`() {

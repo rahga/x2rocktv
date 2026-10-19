@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import com.rahga.x2rock.lan.AUTHENTICATION_REQUIRED
 import com.rahga.x2rock.lan.ReplyTimeoutException
 import com.rahga.x2rock.lan.SonosCommandException
 import kotlinx.coroutines.CancellationException
@@ -95,6 +96,17 @@ internal fun plainRefusal(detail: String): String = when (detail.substringBefore
     "ERROR_ACCOUNT_INVALID_ID" -> "it isn't available from this system's accounts"
     else -> detail
 }
+
+/**
+ * What the screen says when the household could not be reached (P-56). The exception's own text —
+ * "no Sonos players answered on this network", "no reply from sonos-<MAC>.local within 5000ms" — was
+ * shown as it was: lowercase, worded for a developer, and on a first connect a speaker's MAC on
+ * screen. It goes to the beta report instead, redacted. Authentication being on, and a choice between
+ * two systems, are already worded for the viewer and pass through.
+ */
+internal fun plainConnectionProblem(error: String, choosing: Boolean): String =
+    if (error == AUTHENTICATION_REQUIRED || choosing) error
+    else "Couldn't reach the Sonos speakers. Check this device is on the same network as them, then retry."
 
 /** A station or program the player accepted and then sat idle on: see `StreamStart.SILENT`. */
 internal fun didNotPlay(title: String) = "\"$title\" didn't play. Try another."

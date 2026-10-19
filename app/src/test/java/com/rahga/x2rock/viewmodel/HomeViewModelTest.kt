@@ -586,6 +586,9 @@ class HomeViewModelTest {
             viewModel.uiState.first { it is HomeViewModel.UiState.Error }
         }
         assertTrue(state is HomeViewModel.UiState.Error)
+        // In the viewer's words, not the exception's (P-56).
+        val shown = (state as HomeViewModel.UiState.Error).message
+        assertTrue(shown, shown.startsWith("Couldn't reach the Sonos speakers."))
     }
 
     // ---------------------------------------------------------------- presets
