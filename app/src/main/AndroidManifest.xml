@@ -45,6 +45,9 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <!-- A tablet's launcher, for testers who sideload it there; a TV's lists only the one
+                     above. Play still offers the app only to TVs: leanback stays required. -->
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
