@@ -66,6 +66,28 @@ uninstall before moving to the release key, which clears its settings.
    carries untracked code and is for the owner's own TVs only).
 5. Later, **owner**: upload the bundle to Play's closed test track, with the same notes.
 
+## Validated artifacts
+
+Each published APK is checked as downloaded, never as rebuilt. The owner's `+hardcore` builds are a
+different artifact and are not recorded here.
+
+**`x2rocktv-0.1.2.apk`** (2026-10-18, T-35), SHA-256 `c35bb4d7…6e017fe2`:
+- Signed v1+v2 by the release key (`CN=Richard Hoelscher, O=x2rock`, cert SHA-256 `8d6575ab…5f120f04`,
+  the same as 0.1.1's). Version `0.1.2`, code 5. minSdk 23 (raised to 26 after it, P-39), target 35.
+  `android.software.leanback` is the only required feature, and it has a leanback launcher entry.
+- Nothing private: no integration key or secret, no `callback.html`, no cloud page source or its
+  service file. It carries the speaker salt: 0.1.2 predates the salt leaving the source, and its
+  `byteArrayOf` matches `~/x2rock-sonos.speaker.salt` and is present in `classes.dex`.
+- On the API-34 emulator at home: a fresh 0.1.1 install found the household with no seed, and 0.1.2
+  updated it in place with its state kept. Cold start 0.93s, warm 0.11s (`am start -W`). Browse
+  (favourites), Music Services, Search ("miles davis": 55 results from 8 services), Kitchen's queue
+  and Send a report (no ids, addresses or `sn_` in the decoded QR) all worked.
+- **Not shown on the artifact itself:** services that need the household's stored sign-ins. The
+  emulator's NAT drops the speaker's connection back to the app, and a release build takes no debug
+  seed, so only Apple Music and the anonymous services were listed. The salt check above is the
+  evidence they would decrypt. Seeing them needs the APK on a real device on the LAN that is not
+  one of the owner's TVs.
+
 ## The listing (owner, once)
 
 - **Privacy policy**: [`PRIVACY.md`](../PRIVACY.md), by its GitHub address.
