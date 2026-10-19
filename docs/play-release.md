@@ -71,6 +71,14 @@ uninstall before moving to the release key, which clears its settings.
 Each published APK is checked as downloaded, never as rebuilt. The owner's `+hardcore` builds are a
 different artifact and are not recorded here.
 
+**`x2rocktv-0.1.3.apk`** (2026-10-19), SHA-256 `528cdc87…dd17e194`:
+- Release key (cert SHA-256 `8d6575ab…5f120f04`, as before). Version `0.1.3`, code 6, minSdk 26, target 35.
+  Leanback is the only required feature; both a leanback and a phone/tablet launcher entry.
+- Nothing private (no integration key, secret, `callback.html` or cloud page source); the speaker salt
+  is present, as `BuildConfig.SPEAKER_SALT`. The downloaded asset is byte-identical to the one tested.
+- Installed fresh on the API-34 Google TV emulator (first connect timed out once, Retry connected) and
+  on a moto g 5G 2024 (Android 15): opens from the launcher, connects, clear of the system bars.
+
 **`x2rocktv-0.1.2.apk`** (2026-10-18, T-35), SHA-256 `c35bb4d7…6e017fe2`:
 - Signed v1+v2 by the release key (`CN=Richard Hoelscher, O=x2rock`, cert SHA-256 `8d6575ab…5f120f04`,
   the same as 0.1.1's). Version `0.1.2`, code 5. minSdk 23 (raised to 26 after it, P-39), target 35.
