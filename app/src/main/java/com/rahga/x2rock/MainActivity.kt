@@ -10,6 +10,16 @@ import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.Modifier
+import androidx.tv.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.ThemeStore
@@ -54,7 +64,17 @@ class MainActivity : ComponentActivity() {
             val artUrl by remember(player) { player.uiState.map { it.albumArtUrl }.distinctUntilChanged() }
                 .collectAsState(initial = null)
             X2RockTheme(colorTheme = theme, art = rememberArtColors(artUrl)) {
-                X2RockNavGraph()
+                // Clear of a phone's or tablet's status and navigation bars, which Android 15 draws
+                // every app under (P-53). A TV has none, so this is nothing there. Not the keyboard's
+                // inset as well: a TV's keyboard covers the screen, and padding for it squeezed Search.
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))
+                ) {
+                    X2RockNavGraph()
+                }
             }
         }
     }
