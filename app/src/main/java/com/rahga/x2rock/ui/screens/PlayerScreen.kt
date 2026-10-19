@@ -93,7 +93,7 @@ import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.handOffFocus

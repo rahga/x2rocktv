@@ -2308,8 +2308,9 @@ class SonosHousehold(
         val allowed = body.getAsJsonObject("attributes")?.get("allowInsecureUPnP")
             ?.takeIf { it.isJsonPrimitive }?.asBoolean ?: return
         securityVersion = body.string("timestamp")
-        _state.update { it.copy(upnpOff = !allowed) }
+        // The transport first: whatever sees the state change may call at once, and must be refused.
         upnp.switchedOff = !allowed
+        _state.update { it.copy(upnpOff = !allowed) }
     }
 
     /** The topology as the seed reports it now, for a check the pushed copy could not settle. */

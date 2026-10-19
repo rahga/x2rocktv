@@ -1,8 +1,10 @@
 package com.rahga.x2rock
 
 import android.app.Application
-import coil.ImageLoader
-import coil.ImageLoaderFactory
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import com.rahga.x2rock.di.InternetHttp
 import com.rahga.x2rock.net.ArtHttp
 import com.rahga.x2rock.net.NetworkMonitor
@@ -11,7 +13,7 @@ import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltAndroidApp
-class X2RockApp : Application(), ImageLoaderFactory {
+class X2RockApp : Application(), SingletonImageLoader.Factory {
 
     @Inject lateinit var networkMonitor: NetworkMonitor
 
@@ -37,8 +39,8 @@ class X2RockApp : Application(), ImageLoaderFactory {
      * the cleartext exemption — for a player's art only. A service's art goes by the internet
      * client, and both are bounded: see [ArtHttp].
      */
-    override fun newImageLoader(): ImageLoader =
-        ImageLoader.Builder(this)
-            .callFactory { ArtHttp.callFactory(lanClient, internetClient) }
+    override fun newImageLoader(context: PlatformContext): ImageLoader =
+        ImageLoader.Builder(context)
+            .components { add(OkHttpNetworkFetcherFactory(callFactory = { ArtHttp.callFactory(lanClient, internetClient) })) }
             .build()
 }

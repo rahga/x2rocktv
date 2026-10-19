@@ -17,7 +17,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.rahga.x2rock.ui.serviceLogo
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import androidx.compose.runtime.getValue
@@ -54,7 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
@@ -222,7 +222,7 @@ fun SearchScreen(
                                 // Search button, the nearest thing that way. Properties before the
                                 // group, as for a modal's focus trap.
                                 modifier = Modifier.height(CELL_HEIGHT * rows + CELL_GAP * (rows - 1) + 8.dp)
-                                    .focusProperties { exit = { if (it == FocusDirection.Right) FocusRequester.Cancel else FocusRequester.Default } }
+                                    .focusProperties { onExit = { if (requestedFocusDirection == FocusDirection.Right) cancelFocusChange() } }
                                     .focusGroup(),
                                 // A little room at the sides for the focused cell's outline, which the edge cut off.
                                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),

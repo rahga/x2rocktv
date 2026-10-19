@@ -2,7 +2,6 @@ package com.rahga.x2rock.ui.theme
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -12,9 +11,11 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.palette.graphics.Palette
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -42,7 +43,7 @@ fun rememberArtColors(url: String?): ArtColors? {
             return@LaunchedEffect
         }
         val request = ImageRequest.Builder(context).data(url).allowHardware(false).size(SAMPLE_PX).build()
-        val bitmap = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+        val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
             ?: return@LaunchedEffect
         colors = withContext(Dispatchers.Default) { artColorsOf(Palette.from(bitmap).generate()) }
     }

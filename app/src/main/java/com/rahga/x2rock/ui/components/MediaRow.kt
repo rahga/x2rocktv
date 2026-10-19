@@ -36,7 +36,7 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.CardShape
@@ -139,7 +139,7 @@ fun ScreenHeader(
     @OptIn(ExperimentalComposeUiApi::class)
     val sidewaysStays = Modifier
         .focusProperties {
-            exit = { if (it == FocusDirection.Left || it == FocusDirection.Right) FocusRequester.Cancel else FocusRequester.Default }
+            onExit = { if (requestedFocusDirection == FocusDirection.Left || requestedFocusDirection == FocusDirection.Right) cancelFocusChange() }
         }
         .focusGroup()
     Row(sidewaysStays, verticalAlignment = Alignment.CenterVertically) {

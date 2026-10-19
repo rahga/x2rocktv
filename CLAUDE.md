@@ -22,7 +22,7 @@ If the directory is missing on a fresh clone, there is no queue here; ask the ow
 
 ## Language & Platform
 - Kotlin only — no Java
-- `:app` — Google TV / Android TV (Jetpack Compose for TV), min SDK 26, compile/target SDK 35
+- `:app` — Google TV / Android TV (Jetpack Compose for TV), min SDK 26, compile SDK 37, target SDK 35
   (`app/build.gradle.kts` is the source of truth; this line has been wrong before)
 - `:core` — plain Kotlin/JVM, no Android dependency; `:app` depends on it
 - Build system: Gradle with Kotlin DSL (`build.gradle.kts`)
@@ -118,7 +118,7 @@ claim in it was run against real hardware.
 ## Building
 
 If Java isn't present, install a JDK (17+ is safe, 21 is what's been tested) via the system
-package manager or `mise`. Gradle itself does not need installing — the project pins 8.7 and
+package manager or `mise`. Gradle itself does not need installing — the project pins 9.8.2 (AGP 9.4, which compiles Kotlin itself) and
 `./gradlew` fetches it.
 
 `gradle-wrapper.jar` used to be missing from fresh clones, which broke `./gradlew` for anyone

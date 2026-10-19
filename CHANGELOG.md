@@ -3,6 +3,19 @@
 Each release is tagged `v<version>` and its build takes that as its version name. Version codes
 rise by one with every build that leaves the developer's machine.
 
+## Unreleased
+
+### Fixed
+
+- On a touchscreen, a screen no longer opens with its first button drawn highlighted as if chosen.
+- When the speakers can't be reached, the app says so in plain words — check this device is on the
+  same network as them — instead of a network error's own text. The beta report keeps the details.
+
+### Under the hood
+
+- Built with the latest stable toolchain: Gradle 9.8, Android Gradle Plugin 9.4, Kotlin 2.4, compile
+  SDK 37, and current AndroidX, Compose (2026.09), Compose for TV 1.1, OkHttp 5 and Coil 3.
+
 ## 0.1.3 — tablets for the adventurous, and a sturdier room
 
 ### New

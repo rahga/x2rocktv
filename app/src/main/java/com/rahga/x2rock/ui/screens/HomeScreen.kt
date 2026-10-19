@@ -88,7 +88,7 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
@@ -98,7 +98,7 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.followingRoom
 import com.rahga.x2rock.model.PlaybackStates
@@ -364,9 +364,8 @@ fun HomeScreen(
                     // handlers on each row's leftmost control. Before the group, not after: a
                     // focus target takes its properties from the modifiers above it.
                     .focusProperties {
-                        exit = { direction ->
-                            if (direction == FocusDirection.Up || direction == FocusDirection.Down) FocusRequester.Cancel
-                            else FocusRequester.Default
+                        onExit = {
+                            if (requestedFocusDirection == FocusDirection.Up || requestedFocusDirection == FocusDirection.Down) cancelFocusChange()
                         }
                     }
                     .focusGroup()

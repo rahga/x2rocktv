@@ -5,10 +5,11 @@ import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.model.PlaybackActions
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.drawable.BitmapDrawable
-import coil.imageLoader
-import coil.request.ImageRequest
-import coil.request.SuccessResult
+import coil3.imageLoader
+import coil3.request.ImageRequest
+import coil3.request.SuccessResult
+import coil3.request.allowHardware
+import coil3.toBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -186,7 +187,7 @@ class MediaSessionPublisher @Inject constructor(
         coverJob?.cancel()
         coverJob = scope.launch {
             val request = ImageRequest.Builder(context).data(artUrl).size(COVER_PX).allowHardware(false).build()
-            val bitmap = ((context.imageLoader.execute(request) as? SuccessResult)?.drawable as? BitmapDrawable)?.bitmap
+            val bitmap = (context.imageLoader.execute(request) as? SuccessResult)?.image?.toBitmap()
                 ?: return@launch
             coverUrl = artUrl
             cover = bitmap

@@ -47,7 +47,7 @@ login, no token exchange, no refresh.
 not a browser — so a plain `Request.Builder` is correct. A `WebView`-based client could not
 do this at all, since the browser WebSocket API forces an `Origin` that cannot be removed.
 
-OkHttp 4.12.0 is already a dependency (`core/build.gradle.kts`) and has native `WebSocket`
+OkHttp (5.x since 2026-10-19; 4.12.0 when this was written) is already a dependency (`core/build.gradle.kts`) and has native `WebSocket`
 support. **No new library is required.**
 
 ### TLS

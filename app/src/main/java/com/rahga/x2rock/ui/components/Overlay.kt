@@ -27,14 +27,14 @@ import com.rahga.x2rock.ui.theme.requestFocusRetrying
  * button opened focused. Cancelling focus *exit* is the targeted version of the same intent.
  *
  * **The properties go before the group.** A focus target collects its properties from the
- * modifiers *above* it in the chain, so `focusGroup().focusProperties { exit }` gave the rule
+ * modifiers *above* it in the chain, so `focusGroup().focusProperties { onExit }` gave the rule
  * to the group's children and the group itself never saw it: the trap was a no-op, and a press
  * up from Settings walked focus to the sidebar's buttons with the panel still open. Seen on
  * the Shield, 2026-10-03.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 fun Modifier.modalFocusTrap(trapped: Boolean = true): Modifier =
-    focusProperties { if (trapped) exit = { FocusRequester.Cancel } }.focusGroup()
+    focusProperties { if (trapped) onExit = { cancelFocusChange() } }.focusGroup()
 
 /**
  * Scrim + centred, focus-trapped content. A tap on the scrim is [onDismiss]; Back is each
