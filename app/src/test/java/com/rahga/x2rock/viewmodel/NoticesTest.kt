@@ -27,6 +27,9 @@ class NoticesTest {
         val shown = plainConnectionProblem("no reply from sonos-48A6B81853E0.local within 5000ms", choosing = false)
         assertTrue(shown, shown.startsWith("Couldn't reach the Sonos speakers."))
         assertTrue(shown, "sonos-" !in shown)
+        // Seen on a Chromecast with Google TV with its Wi-Fi switched off, on 0.1.3 (2026-10-19).
+        val offline = plainConnectionProblem("sendto failed: ENETUNREACH (Network is unreachable)", choosing = false)
+        assertTrue(offline, offline.startsWith("Couldn't reach the Sonos speakers."))
     }
 
     @Test fun `authentication and a choice of systems keep their own words`() {
