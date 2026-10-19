@@ -175,7 +175,8 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
     ├── StartGuard.kt               one thing starting at a time, marked for its row; every screen's start
     ├── Notices.kt                  TransientNotice: one line of "that didn't work", and its wording
-    ├── RoomTarget.kt               the room a screen was opened for, followed across regroups
+    ├── RoomTarget.kt               the room a screen was opened for, followed across regroups; SavedRoom,
+    │                               the player's and the selection's room kept through process death
     ├── MonotonicClock.kt           milliseconds that only go up (sleep timer ends), a test seam
     ├── FavoriteGroups.kt           favourites grouped and labelled, and which open on a page
     └── RoomActivity.kt             Playing / Paused / Stopped / Nothing playing — one rule for every screen

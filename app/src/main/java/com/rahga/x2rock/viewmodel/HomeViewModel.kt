@@ -1,5 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.store.BetaFeatures
@@ -92,6 +93,7 @@ class HomeViewModel @Inject constructor(
     private val presetStore: PresetStore,
     private val betaFeatures: BetaFeatures,
     private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
+    saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     /**
@@ -219,6 +221,9 @@ class HomeViewModel @Inject constructor(
     /** The last selection as a group, so its room can be found again after a regroup. */
     private var lastSelected: Group? = null
 
+    /** The same, kept for a restore after the app was reclaimed, so Back opens on the room the viewer left. */
+    private val savedSelection = SavedRoom(saved, "home.selected")
+
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
 
@@ -255,6 +260,7 @@ class HomeViewModel @Inject constructor(
                 // shared speaker used to do, and a split sent the selection to whichever
                 // fragment the household listed first.
                 val followed = lastSelected?.let { groups.followingRoom(it.coordinatorId, it.playerIds) }
+                    ?: savedSelection.findIn(groups)
 
                 _selectedGroupId.value = (
                     followed
@@ -267,7 +273,12 @@ class HomeViewModel @Inject constructor(
         // Remembered so a vanished selection can be followed to wherever its speakers went.
         viewModelScope.launch {
             combine(household.state, _selectedGroupId) { state, id -> state.groups.firstOrNull { it.id == id } }
-                .collect { group -> if (group != null) lastSelected = group }
+                .collect { group ->
+                    if (group != null) {
+                        lastSelected = group
+                        savedSelection.remember(group)
+                    }
+                }
         }
         // Which soundbar this television feeds, learned once and then remembered. Only
         // detectable while that room is on its TV input, so this watches rather than asking

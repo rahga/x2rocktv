@@ -45,6 +45,16 @@ fun neighbourSlots(entries: List<QueueEntry>, trackNumber: Int): Pair<Int?, Int?
     return entries.getOrNull(index - 1)?.trackNumber to entries.getOrNull(index + 1)?.trackNumber
 }
 
+/**
+ * Where focus goes when another controller's edit closes an open item menu (P-41): to the menu's
+ * track where it sits now, or else the slot the menu was opened on, or the last slot if the queue
+ * shrank past it. `null` only for an empty queue. Focus used to be left to fall, onto the header's
+ * Back, where one reflexive Select left the screen (P-52).
+ */
+fun slotAfterStaleMenu(entries: List<QueueEntry>, opened: QueueEntry): Int? =
+    entries.firstOrNull { it.item.track == opened.item.track }?.trackNumber
+        ?: entries.lastOrNull { it.trackNumber <= opened.trackNumber }?.trackNumber
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val household: SonosHousehold,

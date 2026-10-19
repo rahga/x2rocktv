@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import kotlinx.coroutines.flow.map
 import com.rahga.x2rock.model.followingRoom
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.rahga.x2rock.lan.SonosHousehold
@@ -166,7 +167,11 @@ class PlayerViewModel @Inject constructor(
     private val household: SonosHousehold,
     private val nowPlaying: NowPlayingPublisher,
     private val clock: MonotonicClock,
+    saved: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
+
+    /** The room, kept for a restore after the app was reclaimed: only the home screen names it otherwise. */
+    private val savedRoom = SavedRoom(saved, "player.room")
 
     private val _groupId = MutableStateFlow<String?>(null)
     private val _groupName = MutableStateFlow("")
@@ -359,10 +364,15 @@ class PlayerViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
-                val id = _groupId.value ?: return@collect
+                val id = _groupId.value
+                if (id == null) {
+                    // Restored with no room: the one saved before the process went, if it is still here.
+                    savedRoom.findIn(groups)?.let { selectGroup(it.id, it.name) }
+                    return@collect
+                }
                 val now = groups.firstOrNull { it.id == id }
                 if (now != null) {
-                    lastGroup = now
+                    remember(now)
                     if (_groupName.value != now.name) _groupName.value = now.name
                     return@collect
                 }
@@ -370,6 +380,11 @@ class PlayerViewModel @Inject constructor(
                 groups.followingRoom(was.coordinatorId, was.playerIds)?.let { selectGroup(it.id, it.name) }
             }
         }
+    }
+
+    private fun remember(group: com.rahga.x2rock.model.Group) {
+        lastGroup = group
+        savedRoom.remember(group)
     }
 
     private suspend fun loadRating(groupId: String) {
@@ -385,7 +400,7 @@ class PlayerViewModel @Inject constructor(
         if (_groupId.value == id) return
         _groupId.value?.let { settlePending(it) }
         _groupId.value = id
-        household.state.value.groups.firstOrNull { it.id == id }?.let { lastGroup = it }
+        household.state.value.groups.firstOrNull { it.id == id }?.let { remember(it) }
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null

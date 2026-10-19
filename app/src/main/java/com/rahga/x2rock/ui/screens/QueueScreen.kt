@@ -46,6 +46,7 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
 import com.rahga.x2rock.viewmodel.neighbourSlots
+import com.rahga.x2rock.viewmodel.slotAfterStaleMenu
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -128,17 +129,18 @@ private fun QueueList(
     val listState = rememberLazyListState()
     var contextMenuEntry by remember { mutableStateOf<QueueEntry?>(null) }
     var menuOpenedAt by remember { mutableStateOf<String?>(null) }
-    // A menu's track gone from its slot, by another controller's edit: the menu closes, rather than
-    // offering actions that now name something else (P-41).
-    LaunchedEffect(entries, contextMenuEntry) {
-        val open = contextMenuEntry ?: return@LaunchedEffect
-        if (entries.firstOrNull { it.trackNumber == open.trackNumber }?.item?.track != open.item.track) contextMenuEntry = null
-    }
-
     // The menu traps focus, so closing it has to hand focus back: to the slot of the row it was
     // opened on — where a removed track's successor now sits — or the slot a moved track went to.
     // Rows are keyed by position, so the slot keeps focus while the queue is read again under it.
     var returnTo by remember { mutableStateOf<Int?>(null) }
+    // A menu's track gone from its slot, by another controller's edit: the menu closes, rather than
+    // offering actions that now name something else (P-41), and says where focus goes (P-52).
+    LaunchedEffect(entries, contextMenuEntry) {
+        val open = contextMenuEntry ?: return@LaunchedEffect
+        if (entries.firstOrNull { it.trackNumber == open.trackNumber }?.item?.track == open.item.track) return@LaunchedEffect
+        returnTo = slotAfterStaleMenu(entries, open)
+        contextMenuEntry = null
+    }
     val returnFocus = remember { FocusRequester() }
     LaunchedEffect(contextMenuEntry, returnTo) {
         if (contextMenuEntry != null) return@LaunchedEffect

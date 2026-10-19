@@ -24,6 +24,22 @@ class QueueEntriesTest {
         assertEquals(Pair(null, null), neighbourSlots(entries, 4))
     }
 
+    /** P-52: an outside edit closed the menu, and focus must land on a row, never fall to Back. */
+    @Test
+    fun `a stale menu returns focus to where its track went`() {
+        val opened = queueEntries(listOf(item("a"), item("b"), item("c")))[1]
+        // "a" removed elsewhere: "b" moved up a slot.
+        assertEquals(1, slotAfterStaleMenu(queueEntries(listOf(item("b"), item("c"))), opened))
+    }
+
+    @Test
+    fun `a stale menu whose track is gone returns to its slot, or the last one`() {
+        val opened = queueEntries(listOf(item("a"), item("b"), item("c")))[1]
+        assertEquals("its successor, in the same slot", 2, slotAfterStaleMenu(queueEntries(listOf(item("a"), item("c"))), opened))
+        assertEquals("the queue shrank past it", 1, slotAfterStaleMenu(queueEntries(listOf(item("a"))), opened))
+        assertEquals(null, slotAfterStaleMenu(emptyList(), opened))
+    }
+
     @Test
     fun `an empty queue yields nothing`() {
         assertEquals(emptyList<QueueEntry>(), queueEntries(emptyList()))

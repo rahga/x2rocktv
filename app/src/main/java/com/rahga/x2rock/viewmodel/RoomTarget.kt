@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.followingRoom
 
 /**
@@ -53,5 +54,25 @@ class RoomTarget(private val household: SonosHousehold, private val saved: Saved
         const val COORDINATOR = "room.coordinator"
         const val PLAYERS = "room.players"
         const val NAME = "room.name"
+    }
+}
+
+/**
+ * A room's speakers kept in [saved] under [key], so a view model that outlives no process can find its
+ * room again when Android restores it (P-51): the shared player and the home screen's selection both
+ * lived in memory only, so a screen restored after the app was reclaimed had no now-playing bar, no
+ * room in its header and no room for the media keys, and Back opened on the default room. Found by the
+ * rule every screen follows a room by, coordinator first, since the group ids may have moved meanwhile.
+ */
+internal class SavedRoom(private val saved: SavedStateHandle, private val key: String) {
+    fun remember(group: Group) {
+        saved["$key.coordinator"] = group.coordinatorId
+        saved["$key.players"] = ArrayList(group.playerIds)
+    }
+
+    /** The group holding the remembered room now, or `null` with nothing remembered or none found. */
+    fun findIn(groups: List<Group>): Group? {
+        val coordinator = saved.get<String>("$key.coordinator") ?: return null
+        return groups.followingRoom(coordinator, saved.get<ArrayList<String>>("$key.players").orEmpty())
     }
 }
