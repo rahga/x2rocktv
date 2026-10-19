@@ -3,6 +3,43 @@
 Each release is tagged `v<version>` and its build takes that as its version name. Version codes
 rise by one with every build that leaves the developer's machine.
 
+## 0.1.3 — tablets for the adventurous, and a sturdier room
+
+### New
+
+- **Tablets and phones, for bold testers.** x2rock is built for Google TV, but a sideloaded APK now
+  shows in a tablet's or phone's app drawer, and keeps clear of its status and navigation bars. It
+  finds the speakers, browses, searches and plays by touch. The layout is still the TV's, so on a
+  phone the lower buttons need a swipe to reach, some text is cut short, and the first button a
+  screen opens on is drawn highlighted as if chosen. Google Play will still offer it to TVs only.
+- **Apple Music is listed only where your household has it**: a sign-in stored on the speakers, or
+  Settings → Advanced → Apple Music for a household that plays it another way.
+
+### Fixed
+
+- After Android closed the app in the background, coming back to Queue or Browse lost the room: no
+  room name in the heading, no now-playing bar, the remote's play and pause keys doing nothing, and
+  Back opening on a different room.
+- A queue menu left open while another app changed the queue could remove or move the wrong track.
+  It now closes, and focus lands on the track rather than on Back.
+- A room regrouped by another app while Queue, Browse or Full screen was open went on sending to its
+  old group, which refused every press.
+- A speaker whose volume could not be set no longer joins a party or a preset at its old level.
+- A service that failed to answer once was remembered as having no ratings or search.
+- A list that failed to load its next page sat on "Loading more"; it now says so and offers Try again.
+- The beta report hides addresses and speaker ids even in error text.
+
+### Changed
+
+- **Android 8 or later is now required** (was 6). Every Google TV meets it; an older Android TV
+  still on Android 6 or 7 can no longer install this version.
+
+### Still untested on hardware
+
+As in 0.1.2: Line-In, a portable's battery, a soundbar that stalls while a room joins it, a satellite
+that drops off later, a change of network between two Sonos systems, and alarms in a household with
+no time zone set. Tablets have been tried only on an emulator, and phones on one moto g.
+
 ## 0.1.2 — your own room order, Configure, and a fix for split parties
 
 ### New
