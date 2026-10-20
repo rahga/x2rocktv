@@ -65,6 +65,15 @@ fun slotToPlay(now: List<QueueEntry>, pressed: QueueEntry): Int? =
     now.firstOrNull { it.trackNumber == pressed.trackNumber && it.item.track == pressed.item.track }?.trackNumber
         ?: now.firstOrNull { it.item.track == pressed.item.track }?.trackNumber
 
+/**
+ * Where focus goes once the list is read again after a press on [pressed]: the slot its track now
+ * plays from, or, gone, where a stale menu's focus would go. `null` while that is the slot pressed,
+ * which already has focus. Rows are keyed by position, so without this focus stayed on the slot
+ * pressed while the track it showed moved elsewhere (P-57).
+ */
+fun focusAfterPlay(now: List<QueueEntry>, pressed: QueueEntry): Int? =
+    (slotToPlay(now, pressed) ?: slotAfterStaleMenu(now, pressed))?.takeIf { it != pressed.trackNumber }
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val household: SonosHousehold,

@@ -56,6 +56,18 @@ class QueueEntriesTest {
     }
 
     @Test
+    fun `focus follows a played track only where it moved`() {
+        val pressed = queueEntries(listOf(item("a"), item("b"), item("c")))[1]
+        assertEquals("already there", null, focusAfterPlay(queueEntries(listOf(item("a"), item("b"), item("c"))), pressed))
+        assertEquals("moved up", 1, focusAfterPlay(queueEntries(listOf(item("b"), item("c"))), pressed))
+        assertEquals("gone, its slot still there", null, focusAfterPlay(queueEntries(listOf(item("a"), item("c"))), pressed))
+        assertEquals("gone, and the queue shrank past it", 1, focusAfterPlay(queueEntries(listOf(item("a"))), pressed))
+        val second = queueEntries(listOf(item("a"), item("b"), item("a")))[2]
+        assertEquals("a track queued twice keeps the copy pressed", null,
+            focusAfterPlay(queueEntries(listOf(item("a"), item("b"), item("a"))), second))
+    }
+
+    @Test
     fun `an empty queue yields nothing`() {
         assertEquals(emptyList<QueueEntry>(), queueEntries(emptyList()))
     }

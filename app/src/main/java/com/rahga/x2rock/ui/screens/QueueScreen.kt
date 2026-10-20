@@ -46,6 +46,7 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.QueueEntry
 import com.rahga.x2rock.viewmodel.QueueViewModel
 import com.rahga.x2rock.viewmodel.neighbourSlots
+import com.rahga.x2rock.viewmodel.focusAfterPlay
 import com.rahga.x2rock.viewmodel.slotAfterStaleMenu
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -141,6 +142,15 @@ private fun QueueList(
         returnTo = slotAfterStaleMenu(entries, open)
         contextMenuEntry = null
     }
+    // A press reads the queue first and plays its track where it now is (P-57); focus follows it
+    // there once the list read with it arrives, which is the first one after the press.
+    var pressed by remember { mutableStateOf<Pair<QueueEntry, List<QueueEntry>>?>(null) }
+    LaunchedEffect(entries, pressed) {
+        val (entry, against) = pressed ?: return@LaunchedEffect
+        if (entries === against) return@LaunchedEffect
+        focusAfterPlay(entries, entry)?.let { returnTo = it }
+        pressed = null
+    }
     val returnFocus = remember { FocusRequester() }
     LaunchedEffect(contextMenuEntry, returnTo) {
         if (contextMenuEntry != null) return@LaunchedEffect
@@ -201,7 +211,7 @@ private fun QueueList(
                     QueueRow(
                         entry = entry,
                         isCurrent = currentTrackName != null && entry.item.track?.name == currentTrackName,
-                        onClick = { onPlayItem(entry.trackNumber) },
+                        onClick = { pressed = entry to entries; onPlayItem(entry.trackNumber) },
                         onLongPress = { menuOpenedAt = queueVersion(); contextMenuEntry = entry },
                         modifier = Modifier
                             .then(if (index == focusTargetIndex) Modifier.focusRequester(firstFocus) else Modifier)
