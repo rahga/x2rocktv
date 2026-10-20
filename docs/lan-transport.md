@@ -387,9 +387,7 @@ Radio — can be **searched and browsed** from the TV, with no account linking a
 because the credential is never minted here: it is **read off a player**. The player publishes
 every configured account, encrypted, in the **initial `ZoneGroupTopology` GENA event** under a
 variable named `ThirdPartyMediaServersX`, and the key to it is derived from the household id,
-which any device on the LAN can ask for. This is the SoCo #1010 technique; x2rock reimplemented
-it in Rust (`src/sonos/stored.rs`), and this is the Kotlin port of that (`:core`'s `smapi`
-package). Linking an account and `match` stay out — those do need a browser.
+which any device on the LAN can ask for. 
 
 - **Capture** (`AccountCapture`): SUBSCRIBE to the player's `/ZoneGroupTopology/Event` on
   cleartext 1400 with a `CALLBACK` naming a listener the app opens for the moment; the player
@@ -398,7 +396,7 @@ package). Linking an account and `match` stay out — those do need a browser.
   firewall must allow the inbound TCP; on Android the app's own listening socket needs no such
   rule.
 - **Decrypt** (`StoredAccounts`): the value is `2:` + base64 of `iv + AES-128-CBC(…)`. The key is
-  `md5(iv + md5(householdId + SALT))` with the fixed SALT from SoCo #1010 and the **short**
+  `md5(iv + md5(householdId + SALT))` with the fixed SALT and the **short**
   household id (`Sonos_xxx`, *not* the long form the SMAPI header wants). Strip PKCS#7, then a
   trailing 4-byte `md5(payload)` is the integrity tail that tells a right key from a wrong one.
   Each `SA_RINCON<type>_…` element is one service account: `type / 256` is the service id,
