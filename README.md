@@ -74,12 +74,10 @@ Open in Android Studio and run `:app`, or:
 A debug build is several times slower on a TV box than a release one, so judge speed from
 `./gradlew :app:assembleRelease`.
 
-The maintainer's released APK includes a local build input used to read music-service sign-ins
-from the speakers and communicate with public SMAPI endpoints. That speaker salt is not included
-in the source package: a source build without `~/x2rock-sonos.speaker.salt` still controls the
-rooms and plays favourites, but has fewer services to browse/search and says so on screen.
-This is separate from the private developer-integration and experimental cloud-content builds,
-which are not distributed. See [release notes for builders](docs/play-release.md).
+The released APK includes a local build input used to read music-service sign-ins  from the 
+speakers and communicate with public SMAPI endpoints. Without it, x2rock controls the rooms 
+and plays favourites, but has fewer services to browse/search and says so on screen.
+See [release notes for builders](docs/play-release.md).
 
 ## Tests
 
