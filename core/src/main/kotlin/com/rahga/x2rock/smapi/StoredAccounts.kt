@@ -20,9 +20,7 @@ import javax.crypto.spec.SecretKeySpec
  * this is the missing half of the discovery/playback split: playback rides the household's
  * registration, and search/browse can ride the household's own stored token, with no browser.
  *
- * The mechanism was published by [SoCo PR #1010](https://github.com/SoCo/SoCo/pull/1010) and
- * is a direct port of x2rock's `sonos/stored.rs`, which verified it byte-for-byte against a
- * real household. The MD5 here is protocol, not a security choice: the desktop controller
+ * The MD5 here is protocol, not a security choice: the desktop controller
  * does the same, and the four-byte digest tail is only how a correct decrypt is recognised.
  *
  * **Two halves, deliberately separated.** [decryptAccounts] is pure — bytes and a household

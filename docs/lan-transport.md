@@ -387,7 +387,7 @@ Radio — can be **searched and browsed** from the TV, with no account linking a
 because the credential is never minted here: it is **read off a player**. The player publishes
 every configured account, encrypted, in the **initial `ZoneGroupTopology` GENA event** under a
 variable named `ThirdPartyMediaServersX`, and the key to it is derived from the household id,
-which any device on the LAN can ask for. 
+which any device on the LAN can ask for.
 
 - **Capture** (`AccountCapture`): SUBSCRIBE to the player's `/ZoneGroupTopology/Event` on
   cleartext 1400 with a `CALLBACK` naming a listener the app opens for the moment; the player

@@ -126,8 +126,8 @@ internal fun betaReport(
             appendLine()
             appendLine("**Connection:** ${redactIdentifiers(it)}")
         }
-        // Whether the stored service sign-ins could be read (SoCo #1010's way), which a firmware could
-        // change: said above the speakers, where cutting the end to fit cannot take it.
+        // Whether the stored service sign-ins could be read, which a firmware could change: said
+        // above the speakers, where cutting the end to fit cannot take it.
         signIns?.let {
             appendLine()
             appendLine(

@@ -74,8 +74,8 @@ Open in Android Studio and run `:app`, or:
 A debug build is several times slower on a TV box than a release one, so judge speed from
 `./gradlew :app:assembleRelease`.
 
-The released APK includes a local build input used to read music-service sign-ins  from the 
-speakers and communicate with public SMAPI endpoints. Without it, x2rock controls the rooms 
+The released APK includes a local build input used to read music-service sign-ins from the
+speakers and communicate with public SMAPI endpoints. Without it, x2rock controls the rooms
 and plays favourites, but has fewer services to browse/search and says so on screen.
 See [release notes for builders](docs/play-release.md).
 
@@ -99,7 +99,7 @@ x2rock is free software under the [GNU General Public License, version 3](LICENS
 (`GPL-3.0-only`): use it, change it and share it, and anything you distribute that is built on
 it is released under the same terms, with its source.
 
-## Caveats 
+## Caveats
 Features rely on LAN compatibility with Sonos firmware and content providers that allow direct
 SMAPI access. Apple Music search uses Apple's public catalogue instead. Providers such as YouTube
 Music do not allow this app's direct SMAPI browse/search; their catalogues are not offered here.

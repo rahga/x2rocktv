@@ -77,7 +77,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │
 └── smapi/                         a service's own server: ratings, and search/browse
     ├── Smapi.kt                   envelope, parseServices; search/getMetadata/getMediaURI; ratings
-    ├── StoredAccounts.kt          decrypt the household's ThirdPartyMediaServersX tokens (SoCo #1010)
+    ├── StoredAccounts.kt          decrypt the household's ThirdPartyMediaServersX tokens
     ├── AccountCapture.kt          one-shot GENA capture of that encrypted token blob off a player
     ├── LinkedServices.kt          which services a stored token (or anonymity) actually unlocks
     ├── ServiceContent.kt          what a service item is (opens, enqueues, streams), and its URI/DIDL

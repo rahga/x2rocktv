@@ -11,8 +11,8 @@ import com.rahga.x2rock.lan.StoredAccountsRead
 
 /**
  * Why the services that need an account are missing, when the household's stored sign-ins could not
- * be had: the speaker sent none, or they could not be read. Those sign-ins are read the way SoCo #1010
- * found, a format a firmware update could change; without a word here the services would simply be
+ * be had: the speaker sent none, or they could not be read. Those sign-ins are read in a format a
+ * firmware update could change; without a word here the services would simply be
  * gone from Music Services and Search, with only the ones needing no account left. Nothing while the
  * sign-ins are fine or not yet read.
  */

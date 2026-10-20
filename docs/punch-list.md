@@ -955,7 +955,7 @@ purpose to see its test fail. The tests are kept, renamed to this project's styl
   - **Stage 2** (2026-10-06): everything else the household has added — Qobuz, TIDAL, Deezer, Saavn,
     Amazon, Sonos Radio — searched and browsed over SMAPI with the household's **own stored token**,
     read off a player's initial `ZoneGroupTopology` GENA event (`ThirdPartyMediaServersX`,
-    AES/MD5 the SoCo #1010 way) and played through `loadContent` like Recently Played. Core:
+    AES/MD5) and played through `loadContent` like Recently Played. Core:
     `StoredAccounts` (decrypt), `AccountCapture` (the one-shot GENA capture), `Smapi` (search /
     getMetadata / getMediaURI), `LinkedServices` (which services a token unlocks); household API
     `searchableServices`/`searchService`/`browseService`/`playServiceItem`/`queueServiceItem`; UI

@@ -161,7 +161,7 @@ class LiveHouseholdTest {
     }
 
     /**
-     * The household's stored service sign-ins still decrypt (SoCo #1010's format). A firmware that
+     * The household's stored service sign-ins still decrypt. A firmware that
      * changed the format would otherwise show only as services vanishing from browse and search, so
      * this is where it should first be caught. Read-only. A speaker that sends none is skipped rather
      * than failed: the capture needs the speaker to call back into this machine, which a firewall

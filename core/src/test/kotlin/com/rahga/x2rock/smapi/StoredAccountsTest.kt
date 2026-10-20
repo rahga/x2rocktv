@@ -7,7 +7,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Tests for the household-token decrypt, ported from x2rock's `sonos/stored.rs` test module.
+ * Tests for the household-token decrypt.
  *
  * The decrypt is exercised against its own inverse: [seal] builds a real `2:` envelope from
  * account XML with the same salt and key derivation, so the whole path is tested with **no

@@ -11,9 +11,9 @@ import org.junit.Test
 
 /**
  * Tests for the pure half of the account capture — extracting the envelope from a GENA NOTIFY
- * body, reading an HTTP message, and finding a header. Ported from x2rock's `sonos/stored.rs`
- * test module. The network half ([AccountCapture.captureEnvelope]) is checked here only for how it
- * lets go — a deadline, a refusal, a caller leaving — against a stand-in on loopback; capturing a
+ * body, reading an HTTP message, and finding a header. The network half
+ * ([AccountCapture.captureEnvelope]) is checked here only for how it lets go — a deadline, a
+ * refusal, a caller leaving — against a stand-in on loopback; capturing a
  * real envelope needs a real player, and is verified there, not here.
  */
 class AccountCaptureTest {

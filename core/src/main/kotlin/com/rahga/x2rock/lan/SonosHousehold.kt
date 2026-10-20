@@ -2915,7 +2915,7 @@ private val ISO_DURATION = Regex("""P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d
 
 /**
  * One read of the household's stored music-service sign-ins: how many carry a sign-in, and why none
- * could be used when that is so — the speaker sent none, or they could not be read (SoCo #1010's
- * format, which a firmware could change).
+ * could be used when that is so — the speaker sent none, or they could not be read (a format a
+ * firmware could change).
  */
 data class StoredAccountsRead(val withSignIns: Int, val problem: String?)

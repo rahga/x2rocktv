@@ -23,7 +23,7 @@ import java.net.Socket
  * is why this is deliberately a one-shot capture with a short-lived socket and not standing
  * UPnP eventing (the queue is re-read on a pushed version instead; see `Upnp`).
  *
- * A direct port of x2rock's `sonos/stored.rs` capture half. The pure parsing ([extractVariable],
+ * The pure parsing ([extractVariable],
  * [xmlUnescape], [header]) carries the tests; only [captureEnvelope] touches the network.
  */
 object AccountCapture {
