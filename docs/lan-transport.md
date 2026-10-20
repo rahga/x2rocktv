@@ -10,7 +10,7 @@ the replacement was and what it costs on this platform. The rewrite it was for l
 
 ---
 
-## Why the cloud API went away
+## Why we don't use the cloud API
 
 Two independent reasons, either sufficient on its own.
 
