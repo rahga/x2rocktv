@@ -46,6 +46,8 @@ class QueueViewModelTest {
     private val loads = CopyOnWriteArrayList<Unit>()
     /** What the fake reports as the queue's UpdateID; the capture says 58. */
     @Volatile private var updateId = "58"
+    /** The slot each Seek went to. */
+    private val seeks = CopyOnWriteArrayList<String>()
     /** The UpdateID each edit quoted. */
     private val editVersions = CopyOnWriteArrayList<String>()
     /** Refuse every edit as made against a queue that has changed: UPnP 1028. */
@@ -63,6 +65,7 @@ class QueueViewModelTest {
                     val action = soapAction(request)
                     val body = request.body.readUtf8()
                     actions += action
+                    if (action == "Seek") seeks += soapFields(body)["Target"].orEmpty()
                     if (action == "ReorderTracksInQueue" || action == "RemoveTrackFromQueue") {
                         editVersions += soapFields(body)["UpdateID"].orEmpty()
                         if (refuseEdits) return MockResponse().setResponseCode(500).setBody(
@@ -265,6 +268,30 @@ class QueueViewModelTest {
         delay(300)
         assertEquals("only the first edit was sent", 1, editVersions.size)
         assertTrue(notice!!, "changed" in notice)
+    }
+
+    // ---------------------------------------------------------------- playing a row (P-57)
+
+    @Test fun `a row plays its own slot while the queue is unchanged`() = runBlocking<Unit> {
+        viewModel.playItem(3)
+        withTimeout(5_000) { while (seeks.isEmpty()) delay(20) }
+        assertEquals(listOf("3"), seeks)
+    }
+
+    /**
+     * The list on screen went stale: another controller put a different track in slot 1, and
+     * nothing said so (P-29). The press is for the track shown, which the queue no longer has.
+     */
+    @Test fun `a row whose track has gone from the queue plays nothing and says so`() = runBlocking<Unit> {
+        slotOneReplaced = true
+        updateId = "59"
+        viewModel.playItem(1)
+        withTimeout(5_000) { viewModel.notice.first { it != null } }
+        assertEquals("That track is no longer in the queue", viewModel.notice.value)
+        assertEquals("nothing played in its place", emptyList<String>(), seeks)
+        withTimeout(5_000) {
+            viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.entries?.first()?.item?.track?.name == "Somebody Else" }
+        }
     }
 
     @Test fun `clear needs a second press`() = runBlocking<Unit> {

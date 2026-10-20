@@ -41,6 +41,21 @@ class QueueEntriesTest {
     }
 
     @Test
+    fun `a press plays its track where the queue now has it`() {
+        val pressed = queueEntries(listOf(item("a"), item("b"), item("c")))[1]
+        assertEquals("unchanged", 2, slotToPlay(queueEntries(listOf(item("a"), item("b"), item("c"))), pressed))
+        // "a" removed elsewhere: "b" moved up, and "c" now sits in the slot pressed.
+        assertEquals("moved", 1, slotToPlay(queueEntries(listOf(item("b"), item("c"))), pressed))
+        assertEquals("gone", null, slotToPlay(queueEntries(listOf(item("a"), item("c"))), pressed))
+    }
+
+    @Test
+    fun `a track queued twice plays from the slot pressed while it still holds it`() {
+        val pressed = queueEntries(listOf(item("a"), item("b"), item("a")))[2]
+        assertEquals(3, slotToPlay(queueEntries(listOf(item("a"), item("b"), item("a"))), pressed))
+    }
+
+    @Test
     fun `an empty queue yields nothing`() {
         assertEquals(emptyList<QueueEntry>(), queueEntries(emptyList()))
     }

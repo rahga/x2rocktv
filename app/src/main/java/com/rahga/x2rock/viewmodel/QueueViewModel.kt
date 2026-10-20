@@ -55,6 +55,16 @@ fun slotAfterStaleMenu(entries: List<QueueEntry>, opened: QueueEntry): Int? =
     entries.firstOrNull { it.item.track == opened.item.track }?.trackNumber
         ?: entries.lastOrNull { it.trackNumber <= opened.trackNumber }?.trackNumber
 
+/**
+ * Where [pressed] plays in the queue as it is [now]: its own slot while that still holds its track,
+ * else wherever the track has moved to; `null` once it is gone. The list on screen can be stale for
+ * as long as it stays open — another controller's edit while a station plays pushes nothing (P-29)
+ * — and a press used to play whatever now sat in the slot (P-57).
+ */
+fun slotToPlay(now: List<QueueEntry>, pressed: QueueEntry): Int? =
+    now.firstOrNull { it.trackNumber == pressed.trackNumber && it.item.track == pressed.item.track }?.trackNumber
+        ?: now.firstOrNull { it.item.track == pressed.item.track }?.trackNumber
+
 @HiltViewModel
 class QueueViewModel @Inject constructor(
     private val household: SonosHousehold,
@@ -135,11 +145,22 @@ class QueueViewModel @Inject constructor(
 
     fun reload() = load()
 
+    /** Plays the track pressed, read against the queue as it is now: see [slotToPlay]. */
     fun playItem(trackNumber: Int) {
+        val pressed = entries().firstOrNull { it.trackNumber == trackNumber }
         viewModelScope.launch {
-            runCatching { household.skipToQueueItem(room.current(), trackNumber) }
-                // Re-read on success: the queue may just have become the source again.
-                .onSuccess { load(quiet = true) }
+            runCatching {
+                val slot = pressed?.let { slotToPlay(queueEntries(household.queue(room.current()).items), it) }
+                    ?: return@runCatching false
+                household.skipToQueueItem(room.current(), slot)
+                true
+            }
+                // Re-read either way: the queue may just have become the source again, or have
+                // changed under the list on screen.
+                .onSuccess { played ->
+                    if (!played) _notice.post(TRACK_GONE)
+                    load(quiet = true)
+                }
                 .onFailure { _notice.failure("play that track", it) }
         }
     }
@@ -300,5 +321,6 @@ class QueueViewModel @Inject constructor(
         /** How long an edit waits for the pushed version's re-read before reading itself. */
         const val EDIT_SETTLE_MILLIS = 3_000L
         const val QUEUE_CHANGED = "The queue changed before that could be done; choose the track again"
+        const val TRACK_GONE = "That track is no longer in the queue"
     }
 }
