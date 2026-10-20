@@ -289,8 +289,16 @@ The queue was left empty and its original `x-rincon-queue:` source restored, wit
 stopped and volume unchanged. Commands and timestamped captures are kept locally under
 `.local-work/reviews/2026-10-11-codex/capture/`.
 
-This was a direct stream and CLI-issued UPnP edits, not a Sonos-app edit while a SMAPI
-station played. It does not settle every station/firmware combination. It does establish
+This was a direct stream and CLI-issued UPnP edits. **The SMAPI-station case was run on
+2026-10-19**: Kitchen (muted) on Sonos Radio's Impulse! Records station with three tracks queued
+behind it, rows removed in the Sonos app (Android, 90.x) by swipe. `UpdateID` moved within three
+seconds of each removal (66 → 67, 68 → 69, 69 → 70); the pushed `queueVersion` stayed `"28"`
+throughout. Mid-track, the removal drew **no** `playback:1`, `playbackMetadata:1` or `groups:1`
+event in 30 seconds. One removal fell in the same second as the station's own segment change,
+whose events carried the unchanged `queueVersion` — a coincidence the mid-track run rules out.
+x2rocktv's Queue on the Shield kept the three removed-from rows throughout, while its now-playing
+bar followed the station. The Sonos app's own queue view did not show an outside add either,
+until it was reopened. It does not settle every firmware. It does establish
 that checking `UpdateID` on playback events cannot guarantee freshness: there may be no
 event to trigger it. The earlier observation that every queue edit moves `queueVersion`
 applies to idle/queue playback, not all sources. External edits while on another source
