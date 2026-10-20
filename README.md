@@ -15,7 +15,9 @@ every change.
 > [an issue](https://github.com/rahga/x2rocktv/issues/new). Please don't post your email address there.
 
 > We'll need to track 12 testers for 14 consecutive days before this can reach Google Play store,
-> where it will be posted for free with no advertisements.
+> where it will be posted for free with no advertisements. To be one of them, join
+> [x2rock@googlegroups.com](https://groups.google.com/g/x2rock); the link to opt in on Play will be
+> here when the test opens. Members can't see each other's addresses.
 
 ![The room list and the player pane on an NVIDIA Shield: five rooms, Dining Room selected](docs/images/home.png)
 

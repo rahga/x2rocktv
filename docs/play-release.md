@@ -117,7 +117,9 @@ different artifact and are not recorded here.
   in the banner. TV screenshots at 1920×1080 are in `docs/images/`.
 - **Closed test**: a new personal developer account needs at least 12 testers opted in for 14 days
   before it can apply for production. Testers are added by email or Google Group in the Console,
-  never in a public issue.
+  never in a public issue. The group is `x2rock@googlegroups.com` (2026-10-20): anyone may join,
+  only managers see members or post. Add it to the closed track, and put the track's opt-in link in
+  the README beside the group's.
 
 Rechecked 2026-10-18: those are **14 consecutive days**, not weeks, and testers must remain opted
 in continuously. Applying for production includes questions about testing, feedback and engagement;
