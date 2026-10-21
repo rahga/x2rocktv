@@ -10,9 +10,8 @@ import com.google.gson.JsonParser
  * The LAN Control API's wire format.
  *
  * Every exchange — command, reply and unsolicited event alike — is a two-element JSON
- * array, `[header, body]`. The namespaces and body shapes are the same ones the cloud
- * REST API serves, which is why `model/SonosModels.kt` needs no changes: it is the same
- * API over a different pipe.
+ * array, `[header, body]`. The namespaces and body shapes are those of Sonos's Control API,
+ * which `model/SonosModels.kt` reads.
  *
  * See `docs/lan-transport.md`; all of this is verified against real players.
  */

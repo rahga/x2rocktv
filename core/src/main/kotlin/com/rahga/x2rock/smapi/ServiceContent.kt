@@ -61,7 +61,7 @@ object ServiceContent {
         else !playsAsStream(item, serviceId) && !isRadioProgram(item)
 
     /** A live stream (a radio station): played from a resolved `getMediaURI`, not queued. */
-    fun isStream(item: Item): Boolean = item.itemType.equals("stream", ignoreCase = true)
+    private fun isStream(item: Item): Boolean = item.itemType.equals("stream", ignoreCase = true)
 
     /**
      * Whether [item] of [serviceId] plays from its `getMediaURI`, as a stream does. TuneIn's episodes

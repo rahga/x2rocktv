@@ -97,7 +97,7 @@ data class GroupState(
     /**
      * Whether a `playbackMetadata:1` event has arrived for this group yet.
      *
-     * Not the same as having an entry in the map at all: any of the three subscriptions
+     * Not the same as having an entry in the map at all: any of the four subscriptions
      * creates one, and [onTvInput] is derived from metadata alone. Anything waiting to judge
      * whether a room is on a TV input has to wait for *this*, or it reads "no" from a group
      * that has merely not answered yet.
@@ -1128,8 +1128,9 @@ class SonosHousehold(
     }
 
     /**
-     * The household's Apple Music account, from what it has played: see [AppleMusic.accountIn].
-     * Recently Played may be switched off (Personalization), so its refusal is not an answer.
+     * The household's Apple Music account: the speakers' stored sign-in first, else from what it has
+     * played (see [AppleMusic.accountIn]). Recently Played may be switched off (Personalization), so
+     * its refusal is not an answer.
      */
     suspend fun appleMusicAccount(): String? = appleAccount
         ?: storedAppleMusicAccount()?.also { appleAccount = it }
@@ -1209,7 +1210,7 @@ class SonosHousehold(
      * The token read is **best-effort**: it asks a player to open a connection back to this
      * device (the one time Sonos does), and if that never arrives only the anonymous services
      * come back — the capability degrades, it does not fail. Apple Music is deliberately absent;
-     * its catalogue is reached through [searchAppleMusic]-shaped iTunes search, not SMAPI.
+     * its catalogue is reached through Apple's iTunes search, not SMAPI.
      */
     suspend fun searchableServices(): List<LinkedService> {
         val all = linkedForThisSession()
@@ -1264,8 +1265,15 @@ class SonosHousehold(
         val salt = speakerSalt
             ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "this build has no speaker salt") }
         val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
-        val envelope = ip?.let { accountCapture(it) }
-            ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "the speaker sent none") }
+        val envelope = try {
+            ip?.let { accountCapture(it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Recorded like every other read: an unreachable speaker throws rather than sending none.
+            _accountsRead.value = StoredAccountsRead(0, "the speaker could not be reached")
+            throw e
+        } ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "the speaker sent none") }
         val accounts = try {
             // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
             StoredAccounts.decryptAccounts(envelope, household.substringBefore('.'), salt)
@@ -1296,7 +1304,7 @@ class SonosHousehold(
      * The household's token now, for the account [stored] was read for at connect, when the household
      * holds a different one; `null` otherwise. [searchableServices] reads tokens once per connection,
      * and a TV left on outlives them: Pandora's went stale within a day while the Sonos app kept the
-     * household's copy fresh (P-32). [SmapiClient] asks this after a refusal about the credential.
+     * household's copy fresh (P-32). [SmapiClient] asks this after any refusal that carries no refresh.
      *
      * A read asks a player to call back into this device, so one serves every refusal for
      * [REREAD_KEEP_NANOS], a failed one included, and reads are taken one at a time: a search across
@@ -2013,7 +2021,6 @@ class SonosHousehold(
     private fun group(groupId: String): Group =
         _state.value.groups.firstOrNull { it.id == groupId } ?: error("no group $groupId")
 
-    /** The players whose certificate name is [hostname]: one socket per speaker, so usually one. */
     /**
      * Whether a group-scoped event came in on the socket of the group's coordinator, the only
      * player that speaks for a group. A member can name a group it does not lead: subscribing
@@ -2029,6 +2036,7 @@ class SonosHousehold(
         return PlayerNames.localHostname(coordinator).equals(from, ignoreCase = true)
     }
 
+    /** The players whose certificate name is [hostname]: one socket per speaker, so usually one. */
     private fun playersOn(hostname: String): List<String> =
         _state.value.players.map { it.id }.filter { PlayerNames.localHostname(it).equals(hostname, ignoreCase = true) }
 
@@ -2239,19 +2247,6 @@ class SonosHousehold(
     }
 
     /**
-     * Put exactly [playerIds] in one group led by the first of them, and answer that group's id
-     * once the topology shows it — which is a new id whenever anything moved, because a regroup
-     * mints one. A preset's first step; what plays and how loud are for the caller.
-     *
-     * Two moves at most, each a `modifyGroupMembers` answered by the pushed topology:
-     *  - if the leader is a *member* of someone else's group, it leaves that group first, since
-     *    only a coordinator can gather a group around itself;
-     *  - then the leader's group takes in the missing players and lets go of the extra ones.
-     *
-     * A player not in the household now fails the whole thing with its id, rather than
-     * gathering the rest and calling that the preset.
-     */
-    /**
      * Each speaker in [levels] set to its level, all at once, before it joins anything: a room that
      * joins plays at once, at whatever level it was left on. The speakers that could not be set —
      * refused, or no reply in time — which a caller must not then join (P-40). A fixed line-out is
@@ -2264,6 +2259,19 @@ class SonosHousehold(
             .awaitAll().filterNotNull().toSet()
     }
 
+    /**
+     * Put exactly [playerIds] in one group led by the first of them, and answer that group's id
+     * once the topology shows it — which is a new id whenever anything moved, because a regroup
+     * mints one. A preset's first step; what plays and how loud are for the caller.
+     *
+     * Two moves at most, each a `modifyGroupMembers` answered by the pushed topology:
+     *  - if the leader is a *member* of someone else's group, it leaves that group first, since
+     *    only a coordinator can gather a group around itself;
+     *  - then the leader's group takes in the missing players and lets go of the extra ones.
+     *
+     * A player not in the household now fails the whole thing with its id, rather than
+     * gathering the rest and calling that the preset.
+     */
     suspend fun gatherRooms(playerIds: List<String>): String {
         require(playerIds.isNotEmpty()) { "no rooms to gather" }
         val wanted = playerIds.toSet()
@@ -2443,18 +2451,10 @@ class SonosHousehold(
         // Best-effort, but not once-only: a group left unsubscribed here would sit in the
         // sidebar permanently frozen — no playback, metadata or volume — which is the very
         // failure this function exists to prevent, and nothing else would retry it until the
-        // next topology change, which may never come.
-        val failed = live.values.filter { group ->
-            subscribedGroups[group.id] != group.coordinatorId &&
-                runCatching { subscribeGroup(group) }.isFailure
-        }
-        if (failed.isNotEmpty()) {
-            delay(RESUBSCRIBE_RETRY_MILLIS)
-            failed.forEach { group ->
-                if (subscribedGroups[group.id] != group.coordinatorId) {
-                    runCatching { subscribeGroup(group) }
-                }
-            }
+        // next topology change, which may never come. So a failure is retried by
+        // [catchUpLater] below, with backoff and outside this lock.
+        live.values.forEach { group ->
+            if (subscribedGroups[group.id] != group.coordinatorId) runCatching { subscribeGroup(group) }
         }
 
         // A player can arrive with a regroup — a speaker taken out of standby, say.
@@ -2808,9 +2808,6 @@ internal fun fillPlaybackState(
 /** Matches the Rust daemon's curve: start at a second, double, stop at a minute. */
 internal const val MIN_BACKOFF_MILLIS = 1_000L
 internal const val MAX_BACKOFF_MILLIS = 60_000L
-
-/** One retry for a group whose subscribe failed, before leaving it to the next topology event. */
-internal const val RESUBSCRIBE_RETRY_MILLIS = 1_000L
 
 /**
  * What became of a stream after the player accepted it. Three answers, because there are three

@@ -56,9 +56,8 @@ object AppleMusic {
 
     /**
      * The household's Apple Music account (`sn_28`), from anything it has played: Recently Played
-     * first, then whatever a room is playing now. Favourites name no account. None means the
-     * household does not use Apple Music, or has played nothing from it that is still known —
-     * either way there is nothing for a search result to play with.
+     * first, then whatever a room is playing now. Favourites name no account. The fallback where the
+     * speakers hold no stored Apple Music sign-in (`SonosHousehold.appleMusicAccount` asks that first).
      */
     fun accountIn(history: List<HistoryItem>, playing: Collection<Track?>): String? =
         (history.map { it.id } + playing.mapNotNull { it?.id })

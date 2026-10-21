@@ -6,6 +6,7 @@ import com.rahga.x2rock.lan.descendants
 import com.rahga.x2rock.lan.firstChildNamed
 import com.rahga.x2rock.lan.firstNamed
 import com.rahga.x2rock.lan.localTag
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +47,7 @@ private const val NS = "http://www.sonos.com/Services/1.1"
  */
 internal const val USER_AGENT = "x2rock-tv/1.0"
 
-/** Short: a rate call is a UI button press, not a background job. */
+/** Short: every call here is a viewer waiting on a press, not a background job. */
 private const val TIMEOUT_SECONDS = 8L
 
 /** How a service expects to be authenticated, from its `<Policy Auth=...>`. */
@@ -130,41 +131,50 @@ data class Shelf(val title: String, val items: List<Item>)
 fun parseShelves(json: String): List<Shelf> {
     val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull() ?: return emptyList()
     val views = root.getAsJsonArray("views") ?: return emptyList()
-    return views.mapNotNull { v ->
-        val view = v.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-        val title = view.getAsJsonObject("content")?.getAsJsonObject("container")?.get("name")?.asString ?: return@mapNotNull null
-        val items = view.getAsJsonArray("items")?.mapNotNull { i ->
-            val item = i.takeIf { it.isJsonObject }?.asJsonObject ?: return@mapNotNull null
-            val policies = item.getAsJsonObject("browsePolicies")
-            val playable = policies?.get("canPlay")?.asBoolean
-            val enumerable = policies?.get("canEnumerate")?.asBoolean
-            val c = item.getAsJsonObject("content")?.getAsJsonObject("container") ?: return@mapNotNull null
-            val id = item.getAsJsonObject("id")?.get("objectId")?.asString ?: return@mapNotNull null
-            // `trackList.program`: a station, played as the room's source like any SMAPI program.
-            val type = c.get("type")?.asString?.substringAfterLast('.')
-            val leaf = type in SHELF_LEAF_TYPES
-            // Browse Radio's rows — Music, News & Talk, Sports, Locations — play nothing and open:
-            // their ids (`/stations/en-US/US/…`) are ones SMAPI's getMetadata answers, anonymously,
-            // with the stations or the next level of containers (2026-10-11). So do Spotify's and
-            // Deezer's albums and playlists, by the ids their pages give (2026-10-11).
-            val opens = !leaf && enumerable != false
-            val plays = !opens && playable != false && (leaf || playable == true)
-            if (!opens && !plays) return@mapNotNull null
-            Item(
-                id = id,
-                title = c.get("name")?.asString.orEmpty(),
-                // TuneIn's page calls a station `station`; its SMAPI search names the same ids `stream`,
-                // and a stream is what plays, resolved through getMediaURI (2026-10-12, T-20).
-                itemType = if (type == "station") "stream" else type ?: if (opens) "container" else "program",
-                // The page names a row's own name as its "service" and leaves summary empty: say nothing.
-                summary = (c.get("summary")?.asString ?: c.getAsJsonObject("artist")?.get("name")?.asString)?.takeIf { it.isNotBlank() },
-                artUrl = c.get("imageUrl")?.asString,
-                container = opens,
-            )
-        }.orEmpty()
-        Shelf(title, items).takeIf { items.isNotEmpty() }
-    }
+    // Row by row: a JSON null where a string or object is expected throws in Gson, and one odd row
+    // must not throw the whole page away (it would fall back to the SMAPI root, silently).
+    return views.mapNotNull { v -> runCatching { shelf(v) }.getOrNull() }
 }
+
+private fun shelf(v: JsonElement): Shelf? {
+    val view = v.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+    val title = view.getAsJsonObject("content")?.getAsJsonObject("container")?.str("name") ?: return null
+    val items = view.getAsJsonArray("items")?.mapNotNull { runCatching { shelfItem(it) }.getOrNull() }.orEmpty()
+    return Shelf(title, items).takeIf { items.isNotEmpty() }
+}
+
+private fun shelfItem(i: JsonElement): Item? {
+    val item = i.takeIf { it.isJsonObject }?.asJsonObject ?: return null
+    val policies = item.getAsJsonObject("browsePolicies")
+    val playable = policies?.get("canPlay")?.takeIf { it.isJsonPrimitive }?.asBoolean
+    val enumerable = policies?.get("canEnumerate")?.takeIf { it.isJsonPrimitive }?.asBoolean
+    val c = item.getAsJsonObject("content")?.getAsJsonObject("container") ?: return null
+    val id = item.getAsJsonObject("id")?.str("objectId") ?: return null
+    // `trackList.program`: a station, played as the room's source like any SMAPI program.
+    val type = c.str("type")?.substringAfterLast('.')
+    val leaf = type in SHELF_LEAF_TYPES
+    // Browse Radio's rows — Music, News & Talk, Sports, Locations — play nothing and open:
+    // their ids (`/stations/en-US/US/…`) are ones SMAPI's getMetadata answers, anonymously,
+    // with the stations or the next level of containers (2026-10-11). So do Spotify's and
+    // Deezer's albums and playlists, by the ids their pages give (2026-10-11).
+    val opens = !leaf && enumerable != false
+    val plays = !opens && playable != false && (leaf || playable == true)
+    if (!opens && !plays) return null
+    return Item(
+        id = id,
+        title = c.str("name").orEmpty(),
+        // TuneIn's page calls a station `station`; its SMAPI search names the same ids `stream`,
+        // and a stream is what plays, resolved through getMediaURI (2026-10-12, T-20).
+        itemType = if (type == "station") "stream" else type ?: if (opens) "container" else "program",
+        // The page names a row's own name as its "service" and leaves summary empty: say nothing.
+        summary = (c.str("summary") ?: c.getAsJsonObject("artist")?.str("name"))?.takeIf { it.isNotBlank() },
+        artUrl = c.str("imageUrl"),
+        container = opens,
+    )
+}
+
+/** A string field, or `null` where it is absent or JSON `null` — whose `asString` throws. */
+private fun com.google.gson.JsonObject.str(name: String): String? = get(name)?.takeIf { it.isJsonPrimitive }?.asString
 
 /** What a shelf's row plays rather than opens. */
 private val SHELF_LEAF_TYPES = setOf("program", "stream", "track", "station")
@@ -270,7 +280,7 @@ data class RateResult(
 class SmapiException(message: String) : IOException(message)
 
 /**
- * One SMAPI client for everything a rating button needs, over a plain internet
+ * One SMAPI client for a service's search, browse, ratings, favourites and playlists, over a plain internet
  * [OkHttpClient] — never the LAN one built for players, which trusts a leaf-only
  * certificate chain that has no business being extended to the rest of the internet.
  */
@@ -313,7 +323,7 @@ class SmapiClient(
         }
 
     /** `getExtendedMetadata`'s whole answer for [id], for what it says beyond the item itself. */
-    suspend fun extendedMetadataBody(service: Service, token: Token?, id: String): String =
+    private suspend fun extendedMetadataBody(service: Service, token: Token?, id: String): String =
         withContext(Dispatchers.IO) { call(service, token, "getExtendedMetadata", id(id)) }
 
     /** [id]'s related artist, album, radio and favourite state — see [ItemDetails]. */
@@ -427,7 +437,7 @@ class SmapiClient(
      * search returns — `sonos:2997` is Hit List in both (2026-10-08), and needs no token.
      */
     suspend fun shelves(service: Service, stored: Token? = null): List<Shelf> = withContext(Dispatchers.IO) {
-        val manifest = service.manifestUri?.let { get(it) } ?: return@withContext emptyList()
+        val manifest = service.manifestUri?.let { fetch(it, null).body } ?: return@withContext emptyList()
         val endpoint = runCatching { JsonParser.parseString(manifest).asJsonObject.getAsJsonArray("endpoints") }.getOrNull()
             ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
             ?.firstOrNull { it.get("type")?.asString == "browse" }
@@ -439,8 +449,9 @@ class SmapiClient(
         // replacement: Spotify's page went from 200 to 401 within the hour (2026-10-11). One SMAPI
         // call takes the refresh, and the page is asked once more with what it handed back.
         if (page.code == 401 && stored != null) {
-            runCatching { metadata(service, stored, "root", 0, 1) }
-            if (refreshed[stored.token] != null) page = fetch(endpoint, bearer())
+            val before = refreshed[stored.token]
+            try { metadata(service, stored, "root", 0, 1) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+            if (refreshed[stored.token] != before) page = fetch(endpoint, bearer())
             // And a page that needs no token can refuse one: Sonos Radio's answers the household's
             // with 401 and its shelves only without (2026-10-11; x2rock found the same).
             if (page.code == 401) page = fetch(endpoint, null)
@@ -448,7 +459,6 @@ class SmapiClient(
         page.body?.let(::parseShelves) ?: emptyList()
     }
 
-    /** The presentation map body, or `null` when the service publishes no manifest for one. */
     /**
      * The service's presentation map, or `null` when it publishes none: no manifest, or a manifest
      * naming no map. A manifest or map that could not be had — an HTTP error, a CDN's 503 — is not
@@ -457,16 +467,18 @@ class SmapiClient(
     private suspend fun presentationMap(service: Service): String? {
         val manifestUri = service.manifestUri ?: return null
         val manifestBody = getOrThrow(manifestUri, "${service.name}'s manifest")
-        val mapUri = runCatching { JsonParser.parseString(manifestBody) }.getOrNull()
-            ?.asJsonObject?.getAsJsonObject("presentationMap")?.get("uri")?.takeIf { it.isJsonPrimitive }
+        // A body that is not a JSON object — a captive portal's page, a CDN's error with a 200 — is
+        // not a manifest saying "no map", and must not be cached as one either.
+        val manifest = runCatching { JsonParser.parseString(manifestBody) }.getOrNull()
+            ?.takeIf { it.isJsonObject }?.asJsonObject
+            ?: throw java.io.IOException("${service.name}'s manifest is not JSON")
+        val mapUri = manifest.getAsJsonObject("presentationMap")?.get("uri")?.takeIf { it.isJsonPrimitive }
             ?.asString ?: return null
         return getOrThrow(mapUri, "${service.name}'s presentation map")
     }
 
     private suspend fun getOrThrow(url: String, what: String): String =
         fetch(url, null).let { it.body ?: throw java.io.IOException("$what answered HTTP ${it.code}") }
-
-    private suspend fun get(url: String): String? = fetch(url, null).body
 
     /** A GET's status, and its body when it succeeded. */
     private class Fetched(val code: Int, val body: String?)

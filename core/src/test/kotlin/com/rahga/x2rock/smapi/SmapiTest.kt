@@ -277,6 +277,25 @@ class SmapiTest {
     }
 
     /**
+     * A JSON `null` where a string is expected throws in Gson; the captured page with one row's art
+     * and summary nulled keeps that row and every other, rather than throwing the page away.
+     */
+    @Test fun `a null field costs nothing but itself`() {
+        val page = com.google.gson.JsonParser.parseString(captured("spotify.browse.json")).asJsonObject
+        val row = page.getAsJsonArray("views").map { it.asJsonObject }
+            .first { it.getAsJsonObject("content").getAsJsonObject("container").get("name").asString == "Recommended for today" }
+            .getAsJsonArray("items").first().asJsonObject.getAsJsonObject("content").getAsJsonObject("container")
+        row.add("imageUrl", com.google.gson.JsonNull.INSTANCE)
+        row.add("summary", com.google.gson.JsonNull.INSTANCE)
+
+        val shelves = parseShelves(page.toString())
+        assertEquals(parseShelves(captured("spotify.browse.json")).map { it.items.size }, shelves.map { it.items.size })
+        val album = shelves.single { it.title == "Recommended for today" }.items.first()
+        assertEquals("spotify:album:3MJGcgbroIjiO90yi7RMhy", album.id)
+        assertEquals(null, album.artUrl)
+    }
+
+    /**
      * Deezer's page (captured 2026-10-11, three of its nine views): albums say they both play and
      * open, and open; Flow's moods are programs, and play.
      */

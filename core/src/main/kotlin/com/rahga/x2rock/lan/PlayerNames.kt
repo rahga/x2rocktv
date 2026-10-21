@@ -23,9 +23,8 @@ object PlayerNames {
 
     /**
      * Null when the id doesn't match the shape this was verified against, rather than a
-     * guess. A caller that gets null should fall back to the address and accept that it
-     * must relax hostname verification for that player — better than inventing a name
-     * the certificate will not contain.
+     * guess: such a player cannot be reached, since hostname verification is never relaxed
+     * (see [LanHttp]) — better than inventing a name the certificate will not contain.
      */
     fun localHostname(playerId: String): String? =
         RINCON.find(playerId)?.let { "sonos-${it.groupValues[1].uppercase()}.local" }

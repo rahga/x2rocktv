@@ -1,6 +1,7 @@
 package com.rahga.x2rock.account
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
@@ -36,7 +37,7 @@ object SignInCallback {
     suspend fun awaitCode(server: ServerSocket, state: String): String = coroutineScope {
         // `accept` hears nothing of a cancellation; closing the socket is what ends it. The closer
         // runs when this scope is cancelled, and when the wait ends: the listener goes with it.
-        val closer = launch { try { awaitCancellation() } finally { runCatching { server.close() } } }
+        val closer = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { runCatching { server.close() } } }
         try {
             withContext(Dispatchers.IO) {
                 var outcome: Result<String>? = null

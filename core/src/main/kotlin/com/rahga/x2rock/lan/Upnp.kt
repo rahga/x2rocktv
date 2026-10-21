@@ -23,24 +23,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * The queue, which the Control API does not have.
- *
- * `queue:1`, `playbackQueue:1` and `cloudQueue:1` all answer
- * `ERROR_UNSUPPORTED_NAMESPACE` — cloud or LAN, the Control API has no view of the queue
- * the official apps populate. UPnP does, over plain HTTP on port 1400.
- *
- * **This is the one cleartext path in the app.** Android blocks cleartext by default since
- * API 28, and the exemption is scoped in `network_security_config.xml` to `.local` names
- * only — never to raw IPs, never to the internet — which works because a player's name is
- * derivable from its id. So every call here goes to a `sonos-<MAC>.local` hostname, and
- * passing a bare address will (correctly) be refused by the platform.
- *
- * UPnP *eventing* (GENA) is deliberately not used: it needs the player to open a
- * connection back to us. This is request/response only, so the queue is the one part of
- * the UI that still has to be asked rather than pushed.
- */
-
-/**
  * The player answered, and the answer was an error — a fault, or 403 with UPnP switched off.
  * Distinct from a transport failure, where nothing came back and the request may yet have
  * been carried out.
@@ -122,11 +104,6 @@ data class Battery(val level: Int? = null, val health: String? = null, val tempe
 }
 
 /**
- * The `<Data name="…">` rows of a `LocalBatteryStatus` block, or null where there is none. **The
- * populated shape is x2rock's, not a capture**: no household this was built against has a portable,
- * so a Roam or Move's real reply is owed (PUNCH P-16) — and release notes say battery is untested.
- */
-/**
  * The Sonos favourites `getFavorites` leaves out, out of `Browse FV:2`'s DIDL. Today's Sonos app saves
  * an album, an artist or a song as `r:type` `shortcut` with an empty `res`: the item is only in
  * `r:resMD` — a service's own SMAPI id behind an eight-digit prefix, `/` written `__UNENCODED_SLASH__`
@@ -183,6 +160,11 @@ private fun shortcutType(upnpClass: String): String? = when {
 private val SHORTCUT_PREFIX = Regex("^[0-9a-f]{8}")
 private val SHORTCUT_SERVICE = Regex("^SA_RINCON(\\d+)_")
 
+/**
+ * The `<Data name="…">` rows of a `LocalBatteryStatus` block, or null where there is none. **The
+ * populated shape is x2rock's, not a capture**: no household this was built against has a portable,
+ * so a Roam or Move's real reply is owed (PUNCH P-16) — and release notes say battery is untested.
+ */
 internal fun parseBattery(body: String): Battery? {
     val root = runCatching { Xml.parse(body) }.getOrNull() ?: return null
     val block = root.getElementsByTagName("LocalBatteryStatus").item(0) as? Element ?: return null
@@ -201,6 +183,24 @@ data class MediaInfo(val currentUri: String, val currentUriMetaData: String = ""
 /** `ListAvailableServices`'s reply — see [Upnp.listAvailableServices]. */
 data class ServiceListAnswer(val descriptors: String, val types: String = "")
 
+/**
+ * What the Control API does not have, over UPnP: the queue first of all, and alarms, EQ and tone,
+ * favourites, device settings and information.
+ *
+ * `queue:1`, `playbackQueue:1` and `cloudQueue:1` all answer
+ * `ERROR_UNSUPPORTED_NAMESPACE` — cloud or LAN, the Control API has no view of the queue
+ * the official apps populate. UPnP does, over plain HTTP on port 1400.
+ *
+ * **This is the one cleartext path in the app.** Android blocks cleartext by default since
+ * API 28, and the exemption is scoped in `network_security_config.xml` to `.local` names
+ * only — never to raw IPs, never to the internet — which works because a player's name is
+ * derivable from its id. So every call here goes to a `sonos-<MAC>.local` hostname, and
+ * passing a bare address will (correctly) be refused by the platform.
+ *
+ * UPnP *eventing* (GENA) is deliberately not used: it needs the player to open a
+ * connection back to us. This is request/response only, so all of it is asked for rather
+ * than pushed.
+ */
 class Upnp(
     client: OkHttpClient,
     /** Overridden only by tests, which answer SOAP from a fake on an ephemeral port. */

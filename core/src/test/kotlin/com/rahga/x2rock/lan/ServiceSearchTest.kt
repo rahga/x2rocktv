@@ -119,6 +119,8 @@ class ServiceSearchTest {
 
     /** The account store a player hands over, and how many times one was asked for. */
     @Volatile private var envelope: String? = ""
+    /** Thrown by the capture instead of answering, as an unreachable speaker's connect does. */
+    @Volatile private var captureFailure: Exception? = null
     private val captures = java.util.concurrent.atomic.AtomicInteger()
 
     /**
@@ -222,6 +224,7 @@ class ServiceSearchTest {
                 captures.incrementAndGet()
                 captureEntered.complete(Unit)
                 captureGate?.await()
+                captureFailure?.let { throw it }
                 envelope
             },
         )
@@ -328,6 +331,13 @@ class ServiceSearchTest {
         connected()
         household.searchableServices()
         assertEquals("the speaker sent none", household.accountsRead.value?.problem)
+    }
+
+    @Test fun `a speaker that cannot be reached for its sign-ins is recorded as such`() = runBlocking {
+        captureFailure = java.net.ConnectException("Connection refused")
+        connected()
+        household.searchableServices()
+        assertEquals("the speaker could not be reached", household.accountsRead.value?.problem)
     }
 
     /** The speakers' stored Apple Music sign-in is the household's Apple account, read with the rest. */

@@ -1,5 +1,6 @@
 package com.rahga.x2rock.smapi
 
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
@@ -58,7 +59,7 @@ object AccountCapture {
                 // this thread, and the service lock above it, for the whole deadline. A child is
                 // cancelled the moment its parent is, while the parent's own completion waits for
                 // this blocked body to return — which is why a completion handler closed it too late (P-46).
-                val letGo = launch { try { awaitCancellation() } finally { runCatching { server.close() } } }
+                val letGo = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { runCatching { server.close() } } }
                 val localIp = localIpToward(playerIp)
                 val callback = "<http://$localIp:${server.localPort}/notify>"
                 val sid = subscribe(playerIp, playerPort, callback) ?: run { letGo.cancel(); return@withContext null }
