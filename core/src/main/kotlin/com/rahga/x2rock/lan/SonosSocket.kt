@@ -3,12 +3,11 @@ package com.rahga.x2rock.lan
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -28,7 +27,7 @@ import kotlin.coroutines.resumeWithException
  * from [LanHttp]. There is no login: two headers on the upgrade and the socket is live.
  *
  * **Scope matters.** Group-scoped namespaces (`playback:1`, `playbackMetadata:1`,
- * `groupVolume:1`) must go to that group's *coordinator's* socket, and player-scoped ones
+ * `groupVolume:1`, `sleepTimer:1`) must go to that group's *coordinator's* socket, and player-scoped ones
  * (`playerVolume:1`) to that *player's own* socket. Anything else answers
  * `ERROR_INVALID_OBJECT_ID`. A caller that talks to several groups needs several sockets.
  */
@@ -65,29 +64,28 @@ class SonosSocket private constructor(
     /**
      * Sends a command and waits for its reply, correlated by `cmdId`.
      *
-     * Throws [SonosCommandException] if the player refuses, or [IOException] if the reply
-     * does not arrive — the socket may be a zombie, and the caller should reconnect
-     * rather than retry on it.
+     * Throws [SonosCommandException] if the player refuses, or [ReplyTimeoutException] if the
+     * reply does not arrive — which is not a "no": the player may still do it, so a caller checks
+     * for the effect before asking again (CLAUDE.md, "No reply is not no").
      */
     suspend fun command(header: JsonObject, body: JsonObject = JsonObject()): JsonElement {
         val id = nextId.getAndIncrement().toString()
-        val waiter = CompletableDeferred<SonosReply>()
-        pending[id] = waiter
         // Signed in, for a household with Authentication on: the token rides in each command's own
         // header as `Bearer <token>` — the handshake's is ignored, and a bare token refused (x2rock,
         // 2026-09-27). Not signed in, no field: every household with Authentication off.
         val sent = authorization?.invoke()
             ?.let { token -> header.deepCopy().apply { addProperty("authorization", "Bearer $token") } }
             ?: header
+        val waiter = CompletableDeferred<SonosReply>()
+        pending[id] = waiter
         val reply = try {
             if (!socket.send(Frames.encode(sent, body, id))) {
                 throw IOException("socket to $hostname is closed")
             }
-            try {
-                withTimeout(REPLY_TIMEOUT_MILLIS) { waiter.await() }
-            } catch (e: TimeoutCancellationException) {
-                throw ReplyTimeoutException(hostname, REPLY_TIMEOUT_MILLIS, e)
-            }
+            // OrNull, not a caught TimeoutCancellationException: a caller's own timeout arrives as
+            // that type too, and must stay a cancellation rather than become "no reply".
+            withTimeoutOrNull(REPLY_TIMEOUT_MILLIS) { waiter.await() }
+                ?: throw ReplyTimeoutException(hostname, REPLY_TIMEOUT_MILLIS)
         } finally {
             pending.remove(id)
         }
@@ -227,7 +225,7 @@ class SonosSocket private constructor(
  * the effect before reporting failure; a [SonosCommandException] is the player's actual
  * refusal and needs no such check.
  */
-class ReplyTimeoutException(hostname: String, millis: Long, cause: Throwable) :
+class ReplyTimeoutException(hostname: String, millis: Long, cause: Throwable? = null) :
     IOException("no reply from $hostname within ${millis}ms", cause)
 
 /** The player understood the command and said no. Distinct from a transport failure. */

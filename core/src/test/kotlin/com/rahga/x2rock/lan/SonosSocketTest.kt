@@ -73,6 +73,22 @@ class SonosSocketTest {
         )
     }
 
+    /**
+     * A caller's own deadline arrives in a command as a TimeoutCancellationException too; caught
+     * as the reply timeout, it became "no reply" — an IOException — and a cold connect run under
+     * the channel receiver's budget recorded an error over a healthy household.
+     */
+    @Test fun `a caller's timeout stays a cancellation, not a missing reply`() = runBlocking<Unit> {
+        val socket = open()
+        fake.holdRepliesTo("getVolume")
+        val thrown = runCatching {
+            withTimeout(300) { socket.command(Frames.onPlayer("playerVolume:1", "getVolume", fake.id)) }
+        }.exceptionOrNull()
+        fake.releaseReplies()
+        socket.close()
+        assertTrue("expected the caller's timeout, got $thrown", thrown is kotlinx.coroutines.TimeoutCancellationException)
+    }
+
     @Test fun `closing on purpose reports no failure`() = runBlocking<Unit> {
         val socket = open()
         socket.close()
