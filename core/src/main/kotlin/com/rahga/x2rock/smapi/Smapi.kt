@@ -444,14 +444,16 @@ class SmapiClient(
             ?.get("uri")?.asString ?: return@withContext emptyList()
         // The token a refresh fault handed back, where one has: the stored one is what aged.
         fun bearer() = stored?.let { (refreshed[it.token] ?: it).token }
-        var page = fetch(endpoint, bearer())
+        val first = bearer()
+        var page = fetch(endpoint, first)
         // A stale token is answered 401 here, where SMAPI answers a refresh fault with its
         // replacement: Spotify's page went from 200 to 401 within the hour (2026-10-11). One SMAPI
         // call takes the refresh, and the page is asked once more with what it handed back.
         if (page.code == 401 && stored != null) {
-            val before = refreshed[stored.token]
             try { metadata(service, stored, "root", 0, 1) } catch (e: CancellationException) { throw e } catch (_: Exception) {}
-            if (refreshed[stored.token] != before) page = fetch(endpoint, bearer())
+            // Asked again only with a token this page has not refused: one this call's refresh brought,
+            // or another call's that landed meanwhile.
+            if (bearer() != first) page = fetch(endpoint, bearer())
             // And a page that needs no token can refuse one: Sonos Radio's answers the household's
             // with 401 and its shelves only without (2026-10-11; x2rock found the same).
             if (page.code == 401) page = fetch(endpoint, null)

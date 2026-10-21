@@ -218,12 +218,6 @@ class PlayerViewModelTest {
     }
 
     /**
-     * The captured status is a queue's first track: `canSkipToPrevious` false, `canSeek` true —
-     * what shuffle reports on every track. Prev there goes back to the start of the track, as
-     * the Sonos app's does, rather than asking for a previous track the player says is not
-     * there.
-     */
-    /**
      * The pane draws no seek bar without a duration — a station, a TV input — and the remote's
      * fast-forward and rewind come through the same function, so they must not seek there either.
      */
@@ -238,6 +232,12 @@ class PlayerViewModelTest {
         assertEquals(0, fake.commandsNamed("seek"))
     }
 
+    /**
+     * The captured status is a queue's first track: `canSkipToPrevious` false, `canSeek` true —
+     * what shuffle reports on every track. Prev there goes back to the start of the track, as
+     * the Sonos app's does, rather than asking for a previous track the player says is not
+     * there.
+     */
     @Test fun `going back with no previous track restarts this one`() = runBlocking<Unit> {
         fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { viewModel.uiState.first { it.actions.canSeek && !it.actions.canSkipToPrevious } }
