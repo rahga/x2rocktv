@@ -221,6 +221,7 @@ internal fun ProgressBar(
     }
 }
 
+/** How long a seek burst's total stays up after the last press, before it fades. */
 private const val SEEK_TOTAL_SHOWN_MILLIS = 1_500L
 
 /** The seek bar's knob, and the height its strip always keeps. */
@@ -229,6 +230,7 @@ private val SEEK_KNOB = 20.dp
 /** The step of each press in a burst of seeks, the last repeating: see the seek bar's burstSteps. */
 private val SEEK_STEPS_MILLIS = longArrayOf(10_000L, 20_000L, 30_000L)
 
+/** A seek total as a viewer reads it: −30s, +1:00, −1:30. */
 internal fun Long.toSeekLabel(): String {
     val sign = if (this < 0) "−" else "+"
     val seconds = kotlin.math.abs(this) / 1_000
@@ -250,10 +252,14 @@ internal fun livePosition(positionMillis: Long, updatedAt: Long, playbackState: 
 @Composable
 internal fun rememberLivePosition(positionMillis: Long, updatedAt: Long, playbackState: String, durationMillis: Long): State<Long> {
     val position = remember(updatedAt) { mutableLongStateOf(livePosition(positionMillis, updatedAt, playbackState, durationMillis)) }
+    // The duration as it is now, not as the loop began: a new track's metadata can arrive after
+    // its first status, which moved the stamp and restarted this with the old track's length.
+    val duration by rememberUpdatedState(durationMillis)
     LaunchedEffect(updatedAt, playbackState) {
         if (playbackState.isPlaying()) while (true) {
             delay(1_000L)
-            position.longValue = (position.longValue + 1_000L).coerceAtMost(durationMillis)
+            val next = position.longValue + 1_000L
+            position.longValue = if (duration > 0) next.coerceAtMost(duration) else next
         }
     }
     return position

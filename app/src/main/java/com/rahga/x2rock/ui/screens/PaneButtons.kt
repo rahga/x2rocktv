@@ -43,6 +43,8 @@ import com.rahga.x2rock.ui.theme.AppButton
 
 // The pane's buttons: a place named under its icon while focused, Group, the mode toggles, the
 // rating buttons, and the overhang that keeps an end button's name whole. Split from PlayerScreen.kt.
+
+/** A setting and the value it currently holds, the way the Sonos app draws these two. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun TwoLineButton(
@@ -60,9 +62,9 @@ internal fun TwoLineButton(
 }
 
 /**
- * The room panel, from the pane: who is playing together, and the room's settings below. Select
- * on a room enters this pane, as every list on a TV does, so the panel needed a way in a viewer
- * can see; a long press on the room still opens it too.
+ * The room panel's grouping half, from the pane: who is playing together (the room's settings are
+ * Configure's). Select on a room enters this pane, as every list on a TV does, so the panel needed
+ * a way in a viewer can see; a hold on the room picks it up to move it instead (P-20).
  */
 @Composable
 internal fun GroupButton(onClick: () -> Unit, focusRequester: FocusRequester) =
@@ -134,7 +136,6 @@ internal fun ModeButton(icon: ImageVector, description: String, onClick: () -> U
     }
 }
 
-/** A thumb, filled once the track is already rated that way and outlined otherwise. */
 @Composable
 internal fun HeartButton(favorite: Boolean, onClick: () -> Unit) {
     IconAppButton(onClick = onClick) {
@@ -154,6 +155,7 @@ internal fun BanButton(onClick: () -> Unit) {
     }
 }
 
+/** A thumb, filled once the track is already rated that way and outlined otherwise. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun RateButton(up: Boolean, selected: Boolean, onClick: () -> Unit) {

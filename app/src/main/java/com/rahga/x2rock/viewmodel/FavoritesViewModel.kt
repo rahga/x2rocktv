@@ -106,8 +106,8 @@ class FavoritesViewModel @Inject constructor(
             if (joining.isEmpty()) error("couldn't set the volume in $names")
             val groupId = household.gatherRooms(joining)
             preset.favoriteId?.let { household.loadFavorite(groupId, it) }
-            roomLink.set(joining.first())
-            if (leftOut.isNotEmpty()) _notice.post("Left out $names: couldn't set its volume")
+            // Said on the home screen, where this goes: this screen's own notice goes with it.
+            roomLink.set(joining.first(), notice = "Left out $names: couldn't set its volume".takeIf { leftOut.isNotEmpty() })
         }
 
     /**

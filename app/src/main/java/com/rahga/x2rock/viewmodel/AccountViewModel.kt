@@ -66,12 +66,15 @@ class AccountViewModel @Inject constructor(
         job?.cancel()
         job = viewModelScope.launch {
             _step.value = Step.Starting
+            // Held here, not only by awaitCode: a cancellation as the socket is made, or a failure
+            // before the wait, would otherwise leave it bound.
+            var listener: ServerSocket? = null
             try {
                 val (server, state) = withContext(Dispatchers.IO) {
                     // The interface toward the internet is the one a phone on the same network reaches.
                     val address = lanAddressToward(InetAddress.getByName(ROUTE_PROBE))
                         ?: error("this TV has no private network address for a phone to reach")
-                    val server = ServerSocket(0, 4, address)
+                    val server = ServerSocket(0, 4, address).also { listener = it }
                     server to signInState(address, server.localPort)
                 }
                 _step.value = Step.Waiting(account.authorizeUrl(state))
@@ -85,6 +88,8 @@ class AccountViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 _step.value = Step.Failed(e.message ?: e.toString())
+            } finally {
+                runCatching { listener?.close() }
             }
         }
     }

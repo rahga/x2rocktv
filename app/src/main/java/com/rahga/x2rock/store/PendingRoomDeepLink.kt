@@ -18,6 +18,19 @@ class PendingRoomDeepLink @Inject constructor() {
     private val _roomId = MutableStateFlow<String?>(null)
     val roomId: StateFlow<String?> = _roomId.asStateFlow()
 
-    fun set(roomId: String) { _roomId.value = roomId }
+    /**
+     * A line to say once the room is shown, from the screen that asked for it: that screen is left
+     * behind by the navigation, and its own notice with it.
+     */
+    @Volatile private var notice: String? = null
+
+    fun set(roomId: String, notice: String? = null) {
+        this.notice = notice
+        _roomId.value = roomId
+    }
+
+    /** The line [set] carried, once. */
+    fun takeNotice(): String? = notice.also { notice = null }
+
     fun clear() { _roomId.value = null }
 }

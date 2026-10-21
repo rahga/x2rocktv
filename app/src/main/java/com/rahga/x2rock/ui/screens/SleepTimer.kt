@@ -5,22 +5,13 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import com.rahga.x2rock.ui.theme.IconAppButton
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalContext
 import android.os.SystemClock
-import androidx.activity.compose.BackHandler
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.path
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -36,18 +27,17 @@ import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Text
-import com.rahga.x2rock.ui.components.Overlay
-import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.viewmodel.PlayerUiState
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import kotlinx.coroutines.delay
 
-// The sleep timer's button, its icon, the countdown it shows and the picker it opens. Split from
-// PlayerScreen.kt, where both control rows place it.
+// The sleep timer's lengths and labels, and the countdown Configure's button shows. Split from
+// PlayerScreen.kt.
 /** The sleep timer's lengths, as the Sonos app offers: up to two hours, since a film outlasts sixty minutes. */
 internal val SLEEP_CHOICES = listOf(15, 30, 45, 60, 90, 120)
 
+/** "15 minutes", "1 hour", "1½ hours", "2 hours". */
 internal fun sleepChoiceLabel(minutes: Int): String = when {
     minutes < 60 -> "$minutes minutes"
     minutes == 60 -> "1 hour"
@@ -136,5 +126,3 @@ private fun rememberSleepCountdown(endsAt: Long?): Long? {
     }
     return left
 }
-
-/** How long a seek burst's total stays up after the last press, before it fades. */

@@ -26,7 +26,7 @@ class RoomPreferencesStore @Inject constructor(private val prefs: Preferences) {
     /**
      * The rooms this device has placed, first to last, as **player** ids — a regroup mints new
      * group ids, while the speakers stay put. Every room not named here sorts after them,
-     * alphabetically. Empty until a room is moved in Settings → Room order.
+     * alphabetically. Empty until a room is moved, by a hold in the room list.
      */
     private val _roomRanks = MutableStateFlow(prefs.getString(KEY_ROOM_RANKS)?.split(',')?.filter { it.isNotBlank() }.orEmpty())
     val roomRanks: StateFlow<List<String>> = _roomRanks.asStateFlow()

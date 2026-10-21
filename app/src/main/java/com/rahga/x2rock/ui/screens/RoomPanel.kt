@@ -78,20 +78,12 @@ import kotlin.math.roundToInt
  * top of the same list rather than in a button of its own.
  *
  * Order is deliberate. Party is first because it is the one press that answers "put this
- * everywhere", which is what the remote is usually reached for. TV Input is last and
- * appears only for a room with a soundbar in it: it is the one row here that changes what
- * the room is *playing* rather than which rooms are listening, and it is a way out of
- * whatever music the house is on rather than a thing to do to the house.
+ * everywhere", which is what the remote is usually reached for. Source — TV Input, Line-In —
+ * is Configure's first section, for a room with a soundbar or a line-in: it changes what the
+ * room is *playing* rather than which rooms are listening.
  *
- * **Every room row carries a level, on left and right.** Nothing else in this panel uses
- * those directions, so they were free to take, and it means a level is reachable for any
- * room the panel names rather than only for the ones already grouped. A member row adjusts
- * that *speaker* (`playerVolume:1`); a joinable row adjusts that whole *group*
- * (`groupVolume:1`), because a row in that list stands for a group and may be several rooms.
- *
- * The two scopes stay in step without this app doing any arithmetic: Sonos scales a group's
- * members proportionally when the group's level moves, and moves the group's average when a
- * member's does. Both come back as pushed events, so the sliders simply follow.
+ * **The panel carries no volume** (2026-10-17): it is for which rooms play together. A grouped
+ * room's speakers are set in the player pane, each as the header's own pill.
  *
  * The panel opens focused on **the room itself**, not on Party — the row a viewer most
  * likely came to touch, and one press away from either.
@@ -317,9 +309,6 @@ fun RoomPanel(
                     }
                 }
 
-                // Both of these need an HDMI socket to mean anything, so a room without one ends at
-                // the lists above. The source comes first: it is a thing to *do*, and the setting
-                // below it is a thing to state once and never touch again.
                 // Tone, for every room: it is the speaker's, not the soundbar's. Written over UPnP, so
                 // not offered with UPnP off; and not until it has been read, since a row that guessed
                 // a level would step from the wrong one.

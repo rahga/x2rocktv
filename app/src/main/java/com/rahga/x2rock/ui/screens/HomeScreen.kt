@@ -746,8 +746,8 @@ private fun RoomListItem(
         modifier = Modifier
             .fillMaxWidth()
             // The card's edge sits inside the 48dp title-safe margin's reach and its content on it.
-            // Room at the right and between rows for the focused card, which grows by a tenth:
-            // with 12dp it reached the pane's edge, and its outline sat on the border (2026-10-08).
+            // Room at the right and between rows for the focused card's border: with 12dp it
+            // reached the pane's edge, and its outline sat on the border (2026-10-08).
             .padding(start = SIDEBAR_START - 16.dp, end = 28.dp, top = 6.dp, bottom = 6.dp)
             .focusRequester(focusRequester)
             // Right crosses into the player pane, at its primary control. A key rather than a
@@ -1144,8 +1144,8 @@ private fun ThemeSelector(
     }
 }
 
-/** The pane's buttons that open another screen, so Back can return focus to the one that did. */
 /** How recent an Up or Down must be for the row focus reached to be the viewer's choice; see `rowFocused`. */
 private const val LIST_KEY_WINDOW_MILLIS = 500L
 
+/** The pane's buttons that open another screen, so Back can return focus to the one that did. */
 private enum class Opener { QUEUE, BROWSE, SEARCH, NOW_PLAYING, SETTINGS }

@@ -174,8 +174,9 @@ class QueueViewModel @Inject constructor(
         }
     }
 
-    /** Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`). */
     /**
+     * Takes the track number, not an id: UPnP removes by queue position (`Q:0/<n>`).
+     *
      * [openedAt] is the queue's version when the item's menu opened, where a menu did: an edit pressed
      * after the queue changed under the open menu is refused rather than sent to whatever now sits in
      * the slot. Another controller removing an earlier track moved every slot up one, and Remove then

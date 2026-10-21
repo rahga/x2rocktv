@@ -53,7 +53,7 @@ import kotlin.math.roundToInt
  * Sidebar order: the rooms this device has placed ([ranks], player ids, first to last), then every
  * other room alphabetically, which is Sonos's own order. A group stands where its best-placed
  * speaker does, so grouping two rooms never sinks either. The Sonos app lets its rooms be
- * reordered now (P-20); this order is this device's, set in Room order.
+ * reordered now (P-20); this order is this device's, set by a hold in the list.
  *
  * Two hoists were removed from here once — favourites, then a pinned "primary room" that quietly
  * switched off [TvSoundbar] detection. Neither came back: placing a room is the viewer's own
@@ -241,6 +241,7 @@ class HomeViewModel @Inject constructor(
                     _selectedGroupId.value = group.id
                     _navigateToRoom.value = true
                 }
+                pendingRoomDeepLink.takeNotice()?.let { _notice.post(it) }
                 // Last: clearing emits null, which cancels this block once it next suspends.
                 pendingRoomDeepLink.clear()
             }
@@ -409,6 +410,9 @@ class HomeViewModel @Inject constructor(
         val joiners = groups.filter { it.id != host.id }.flatMap { it.playerIds }
         if (joiners.isEmpty()) return
         val level = household.groupState(host.id).volume?.volume.takeIf { evenVolume }
+        // Asked to even out and no level known yet (the room's volume not yet pushed): joining
+        // anyway would be the loud start evening out was for.
+        if (evenVolume && level == null) return _notice.post("Couldn't read ${host.name}'s volume yet, so no room joined")
         viewModelScope.launch {
             // A speaker whose level could not be set stays out: joining, it would play at once at
             // whatever level it was left on, which is what evening out was for (P-40).

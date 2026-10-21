@@ -555,8 +555,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    // ------------------------------------------------------------ ratings
-
     fun saveFavorite() {
         if (!uiState.value.canSaveFavorite || saveFavoriteJob?.isActive == true) return
         val groupId = _groupId.value ?: return
@@ -571,6 +569,8 @@ class PlayerViewModel @Inject constructor(
                 .onFailure { notice.failure("save to Sonos Favorites", it) }
         }
     }
+
+    // ------------------------------------------------------------ ratings
     //
     // Unlike the transport commands above, this isn't fire-and-forget: there's no pushed
     // event for a rating, and a failure here (an unsupported service, a Live broadcast with
@@ -609,7 +609,9 @@ class PlayerViewModel @Inject constructor(
     /** Debounced and accumulating, so holding skip moves once by the total, not once by one step. */
     fun seekBy(deltaMillis: Long) {
         val state = uiState.value
-        if (!state.actions.canSeek) return
+        // As the pane offers it: a seek bar only with a duration to seek within. The remote's
+        // fast-forward and rewind come here too, and must not act where no bar is drawn.
+        if (!state.actions.canSeek || state.durationMillis <= 0) return
         val now = System.currentTimeMillis()
         val playing = state.playbackState.isPlaying()
         val pending = pendingSeekMillis
@@ -698,20 +700,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    /**
-     * A step, accumulated across presses and sent as one relative change after the debounce —
-     * a held D-pad key would otherwise send one command per repeat.
-     *
-     * Relative because a button says "louder", not a level (Sonos's rule for stateless
-     * controls), and because it needs no baseline: the old absolute target was computed from
-     * the last pushed level, so the buttons had to be disabled until one arrived and while
-     * muted — and a disabled tv-material3 button still takes focus and draws nothing. A step
-     * on a muted room unmutes it, as the player does for either setter.
-     *
-     * The total is taken and zeroed just before it is sent, so a newer press — which cancels
-     * this job, possibly with the command already in flight — starts a new total rather than
-     * resending this one or losing its own.
-     */
     private val volumeBurst = VolumeBurst(clock)
     private val playerBursts = mutableMapOf<String, VolumeBurst>()
 
@@ -731,6 +719,19 @@ class PlayerViewModel @Inject constructor(
         adjustPlayerVolume(playerId, playerBursts.getOrPut(playerId) { VolumeBurst(clock) }.step(level, direction))
     }
 
+    /**
+     * A step, accumulated across presses and sent as one relative change after the debounce —
+     * a held D-pad key would otherwise send one command per repeat.
+     *
+     * Relative because a button says "louder", not a level (Sonos's rule for stateless
+     * controls), and because it needs no baseline: the old absolute target was computed from
+     * the last pushed level, so the buttons had to be disabled until one arrived and while
+     * muted — and a disabled tv-material3 button still takes focus and draws nothing. A step
+     * on a muted room unmutes it, as the player does for either setter.
+     *
+     * The total is taken and zeroed just before it is sent, so a newer press starts a new total
+     * rather than resending this one or losing its own.
+     */
     fun adjustVolume(delta: Int) {
         val groupId = _groupId.value ?: return
         // The player refuses a level it does not control; say so instead of asking it.

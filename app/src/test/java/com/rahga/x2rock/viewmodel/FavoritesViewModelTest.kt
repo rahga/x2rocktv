@@ -181,7 +181,8 @@ class FavoritesViewModelTest {
         fake.awaitCommand("loadFavorite", 10_000)
         withTimeout(5_000) { while (!done) kotlinx.coroutines.delay(20) }
         assertEquals("Guest TV was regrouped", 0, fake.commandsNamed("modifyGroupMembers"))
-        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        // Carried to the home screen, where the preset goes: this screen and its notice are left behind.
+        val said = roomLink.takeNotice()!!
         assertTrue(said, said.startsWith("Left out Guest TV"))
     }
 
@@ -213,7 +214,8 @@ class FavoritesViewModelTest {
 
         fake.awaitCommand("loadFavorite", 10_000)
         assertEquals(0, fake.commandsNamed("modifyGroupMembers"))
-        val said = withTimeout(5_000) { viewModel.notice.first { it != null } }!!
+        withTimeout(5_000) { roomLink.roomId.first { it != null } }
+        val said = roomLink.takeNotice()!!
         assertTrue(said, said.startsWith("Left out Guest TV"))
     }
 

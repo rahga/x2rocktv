@@ -71,7 +71,7 @@ class NsdMdnsDiscovery @Inject constructor(
      * that runs out mid-resolve therefore waits for that resolve to finish, a few seconds at
      * most, rather than leaving it to fail the next find's first player.
      */
-    @Suppress("DEPRECATION") // resolveService is deprecated from API 34; this app runs from 23.
+    @Suppress("DEPRECATION") // resolveService is deprecated from API 34; this app runs from 26.
     private suspend fun resolve(nsd: NsdManager, service: NsdServiceInfo): NsdServiceInfo? =
         resolving.withLock {
             withContext(NonCancellable) {

@@ -138,8 +138,11 @@ fun ServiceBrowseScreen(
                     title = linked.service.name,
                     subtitle = linked.nickname.ifEmpty { null },
                     artUrl = serviceLogo(linked.service.name),
-                    sections = listOf(MenuSection(null, if (primary) emptyList() else listOf(
-                        MenuAction("Make primary", "Listed first, and the one Search asks") { viewModel.makePrimary(linked) },
+                    // Never empty: a menu with nothing to focus leaves focus on the list behind it,
+                    // where Up and Down walk rows the viewer cannot see.
+                    sections = listOf(MenuSection(null, listOf(
+                        if (primary) MenuAction("Close") {}
+                        else MenuAction("Make primary", "Listed first, and the one Search asks") { viewModel.makePrimary(linked) },
                     ))),
                     onDismiss = viewModel::closeServiceMenu,
                     note = if (primary) "This is ${linked.service.name}'s primary account here." else null,

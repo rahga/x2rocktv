@@ -223,6 +223,21 @@ class PlayerViewModelTest {
      * the Sonos app's does, rather than asking for a previous track the player says is not
      * there.
      */
+    /**
+     * The pane draws no seek bar without a duration — a station, a TV input — and the remote's
+     * fast-forward and rewind come through the same function, so they must not seek there either.
+     */
+    @Test fun `a relative seek with no duration to seek within is not sent`() = runBlocking<Unit> {
+        fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { viewModel.uiState.first { it.actions.canSeek && it.durationMillis == 0L } }
+        fake.clearHistory()
+
+        viewModel.seekBy(10_000)
+        delay(600)
+
+        assertEquals(0, fake.commandsNamed("seek"))
+    }
+
     @Test fun `going back with no previous track restarts this one`() = runBlocking<Unit> {
         fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PLAYING")
         withTimeout(5_000) { viewModel.uiState.first { it.actions.canSeek && !it.actions.canSkipToPrevious } }
@@ -243,8 +258,9 @@ class PlayerViewModelTest {
      * in between went back to the old position (outside review, 2026-10-08).
      */
     @Test fun `a second seek before the new position is pushed aims from the first`() = runBlocking<Unit> {
+        fake.pushFixture("metadataStatus", groupId)
         fake.pushPlaybackStatus(groupId, "PLAYBACK_STATE_PAUSED")
-        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == "PLAYBACK_STATE_PAUSED" && it.actions.canSeek } }
+        withTimeout(5_000) { viewModel.uiState.first { it.playbackState == "PLAYBACK_STATE_PAUSED" && it.actions.canSeek && it.durationMillis > 0 } }
         val start = viewModel.uiState.value.positionMillis
         fake.clearHistory()
 
@@ -429,12 +445,11 @@ class PlayerViewModelTest {
     }
 
     /**
-     * A newer press cancels the volume send still in flight, and `runCatching` catches that
-     * cancellation too. It is not a failure; reported, a held key would flash an error on
-     * every repeat. The reply is held so the cancellation lands mid-command, the one place
-     * `runCatching` sees it.
+     * A press while a send is still in flight leaves that send alone and sends its own step: a
+     * send past its debounce is never cancelled now (a cancel before the frame was written lost the
+     * step). The reply is held so the second press lands mid-command. Nothing is said, nothing lost.
      */
-    @Test fun `a volume send cancelled by a newer press says nothing`() = runBlocking<Unit> {
+    @Test fun `a press during a volume send in flight sends its own step and says nothing`() = runBlocking<Unit> {
         fake.pushGroupVolume(groupId, 20)
         awaitVolume(20)
         fake.holdRepliesTo("setRelativeVolume")
@@ -519,8 +534,9 @@ class PlayerViewModelTest {
     /** A seek pending in one room is not the next room's starting point. */
     @Test fun `a pending seek does not become another room's baseline`() = runBlocking<Unit> {
         val other = household.state.value.groups.first { it.id != groupId }
+        fake.pushFixture("metadataStatus", other.id)
         fake.pushPlaybackStatus(other.id, state = com.rahga.x2rock.model.PlaybackStates.PAUSED)
-        withTimeout(5_000) { household.groupStates.first { it[other.id]?.playbackState == com.rahga.x2rock.model.PlaybackStates.PAUSED } }
+        withTimeout(5_000) { household.groupStates.first { it[other.id]?.playbackState == com.rahga.x2rock.model.PlaybackStates.PAUSED && it[other.id]?.track != null } }
         viewModel.seekTo(60_000)
         viewModel.selectGroup(other.id, other.name)
         withTimeout(5_000) { viewModel.uiState.first { it.groupName == other.name && it.playbackState == com.rahga.x2rock.model.PlaybackStates.PAUSED } }

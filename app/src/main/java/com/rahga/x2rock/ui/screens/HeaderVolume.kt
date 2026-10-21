@@ -58,6 +58,7 @@ import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.components.mutedInk
 import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.components.tapToClick
+import com.rahga.x2rock.ui.theme.ignoreUnpressedRelease
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -178,6 +179,7 @@ internal fun VolumePill(
         // Focus shows in its colour; tv-material3's grow on focus pushed it past its own row.
         scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         modifier = modifier
+            .ignoreUnpressedRelease()
             .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)
             .onFocusChanged { focused = it.isFocused; onFocused(it.isFocused) }
             .onKeyEvent { event ->
@@ -318,5 +320,3 @@ internal fun SetVolumeOverlay(room: String, current: Int?, trapped: Boolean, onS
 
 /** The levels a room is most often set to, as one press each: quiet to loud, short of loud. */
 private val QUICK_LEVELS = listOf(5, 10, 15, 20, 25, 30, 40)
-
-/** "15 minutes", "1 hour", "1½ hours", "2 hours". */

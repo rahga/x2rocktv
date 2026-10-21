@@ -31,6 +31,14 @@ val uploadKey: Properties? = rootProject.file("keystore.properties")
     }
 
 /**
+ * A file's text, or `null` where there is none — read through Gradle, so the configuration cache sees
+ * it: a plain `File.readText()` is not an input, and a salt file added after a cached configuration
+ * built an APK with no salt, reusing the entry that had found none.
+ */
+fun fileText(file: File): String? =
+    providers.fileContents(objects.fileProperty().fileValue(file)).asText.orNull
+
+/**
  * A developer's own Sonos Control integration (T-27), compiled in only when asked for:
  * `-Px2rock.sonosIntegration`, or that line in `~/.gradle/gradle.properties` for every build of one's
  * own. It reads `~/x2rocktv-sonos.api.key` and `~/x2rocktv-sonos.api.secret` — x2rocktv's own
@@ -49,8 +57,8 @@ val sonosIntegration: Triple<String, String, String>? =
         val home = System.getProperty("user.home")
         fun read(property: String, default: String): String {
             val file = File(providers.gradleProperty(property).getOrElse(default))
-            require(file.canRead()) { "-Px2rock.sonosIntegration needs $file" }
-            return file.readText().trim().also { require(it.isNotEmpty()) { "$file is empty" } }
+            return (fileText(file) ?: error("-Px2rock.sonosIntegration needs $file")).trim()
+                .also { require(it.isNotEmpty()) { "$file is empty" } }
         }
         Triple(
             read("x2rock.sonosKeyFile", "$home/x2rocktv-sonos.api.key"),
@@ -68,8 +76,8 @@ val sonosIntegration: Triple<String, String, String>? =
 val speakerSalt: String = run {
     val home = System.getProperty("user.home")
     val file = File(providers.gradleProperty("x2rock.speakerSaltFile").getOrElse("$home/x2rock-sonos.speaker.salt"))
-    if (!file.canRead()) return@run ""
-    file.readText().trim().lowercase().also {
+    val text = fileText(file) ?: return@run ""
+    text.trim().lowercase().also {
         require(Regex("[0-9a-f]{32}").matches(it)) { "$file must hold the salt as 32 hex digits" }
     }
 }

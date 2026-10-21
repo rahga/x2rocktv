@@ -187,6 +187,13 @@ class HomeViewModelTest {
         withTimeout(5_000) { viewModel.selectedGroupId.first { it == kitchen.id } }
     }
 
+    /** A preset's "Left out" line is said here, where the preset goes; Browse's notice is left behind. */
+    @Test fun `a room asked for with a line says it on arrival`() = runBlocking<Unit> {
+        val state = connect()
+        deepLink.set(state.groups.first { it.name == "Kitchen" }.coordinatorId, notice = "Left out Guest TV")
+        assertEquals("Left out Guest TV", withTimeout(5_000) { viewModel.notice.first { it != null } })
+    }
+
     @Test fun `it is loading until the household answers`() {
         assertTrue(viewModel.uiState.value is HomeViewModel.UiState.Loading)
     }

@@ -217,9 +217,6 @@ fun PlayerPane(
         }
     }
 
-    // The picker traps focus, so closing it hands focus back to Zzz, the button that opened it,
-    // where the remote was; the pane's first control only if Zzz has gone meanwhile.
-
     Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(tint, surface)))) {
         Surface(
             // Transparent so the art's tint shows through. The remote's transport keys are
@@ -861,7 +858,6 @@ private fun TvControls(
  * the room is the one already chosen.
  */
 
-/** A setting and the value it currently holds, the way the Sonos app draws these two. */
 /**
  * One speaker of a grouped room: its name and its level as the header's pill (left and right step
  * it, Select mutes). Grouping is the Group button's, not this row's: on a remote, Right on the pill
@@ -967,5 +963,3 @@ private fun GlyphTile(icon: ImageVector) {
 
 /** The cover's size in the pane: large, but not so large the second row of buttons leaves the screen. */
 private val ART_SIZE = 168.dp
-
-/** A seek total as a viewer reads it: −30s, +1:00, −1:30. */

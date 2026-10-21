@@ -83,6 +83,10 @@ fun X2RockNavGraph() {
                 "&kind=${Uri.encode(kind)}"
         )
 
+    // Never past home: the leaving screen keeps focus through the fade, so a second quick press on
+    // its Back would pop the start destination too and leave nothing but a blank.
+    val back: () -> Unit = { if (navController.previousBackStackEntry != null) navController.popBackStack() }
+
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
             val accountViewModel: AccountViewModel = hiltViewModel()
@@ -117,25 +121,25 @@ fun X2RockNavGraph() {
             route = "nowPlaying?groupId={groupId}",
             arguments = listOf(navArgument("groupId") { type = NavType.StringType })
         ) {
-            NowPlayingScreen(onBack = { navController.popBackStack() })
+            NowPlayingScreen(onBack = back)
         }
 
         composable("about") {
-            AboutSystemScreen(onBack = { navController.popBackStack() })
+            AboutSystemScreen(onBack = back)
         }
         composable("account") {
-            AccountScreen(onBack = { navController.popBackStack() })
+            AccountScreen(onBack = back)
         }
         composable("report") {
-            BetaReportScreen(onBack = { navController.popBackStack() })
+            BetaReportScreen(onBack = back)
         }
 
         composable("alarms") {
-            AlarmsScreen(onBack = { navController.popBackStack() })
+            AlarmsScreen(onBack = back)
         }
 
         composable("preferredServices") {
-            PreferredServicesScreen(onBack = { navController.popBackStack() })
+            PreferredServicesScreen(onBack = back)
         }
 
         composable(
@@ -144,7 +148,7 @@ fun X2RockNavGraph() {
         ) {
             QueueScreen(
                 room = room,
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 playerViewModel = playerViewModel
             )
         }
@@ -155,7 +159,7 @@ fun X2RockNavGraph() {
         ) {
             FavoritesScreen(
                 room = room,
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
                 onOpenServices = { groupId -> navController.navigate("services?groupId=${Uri.encode(groupId)}") },
                 onOpenFavorite = { groupId, serviceKey, containerId, favorite ->
@@ -174,7 +178,7 @@ fun X2RockNavGraph() {
         ) {
             SearchScreen(
                 room = room,
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 onPlayed = ::played,
                 // The room's group as it is now, from the screen, not the route's: a regroup since
                 // Search opened mints a new one, and a page opened on the old could not find the room.
@@ -205,7 +209,7 @@ fun X2RockNavGraph() {
             ServiceBrowseScreen(
                 room = room,
                 onOpenAppleMusic = { groupId -> navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 onPlayed = ::played,
             )
         }
@@ -216,7 +220,7 @@ fun X2RockNavGraph() {
         ) {
             AppleMusicScreen(
                 room = room,
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 onPlayed = ::played,
             )
         }
@@ -227,7 +231,7 @@ fun X2RockNavGraph() {
         ) {
             RadioScreen(
                 room = room,
-                onBack = { navController.popBackStack() },
+                onBack = back,
                 playerViewModel = playerViewModel,
                 onPlayed = ::played,
             )

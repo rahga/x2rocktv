@@ -62,3 +62,9 @@ keystore.properties
 # -Px2rock.cloudContent for the owner's own TVs. Never committed; see CLAUDE.md.
 core/src/cloud/
 core/src/cloudTest/
+
+# The developer integration's key and secret, and the speaker salt, live in ~ (T-27, CLAUDE.md);
+# should a copy ever land in the tree, it is not picked up by `git add`.
+*.api.key
+*.api.secret
+*.speaker.salt

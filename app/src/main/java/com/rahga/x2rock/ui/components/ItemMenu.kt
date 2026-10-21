@@ -36,7 +36,7 @@ data class MenuSection(val title: String?, val actions: List<MenuAction>)
  * Everything that can be done with one item, opened by a hold or the Menu key on its row — the
  * remote's version of the Sonos app's "⋯". Sonos's own actions first (play now, play next, add to
  * the queue), then the service's under its name (browse the artist, open the album), as the Sonos
- * app lays them out. Focus starts on the first action (or [focusedAction]); Back or a tap outside closes it, and so
+ * app lays them out. Focus starts on the first action; Back or a tap outside closes it, and so
  * does any action, after it is sent.
  *
  * [note] stands in for a section still being asked for, so the menu opens at once rather than
@@ -53,8 +53,6 @@ fun ItemMenu(
     note: String? = null,
     /** False while focus is handed back through [handOffFocus], as the room panel's is. */
     trapped: Boolean = true,
-    /** Which action takes first focus, counted across sections: a choice opens on what is chosen. */
-    focusedAction: Int = 0,
 ) {
     BackHandler { onDismiss() }
     val firstFocus = rememberAutoFocusRequester()
@@ -66,7 +64,7 @@ fun ItemMenu(
         note?.let { add(Note(it)) }
     }
     val actionRows = rows.indices.filter { rows[it] is MenuAction }
-    val first = actionRows.getOrElse(focusedAction) { actionRows.firstOrNull() ?: -1 }
+    val first = actionRows.firstOrNull() ?: -1
 
     Overlay(onDismiss, trapped) {
         Column(

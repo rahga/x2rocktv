@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import androidx.tvprovider.media.tv.TvContractCompat
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.store.RoomPreferencesStore
+import com.rahga.x2rock.viewmodel.sortGroups
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +26,7 @@ class ChannelSyncReceiver : BroadcastReceiver() {
 
     @Inject lateinit var household: SonosHousehold
     @Inject lateinit var channelSync: RoomsChannelSync
+    @Inject lateinit var roomPrefs: RoomPreferencesStore
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != TvContractCompat.ACTION_INITIALIZE_PROGRAMS) return
@@ -45,7 +48,8 @@ class ChannelSyncReceiver : BroadcastReceiver() {
                     household.groupStates.first { pushed -> pushed.isNotEmpty() }
 
                     val tiles = state.groups.associate { it.id to household.groupState(it.id).let { s -> RoomTile(s.track?.name, s.artUrl) } }
-                    channelSync.sync(state.groups, tiles)
+                    // As the app publishes them: in this device's room order, without playback state.
+                    channelSync.sync(sortGroups(state.groups, roomPrefs.roomRanks.value).map { it.copy(playbackState = null) }, tiles)
                 }
             } catch (_: TimeoutCancellationException) {
                 // Out of budget. The next INITIALIZE_PROGRAMS, or the app itself, will retry.
