@@ -14,7 +14,8 @@ A Sonos controller for Google TV / Android TV, written in Kotlin with Jetpack Co
 ## What it does
 
 x2rock controls Sonos speakers from a TV remote. There is no sign-in: a player is found on
-the local network by SSDP (or remembered from last time) and answers without an account.
+the local network by SSDP, or by mDNS where SSDP draws nothing (`NsdMdnsDiscovery`), or is
+remembered from last time, and answers without an account.
 
 Rooms are listed in a sidebar, alphabetically until the viewer moves one (a hold picks a room
 up; the order is this device's). Selecting a room shows
@@ -24,7 +25,7 @@ each opened by its own pane button: **Group** — play everywhere, the rooms pla
 rooms that could join, presets — and **Configure** — source (TV input, line-in), sleep timer,
 sound, and room settings with "This is my TV". The queue and the
 household's favourites each have a screen. A track on a service that publishes ratings can be
-rated up or down. There are five dark colour themes.
+rated up or down. There are six dark colour themes.
 
 The app opens on the television's own room: the soundbar the device is plugged into, found by
 `TvSoundbar` or named by the viewer. Each room is also a tile on the TV home screen's channel,
@@ -52,7 +53,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │                                                testable against real speakers)
 ├── model/
 │   ├── SonosModels.kt             Control API shapes, shared by every layer
-│   └── AppColorTheme.kt           Enum: DEFAULT, OCEAN, EMBER, FOREST, ORCHID
+│   └── AppColorTheme.kt           Enum: DEFAULT, OCEAN, EMBER, FOREST, ORCHID, ARTWORK (accent from the cover)
 │
 ├── lan/
 │   ├── Frame.kt                   [header, body] wire format; reply vs event
@@ -61,6 +62,7 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── SonosSocket.kt             one socket to one player
 │   ├── CallAwait.kt               an OkHttp call awaited, and cancelled with its caller, body included
 │   ├── Discovery.kt               SSDP: id, address and household in one reply
+│   ├── MdnsDiscovery.kt           the seam for `_sonos._tcp` over mDNS when SSDP finds nothing; the platform supplies it
 │   ├── MulticastGate.kt           whatever the platform must hold for multicast
 │   ├── SeedStore.kt               the last reachable player (per network), for a warm start
 │   ├── SonosHousehold.kt          state flows, commands, subscriptions, reconnection
@@ -70,6 +72,10 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
 │   ├── Xml.kt                     the one parser for UPnP and SMAPI replies, DOCTYPE refused by hand
 │   ├── TvSoundbar.kt              which soundbar this television is plugged into
 │   └── PlayModes.kt               repeat flags ↔ the app's enum
+│
+├── account/                       T-27: a developer's own integration; inert unless a build carries one
+│   ├── SonosAccount.kt            the integration, OAuth code redemption and refresh, the token store seam, signInState
+│   └── SignInCallback.kt          the TV listening once on the LAN for the phone's forwarded `/callback?code=…`
 │
 ├── radio/RadioDirectory.kt        Radio Browser: stations by votes, genre or country
 ├── apple/ITunesSearch.kt         Apple Music's catalogue through Apple's public iTunes search
@@ -81,8 +87,15 @@ core/src/main/kotlin/com/rahga/x2rock/          (pure JVM — no Android, so it 
     ├── AccountCapture.kt          one-shot GENA capture of that encrypted token blob off a player
     ├── LinkedServices.kt          which services a stored token (or anonymity) actually unlocks
     ├── ServiceContent.kt          what a service item is (opens, enqueues, streams), and its URI/DIDL
+    ├── ServicePages.kt            T-28 seam: a service's pages from an untracked source, via ServiceLoader; none ships
     ├── RatingsCatalogue.kt        a service's rating rules, fetched on a miss
     └── RatingsStore.kt            where those rules are remembered (seam)
+
+core/src/testFixtures/kotlin/com/rahga/x2rock/  (shared by :core's and :app's tests)
+├── lan/FakePlayer.kt              an in-process TLS player replaying captured fixtures
+├── lan/FakeUpnp.kt                SOAP helpers for MockWebServer fakes: the action, the arguments, an empty reply
+├── lan/TestHousehold.kt           fakeHousehold: no multicast, SSDP, mDNS or account capture; FakeSeedStore
+└── smapi/TestEnvelope.kt          seals account XML as a player does, with the tests' own salt
 
 app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── X2RockApp.kt                   Hilt entry point; image loader on the LAN client
@@ -93,6 +106,11 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 ├── store/ThemeStore.kt            StateFlow-backed theme preference
 ├── store/RoomPreferencesStore.kt  the television's soundbar, as a player id
 ├── store/PendingRoomDeepLink.kt   a room asked for by a channel tile, until it exists
+├── store/AfterPlaying.kt          whether starting something stays in the browser or returns to the room
+├── store/AppleMusicSetting.kt     whether Apple Music is listed: a stored sign-in, or the Advanced switch
+├── store/BetaFeatures.kt          Settings → Beta features, and the last refusal one met, for the report
+├── store/DeveloperAccount.kt      the T-27 account where the build carries an integration; null otherwise
+├── store/RecentSearches.kt        this device's last eight search terms, newest first
 ├── net/
 │   ├── ArtHttp.kt                 cover art: bounded, and players and CDNs on separate clients
 │   ├── NetworkMonitor.kt          ConnectivityManager → household.onNetworkChanged()
@@ -135,6 +153,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   │   ├── StepMark.kt            − and + beside a level, while it has focus or by touch
 │   │   ├── Touch.kt               a tap as a press, for the emulator and tablets; inert on a remote
 │   │   ├── DotEqualizer.kt        a playing room's mark, and DotScanner for loading
+│   │   ├── SignInsNote.kt         why services needing an account are missing, when stored sign-ins could not be read
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
 │       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
@@ -153,6 +172,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │       ├── PreferredServicesScreen.kt  Settings' sorter: mark services preferred, carry them into order
 │       ├── AlarmsScreen.kt        Settings' alarms: every room's, armed on Select; a new one step by step
 │       ├── AboutSystemScreen.kt   Settings' About this system: every speaker, its software, any update waiting
+│       ├── AccountScreen.kt       Settings → Sonos account (T-27): a QR code to sign in from a phone, or sign out
+│       ├── BetaReportScreen.kt    Settings → Beta features → Send a report: the text, and a QR code to a draft issue
+│       ├── StayPin.kt             the pin at the right of every Browse header: hold in the browser or release
 │       ├── RadioScreen.kt         the radio directory, by category — click to play
 │       ├── AppleMusicScreen.kt    Apple Music search — click to play, hold or Menu to queue
 │       ├── ServiceBrowseScreen.kt the household's own services — each opens on its library (or its
@@ -170,6 +192,9 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── ServiceBrowseViewModel.kt   browse/search the household's own services, a level at a time
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
     ├── AboutSystemViewModel.kt     every speaker's description and update state, read once
+    ├── AccountViewModel.kt         the T-27 sign-in: show the consent page's QR, listen once, redeem the code
+    ├── AfterPlayingViewModel.kt    AfterPlaying, for the nav graph and Browse's header
+    ├── BetaReportViewModel.kt      the beta report as a prefilled GitHub issue, read once on opening
     ├── AlarmsViewModel.kt          the household's alarms, the clock they are on, and the new-alarm steps
     ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
@@ -178,8 +203,16 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── RoomTarget.kt               the room a screen was opened for, followed across regroups; SavedRoom,
     │                               the player's and the selection's room kept through process death
     ├── MonotonicClock.kt           milliseconds that only go up (sleep timer ends), a test seam
+    ├── VolumeBurst.kt              how far one volume press moves: 2, 3, 5 within a burst, finer when quiet
     ├── FavoriteGroups.kt           favourites grouped and labelled, and which open on a page
     └── RoomActivity.kt             Playing / Paused / Stopped / Nothing playing — one rule for every screen
+
+app/src/androidTest/java/com/rahga/x2rock/      (Compose UI tests on the emulator, over FakePlayer)
+├── FocusChoreographyTest.kt       the home screen's focus paths
+├── AlarmPaneTest.kt               a ringing alarm's Snooze and Stop take the places row's slot (P-25)
+├── BrowseFocusReturnTest.kt       Back to Browse lands on the opening row, even one scrolled out of view (P-02)
+├── SearchFieldFocusTest.kt        the D-pad leaves the search field once the keyboard is closed (P-19)
+└── TestDoubles.kt                 in-memory Preferences, no channel sync, no media session
 ```
 
 ---
@@ -261,11 +294,11 @@ State in each ViewModel is derived rather than assembled by hand, so it recomput
 something actually changes and at no other time. A command's effect arrives as an event
 like any other, which is why nothing re-fetches after acting.
 
-Five things are asked for rather than pushed, each because nothing pushes it:
+Four things are asked for rather than pushed, each because nothing pushes it:
 - **The queue**, over UPnP — the Control API has none. Stale until re-read.
 - **Night Sound and Speech Enhancement**, from `settings:1 getPlayerSettings`: `homeTheater:1`
-  accepts a subscription and never fires. Read once per room and after each write.
-- **The sleep timer**, over AVTransport. Read once per room and after each change.
+  accepts a subscription and never fires. Read once per room and after each write. Tone and
+  the volume limit come from the same read.
 - **A track's rating**, from the service. Read once per room and track and after each press.
 - **Favourites**, read when their screen opens.
 
@@ -295,7 +328,8 @@ volume keys. Manages:
 - The rating state
 - A notice line: a rating's result, or why a command failed
 - The room's sleep timer: Sonos's own, so every controller sees it and the room pauses
-  itself. Read on selection and after a change, counted down locally between reads
+  itself. Pushed by `sleepTimer:1` on every set and cancel, whoever made it, and counted down
+  locally between reports
 
 The selected room reaches it from `HomeScreen`, which calls `selectGroup` as focus moves.
 
@@ -351,19 +385,34 @@ rather than repairing in place: subscriptions do not survive a reconnect and the
 replay buffer, so the fresh snapshot is truth. `onNetworkChanged()` skips the wait entirely,
 because a resumed socket can accept writes and never report failure.
 
-### Leaving the LAN: ratings (`:core`, package `smapi`)
+### Leaving the LAN (`:core`, packages `smapi`, `radio`, `apple`, `account`)
 
-The only traffic that leaves the household, and it goes over its own internet client — never
-the LAN one, whose trust manager accepts the players' leaf-only chains. A rating starts on the
-LAN with `ListAvailableServices`, then fetches the service's manifest and presentation map from
-Sonos's CDN (cached per service by `RatingsCatalogue`, including "publishes none"), then calls
-`getExtendedMetadata` and `rateItem` on the service itself. Only anonymous services are rated:
-there is no account linking on a TV. `SonosHousehold.ratingState` answers null wherever `rate`
-would refuse, so the buttons are drawn exactly when a press can succeed.
+Control never leaves the household, but some traffic does, all of it over the `@InternetHttp`
+client — never the LAN one, whose trust manager accepts the players' leaf-only chains:
+- a service's own SMAPI endpoint, for search, browse, favourites, playlists and ratings, and its
+  manifest's `browse` endpoint for a service's page of shelves
+- Sonos's CDN, for a service's manifest and presentation map
+- Radio Browser (`RadioDirectory`) and Apple's iTunes search (`ITunesSearch`)
+- with T-27 only, `api.sonos.com` to redeem and refresh the account token; with T-28 only, the
+  untracked page source
+
+**Ratings.** A rating starts on the LAN with `ListAvailableServices`, then fetches the service's
+manifest and presentation map from the CDN (cached per service by `RatingsCatalogue`, including
+"publishes none"), then calls `getExtendedMetadata` and `rateItem` on the service itself. A
+service is reached with the household's own credential: none for an anonymous one, the token
+read off a player (`StoredAccounts`, the one search uses) for the rest, picking the account the
+track plays from. No account linking happens on the TV. `SonosHousehold.ratingState` answers
+null wherever `rate` would refuse, so the buttons are drawn exactly when a press can succeed.
 
 ### Authentication
 
-None, and that is the point. No account, no OAuth, no tokens, no stored secrets.
+By default none: the LAN takes commands with no account, OAuth or token. Two exceptions:
+- **The household's stored service sign-ins** (`StoredAccounts`): the music-service tokens the
+  speakers already hold, read off a player and decrypted with a salt the build carries, so
+  services needing an account can be searched, browsed and rated. Nothing is stored by the app.
+- **A developer's own integration** (T-27, `account/`), only in a build made with
+  `-Px2rock.sonosIntegration`: the TV is signed in from a phone, the token is kept in the app's
+  private preferences, and it rides in each command's header as `authorization: Bearer …`.
 
 ---
 
@@ -381,8 +430,10 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | `favorites:1` | household / group | listing and loading favourites |
 | `playlists:1` | household / group | listing Sonos playlists, and loading one with `action: REPLACE` |
 | `history:1` | household | recently played, `getHistory` |
+| `playbackSession:1` | group (coordinator) | `createSession`, then `loadStreamUrl` in it: a radio-directory station or Play a URL |
+| `sleepTimer:1` | group (coordinator) | the room's sleep timer, subscribed and pushed (set over UPnP) |
 | `playback:1 loadContent` | group (coordinator) | playing a recently played item again: load, then press play until pushed as playing |
-| `settings:1` | player | `getPlayerSettings`: Night Sound and Speech Enhancement, read only |
+| `settings:1` | player | `getPlayerSettings`: Night Sound and Speech Enhancement, tone, the volume limit; read only (writes are refused, so go over UPnP) |
 | `zones:1` | household (the seed) | bonded speakers that have dropped off, `activeZonesChange` |
 | `hdmi:1` | **each soundbar's own socket** | whether anything is plugged into the HDMI port |
 | `effectiveSettings:1` | player (the seed) | the UPnP switch: `getSettingsGroup {"groupName":"security"}`, followed by `settingsChanged`'s per-group timestamps |
@@ -394,14 +445,26 @@ Commands and events are `[header, body]` frames over the WebSocket, not REST pat
 | Service | Action | Used for |
 |---|---|---|
 | ContentDirectory | `Browse Q:0` | reading the queue, and its `UpdateID` before an edit |
+| ContentDirectory | `Browse FV:2`, `CreateObject FV:2`, `DestroyObject` | Sonos favourites: the shortcuts and alarm programs the Control API omits, saving the current track, removing one |
 | AVTransport | `RemoveTrackFromQueue`, `Seek TRACK_NR` | removing from and jumping in the queue |
 | AVTransport | `ReorderTracksInQueue`, `RemoveAllTracksFromQueue`, `SaveQueue` | moving a track, clearing, saving as a playlist |
+| AVTransport | `AddURIToQueue`, `GetPositionInfo` | adding to the queue (at the end, or next after the slot playing); the slot for Previous and for saving a favourite |
 | AVTransport | `GetMediaInfo`, `SetAVTransportURI x-rincon-queue:<coordinator>#0` | whether the queue is the source, and making it so before a jump — `Seek` answers 701 otherwise |
 | AVTransport | `SetAVTransportURI x-sonos-htastream:<soundbar>:spdif` | the TV input, sent to the coordinator |
+| AVTransport | `SetAVTransportURI` (a service's radio URI) | a service's station, before falling back to `getMediaURI` |
+| AVTransport | `ConfigureSleepTimer` (`GetRemainingSleepTimerDuration` for the live suite) | setting the room's own sleep timer; its state arrives on `sleepTimer:1` |
+| AVTransport | `GetRunningAlarmProperties`, `SnoozeAlarm` | a ringing alarm's Snooze |
 | RenderingControl | `SetEQ NightMode`, `SetEQ DialogLevel` | the two home-theatre toggles, sent to the soundbar |
+| RenderingControl | `GetEQ`, `SetEQ` (Sub and surround types) | Sub and surrounds: on/off and level |
 | RenderingControl | `SetBass`, `SetTreble`, `SetLoudness` (`Channel=Master`), `Get/SetRoomCalibrationStatus` | tone and TruePlay, sent to the speaker itself |
-| AVTransport | `GetRemainingSleepTimerDuration`, `ConfigureSleepTimer` | the room's own sleep timer |
-| MusicServices | `ListAvailableServices` | which service a track's id names, for ratings |
+| DeviceProperties | `Get/SetLEDState`, `Get/SetButtonLockState` | Status light, Touch controls |
+| HTControl | `Get/SetLEDFeedbackState`, `Get/SetIRRepeaterState` | a soundbar's Remote feedback light and IR repeater |
+| AlarmClock | `ListAlarms`, `CreateAlarm`, `UpdateAlarm`, `DestroyAlarm`, `GetTimeNow`, `GetTimeZone` | the household's alarms and the clock they run on |
+| ZoneGroupTopology | `CheckForUpdate` (`CachedOnly=1`) | About this system: whether an update waits; never applied |
+| MusicServices | `ListAvailableServices` | the household's services: the list search, browse and Music Services start from, which service a track's id names (ratings, saving a favourite) |
+
+Plain GETs on the same port: `/status/zp` (the long household id), `/xml/device_description.xml`
+(a speaker's model and software), `/status/batterystatus` (a portable's battery).
 
 Every UPnP call is addressed by `.local` name, because cleartext is permitted for those names
 only. A 403 means the household has UPnP switched off in the Sonos app.
@@ -413,11 +476,14 @@ only. A 403 means the household has UPnP switched off in the Sonos app.
 Dagger Hilt in `:app` only. `AppModule` provides:
 - an application-scoped `CoroutineScope` — the sockets outlive any one screen
 - a `PlayerAddressBook`, and the single `OkHttpClient` allowed to reach players
-- an `@InternetHttp` `OkHttpClient` for the CDN and music services, and nothing else
-- `SonosHousehold`, as a singleton
+- an `@InternetHttp` `OkHttpClient` for everything that is not a player: Sonos's CDN, music
+  services, and `RadioDirectory` and `ITunesSearch`, which it also provides
+- the `SeedStore` (`PrefsSeedStore`, keyed by `NetworkIdentity`) and the `MonotonicClock`
+- `SonosHousehold`, as a singleton, with the T-27 bearer and T-28 page source where the build has them
 
 `StoreModule` binds the seams that keep the view models constructible without the framework:
-`Preferences`, `ChannelSync`, `NowPlayingPublisher` and `RatingsStore`.
+`Preferences`, `ChannelSync`, `MulticastGate` (`WifiMulticastGate`), `MdnsDiscovery`
+(`NsdMdnsDiscovery`), `NowPlayingPublisher` and `RatingsStore`.
 
 **The image loader must use the LAN client.** Album art is served by the players at cleartext
 `.local` URLs, so a loader with its own client has neither the address book to resolve the
@@ -445,7 +511,8 @@ Two suites; `CLAUDE.md` explains why both exist and how to run the live one.
 - Both build their household with `fakeHousehold` (`TestHousehold.kt` in `:core`'s test
   fixtures): no multicast, no real SSDP, mDNS or account capture. Name only what a test changes.
 - **On the device**, `app/src/androidTest`: `FocusChoreographyTest` drives the home screen's focus
-  paths with Compose UI tests over the same in-process `FakePlayer`, view models built by hand.
+  paths with Compose UI tests over the same in-process `FakePlayer`, view models built by hand;
+  `AlarmPaneTest`, `BrowseFocusReturnTest` and `SearchFieldFocusTest` pin three punch-list fixes.
   `ANDROID_SERIAL=emulator-5554 ./gradlew :app:connectedDebugAndroidTest`, on the emulator only:
   the task installs and uninstalls on every attached device, so `adb disconnect` the TVs first.
 
@@ -467,7 +534,7 @@ Two suites; `CLAUDE.md` explains why both exist and how to run the live one.
 ## Build
 
 - Language: Kotlin only
-- Min SDK 26; compile and target SDK 35 (`app/build.gradle.kts` is the source of truth)
+- Min SDK 26, compile SDK 37, target SDK 35 (`app/build.gradle.kts` is the source of truth)
 - Build system: Gradle with Kotlin DSL; modules `:core` (Kotlin/JVM) and `:app` (Android)
 - Unit tests: `./gradlew :core:test :app:testDebugUnitTest`
 - Build inputs that are not in the repository, each opt-in, none needed for a complete build:

@@ -237,7 +237,7 @@ a player found by any means at all can be connected to without SSDP.
 household out of the error reply, and a One SL on p20.96.1 simply ignored that — no reply at
 all, so a connect that depended on it hung its timeout and failed. It went unnoticed because
 SSDP always supplies the household. The probe is gone; do not bring it back as a fallback.
-`FakePlayer.ignoreHouseholdProbe` reproduces that One SL.
+`HouseholdIdTest` covers the `/status/zp` read that replaced it.
 
 ## Anything on the network can change this household
 

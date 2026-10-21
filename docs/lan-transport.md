@@ -20,6 +20,11 @@ no device-code or second-screen grant. The app's old `LoginScreen` → `SonosAut
 was a dead end on the target device, whatever else was right about it. The account path is not
 undesirable here; it is closed.
 
+*Since 2026-10-13 (T-27) a build with a developer's own integration signs a TV in from a phone
+instead — a QR code to the consent page, whose redirect hands the code back to the TV over the LAN —
+for a household with Sonos's Authentication switch on. Commands still go over the LAN, now carrying
+the token; see CLAUDE.md. The cloud transport itself stays gone.*
+
 **2. It buys nothing.** The Control API is the *same API* over the LAN, unauthenticated.
 The only cloud-exclusive capability is control from outside the house. YouTube Music search
 is closed on both transports — by a Google project gate on its partner API, x2rock found on

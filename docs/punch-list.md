@@ -113,6 +113,25 @@ answers by writing nothing; `addToServicePlaylist` appending at a `total` a serv
 (Deezer sends it; no other writable service is known); line-in's coordinator-first order, untested
 like the rest of line-in (P-14).
 
+**Review pass of 2026-10-20** (15a0922..; five area reviews — core/lan, core services, view models,
+UI, build/docs/tests — each claim checked against the code before acting). Fixed: a caller's own
+timeout over a socket command recorded as "no reply" (the channel receiver's budget over a cold
+connect left an error and a forgotten seed over a healthy household); a bad escape on the sign-in
+listener ending the sign-in, and a 429 on a token refresh signing out; a JSON null in one shelf row
+throwing a service's whole page away, and a non-JSON manifest cached as "no ratings"; an unreachable
+speaker's sign-ins read going unrecorded; a preset's "Left out" line posted on a screen the preset
+navigates away from; the remote's fast-forward seeking where the pane draws no bar; the seek bar's
+tick clamping to the previous track's length; a double Back popping the home screen; an item menu
+with nothing focusable; the volume pill clicking on a stray release; the connect and reconnect
+guards racing across threads; a socket cancelled before pooling left open; the salt file outside
+Gradle's configuration cache; tests that could not fail (the sign-in listener closing, About this
+system's speaker count, player scope in the fake). Open items are PUNCH P-58..P-68. Looked at and
+left alone: `HouseholdState.lineInPlayer`, used only by a test, kept as the per-group question that
+test asks; `androidx.core.ktx` declared though nothing imports it directly — it arrives anyway and
+pins the version; a token reply with no `expires_in` refreshing on every call, since Sonos always
+sends one; Upnp's "GENA is not used" while `AccountCapture` subscribes once — that is the one-shot
+capture, said there.
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`;
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
 2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an
