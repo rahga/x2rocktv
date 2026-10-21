@@ -564,6 +564,12 @@ class FakePlayer(
             refuseObject(webSocket, cmdId, namespace, "Incorrect playerId")
             return
         }
+        // And on that player's own socket: a player-scoped command sent to another speaker is
+        // refused the same way, so a household that put one on a coordinator's socket fails here.
+        if (playerId != null && PlayerNames.localHostname(playerId)?.lowercase() != host) {
+            refuseObject(webSocket, cmdId, namespace, "Incorrect playerId")
+            return
+        }
         // And the scope rule CLAUDE.md calls load-bearing: a group-scoped command is answered
         // only by that group's coordinator, on its own socket. Sent anywhere else, a real player
         // answers ERROR_INVALID_OBJECT_ID — and so does this one, so a household that put a

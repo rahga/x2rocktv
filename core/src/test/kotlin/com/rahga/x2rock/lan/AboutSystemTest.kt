@@ -3,6 +3,7 @@ package com.rahga.x2rock.lan
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -58,8 +59,15 @@ class AboutSystemTest {
     }
 
     @Test fun `each speaker says what it is, and an up-to-date one waits for nothing`() = runBlocking<Unit> {
+        // Grouped first: in the captured topology every group has one player, so listing only the
+        // coordinators would pass too.
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val state = kotlinx.coroutines.withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { it.playerIds.size > 1 } }
+        }
         val speakers = household.aboutSystem()
-        assertEquals(household.state.value.groups.flatMap { it.playerIds }.distinct().size, speakers.size)
+        assertTrue("a member is a speaker too", state.groups.size < speakers.size)
+        assertEquals(state.groups.flatMap { it.playerIds }.distinct().size, speakers.size)
         val one = speakers.first()
         assertEquals("Sonos One SL", one.info?.modelName)
         assertEquals("18.8", one.info?.displayVersion)

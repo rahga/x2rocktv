@@ -404,7 +404,7 @@ class SonosHousehold(
      */
     private val socketJobs = mutableMapOf<SonosSocket, List<Job>>()
     private val lock = Mutex()
-    private var reconnectJob: Job? = null
+    @Volatile private var reconnectJob: Job? = null
 
     /** Set once someone asks for a connection, cleared only by [disconnect]. */
     @Volatile private var wantConnection = false
@@ -461,24 +461,25 @@ class SonosHousehold(
      * is enough, because `getGroups` then reports where all the others are.
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
-        if (_state.value.connected || reconnectJob?.isActive == true || connecting) return
+        if (_state.value.connected || reconnectJob?.isActive == true) return
         // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
         // boots and starts this app before the LAN is up, and without this the network
         // coming back would be ignored and the user left on the error screen.
         wantConnection = true
         // One at a time: the home screen and the channel receiver both ask on start, and
         // `connected` is not set until getGroups has answered, so two set-ups used to run
-        // side by side, subscribing the seed twice over.
-        connecting = true
+        // side by side, subscribing the seed twice over. Taken atomically: the two ask from
+        // different threads.
+        if (!connecting.compareAndSet(false, true)) return
         try {
             establish(seed)
         } finally {
-            connecting = false
+            connecting.set(false)
         }
     }
 
     /** A [connect] is setting up; see there. */
-    @Volatile private var connecting = false
+    private val connecting = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /**
      * Connect to the household the viewer picked from [HouseholdState.householdChoices]. Its
@@ -696,6 +697,9 @@ class SonosHousehold(
      * tears everything down first and treats the fresh snapshot as truth rather than
      * merging it with what was there before an outage.
      */
+    // Synchronized: sockets fail on pool threads, several at once when Wi-Fi drops, and two
+    // unsynchronized cancel-and-replace runs could each miss the other's job, leaving two loops.
+    @Synchronized
     private fun reconnect(
         immediate: Boolean = false,
         fresh: Boolean = false,
@@ -2373,7 +2377,15 @@ class SonosHousehold(
             generation
         }
         val socket = SonosSocket.open(client, hostname, port, authorization)
-        return lock.withLock {
+        // Cancelled while waiting for the lock, the socket would be neither pooled nor closed.
+        return try { adopt(hostname, socket, opened) } catch (e: CancellationException) {
+            socket.cancel()
+            throw e
+        }
+    }
+
+    private suspend fun adopt(hostname: String, socket: SonosSocket, opened: Int): SonosSocket =
+        lock.withLock {
             // A teardown while the handshake was in flight means this socket belongs to a
             // dead session; adopting it would resurrect it into a just-cleared map.
             if (opened != generation) {
@@ -2388,7 +2400,6 @@ class SonosHousehold(
             watch(socket)
             socket
         }
-    }
 
     /**
      * Every socket's watchers, taken out of the map under its lock as one snapshot, so the
