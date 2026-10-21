@@ -90,6 +90,13 @@ class SonosAccountTest {
         assertNull(store.held)
     }
 
+    @Test fun `a rate limit on the refresh is not a refusal of the grant`() = runBlocking {
+        store.held = AccountToken("a-1", "r-1", expiresIn = 1000, obtainedAt = clock - 900)
+        server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":null,"error_description":null}"""))
+        assertEquals("a-1", account.bearer())
+        assertTrue("still signed in", store.held != null)
+    }
+
     @Test fun `Sonos out of reach leaves a token that has not yet expired`() = runBlocking {
         store.held = AccountToken("a-1", "r-1", expiresIn = 1000, obtainedAt = clock - 900)
         server.enqueue(MockResponse().setResponseCode(503))

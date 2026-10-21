@@ -71,7 +71,11 @@ object SignInCallback {
             respond(socket, 404, "Not here", "This is x2rock on a TV, waiting for a Sonos sign-in.")
             return null
         }
-        val query = parseQuery(target.substringAfter('?'))
+        // A bad escape (`%zz`) is a stray request, not the end of the sign-in.
+        val query = try { parseQuery(target.substringAfter('?')) } catch (_: IllegalArgumentException) {
+            respond(socket, 400, "Not this sign-in", "Start the sign-in on the TV again, and scan the code it shows now.")
+            return null
+        }
         if (query["state"] != state) {
             // Another sign-in's redirect, or a stale tab: not this one's to redeem.
             respond(socket, 400, "Not this sign-in", "Start the sign-in on the TV again, and scan the code it shows now.")

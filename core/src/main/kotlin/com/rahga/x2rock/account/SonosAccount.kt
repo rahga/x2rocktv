@@ -1,5 +1,6 @@
 package com.rahga.x2rock.account
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.rahga.x2rock.lan.awaitReply
 import kotlinx.coroutines.Dispatchers
@@ -118,18 +119,22 @@ class SonosAccount(
         val reply = client.newCall(request).awaitReply()
         val json = runCatching { JsonParser.parseString(reply.body).asJsonObject }.getOrNull()
         if (reply.code !in 200..299 || json == null) {
-            val said = json?.get("error_description")?.asString ?: json?.get("error")?.asString
-            // A 4xx is Sonos's answer about the grant; anything else is the way there.
-            if (reply.code in 400..499) throw SignInException("Sonos refused it: ${said ?: "HTTP ${reply.code}"}")
+            val said = json?.text("error_description") ?: json?.text("error")
+            // A 400 or 401 is Sonos's answer about the grant; anything else — a 429 or 408 included —
+            // is the way there, and must not sign out over a refresh token that still works.
+            if (reply.code == 400 || reply.code == 401) throw SignInException("Sonos refused it: ${said ?: "HTTP ${reply.code}"}")
             throw IOException("Sonos's sign-in answered HTTP ${reply.code}")
         }
         AccountToken(
-            accessToken = json.get("access_token")?.asString ?: throw SignInException("Sonos sent no access token"),
-            refreshToken = json.get("refresh_token")?.asString.orEmpty(),
-            expiresIn = json.get("expires_in")?.asLong ?: 0,
+            accessToken = json.text("access_token") ?: throw SignInException("Sonos sent no access token"),
+            refreshToken = json.text("refresh_token").orEmpty(),
+            expiresIn = json.get("expires_in")?.takeIf { it.isJsonPrimitive }?.asLong ?: 0,
             obtainedAt = now(),
         )
     }
+
+    /** A string field, or `null` where it is absent or JSON `null` (whose `asString` throws). */
+    private fun JsonObject.text(name: String): String? = get(name)?.takeIf { it.isJsonPrimitive }?.asString
 
     companion object {
         const val SCOPE = "playback-control-all"
