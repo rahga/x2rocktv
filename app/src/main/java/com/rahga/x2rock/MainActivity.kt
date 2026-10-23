@@ -81,6 +81,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Kept as the activity's intent: a recreation runs onCreate on `intent`, which otherwise
+        // replayed the launch's room rather than the tile's opened since (P-92, 2026-10-23).
+        setIntent(intent)
         handleIntent(intent)
     }
 
