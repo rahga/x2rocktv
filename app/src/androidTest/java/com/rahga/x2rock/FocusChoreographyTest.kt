@@ -70,6 +70,7 @@ class FocusChoreographyTest {
     private val prefs = TestPreferences()
 
     @Before fun setUp() = runBlocking {
+        compose.activity.useDpadInput()
         fake = FakePlayer().also { it.start() }
         scope = CoroutineScope(SupervisorJob())
         household = fakeHousehold(fake, scope)

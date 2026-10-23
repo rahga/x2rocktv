@@ -1,5 +1,7 @@
 package com.rahga.x2rock
 
+import androidx.activity.ComponentActivity
+import androidx.test.platform.app.InstrumentationRegistry
 import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.media.NowPlayingPublisher
@@ -33,3 +35,11 @@ object SilentNowPlaying : NowPlayingPublisher {
 }
 
 val testClock = MonotonicClock { System.nanoTime() / 1_000_000 }
+
+/** Remote first-focus tests must start in keyboard mode, even after a touchscreen AVD snapshot. */
+fun ComponentActivity.useDpadInput() {
+    InstrumentationRegistry.getInstrumentation().runOnMainSync {
+        window.decorView.requestFocusFromTouch()
+        check(!window.decorView.isInTouchMode) { "the remote focus test is still in touch mode" }
+    }
+}
