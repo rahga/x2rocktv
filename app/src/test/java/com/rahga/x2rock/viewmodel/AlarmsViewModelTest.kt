@@ -48,6 +48,8 @@ class AlarmsViewModelTest {
     @Volatile private var duplicate = false
     /** Whether DestroyAlarm answers as for an alarm already gone. */
     @Volatile private var gone = false
+    /** While set, UpdateAlarm answers only once it is counted down: a write still out. */
+    @Volatile private var holdUpdate: java.util.concurrent.CountDownLatch? = null
 
     @Before fun setUp() = runBlocking {
         fake = FakePlayer().also { it.start() }
@@ -58,7 +60,10 @@ class AlarmsViewModelTest {
                     requests += action to soapFields(request.body.readUtf8())
                     val body = when (action) {
                         "ListAlarms" -> FakePlayer.fixtureText("ListAlarms.two.xml")
-                        "UpdateAlarm" -> FakePlayer.fixtureText("UpdateAlarm.reply.xml")
+                        "UpdateAlarm" -> {
+                            holdUpdate?.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                            FakePlayer.fixtureText("UpdateAlarm.reply.xml")
+                        }
                         "DestroyAlarm" -> if (gone) return MockResponse().setResponseCode(500)
                             .setBody(FakePlayer.fixtureText("DestroyAlarm.gone.fault800.xml"))
                             else FakePlayer.fixtureText("DestroyAlarm.reply.xml")
@@ -188,6 +193,33 @@ class AlarmsViewModelTest {
         assertEquals("0", sent["Enabled"])
         assertTrue("its album, not the chime", sent["ProgramURI"].orEmpty().startsWith("x-rincon-cpcontainer:"))
         withTimeout(5_000) { viewModel.draft.first { it == null } }
+    }
+
+    /**
+     * Save on one alarm, Back while its write is out, and another opened: the first write landing
+     * used to close the second mid-change, and a Save on it then was ignored without a word (P-85).
+     */
+    @Test fun `a save landing late leaves the alarm opened since, and a press meanwhile is answered`() = runBlocking<Unit> {
+        ready()
+        val held = java.util.concurrent.CountDownLatch(1)
+        holdUpdate = held
+        viewModel.startEdit(34)
+        requests.clear()
+        viewModel.save()
+        withTimeout(5_000) { while (requests.none { it.first == "UpdateAlarm" }) delay(20) }
+        viewModel.back()
+        viewModel.startEdit(33)
+        viewModel.save()
+        val said = viewModel.notice.value
+        if (said != "Saving…") held.countDown() // not left holding the server's thread
+        assertEquals("Saving…", said)
+
+        // The list is read again once the write lands, after the draft would have been closed.
+        val reads = requests.count { it.first == "ListAlarms" }
+        held.countDown()
+        withTimeout(5_000) { while (requests.count { it.first == "ListAlarms" } == reads) delay(20) }
+        delay(300)
+        assertEquals("the alarm opened since is still open", 33, viewModel.draft.value?.editing?.id)
     }
 
     /** Remove takes two presses; the second deletes that alarm. */

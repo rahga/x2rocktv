@@ -203,10 +203,12 @@ class AlarmsViewModel @Inject constructor(
 
     /**
      * Write the alarm being changed back, its other fields as the player has them now; [onDone]
-     * once the list has it. A second press while one is out is ignored, as for [create].
+     * once the list has it. A second press while one is out is turned away, as for [create], and
+     * says so: it was ignored without a word, which on another alarm opened since read as a Save
+     * that did nothing (P-85, 2026-10-23).
      */
     fun save(onDone: () -> Unit = {}) {
-        if (createJob?.isActive == true) return
+        if (createJob?.isActive == true) return _notice.post(STILL_SAVING)
         val d = _draft.value ?: return
         val editing = d.editing ?: return
         val room = d.room ?: return
@@ -221,7 +223,7 @@ class AlarmsViewModel @Inject constructor(
                 }
             }
                 .onSuccess {
-                    _draft.value = null
+                    closeIfStill(editing.id)
                     load()
                     onDone()
                 }
@@ -247,10 +249,19 @@ class AlarmsViewModel @Inject constructor(
         disarmRemove()
         viewModelScope.launch {
             runCatching { household.removeAlarm(editing.id) }
-                .onSuccess { _draft.value = null }
+                .onSuccess { closeIfStill(editing.id) }
                 .onFailure { _notice.failure("remove the alarm", it) }
             load()
         }
+    }
+
+    /**
+     * Close the alarm being changed once [id]'s write has landed — if it is still the one open. Back
+     * while the write was out, and another alarm opened since, used to be closed by it mid-change
+     * (P-85, 2026-10-23).
+     */
+    private fun closeIfStill(id: Int) {
+        if (_draft.value?.editing?.id == id) _draft.value = null
     }
 
     private fun disarmRemove() {
@@ -263,7 +274,7 @@ class AlarmsViewModel @Inject constructor(
      * sent twice, the second is refused as a duplicate of the first, and says so.
      */
     fun create(onDone: () -> Unit = {}) {
-        if (createJob?.isActive == true) return
+        if (createJob?.isActive == true) return _notice.post(STILL_SAVING)
         val d = _draft.value ?: return
         val room = d.room ?: return
         val alarm = Alarm(
@@ -279,7 +290,8 @@ class AlarmsViewModel @Inject constructor(
         createJob = viewModelScope.launch {
             runCatching { household.createAlarm(alarm) }
                 .onSuccess {
-                    _draft.value = null
+                    // Not an alarm opened to change since: only a new one is this one (P-85).
+                    if (_draft.value?.editing == null) _draft.value = null
                     load()
                     onDone()
                 }
@@ -310,5 +322,7 @@ class AlarmsViewModel @Inject constructor(
         /** `CreateAlarm` for a room and start time that already has one (Kitchen, 2026-10-10). */
         const val DUPLICATE = "801"
         const val REMOVE_CONFIRM_MILLIS = 4_000L
+        /** A press while the last write is still out, said rather than ignored (P-85). */
+        const val STILL_SAVING = "Saving…"
     }
 }
