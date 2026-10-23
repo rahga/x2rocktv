@@ -48,6 +48,8 @@ class FavoritesViewModel @Inject constructor(
             val recent: List<HistoryItem> = emptyList(),
             /** Why there is no recently played list, when the household said: history is off. */
             val recentNote: String? = null,
+            /** What [activeId]'s row says: "Now playing" or "Paused" ([favoriteMark]). */
+            val activeLabel: String? = null,
         ) : UiState
         data class Error(val message: String) : UiState
     }
@@ -200,15 +202,16 @@ class FavoritesViewModel @Inject constructor(
                     Triple(favs.await(), playlists.await(), history.await())
                 }
                 // What is playing comes from the subscription, so only the list is fetched.
-                val containerName = household.groupState(room.forNavigation()).container?.name
-                val activeId = containerName?.let { playingFavorite(favs.items, it)?.id }
+                val group = household.groupState(room.forNavigation())
+                val activeLabel = favoriteMark(group.playbackState)
+                val activeId = activeLabel?.let { group.container?.name?.let { playingFavorite(favs.items, it)?.id } }
                 // Not de-duplicated by name: two "The Main Mix" in the office history are two
                 // different Radio Paradise streams, with different ids.
                 val recent = history.getOrDefault(emptyList()).filter { it.playable }
                 val recentNote = (history.exceptionOrNull() as? SonosCommandException)
                     ?.takeIf { it.detail.startsWith("ERROR_DISALLOWED_BY_POLICY") }
                     ?.let { HISTORY_OFF }
-                UiState.Success(favs.items, activeId, playlists, recent, recentNote)
+                UiState.Success(favs.items, activeId, playlists, recent, recentNote, activeLabel)
             }
                 .onSuccess { _uiState.value = it }
                 .onFailure { _uiState.value = UiState.Error(it.message ?: "Failed to load favorites") }
@@ -226,6 +229,17 @@ fun playlistKey(playlistId: String) = "playlist:$playlistId"
  * The favourite a room is playing, found by its container's name — the only link the player gives
  * from what plays back to a favourite. Browse marks it, and a preset saved from the room keeps it.
  */
+/**
+ * The mark on the favourite the room has loaded, by what the room is doing ([roomActivity]): "Now
+ * playing" while it plays, "Paused" while paused, and none once stopped. A lapsed Saavn playlist,
+ * stopped and unable to play, was marked "Now playing" (P-98, 2026-10-23).
+ */
+fun favoriteMark(playbackState: String?): String? = when (roomActivity(playbackState, hasSource = true)) {
+    RoomActivity.PLAYING -> "Now playing"
+    RoomActivity.PAUSED -> RoomActivity.PAUSED.label
+    else -> null
+}
+
 fun playingFavorite(favorites: List<Favorite>, containerName: String): Favorite? =
     favorites.firstOrNull { it.playable && it.name == containerName }
 

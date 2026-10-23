@@ -86,6 +86,7 @@ class ServiceBrowseViewModelTest {
                             "<id>$PLAYLIST</id>" in body -> FakePlayer.fixtureText("smapi.deezer.playlist.oneTrack.xml")
                             "<id>$ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.plex.albumTracks.xml")
                             "<id>$EMPTY_ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.soundcloud.emptyAlbum.xml")
+                            "<id>album:refused</id>" in body -> ""
                             "<getMetadata" !in body -> SEARCH_ALBUM
                             "<id>root</id>" in body && emptyRoot -> EMPTY
                             "<id>root</id>" in body && refusedRoot -> ""
@@ -343,6 +344,15 @@ class ServiceBrowseViewModelTest {
         assertTrue("an album offers Play while it loads", viewModel.playsWhole.value)
         withTimeout(5_000) { viewModel.results.first { (it as? ServiceBrowseViewModel.Results.Found)?.items?.isEmpty() == true } }
         assertFalse("and none once it holds nothing", viewModel.playsWhole.value)
+    }
+
+    /** P-98: a lapsed Saavn album offered Play and Shuffle under "Saavn wouldn't open Irumudi". */
+    @Test fun `an album that would not open offers no Play`() = runBlocking {
+        viewModel.open(ready().first { it.service.id == "31" })
+        found()
+        viewModel.select(com.rahga.x2rock.smapi.Item("album:refused", "Irumudi", "album", null, null, container = true)) {}
+        withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Failed } }
+        assertFalse(viewModel.playsWhole.value)
     }
 
     @Test fun `descending into a container, then Back, climbs out a level at a time`() = runBlocking {

@@ -275,7 +275,7 @@ private fun BrowseList(
                         when {
                             loadingId == fav.id -> RowStatus("Starting…")
                             deleteArmed == favoriteKey(fav.id) -> RowStatus("Hold again to remove", highlighted = true)
-                            state.activeId == fav.id -> RowStatus("Now playing", highlighted = true)
+                            state.activeId == fav.id -> RowStatus(state.activeLabel ?: "Now playing", highlighted = true)
                             // An album or playlist opens on its tracks, with Play and Shuffle at the head.
                             opens(fav) -> Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(28.dp))
                         }

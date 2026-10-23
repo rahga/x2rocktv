@@ -16,6 +16,7 @@ import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.Preset
 import com.rahga.x2rock.store.PresetStore
 import org.junit.After
+import com.rahga.x2rock.model.PlaybackStates
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -55,6 +56,15 @@ class FavoritesViewModelTest {
      * Two real favourites and one derived shell — a real album with its service and type
      * stripped, which is what a removed service leaves. Only the shell goes.
      */
+    /** P-98: a stopped room's favourite read "Now playing" in Browse, though it could not play. */
+    @Test fun `the loaded favourite is marked by what the room is doing`() {
+        assertEquals("Now playing", favoriteMark(PlaybackStates.PLAYING))
+        assertEquals("Now playing", favoriteMark(PlaybackStates.BUFFERING))
+        assertEquals("Paused", favoriteMark(PlaybackStates.PAUSED))
+        assertEquals(null, favoriteMark(PlaybackStates.IDLE))
+        assertEquals(null, favoriteMark(null))
+    }
+
     @Test fun `a favourite the household can no longer play is not listed`() = runBlocking<Unit> {
         val state = withTimeout(5_000) {
             viewModel.uiState.first { it is FavoritesViewModel.UiState.Success } as FavoritesViewModel.UiState.Success

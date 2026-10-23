@@ -558,10 +558,14 @@ class ServiceBrowseViewModel @Inject constructor(
      * Whether [level] offers Play and Shuffle: an album or playlist, unless it turned out to hold
      * nothing. SoundCloud lists its albums `canPlay` and answers each one's contents with none, and
      * the Sonos app's page for one has no tracks and no Play (P-23, 2026-10-12); played anyway, it
-     * loaded and never started.
+     * loaded and never started. Nor one that would not open: a lapsed Saavn album offered both under
+     * its refusal (P-98, 2026-10-23). While it loads it offers them, so the row does not jump.
      */
-    private fun playsWhole(level: Level) =
-        level.whole != null && (level.results as? Results.Found)?.items?.isEmpty() != true
+    private fun playsWhole(level: Level) = level.whole != null && when (val r = level.results) {
+        is Results.Found -> r.items.isNotEmpty()
+        is Results.Failed -> false
+        else -> true
+    }
 }
 
 /** The id a shelf of a service's page is listed under; never a service's own id. */
