@@ -22,10 +22,19 @@ object TestEnvelope {
     /** A salt of the tests' own; the real one is not part of the GPL-licensed source package. */
     val SALT: ByteArray = ByteArray(16) { (0x30 + it).toByte() }
 
-    /** Seal [accountXml] for [householdId] (the short `Sonos_xxx` form), with a fixed-byte IV. */
-    fun seal(accountXml: String, householdId: String, iv: ByteArray = ByteArray(16) { 4 }): String {
+    /**
+     * Seal [accountXml] for [householdId] (the short `Sonos_xxx` form), with a fixed-byte IV. [tail]
+     * is the 4-byte integrity tail, the payload's own unless a test wants a wrong one under valid
+     * padding — the one case the decrypt's checksum is there for.
+     */
+    fun seal(
+        accountXml: String,
+        householdId: String,
+        iv: ByteArray = ByteArray(16) { 4 },
+        tail: ByteArray = md5(accountXml.toByteArray()).copyOfRange(0, 4),
+    ): String {
         val blobKey = md5(iv, md5(householdId.toByteArray(), SALT))
-        val body = accountXml.toByteArray() + md5(accountXml.toByteArray()).copyOfRange(0, 4)
+        val body = accountXml.toByteArray() + tail
         val pad = 16 - body.size % 16
         val padded = body + ByteArray(pad) { pad.toByte() }
         val ciphertext = Cipher.getInstance("AES/CBC/NoPadding").apply {

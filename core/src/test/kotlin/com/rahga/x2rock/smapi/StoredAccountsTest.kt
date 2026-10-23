@@ -108,6 +108,19 @@ class StoredAccountsTest {
         assertTrue("a wrong key should be named as such, got: $msg", "integrity" in msg || "padding" in msg)
     }
 
+    /**
+     * Valid padding and a wrong checksum: what a wrong key that happened to unpad cleanly would give,
+     * and the only case the integrity check stands between garbage and the XML parser. A wrong key
+     * almost always fails the padding first, so the test above never showed the check run (P-83).
+     */
+    @Test fun `a payload whose checksum is wrong is refused by the integrity check`() {
+        val right = java.security.MessageDigest.getInstance("MD5").digest(XML.toByteArray()).copyOfRange(0, 4)
+        val wrong = right.copyOf().also { it[0] = (it[0].toInt() xor 0x01).toByte() }
+        val envelope = TestEnvelope.seal(XML, HH, ByteArray(16) { 5 }, tail = wrong)
+        val err = runCatching { StoredAccounts.decryptAccounts(envelope, HH, TestEnvelope.SALT) }.exceptionOrNull()
+        assertTrue("expected the integrity check, got $err", (err?.message ?: "").contains("integrity check failed"))
+    }
+
     @Test fun `a non envelope is refused by its prefix`() {
         val err = runCatching { StoredAccounts.decryptAccounts("not-a-2-colon-thing", HH, TestEnvelope.SALT) }.exceptionOrNull()
         assertTrue((err?.message ?: "").contains("envelope version"))
