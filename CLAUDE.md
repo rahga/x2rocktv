@@ -744,7 +744,9 @@ checked on the Streamer. What it settled, so it is not undone by accident:
 - **Search is one field across every service** (`SearchViewModel`): two categories per service,
   signed-in services first, sections filling in as each answers, on submit only — per keystroke
   would be thirty requests a letter. An album or artist found there opens in its service's
-  browser rather than being played blind.
+  browser rather than being played blind. A service that refuses is named ("Couldn't search Saavn");
+  "didn't answer" is kept for one that ran out of time (P-97). A SMAPI success with an empty body, how
+  a lapsed Saavn account answered everything, reads "sent back nothing; its account may have lapsed".
 - **Preferred services lead** (`PreferredServices`, Settings → Preferred services, 2026-10-09):
   an ordered tier this device keeps, above the signed-in rule, in Search and Music Services alike.
   The Sonos app has a single "Preferred Service"; a tier was asked for, since nothing is gained by

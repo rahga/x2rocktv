@@ -358,9 +358,10 @@ private fun Status(results: SearchViewModel.Results) {
     }
     val outstanding = when {
         results.pending > 0 -> "Searching… ${results.pending} still to answer"
-        results.silent == 1 -> "1 service didn't answer"
-        results.silent > 1 -> "${results.silent} services didn't answer"
-        else -> null
+        else -> listOfNotNull(
+            results.refused.takeIf { it.isNotEmpty() }?.let { "Couldn't search ${namesOf(it)}" },
+            results.unanswered.takeIf { it.isNotEmpty() }?.let { "${namesOf(it)} didn't answer" },
+        ).joinToString(" · ").ifEmpty { null }
     }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(total, style = style, color = color, modifier = Modifier.weight(1f))
@@ -388,5 +389,15 @@ private fun HitRow(
         // No chevron here: in a block of cells running sideways, one reads as "this way", and the
         // only thing that way is the block's own "More from". An album still opens on a press.
         if (isStarting) RowStatus("Starting…")
+    }
+}
+
+/** "Saavn", "Pandora and Saavn", "Pandora, Saavn and YouTube Music", "Pandora, Saavn and 3 others". */
+internal fun namesOf(names: List<String>): String {
+    val distinct = names.distinct().sorted()
+    return when {
+        distinct.size == 1 -> distinct[0]
+        distinct.size <= 3 -> distinct.dropLast(1).joinToString(", ") + " and " + distinct.last()
+        else -> distinct.take(2).joinToString(", ") + " and ${distinct.size - 2} others"
     }
 }

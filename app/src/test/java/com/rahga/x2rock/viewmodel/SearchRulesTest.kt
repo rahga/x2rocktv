@@ -1,6 +1,9 @@
 package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.smapi.Category
+import com.rahga.x2rock.smapi.SmapiException
+import com.rahga.x2rock.ui.screens.namesOf
+import com.rahga.x2rock.viewmodel.SearchViewModel.Companion.answered
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -77,5 +80,33 @@ class SearchRulesTest {
             listOf("TuneIn", "Deezer", "Apple Music", "Qobuz", "Calm Radio"),
             sections.sortedWith(SearchViewModel.sectionOrder(listOf("254", "2"))).map { it.name },
         )
+    }
+
+    /**
+     * P-97: "anirudh" across the office household said "3 services didn't answer", and all three had:
+     * YouTube Music with a 403, Saavn with an empty 200, Pandora with a token it could not refresh. A
+     * refusal is named as one; only a service that ran out of time "didn't answer".
+     */
+    @Test fun `a service that refuses is named apart from one that never answers`() {
+        fun section(name: String) = SearchViewModel.Section(name, signedIn = true, hits = emptyList(), key = name)
+        val saavn = section("Saavn")
+        val slow = section("Hype Machine")
+        val quiet = section("Qobuz")
+        val start = SearchViewModel.Results(pending = 3, searched = true, waiting = listOf(saavn, slow, quiet))
+        val after = start
+            .answered(saavn, Result.failure(SmapiException("Saavn sent back nothing; its account may have lapsed")), emptyList())
+            .answered(slow, null, emptyList())
+            .answered(quiet, Result.success(emptyList()), emptyList())
+        assertEquals(listOf("Saavn"), after.refused)
+        assertEquals(listOf("Hype Machine"), after.unanswered)
+        assertEquals("nothing found is neither", 0, after.pending)
+        assertEquals(emptyList<SearchViewModel.Section>(), after.sections)
+    }
+
+    @Test fun `the services a search could not use are named, a few at a time`() {
+        assertEquals("Saavn", namesOf(listOf("Saavn", "Saavn")))
+        assertEquals("Pandora and Saavn", namesOf(listOf("Saavn", "Pandora")))
+        assertEquals("Pandora, Saavn and YouTube Music", namesOf(listOf("YouTube Music", "Saavn", "Pandora")))
+        assertEquals("Deezer, Pandora and 3 others", namesOf(listOf("Saavn", "Pandora", "YouTube Music", "TIDAL", "Deezer")))
     }
 }

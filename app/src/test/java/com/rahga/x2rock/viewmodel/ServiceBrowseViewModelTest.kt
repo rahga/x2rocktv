@@ -254,7 +254,7 @@ class ServiceBrowseViewModelTest {
         val qobuz = ready().first { it.service.id == "31" }
         viewModel.open(qobuz)
         val failed = withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Failed } }
-        assertEquals("Qobuz wouldn't open: Qobuz answered HTTP 200 with an empty body",
+        assertEquals("Qobuz wouldn't open: Qobuz sent back nothing; its account may have lapsed",
             (failed as ServiceBrowseViewModel.Results.Failed).message)
         assertFalse("the search waits to be asked for", viewModel.searching.value)
         assertTrue("and is one press up", viewModel.categories.value.isNotEmpty())

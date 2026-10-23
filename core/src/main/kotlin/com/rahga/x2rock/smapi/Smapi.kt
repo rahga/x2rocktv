@@ -518,7 +518,13 @@ class SmapiClient(
         client.newCall(request).awaitReply().let { response ->
             val body = response.body
             if (body.isBlank()) {
-                throw SmapiException("${service.name} answered HTTP ${response.code} with an empty body")
+                // A success with nothing in it is how a lapsed Saavn subscription answered every call,
+                // browse and search alike (office, 2026-10-23); the Sonos app says only "Error
+                // occurred". Worded for that one case, and only as a possibility.
+                throw SmapiException(
+                    if (response.isSuccessful) "${service.name} sent back nothing; its account may have lapsed"
+                    else "${service.name} $action failed: HTTP ${response.code}"
+                )
             }
             val root = runCatching { Xml.parse(body) }.getOrNull()
             root?.let { faultMessage(it) }?.let { fault ->

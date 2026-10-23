@@ -41,8 +41,8 @@ import javax.inject.Inject
  * Each service that publishes search categories is asked for its tracks and its albums (or the
  * nearest two categories it has), and Apple Music through Apple's public search; answers fill in
  * section by section as they come, so a slow service holds up only its own section. Services the
- * household signed in to come first, then the anonymous ones; a service that fails or stays silent
- * is left out and counted rather than holding the list.
+ * household signed in to come first, then the anonymous ones; a service that refuses or stays silent
+ * is left out and named rather than holding the list.
  *
  * A press plays a track or a station, resumes an audiobook, and opens anything else — an album, an
  * artist — in that service's own browser, where its tracks can be played. A hold or Menu opens the
@@ -102,8 +102,14 @@ class SearchViewModel @Inject constructor(
         val sections: List<Section> = emptyList(),
         /** Searches still out. */
         val pending: Int = 0,
-        /** Services that failed or did not answer in time. */
-        val silent: Int = 0,
+        /**
+         * Services that answered with a refusal, by name. They used to be counted with the silent ones
+         * as "didn't answer", which a lapsed Saavn account, YouTube Music's 403 and a Pandora token that
+         * would not refresh were not (P-97, 2026-10-23).
+         */
+        val refused: List<String> = emptyList(),
+        /** Services that did not answer in time, by name. */
+        val unanswered: List<String> = emptyList(),
         val searched: Boolean = false,
         /**
          * Whether the first section is where the list should start: no service still out would rank
@@ -181,24 +187,14 @@ class SearchViewModel @Inject constructor(
     }
 
     /**
-     * Fold one service's answer in: its section in place if it found anything, a count if it did
-     * not answer. A service with no search at all answers an empty list and simply has no section.
+     * Fold one service's answer in: its section in place if it found anything, its name if it
+     * refused or did not answer. A service with no search at all answers an empty list and simply has no section.
      */
     private suspend fun arrive(requests: Semaphore, order: List<String>, pending: Section, search: suspend () -> List<Hit>) {
-        val hits = requests.withPermit {
-            withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { attempt { search() }.getOrNull() }
-        }
+        val answer = requests.withPermit { withTimeoutOrNull(SERVICE_TIMEOUT_MILLIS) { attempt { search() } } }
         // Cancellation while waiting for a permit or timing out must not publish into a newer search.
         currentCoroutineContext().ensureActive()
-        _results.update { r ->
-            val sections = if (hits.isNullOrEmpty()) r.sections
-            else (r.sections + pending.copy(hits = hits)).sortedWith(sectionOrder(order))
-            val waiting = r.waiting - pending
-            r.copy(
-                sections = sections, pending = r.pending - 1, silent = r.silent + if (hits == null) 1 else 0,
-                waiting = waiting, leadSettled = leadSettled(sections, waiting, order),
-            )
-        }
+        _results.update { it.answered(pending, answer, order) }
     }
 
     private suspend fun searchOne(linked: LinkedService, term: String): List<Hit> {
@@ -274,6 +270,20 @@ class SearchViewModel @Inject constructor(
          * Whether the top of [sections] is where focus should start: there is one, and none of the
          * services still [waiting] would sort above it.
          */
+        /** These results with [section]'s [answer] folded in: null is a service that did not answer in time. */
+        internal fun Results.answered(section: Section, answer: Result<List<Hit>>?, order: List<String>): Results {
+            val hits = answer?.getOrNull()
+            val shown = if (hits.isNullOrEmpty()) sections
+            else (sections + section.copy(hits = hits)).sortedWith(sectionOrder(order))
+            val stillOut = waiting - section
+            return copy(
+                sections = shown, pending = pending - 1,
+                refused = if (answer?.isFailure == true) refused + section.name else refused,
+                unanswered = if (answer == null) unanswered + section.name else unanswered,
+                waiting = stillOut, leadSettled = leadSettled(shown, stillOut, order),
+            )
+        }
+
         internal fun leadSettled(sections: List<Section>, waiting: List<Section>, preferred: List<String>): Boolean {
             val first = sections.firstOrNull() ?: return false
             return waiting.none { sectionOrder(preferred).compare(it, first) < 0 }
