@@ -53,6 +53,8 @@ fun AppleMusicScreen(
     room: String,
     onBack: () -> Unit,
     onPlayed: () -> Unit,
+    /** The shared player's line, drawn when this screen has none of its own (P-80). */
+    sharedNotice: String? = null,
     viewModel: AppleMusicViewModel = hiltViewModel(),
     afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
@@ -123,7 +125,7 @@ fun AppleMusicScreen(
                         }
                 }
             }
-            notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            (notice ?: sharedNotice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }
 }

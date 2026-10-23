@@ -12,6 +12,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -34,6 +35,19 @@ import com.rahga.x2rock.viewmodel.AccountViewModel
 import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.HomeViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
+import com.rahga.x2rock.viewmodel.RoomRoute
+
+/**
+ * A room screen's route, opened on [room]: its group, and the speakers it is followed by, which a
+ * screen opened while the group id was already gone still finds it by (P-88).
+ */
+private fun roomQuery(room: RoomRoute) = "groupId=${Uri.encode(room.groupId)}&${RoomRoute.SPEAKERS}=${Uri.encode(room.speakers)}"
+
+/** The arguments every room screen's route takes, after its own. */
+private val roomArguments = listOf(
+    navArgument("groupId") { type = NavType.StringType },
+    navArgument(RoomRoute.SPEAKERS) { type = NavType.StringType; defaultValue = "" },
+)
 
 @Composable
 fun X2RockNavGraph() {
@@ -42,8 +56,11 @@ fun X2RockNavGraph() {
     val homeViewModel: HomeViewModel = hiltViewModel()
     val afterPlayingViewModel: AfterPlayingViewModel = hiltViewModel()
     // Something started: back to the room, past Browse, where what started is shown — unless Browse's
-    // pin says stay, which leaves the viewer where they chose it (asked for 2026-10-15).
-    fun played() {
+    // pin says stay, which leaves the viewer where they chose it (asked for 2026-10-15). Only from the
+    // screen in front: a start landing in the fade after Back, from the screen being left, popped the
+    // one it revealed too (P-90, 2026-10-23).
+    fun played(from: NavBackStackEntry) {
+        if (!from.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         if (!afterPlayingViewModel.stay.value) navController.popBackStack("home", inclusive = false)
     }
 
@@ -76,9 +93,14 @@ fun X2RockNavGraph() {
     // The room name alone, so a position tick or a volume step does not recompose the graph.
     val room by remember(playerViewModel) { playerViewModel.uiState.map { it.groupName }.distinctUntilChanged() }
         .collectAsState(initial = "")
-    fun openService(groupId: String, serviceKey: String, containerId: String, title: String, favorite: String = "", kind: String = "") =
+    // The shared player's line — a media key's failure, a saved favourite, what Home's actions
+    // answered once the viewer had gone on — for the screens that hold no player of their own. Each
+    // draws it when it has nothing of its own to say, as Queue, Browse and Radio do (P-80).
+    val sharedNotice by remember(playerViewModel) { playerViewModel.uiState.map { it.notice }.distinctUntilChanged() }
+        .collectAsState(initial = null)
+    fun openService(room: RoomRoute, serviceKey: String, containerId: String, title: String, favorite: String = "", kind: String = "") =
         navController.navigate(
-            "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}" +
+            "services?${roomQuery(room)}&service=${Uri.encode(serviceKey)}" +
                 "&container=${Uri.encode(containerId)}&title=${Uri.encode(title)}&favorite=${Uri.encode(favorite)}" +
                 "&kind=${Uri.encode(kind)}"
         )
@@ -93,18 +115,10 @@ fun X2RockNavGraph() {
             val accountOffered by accountViewModel.offered.collectAsState()
             val accountSignedIn by accountViewModel.signedIn.collectAsState()
             HomeScreen(
-                onOpenQueue = { groupId ->
-                    navController.navigate("queue?groupId=${Uri.encode(groupId)}")
-                },
-                onOpenFavorites = { groupId ->
-                    navController.navigate("favorites?groupId=${Uri.encode(groupId)}")
-                },
-                onOpenSearch = { groupId ->
-                    navController.navigate("search?groupId=${Uri.encode(groupId)}")
-                },
-                onOpenNowPlaying = { groupId ->
-                    navController.navigate("nowPlaying?groupId=${Uri.encode(groupId)}")
-                },
+                onOpenQueue = { navController.navigate("queue?${roomQuery(it)}") },
+                onOpenFavorites = { navController.navigate("favorites?${roomQuery(it)}") },
+                onOpenSearch = { navController.navigate("search?${roomQuery(it)}") },
+                onOpenNowPlaying = { navController.navigate("nowPlaying?${roomQuery(it)}") },
                 onOpenPreferredServices = { navController.navigate("preferredServices") },
                 onOpenAlarms = { navController.navigate("alarms") },
                 onOpenAbout = { navController.navigate("about") },
@@ -117,11 +131,8 @@ fun X2RockNavGraph() {
             )
         }
 
-        composable(
-            route = "nowPlaying?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
-            NowPlayingScreen(onBack = back)
+        composable(route = "nowPlaying?groupId={groupId}&speakers={speakers}", arguments = roomArguments) {
+            NowPlayingScreen(onBack = back, sharedNotice = sharedNotice)
         }
 
         composable("about") {
@@ -135,17 +146,14 @@ fun X2RockNavGraph() {
         }
 
         composable("alarms") {
-            AlarmsScreen(onBack = back)
+            AlarmsScreen(onBack = back, sharedNotice = sharedNotice)
         }
 
         composable("preferredServices") {
             PreferredServicesScreen(onBack = back)
         }
 
-        composable(
-            route = "queue?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        composable(route = "queue?groupId={groupId}&speakers={speakers}", arguments = roomArguments) {
             QueueScreen(
                 room = room,
                 onBack = back,
@@ -153,41 +161,34 @@ fun X2RockNavGraph() {
             )
         }
 
-        composable(
-            route = "favorites?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        composable(route = "favorites?groupId={groupId}&speakers={speakers}", arguments = roomArguments) { entry ->
             FavoritesScreen(
                 room = room,
                 onBack = back,
-                onOpenRadio = { groupId -> navController.navigate("radio?groupId=${Uri.encode(groupId)}") },
-                onOpenServices = { groupId -> navController.navigate("services?groupId=${Uri.encode(groupId)}") },
-                onOpenFavorite = { groupId, serviceKey, containerId, favorite ->
+                onOpenRadio = { navController.navigate("radio?${roomQuery(it)}") },
+                onOpenServices = { navController.navigate("services?${roomQuery(it)}") },
+                onOpenFavorite = { opened, serviceKey, containerId, favorite ->
                     // An artist is a place, not a whole to play: it opens as search opens one.
-                    if (favorite.resource?.type == "ARTIST") openService(groupId, serviceKey, containerId, favorite.name, kind = "artist")
-                    else openService(groupId, serviceKey, containerId, favorite.name, favorite.id)
+                    if (favorite.resource?.type == "ARTIST") openService(opened, serviceKey, containerId, favorite.name, kind = "artist")
+                    else openService(opened, serviceKey, containerId, favorite.name, favorite.id)
                 },
-                onPlayed = ::played,
+                onPlayed = { played(entry) },
                 playerViewModel = playerViewModel
             )
         }
 
-        composable(
-            route = "search?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        composable(route = "search?groupId={groupId}&speakers={speakers}", arguments = roomArguments) { entry ->
             SearchScreen(
                 room = room,
                 onBack = back,
-                onPlayed = ::played,
+                onPlayed = { played(entry) },
                 // The room's group as it is now, from the screen, not the route's: a regroup since
                 // Search opened mints a new one, and a page opened on the old could not find the room.
-                onOpen = { groupId, serviceKey, item -> openService(groupId, serviceKey, item.id, item.title, kind = item.itemType) },
-                onSearchService = { groupId, serviceKey, query ->
-                    navController.navigate(
-                        "services?groupId=${Uri.encode(groupId)}&service=${Uri.encode(serviceKey)}&query=${Uri.encode(query)}"
-                    )
+                onOpen = { opened, serviceKey, item -> openService(opened, serviceKey, item.id, item.title, kind = item.itemType) },
+                onSearchService = { opened, serviceKey, query ->
+                    navController.navigate("services?${roomQuery(opened)}&service=${Uri.encode(serviceKey)}&query=${Uri.encode(query)}")
                 },
+                sharedNotice = sharedNotice,
             )
         }
 
@@ -195,9 +196,8 @@ fun X2RockNavGraph() {
             // Opened on the service list, or — from search — straight onto one of a service's
             // containers or onto its own search for the same term, which Back then leaves for the
             // search again.
-            route = "services?groupId={groupId}&service={service}&container={container}&title={title}&query={query}&favorite={favorite}&kind={kind}",
-            arguments = listOf(
-                navArgument("groupId") { type = NavType.StringType },
+            route = "services?groupId={groupId}&speakers={speakers}&service={service}&container={container}&title={title}&query={query}&favorite={favorite}&kind={kind}",
+            arguments = roomArguments + listOf(
                 navArgument("service") { type = NavType.StringType; defaultValue = "" },
                 navArgument("container") { type = NavType.StringType; defaultValue = "" },
                 navArgument("title") { type = NavType.StringType; defaultValue = "" },
@@ -205,35 +205,31 @@ fun X2RockNavGraph() {
                 navArgument("favorite") { type = NavType.StringType; defaultValue = "" },
                 navArgument("kind") { type = NavType.StringType; defaultValue = "" },
             )
-        ) {
+        ) { entry ->
             ServiceBrowseScreen(
                 room = room,
-                onOpenAppleMusic = { groupId -> navController.navigate("applemusic?groupId=${Uri.encode(groupId)}") },
+                onOpenAppleMusic = { navController.navigate("applemusic?${roomQuery(it)}") },
                 onBack = back,
-                onPlayed = ::played,
+                onPlayed = { played(entry) },
+                sharedNotice = sharedNotice,
             )
         }
 
-        composable(
-            route = "applemusic?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        composable(route = "applemusic?groupId={groupId}&speakers={speakers}", arguments = roomArguments) { entry ->
             AppleMusicScreen(
                 room = room,
                 onBack = back,
-                onPlayed = ::played,
+                onPlayed = { played(entry) },
+                sharedNotice = sharedNotice,
             )
         }
 
-        composable(
-            route = "radio?groupId={groupId}",
-            arguments = listOf(navArgument("groupId") { type = NavType.StringType })
-        ) {
+        composable(route = "radio?groupId={groupId}&speakers={speakers}", arguments = roomArguments) { entry ->
             RadioScreen(
                 room = room,
                 onBack = back,
                 playerViewModel = playerViewModel,
-                onPlayed = ::played,
+                onPlayed = { played(entry) },
             )
         }
     }

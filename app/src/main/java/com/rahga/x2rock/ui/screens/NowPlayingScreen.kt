@@ -59,6 +59,7 @@ import coil3.compose.AsyncImage
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.theme.rememberArtColors
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.components.NoticeBanner
 import com.rahga.x2rock.viewmodel.NowPlayingUi
 import com.rahga.x2rock.viewmodel.NowPlayingViewModel
 import kotlinx.coroutines.delay
@@ -72,7 +73,12 @@ import java.util.Date
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun NowPlayingScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltViewModel()) {
+fun NowPlayingScreen(
+    onBack: () -> Unit,
+    /** The shared player's line: a media key's failure is said here too, over the foot (P-80). */
+    sharedNotice: String? = null,
+    viewModel: NowPlayingViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     // Once only: the screen stays composed, and focused, through the navigation's fade, and a
     // second key released then would pop the home screen too, leaving nothing but a blank.
@@ -144,6 +150,7 @@ fun NowPlayingScreen(onBack: () -> Unit, viewModel: NowPlayingViewModel = hiltVi
                 Progress(state)
             }
         }
+        sharedNotice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
     }
 }
 

@@ -69,8 +69,13 @@ class HomeViewModelTest {
             presetStore = PresetStore(prefs),
             betaFeatures = BetaFeatures(prefs),
             appleMusic = com.rahga.x2rock.store.AppleMusicSetting(prefs, household),
+            shared = shared,
         )
+        // In front, as the screen says when it is: its own banner is what these tests read.
+        viewModel.shown = true
     }
+
+    private val shared = SharedNotice(scope = kotlinx.coroutines.MainScope())
 
     @After fun tearDown() {
         household.disconnect()
@@ -187,11 +192,40 @@ class HomeViewModelTest {
         withTimeout(5_000) { viewModel.selectedGroupId.first { it == kitchen.id } }
     }
 
-    /** A preset's "Left out" line is said here, where the preset goes; Browse's notice is left behind. */
+    /**
+     * A preset's "Left out" line is said on the shared line, which the room's pane draws — and Browse,
+     * where a preset started with the Stay pin held leaves the viewer.
+     */
     @Test fun `a room asked for with a line says it on arrival`() = runBlocking<Unit> {
         val state = connect()
         deepLink.set(state.groups.first { it.name == "Kitchen" }.coordinatorId, notice = "Left out Guest TV")
-        assertEquals("Left out Guest TV", withTimeout(5_000) { viewModel.notice.first { it != null } })
+        assertEquals("Left out Guest TV", withTimeout(5_000) { shared.text.first { it != null } })
+    }
+
+    /** A preset's room is selected but not shown: going there is the Stay pin's to say (2026-10-23). */
+    @Test fun `a room asked for without showing it is selected and not navigated to`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } }
+        viewModel.selectGroup(state.groups.first { it.id != kitchen.id }.id)
+        deepLink.set(kitchen.coordinatorId, navigate = false)
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == kitchen.id } }
+        assertFalse(viewModel.navigateToRoom.value)
+    }
+
+    /**
+     * A TV input can take 20s to fail; by then the viewer may be in Queue or Browse, where Home's own
+     * banner is not drawn. Said on the shared line instead, which those screens draw (P-79).
+     */
+    @Test fun `a failure landing once home is left is said on the shared line`() = runBlocking<Unit> {
+        val state = connect()
+        fake.refuse("modifyGroupMembers")
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        val guest = state.groups.first { it.name == "Guest TV" }
+        viewModel.shown = false
+        viewModel.joinGroup(guest.id, kitchen.id)
+        assertEquals("Couldn't add Guest TV: ERROR_COMMAND_FAILED", withTimeout(5_000) { shared.text.first { it != null } })
+        assertNull("said where nobody is looking", viewModel.notice.value)
     }
 
     @Test fun `it is loading until the household answers`() {
@@ -231,6 +265,34 @@ class HomeViewModelTest {
         val kitchen = split.groups.first { it.name == "Kitchen" }
         withTimeout(5_000) { viewModel.selectedGroupId.first { it != grouped.id } }
         assertEquals(kitchen.id, viewModel.selectedGroupId.value)
+    }
+
+    /**
+     * Kitchen chosen, then added to Guest TV's party by another controller: the selection follows it
+     * there. When the party splits the host keeps its id, so a selection re-anchored on the party
+     * stayed with Guest TV while Queue, opened on Kitchen, went with Kitchen (P-71). It goes with the
+     * room chosen.
+     */
+    @Test fun `a selection leaves a party its room only joined when the party splits`() = runBlocking<Unit> {
+        val state = connect()
+        val kitchen = state.groups.first { it.name == "Kitchen" }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it != null } }
+        viewModel.selectGroup(kitchen.id)
+
+        val grouped = FakePlayer.groupedTopology(coordinatorRoom = "Guest TV", memberRoom = "Kitchen")
+        fake.pushTopology(grouped)
+        val party = withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { kitchen.coordinatorId in it.playerIds && it.coordinatorId != kitchen.coordinatorId } }
+        }.groups.first { kitchen.coordinatorId in it.playerIds }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == party.id } }
+
+        fake.pushTopology(splitKeepingHost(party.id, hostRoom = "Guest TV", memberRoom = "Kitchen"))
+        val alone = withTimeout(5_000) {
+            household.state.first { s -> s.groups.size == 5 && s.groups.none { it.id == kitchen.id } }
+        }.groups.first { kitchen.coordinatorId in it.playerIds }
+        assertTrue("the host kept its id", household.state.value.groups.any { it.id == party.id })
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == alone.id } }
+        assertEquals("handed on with Kitchen's speakers", kitchen.coordinatorId, viewModel.route(alone.id).coordinatorId)
     }
 
     @Test fun `now playing follows the pushed metadata`() = runBlocking<Unit> {

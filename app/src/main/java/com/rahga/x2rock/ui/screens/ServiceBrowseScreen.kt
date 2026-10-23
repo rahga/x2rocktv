@@ -51,6 +51,7 @@ import com.rahga.x2rock.store.isPrimary
 import com.rahga.x2rock.store.PreferredServices
 import com.rahga.x2rock.store.preferredRank
 import com.rahga.x2rock.store.withPrimariesFirst
+import com.rahga.x2rock.viewmodel.RoomRoute
 import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import com.rahga.x2rock.ui.components.NoticeBanner
@@ -81,10 +82,12 @@ import com.rahga.x2rock.viewmodel.ServiceBrowseViewModel
 @Composable
 fun ServiceBrowseScreen(
     room: String,
-    /** With the room's current group: see ServiceBrowseViewModel.groupId. */
-    onOpenAppleMusic: (groupId: String) -> Unit,
+    /** With the room's current group: see ServiceBrowseViewModel.route. */
+    onOpenAppleMusic: (RoomRoute) -> Unit,
     onBack: () -> Unit,
     onPlayed: () -> Unit,
+    /** The shared player's line, drawn when this screen has none of its own (P-80). */
+    sharedNotice: String? = null,
     viewModel: ServiceBrowseViewModel = hiltViewModel(),
     afterPlaying: AfterPlayingViewModel = hiltViewModel(),
 ) {
@@ -124,7 +127,7 @@ fun ServiceBrowseScreen(
                         onOpen = { opened = Entry.Service(it).key; viewModel.open(it) },
                         onMenu = { opened = Entry.Service(it).key; viewModel.openServiceMenu(it) },
                         menuOpen = serviceMenu != null,
-                        onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic(viewModel.groupId) },
+                        onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic(viewModel.route) },
                     )
                 } else {
                     ServicePage(viewModel, service, room, onPlayed)
@@ -148,7 +151,7 @@ fun ServiceBrowseScreen(
                     note = if (primary) "This is ${linked.service.name}'s primary account here." else null,
                 )
             }
-            notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            (notice ?: sharedNotice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }
 }

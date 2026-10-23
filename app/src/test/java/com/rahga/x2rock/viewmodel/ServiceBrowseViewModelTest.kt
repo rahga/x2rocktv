@@ -152,7 +152,7 @@ class ServiceBrowseViewModelTest {
         fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = other.name, memberRoom = room.name))
         val now = withTimeout(5_000) { household.state.first { s -> s.groups.none { it.id == opened } } }
             .groups.first { room.coordinatorId in it.playerIds }.id
-        assertEquals(now, viewModel.groupId)
+        assertEquals(now, viewModel.route.groupId)
     }
 
     /**

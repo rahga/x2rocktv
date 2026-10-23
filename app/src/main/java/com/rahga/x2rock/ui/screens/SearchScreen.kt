@@ -45,9 +45,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.rahga.x2rock.ui.components.PlaylistPicker
 import com.rahga.x2rock.ui.components.ServiceItemMenuOverlay
+import com.rahga.x2rock.viewmodel.RoomRoute
 import com.rahga.x2rock.viewmodel.ServiceItemMenu
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,10 +88,12 @@ fun SearchScreen(
     onBack: () -> Unit,
     onPlayed: () -> Unit,
     /** Open a service's container in its own browser: the service's key, and the container. */
-    /** The room's current group comes first: see SearchViewModel.groupId. */
-    onOpen: (groupId: String, serviceKey: String, item: Item) -> Unit,
+    /** The room's current group comes first: see SearchViewModel.route. */
+    onOpen: (room: RoomRoute, serviceKey: String, item: Item) -> Unit,
     /** Open one service's own search for [query]: every category, every page. */
-    onSearchService: (groupId: String, serviceKey: String, query: String) -> Unit,
+    onSearchService: (room: RoomRoute, serviceKey: String, query: String) -> Unit,
+    /** The shared player's line, drawn when this screen has none of its own (P-80). */
+    sharedNotice: String? = null,
     viewModel: SearchViewModel = hiltViewModel(),
 ) {
     val query by viewModel.query.collectAsState()
@@ -99,8 +103,11 @@ fun SearchScreen(
     val recent by viewModel.recent.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val recentFocus = remember { FocusRequester() }
-    // A forgotten term's row leaves under the focus; the next one up takes it, or the field.
+    // A forgotten term's row leaves under the focus; the next one takes it — the one above, at the
+    // foot — or the field once none is left. It went to the first term, wherever the forgotten one
+    // had been (P-87, 2026-10-23). The requester sits on the row now at the forgotten one's place.
     var forgot by remember { mutableStateOf(false) }
+    var forgotAt by remember { mutableIntStateOf(0) }
     LaunchedEffect(recent) {
         if (!forgot) return@LaunchedEffect
         forgot = false
@@ -197,8 +204,8 @@ fun SearchScreen(
                             MediaRow(
                                 title = term, subtitle = null, artUrl = null,
                                 onClick = { openedFrom = null; viewModel.searchAgain(term) },
-                                onLongClick = { forgot = true; viewModel.forget(term) },
-                                modifier = if (index == 0) Modifier.focusRequester(recentFocus) else Modifier,
+                                onLongClick = { forgot = true; forgotAt = index; viewModel.forget(term) },
+                                modifier = if (index == forgotAt.coerceAtMost(recent.lastIndex)) Modifier.focusRequester(recentFocus) else Modifier,
                             )
                         }
                     }
@@ -237,7 +244,7 @@ fun SearchScreen(
                                         onClick = {
                                             viewModel.select(hit, onPlayed) { linked, item ->
                                                 openedFrom = key
-                                                onOpen(viewModel.groupId, linked.key(), item)
+                                                onOpen(viewModel.route, linked.key(), item)
                                             }
                                         },
                                         onMenu = { menuFrom = hit.key; viewModel.openMenu(hit) },
@@ -250,7 +257,7 @@ fun SearchScreen(
                                 // Two categories and eight hits a service is what keeps one search
                                 // across every service affordable; the rest is its own search away.
                                 if (section.key != APPLE_SECTION) item(key = "more:${section.key}") {
-                                    val more = { openedFrom = "more:${section.key}"; onSearchService(viewModel.groupId, section.key, query.trim()) }
+                                    val more = { openedFrom = "more:${section.key}"; onSearchService(viewModel.route, section.key, query.trim()) }
                                     MediaRow(
                                         title = "More from ${section.name}",
                                         subtitle = "Every kind, every page",
@@ -277,17 +284,17 @@ fun SearchScreen(
                 ServiceItemMenuOverlay(
                     menu = viewModel.menu, target = target, room = room, fromQueue = fromQueue, details = details,
                     here = null,
-                    onOpen = service?.let { { onOpen(viewModel.groupId, it.linked.key(), it.item) } },
+                    onOpen = service?.let { { onOpen(viewModel.route, it.linked.key(), it.item) } },
                     // An album says so, so the page it opens on has Play and Shuffle at its head.
                     onOpenRelated = { id, title, album ->
                         val kind = if (album) "album" else "container"
-                        service?.let { onOpen(viewModel.groupId, it.linked.key(), Item(id, title, kind, null, null, container = true)) }
+                        service?.let { onOpen(viewModel.route, it.linked.key(), Item(id, title, kind, null, null, container = true)) }
                     },
                     onPlayed = onPlayed,
                 )
             }
             PlaylistPicker(viewModel.menu)
-            notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            (notice ?: sharedNotice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }
 }

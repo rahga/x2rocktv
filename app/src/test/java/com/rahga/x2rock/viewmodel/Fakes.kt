@@ -39,6 +39,22 @@ class MainDispatcherRule : TestWatcher() {
     }
 }
 
+/**
+ * [memberRoom] joined [hostRoom]'s party, then the party split as a real one does: the host keeps
+ * the group id it had through the party — [partyId], from the grouped topology — and the member's
+ * group takes a new one (CLAUDE.md: members get a new id each time, the host none). The captured
+ * topology rearranged, as [FakePlayer.groupedTopology] does; only ids move.
+ */
+fun splitKeepingHost(partyId: String, hostRoom: String, memberRoom: String): com.google.gson.JsonObject =
+    com.rahga.x2rock.lan.FakePlayer.reachableTopology().also { topology ->
+        topology.getAsJsonArray("groups").map { it.asJsonObject }.forEach { group ->
+            when (group.get("name").asString) {
+                hostRoom -> group.addProperty("id", partyId)
+                memberRoom -> group.addProperty("id", group.get("id").asString.substringBeforeLast(":") + ":" + (System.nanoTime() % 1_000_000_000))
+            }
+        }
+    }
+
 /** A monotonic clock the JVM has; Android's SystemClock is not here. */
 val testClock = MonotonicClock { System.nanoTime() / 1_000_000 }
 

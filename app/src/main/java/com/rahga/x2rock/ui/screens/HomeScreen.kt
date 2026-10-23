@@ -7,6 +7,7 @@ import com.rahga.x2rock.viewmodel.label
 import androidx.compose.runtime.rememberCoroutineScope
 import com.rahga.x2rock.ui.components.handOffFocus
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import com.rahga.x2rock.ui.components.DotEqualizer
 import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.exitOnKey
@@ -100,7 +101,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import com.rahga.x2rock.model.Group
-import com.rahga.x2rock.model.followingRoom
+import com.rahga.x2rock.viewmodel.RoomRoute
 import com.rahga.x2rock.model.PlaybackStates
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.Overlay
@@ -121,10 +122,10 @@ import com.rahga.x2rock.viewmodel.sortGroups
 @OptIn(ExperimentalTvMaterial3Api::class, androidx.compose.ui.ExperimentalComposeUiApi::class)
 @Composable
 fun HomeScreen(
-    onOpenQueue: (groupId: String) -> Unit,
-    onOpenFavorites: (groupId: String) -> Unit,
-    onOpenSearch: (groupId: String) -> Unit,
-    onOpenNowPlaying: (groupId: String) -> Unit,
+    onOpenQueue: (RoomRoute) -> Unit,
+    onOpenFavorites: (RoomRoute) -> Unit,
+    onOpenSearch: (RoomRoute) -> Unit,
+    onOpenNowPlaying: (RoomRoute) -> Unit,
     onOpenPreferredServices: () -> Unit,
     onOpenAlarms: () -> Unit,
     onOpenAbout: () -> Unit,
@@ -196,7 +197,7 @@ fun HomeScreen(
     LaunchedEffect(selectedGroupId, groups) {
         val id = selectedGroupId ?: return@LaunchedEffect
         val name = groups.find { it.id == id }?.name ?: return@LaunchedEffect
-        playerViewModel.selectGroup(id, name)
+        playerViewModel.selectGroup(id, name, homeViewModel.route(id))
     }
 
     // Selection follows focus only once this screen has put focus somewhere itself. Until then a
@@ -224,6 +225,14 @@ fun HomeScreen(
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
+    // While this screen is in front its own banner says what Home's actions answer; once the viewer
+    // has gone on, the shared line does (P-79). See HomeViewModel.shown.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            homeViewModel.shown = true
+            try { awaitCancellation() } finally { homeViewModel.shown = false }
+        }
+    }
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             // Wait for the frames that apply a selection made just before resuming. A deep link
@@ -396,10 +405,10 @@ fun HomeScreen(
                         nowPlayingFocusRequester = nowPlayingFocus,
                         groupFocusRequester = groupFocus,
                         startFocusRequester = openerFocus(opener),
-                        onOpenQueue = { opener = Opener.QUEUE; onOpenQueue(selectedGroupId!!) },
-                        onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(selectedGroupId!!) },
-                        onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(selectedGroupId!!) },
-                        onOpenNowPlaying = { opener = Opener.NOW_PLAYING; onOpenNowPlaying(selectedGroupId!!) },
+                        onOpenQueue = { opener = Opener.QUEUE; onOpenQueue(homeViewModel.route(selectedGroupId!!)) },
+                        onOpenFavorites = { opener = Opener.BROWSE; onOpenFavorites(homeViewModel.route(selectedGroupId!!)) },
+                        onOpenSearch = { opener = Opener.SEARCH; onOpenSearch(homeViewModel.route(selectedGroupId!!)) },
+                        onOpenNowPlaying = { opener = Opener.NOW_PLAYING; onOpenNowPlaying(homeViewModel.route(selectedGroupId!!)) },
                         onOpenGroup = {
                             groups.firstOrNull { it.id == selectedGroupId }?.let { panelFromPane = true; panelConfigure = false; panelGroup = it }
                         },
@@ -472,13 +481,11 @@ fun HomeScreen(
         val panel = panelGroup
         // Re-read from the live list rather than the captured group: a regroup mints new
         // ids, and this panel is the surface most likely to be open while one happens —
-        // including one performed from it. Following the speakers keeps it on the room.
-        // By the one rule every screen follows a room by: the coordinator before any member,
-        // or a split would take the panel — its title unchanged, `onRemovePlayer` and
-        // `onUseTvInput` acting on a different room — to whichever fragment came first.
-        val liveGroup = panel?.let { captured ->
-            groups.firstOrNull { it.id == captured.id } ?: groups.followingRoom(captured.coordinatorId, captured.playerIds)
-        }
+        // including one performed from it. It is only ever opened on the selected room, so it
+        // is the selected room's group, which follows the room chosen by its speakers, coordinator
+        // first: following the captured group by its own speakers instead, a party's split could
+        // leave the panel on the party's host while the pane went with the room (P-71).
+        val liveGroup = panel?.let { groups.firstOrNull { it.id == selectedGroupId } }
         if (panel != null && liveGroup == null) {
             // Its speakers went somewhere this can no longer name.
             LaunchedEffect(panel.id) { panelGroup = null }
@@ -538,8 +545,9 @@ fun HomeScreen(
                     onSavePreset = { homeViewModel.savePreset(liveGroup.id) },
                     configure = panelConfigure,
                     sleepEndsAt = rememberSleepEnd(playerState.sleepTimerEndsAt),
-                    onSetSleep = { minutes -> playerViewModel.setSleepTimer(minutes); closePanel() },
-                    onCancelSleep = { playerViewModel.cancelSleepTimer(); closePanel() },
+                    // The panel's room, named: see PlayerViewModel.setSleepTimer.
+                    onSetSleep = { minutes -> playerViewModel.setSleepTimer(minutes, liveGroup.id); closePanel() },
+                    onCancelSleep = { playerViewModel.cancelSleepTimer(liveGroup.id); closePanel() },
                 )
             }
         }
@@ -588,8 +596,12 @@ private fun RoomSidebar(
     }
     // Back puts a moved room down, before anything else takes it.
     BackHandler(enabled = movingGroupId != null) { onMoving(null) }
-    // A picked-up room that is no longer one of several — the house grouped into it — is put down.
-    LaunchedEffect(sorted.size) { if (sorted.size < 2 && movingGroupId != null) onMoving(null) }
+    // A picked-up room that is no longer one of several — the house grouped into it — is put down,
+    // and so is one regrouped by another controller: its id gone, no row looked picked up, yet the
+    // next Back was spent putting it down (P-89, 2026-10-23).
+    LaunchedEffect(sorted, movingGroupId) {
+        if (movingGroupId != null && (sorted.size < 2 || sorted.none { it.id == movingGroupId })) onMoving(null)
+    }
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 

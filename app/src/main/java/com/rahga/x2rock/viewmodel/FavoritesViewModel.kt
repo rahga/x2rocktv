@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
@@ -29,13 +31,16 @@ class FavoritesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val presetStore: PresetStore,
     private val roomLink: PendingRoomDeepLink,
+    /** The application's: a preset outlives this screen (P-70). */
+    private val appScope: CoroutineScope = MainScope(),
+    private val shared: SharedNotice = SharedNotice(appScope),
 ) : ViewModel() {
 
     /** The room this screen plays into; the Radio screen is opened on the same one. */
     private val room = RoomTarget(household, savedStateHandle)
 
     /** The room's current group, for the screens opened from here; see [RoomTarget]. */
-    val groupId: String get() = room.forNavigation()
+    val route: RoomRoute get() = room.forNavigation()
 
     sealed interface UiState {
         data object Loading : UiState
@@ -92,25 +97,59 @@ class FavoritesViewModel @Inject constructor(
      * Bring [preset] back: set each speaker's level, gather the rooms, then start its favourite.
      * Levels come **first**, before the regroup, so nothing starts loud: a speaker's level is its
      * own and survives a join, and a room joining a group plays the group's music at once — at
-     * whatever level it was left on, had that not already been set. Then to the room it now forms,
-     * which may not be the one Browse was opened from.
+     * whatever level it was left on, had that not already been set. The room it now forms, which
+     * may not be the one Browse was opened from, becomes the selected room; whether the viewer is
+     * taken there is the Stay pin's to say, as for everything else that starts (owner, 2026-10-23).
+     *
+     * Run in the application's scope, not this screen's: Back while it was "Starting…" cancelled it
+     * wherever it stood — levels set and nothing grouped, a room pulled from its group and the rest
+     * never joined, or the rooms grouped without the favourite — and said nothing, a cancellation
+     * being nothing to say (P-70, 2026-10-23). Now it finishes, and says how it went on the shared
+     * line, which the room's pane draws, once the screen that started it has gone.
      */
-    fun applyPreset(preset: Preset, onDone: () -> Unit) =
-        startOne(presetKey(preset.id), "start ${preset.name}", onDone) {
-            // All at once, each to its own speaker. One whose level could not be set stays out, as does
-            // an adjustable one the preset holds no level for: either would play at once at whatever
-            // level it was left on (P-40). A fixed line-out is the amplifier's and always comes.
-            val failed = household.setLevelsBeforeJoining(preset.volumes)
-            val fixed = household.playerVolumes.value.filterValues { it.fixed }.keys
-            val leftOut = preset.playerIds.filter { it in failed || (it !in preset.volumes && it !in fixed) }
-            val joining = preset.playerIds - leftOut.toSet()
-            val names = leftOut.joinToString { household.playerName(it) }
-            if (joining.isEmpty()) error("couldn't set the volume in $names")
-            val groupId = household.gatherRooms(joining)
-            preset.favoriteId?.let { household.loadFavorite(groupId, it) }
-            // Said on the home screen, where this goes: this screen's own notice goes with it.
-            roomLink.set(joining.first(), notice = "Left out $names: couldn't set its volume".takeIf { leftOut.isNotEmpty() })
+    fun applyPreset(preset: Preset, onDone: () -> Unit) {
+        val what = "start ${preset.name}"
+        startOne(presetKey(preset.id), what, onDone) {
+            appScope.async {
+                try {
+                    bringBack(preset)
+                } catch (e: Throwable) {
+                    // While this screen lives its own guard says it, where the viewer is.
+                    if (cleared) shared.failure(what, e)
+                    throw e
+                }
+            }.await()
         }
+    }
+
+    private suspend fun bringBack(preset: Preset) {
+        // All at once, each to its own speaker. One whose level could not be set stays out, as does
+        // an adjustable one the preset holds no level for: either would play at once at whatever
+        // level it was left on (P-40). A fixed line-out is the amplifier's and always comes.
+        val failed = household.setLevelsBeforeJoining(preset.volumes)
+        val fixed = household.playerVolumes.value.filterValues { it.fixed }.keys
+        val leftOut = preset.playerIds.filter { it in failed || (it !in preset.volumes && it !in fixed) }
+        val joining = preset.playerIds - leftOut.toSet()
+        val names = leftOut.joinToString { household.playerName(it) }
+        if (joining.isEmpty()) error("couldn't set the volume in $names")
+        val groupId = household.gatherRooms(joining)
+        preset.favoriteId?.let { household.loadFavorite(groupId, it) }
+        // Said on the shared line, which every screen draws: this screen may be left behind, by the
+        // pin's return to the room or by Back while this ran.
+        roomLink.set(
+            joining.first(),
+            notice = "Left out $names: couldn't set its volume".takeIf { leftOut.isNotEmpty() },
+            navigate = false,
+        )
+    }
+
+    /** Set once this screen has gone, so a preset still running says its own failure. */
+    @Volatile private var cleared = false
+
+    override fun onCleared() {
+        cleared = true
+        super.onCleared()
+    }
 
     /**
      * Two presses of Menu, as the queue's Clear is two: the first arms and says so, the second
@@ -211,7 +250,7 @@ class FavoritesViewModel @Inject constructor(
                     Triple(favs.await(), playlists.await(), history.await())
                 }
                 // What is playing comes from the subscription, so only the list is fetched.
-                val group = household.groupState(room.forNavigation())
+                val group = household.groupState(room.forNavigation().groupId)
                 val activeLabel = favoriteMark(group.playbackState)
                 val activeId = activeLabel?.let { group.container?.name?.let { playingFavorite(favs.items, it)?.id } }
                 // Not de-duplicated by name: two "The Main Mix" in the office history are two

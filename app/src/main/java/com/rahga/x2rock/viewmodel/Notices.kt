@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import javax.inject.Inject
+import javax.inject.Singleton
 
 /** A replaceable read may fail, but a cancelled read must never publish over its replacement. */
 internal suspend inline fun <T> attempt(block: () -> T): Result<T> {
@@ -58,6 +60,20 @@ class TransientNotice(private val scope: CoroutineScope) {
     private companion object {
         const val NOTICE_MILLIS = 4_000L
     }
+}
+
+/**
+ * The shared player's line: what the pane and every screen draw when they have none of their own
+ * (P-79, P-80, 2026-10-23). Application-scoped, so an outcome that lands after the screen that asked
+ * for it has gone — a TV input refused 20s on, a party that left a room out, a preset whose Browse was
+ * left by Back — is still said wherever the viewer now is, rather than on a screen nobody can see.
+ */
+@Singleton
+class SharedNotice @Inject constructor(scope: CoroutineScope) {
+    private val line = TransientNotice(scope)
+    val text: StateFlow<String?> = line.text
+    fun post(message: String) = line.post(message)
+    fun failure(what: String, e: Throwable) = line.failure(what, e)
 }
 
 /**

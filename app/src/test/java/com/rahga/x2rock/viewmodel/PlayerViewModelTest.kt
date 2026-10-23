@@ -97,6 +97,53 @@ class PlayerViewModelTest {
         assertEquals("the command named the room's new group", moved.id, sent.get("groupId").asString)
     }
 
+    /**
+     * Kitchen, added to Guest TV's party by another controller, then the party split: the host keeps
+     * its id, and the player — re-anchored on the party — stayed with Guest TV while Queue went with
+     * Kitchen (P-71). It follows the room chosen, with nothing re-selecting it.
+     */
+    @Test fun `the room leaves a party it only joined when the party splits`() = runBlocking<Unit> {
+        val kitchen = household.state.value.groups.first { it.name == "Kitchen" }
+        viewModel.selectGroup(kitchen.id, kitchen.name)
+        fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = "Guest TV", memberRoom = "Kitchen"))
+        val party = withTimeout(5_000) {
+            household.state.first { s -> s.groups.none { it.id == kitchen.id } }
+        }.groups.first { kitchen.coordinatorId in it.playerIds }
+        withTimeout(5_000) { viewModel.uiState.first { it.groupName == party.name } }
+        // The party playing rewrites the group list while the room is in it: what moved the anchor.
+        fake.pushPlaybackStatus(party.id, state = "PLAYBACK_STATE_PAUSED")
+        withTimeout(5_000) { household.state.first { s -> s.groups.any { it.id == party.id && it.playbackState == "PLAYBACK_STATE_PAUSED" } } }
+
+        fake.pushTopology(splitKeepingHost(party.id, hostRoom = "Guest TV", memberRoom = "Kitchen"))
+        withTimeout(5_000) { household.state.first { s -> s.groups.size == 5 } }
+        withTimeout(5_000) { viewModel.uiState.first { it.groupName == "Kitchen" } }
+    }
+
+    /**
+     * No room yet — a household that never answered, or one still arriving — is nothing to advertise:
+     * a session with a blank title is the launcher's "Unknown" card (P-91).
+     */
+    @Test fun `no media session is presented before there is a room`() = runBlocking<Unit> {
+        val roomless = RecordingNowPlaying()
+        val player = PlayerViewModel(household, roomless, testClock)
+        withTimeout(5_000) { while (roomless.presenting) delay(20) }
+        assertTrue("a blank title was published", roomless.metadata.isEmpty())
+
+        player.selectGroup(groupId, "Test Room")
+        withTimeout(5_000) { while (!roomless.presenting) delay(20) }
+    }
+
+    /** P-78: a new track in the same room keeps the last one's buttons, unselected, until its read lands. */
+    @Test fun `the rating buttons are held through a track change`() {
+        val rated = "G1" to SonosHousehold.RatingState("Deezer", com.rahga.x2rock.smapi.Thumb.UP, SonosHousehold.RatingStyle.FAVORITE)
+        assertEquals(
+            "G1" to SonosHousehold.RatingState("Deezer", com.rahga.x2rock.smapi.Thumb.NONE, SonosHousehold.RatingStyle.FAVORITE),
+            ratingWhileReading(rated, "G1", "track-2"),
+        )
+        assertNull("another room's are not shown here", ratingWhileReading(rated, "G2", "track-2"))
+        assertNull("a track with nothing to rate has none", ratingWhileReading(rated, "G1", null))
+    }
+
     @Test fun `volume is null until the speaker has said, not zero`() {
         assertNull("volume was reported before the speaker said anything", viewModel.uiState.value.volume)
     }

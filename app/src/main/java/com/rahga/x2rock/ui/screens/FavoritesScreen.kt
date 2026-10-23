@@ -51,6 +51,7 @@ import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
 import com.rahga.x2rock.ui.theme.IconLabelButton
 import com.rahga.x2rock.ui.components.SectionTitle
+import com.rahga.x2rock.viewmodel.RoomRoute
 import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.favoriteGroups
 import com.rahga.x2rock.viewmodel.favoriteLine
@@ -75,10 +76,10 @@ import com.rahga.x2rock.viewmodel.recentKey
 fun FavoritesScreen(
     room: String,
     onBack: () -> Unit,
-    onOpenRadio: (groupId: String) -> Unit,
-    onOpenServices: (groupId: String) -> Unit,
+    onOpenRadio: (RoomRoute) -> Unit,
+    onOpenServices: (RoomRoute) -> Unit,
     /** Open an album or playlist favourite on its service's page: the service, its id, the favourite. */
-    onOpenFavorite: (groupId: String, serviceKey: String, containerId: String, favorite: Favorite) -> Unit,
+    onOpenFavorite: (room: RoomRoute, serviceKey: String, containerId: String, favorite: Favorite) -> Unit,
     /** Something started from here: back to the player, or not, as the header's [StayPin] says. */
     onPlayed: () -> Unit,
     playerViewModel: PlayerViewModel,
@@ -148,9 +149,9 @@ fun FavoritesScreen(
                         // The household's own services, searched and browsed with its stored login —
                         // Apple Music among them. Then the radio directory: stations no favourite
                         // holds, with no account and no typing. Services first (asked for 2026-10-14).
-                        IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.groupId) }, tracked("header:services"))
+                        IconLabelButton(Icons.Default.LibraryMusic, "Music Services", { onOpenServices(viewModel.route) }, tracked("header:services"))
                         Spacer(Modifier.width(16.dp))
-                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.groupId) }, tracked("header:radio"))
+                        IconLabelButton(Icons.Default.Radio, "Radio", { onOpenRadio(viewModel.route) }, tracked("header:radio"))
                         StayPin(afterPlaying)
                     }
                     Spacer(Modifier.height(20.dp))
@@ -177,7 +178,7 @@ fun FavoritesScreen(
                             onRemoveFavorite = viewModel::removeFavorite,
                             onPlay = { fav ->
                                 val page = favoritePage(fav, browsable)
-                                if (page != null) onOpenFavorite(viewModel.groupId, page.first, page.second, fav)
+                                if (page != null) onOpenFavorite(viewModel.route, page.first, page.second, fav)
                                 else viewModel.loadFavorite(fav.id, onDone = onPlayed)
                             },
                             opens = { favoritePage(it, browsable) != null },

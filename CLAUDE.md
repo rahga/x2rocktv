@@ -274,6 +274,13 @@ Two things this costs, both of which were wrong once:
   rather than the id: whichever group now holds them is the same room to a listener, even
   though it is a different group. Only if that fails does it fall back to the sorted first.
 
+  **It follows the room chosen, and only that** (`SavedRoom`, P-71, 2026-10-23). A room added to
+  another's party is followed into it, but the anchor stays on the room, not on the party's host: a
+  host keeps its id through a party and its split, so an anchor moved onto it kept the selection and
+  the player on the host while Queue went with the room. The home screen, the shared player, every
+  screen's `RoomTarget` and the room panel follow that one anchor, and a route hands it on
+  (`RoomRoute`) with the group id, so a screen opened while the id was already gone still finds it (P-88).
+
 When writing a test for this, a derived topology must change the host group's **id**, not
 just its membership — `FakePlayer.groupedTopology` does. Keeping the id made the fixture
 look right while testing nothing, because a household that never re-subscribes passes it.
@@ -693,6 +700,11 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   reports it with every status, so there it is a plain progress line and not a focus stop. What
   did not work floats over the foot of the pane as a `NoticeBanner`, as the home screen's does
   over the room panel, rather than as a line among the rows.
+- **One shared line for what lands once the viewer has gone on** (`SharedNotice`, 2026-10-23): the
+  player's notice, drawn by the pane and by every screen that has nothing of its own to say. A TV
+  input refused 20s on, a party that left a room out, a preset whose Browse was left: each used to be
+  posted to a screen nobody could see (P-79, P-80). Home's own banner says its answers while Home is
+  in front (`HomeViewModel.shown`); after that, the shared line does.
 - **A control the pane does not draw is not acted on from anywhere** (2026-10-10). The remote's
   media keys and the media session's controls come through the same `PlayerViewModel` functions
   as the pane's buttons, and each checks the player's `availablePlaybackActions` first: Next on a
@@ -727,8 +739,8 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   Music. Outlined, the default, it returns to the player, where what started is shown; filled, it
   stays in the browser, so the next station or track is a press away and Back leaves. Named while
   focused by what a press will do — a verb, not the state: "Hold" while off, "Release" while on.
-  One per-device rule for everything that plays, Search included, so it does not depend on how the
-  viewer got there. Radio carries Browse's now-playing bar. Browse's header reads Music Services, Radio.
+  One per-device rule for everything that plays, Search and presets included, so it does not depend
+  on how the viewer got there. Radio carries Browse's now-playing bar. Browse's header reads Music Services, Radio.
 - **The type floor is 14sp**, set once in `TenFootTypography` rather than call site by call
   site: tv-material3 puts most secondary text at 12sp, Google's absolute minimum, and that was
   the text people read. Each style keeps its rank, so a call site's choice still means what it did.
@@ -764,7 +776,10 @@ checked on the Streamer. What it settled, so it is not undone by accident:
 - **Presets** are this device's (`PresetStore`): players, each one's level, and a Sonos favourite,
   saved from the room panel and played from Browse. Players, not groups, for the reason the TV
   room stores a player. Applying one sets levels **before** it starts the music, so nothing starts
-  loud. Music that is not a favourite is not kept, and saving says so.
+  loud. Music that is not a favourite is not kept, and saving says so. **A preset follows the Stay
+  pin** (owner, 2026-10-23): the room it forms becomes the selected room, and with the pin held the
+  viewer stays in Browse. It runs in the application's scope, so Back while it is "Starting…" leaves
+  it to finish rather than half-grouped, and how it went is said on the shared line (P-70).
 - **A book's chapters and a service's playlists are the item menu's** (2026-10-10). On a book,
   **Chapters** lists them as a Browse level, opening on the chapter its service has the listener
   in, marked "Resumes at"; that one carries on from the place, any other plays from its start, and

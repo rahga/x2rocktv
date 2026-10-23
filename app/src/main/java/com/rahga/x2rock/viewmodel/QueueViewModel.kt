@@ -229,7 +229,7 @@ class QueueViewModel @Inject constructor(
      * keyboard to ask with, and the Sonos app can rename it.
      */
     fun saveAsPlaylist() {
-        val roomName = household.state.value.groups.firstOrNull { it.id == room.forNavigation() }?.name ?: "Queue"
+        val roomName = household.state.value.groups.firstOrNull { it.id == room.forNavigation().groupId }?.name ?: "Queue"
         val name = "$roomName, ${SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date())}"
         viewModelScope.launch {
             runCatching { household.saveQueue(room.current(), name) }
@@ -275,7 +275,7 @@ class QueueViewModel @Inject constructor(
                 val before = updateId
                 runCatching { block() }
                     .onSuccess {
-                        val pushed = household.groupStates.value[room.forNavigation()]?.queueVersion != null
+                        val pushed = household.groupStates.value[room.forNavigation().groupId]?.queueVersion != null
                         val reread = pushed && withTimeoutOrNull(EDIT_SETTLE_MILLIS) { _updateId.first { it != before } } != null
                         if (!reread) read(quiet = true)
                     }

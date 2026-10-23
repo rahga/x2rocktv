@@ -143,6 +143,8 @@ class FavoritesViewModelTest {
         assertEquals("84", fake.lastCommandBody("loadFavorite")!!.get("favoriteId").asString)
         withTimeout(5_000) { while (!done) kotlinx.coroutines.delay(20) }
         assertEquals("then to the room it forms", leader, roomLink.roomId.value)
+        // Selected, not shown: going there is the Stay pin's to say, through `onDone` (2026-10-23).
+        assertFalse("the room link went there itself, past the pin", roomLink.navigates())
     }
 
     /** Menu twice: the first press only arms, so one stray press never loses a preset. */
@@ -174,6 +176,59 @@ class FavoritesViewModelTest {
         val regroup = fake.awaitCommand("modifyGroupMembers", 5_000)
         assertEquals(groups.first { it.name == "Kitchen" }.id, regroup.get("groupId").asString)
         fake.pushTopology(com.rahga.x2rock.lan.FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+    }
+
+    /** Browse built in a store of its own, so a test can leave it as Back does: the store cleared. */
+    private fun browseInStore(store: androidx.lifecycle.ViewModelStore, shared: SharedNotice): FavoritesViewModel =
+        androidx.lifecycle.ViewModelProvider.create(store, object : androidx.lifecycle.ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: kotlin.reflect.KClass<T>, extras: androidx.lifecycle.viewmodel.CreationExtras): T =
+                FavoritesViewModel(household, SavedStateHandle(mapOf("groupId" to fake.groupId(household))), presets, roomLink, scope, shared) as T
+        })[FavoritesViewModel::class]
+
+    /**
+     * Back while a preset was "Starting…" cancelled it wherever it stood — here the rooms asked to
+     * group and the favourite never sent — and said nothing (P-70). It runs on the application's
+     * scope now, so leaving Browse leaves it to finish.
+     */
+    @Test fun `a preset left by Back mid-way still finishes`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        val guest = groups.first { it.name == "Guest TV" }.coordinatorId
+        val store = androidx.lifecycle.ViewModelStore()
+        val browse = browseInStore(store, SharedNotice(scope))
+        fake.clearHistory()
+
+        browse.applyPreset(Preset("p6", "Kitchen + Guest TV", listOf(kitchen, guest), mapOf(kitchen to 12, guest to 8), "84")) {}
+        fake.awaitCommand("modifyGroupMembers", 10_000)
+        store.clear()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+
+        fake.awaitCommand("loadFavorite", 10_000)
+        assertEquals("84", fake.lastCommandBody("loadFavorite")!!.get("favoriteId").asString)
+        withTimeout(5_000) { roomLink.roomId.first { it == kitchen } }
+    }
+
+    /** And one that fails once Browse has gone says so on the shared line, which the room's pane draws. */
+    @Test fun `a preset left by Back that then fails says so on the shared line`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val kitchen = groups.first { it.name == "Kitchen" }.coordinatorId
+        val guest = groups.first { it.name == "Guest TV" }.coordinatorId
+        val store = androidx.lifecycle.ViewModelStore()
+        val shared = SharedNotice(scope)
+        val browse = browseInStore(store, shared)
+        fake.refuse("loadFavorite")
+        fake.clearHistory()
+
+        browse.applyPreset(Preset("p7", "Kitchen + Guest TV", listOf(kitchen, guest), mapOf(kitchen to 12, guest to 8), "84")) {}
+        fake.awaitCommand("modifyGroupMembers", 10_000)
+        store.clear()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+
+        assertEquals(
+            "Couldn't start Kitchen + Guest TV: ERROR_COMMAND_FAILED",
+            withTimeout(10_000) { shared.text.first { it != null } },
+        )
     }
 
     /** A speaker whose level was refused is left out of the regroup, and the notice names it (P-40). */
@@ -230,7 +285,7 @@ class FavoritesViewModelTest {
     }
 
     @Test fun `Browse opened before a regroup still plays into the same room`() = runBlocking<Unit> {
-        val original = household.state.value.groups.first { it.id == viewModel.groupId }
+        val original = household.state.value.groups.first { it.id == viewModel.route.groupId }
         val member = household.state.value.groups.first { it.id != original.id }
         val topology = FakePlayer.groupedTopology(original.name, member.name)
         fake.pushTopology(topology)

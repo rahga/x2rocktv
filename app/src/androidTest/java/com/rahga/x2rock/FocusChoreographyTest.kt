@@ -94,7 +94,7 @@ class FocusChoreographyTest {
         fake.shutdown()
     }
 
-    private fun showHome(onOpenQueue: (String) -> Unit = {}) = compose.setContent {
+    private fun showHome(onOpenQueue: (com.rahga.x2rock.viewmodel.RoomRoute) -> Unit = {}) = compose.setContent {
         X2RockTheme {
             HomeScreen(
                 onOpenQueue = onOpenQueue, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
@@ -163,7 +163,7 @@ class FocusChoreographyTest {
                 NavHost(nav, startDestination = "home") {
                     composable("home") {
                         HomeScreen(
-                            onOpenQueue = { id -> nav.navigate("queue/$id") }, onOpenFavorites = {}, onOpenSearch = {},
+                            onOpenQueue = { room -> nav.navigate("queue/${room.groupId}") }, onOpenFavorites = {}, onOpenSearch = {},
                             onOpenNowPlaying = {}, onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
                             homeViewModel = home, playerViewModel = player,
                         )

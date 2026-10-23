@@ -22,8 +22,8 @@ import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.Track
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
-import com.rahga.x2rock.model.followingRoom
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -94,6 +94,7 @@ class HomeViewModel @Inject constructor(
     private val betaFeatures: BetaFeatures,
     private val appleMusic: com.rahga.x2rock.store.AppleMusicSetting,
     saved: SavedStateHandle = SavedStateHandle(),
+    private val shared: SharedNotice = SharedNotice(MainScope()),
 ) : ViewModel() {
 
     /**
@@ -218,11 +219,18 @@ class HomeViewModel @Inject constructor(
     val selectedGroupId: StateFlow<String?> = _selectedGroupId.asStateFlow()
 
 
-    /** The last selection as a group, so its room can be found again after a regroup. */
-    private var lastSelected: Group? = null
-
-    /** The same, kept for a restore after the app was reclaimed, so Back opens on the room the viewer left. */
+    /**
+     * The room chosen, by its speakers, so it can be found again after a regroup — and kept for a
+     * restore after the app was reclaimed, so Back opens on the room the viewer left. Chosen, not
+     * merely followed: see [SavedRoom] for why a party another speaker hosts does not move it (P-71).
+     */
     private val savedSelection = SavedRoom(saved, "home.selected")
+
+    /**
+     * The selected room as a screen opened on it is handed it: [groupId], and the speakers of the room
+     * chosen, which that screen follows it by (P-71, P-88).
+     */
+    fun route(groupId: String): RoomRoute = RoomRoute(groupId, savedSelection.coordinator, savedSelection.players)
 
     private val _navigateToRoom = MutableStateFlow(false)
     val navigateToRoom: StateFlow<Boolean> = _navigateToRoom.asStateFlow()
@@ -237,11 +245,13 @@ class HomeViewModel @Inject constructor(
                 val groups = household.state.map { it.groups }.first { it.isNotEmpty() }
                 val group = groups.firstOrNull { it.id == roomId } ?: TvSoundbar.groupOf(roomId, groups)
                 if (group != null) {
-                    lastSelected = group
+                    savedSelection.remember(group)
                     _selectedGroupId.value = group.id
-                    _navigateToRoom.value = true
+                    if (pendingRoomDeepLink.navigates()) _navigateToRoom.value = true
                 }
-                pendingRoomDeepLink.takeNotice()?.let { _notice.post(it) }
+                // On the shared line, which the room's pane draws, and Browse too when a preset was
+                // started with the Stay pin held and the viewer is still there.
+                pendingRoomDeepLink.takeNotice()?.let { shared.post(it) }
                 // Last: clearing emits null, which cancels this block once it next suspends.
                 pendingRoomDeepLink.clear()
             }
@@ -251,35 +261,30 @@ class HomeViewModel @Inject constructor(
             household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
                 if (groups.isEmpty()) return@collect
                 val current = _selectedGroupId.value
-                if (current != null && groups.any { it.id == current }) return@collect
-
                 // A regroup mints new group ids, so the selected one can simply cease to
                 // exist — anything else on the network can do that at any moment. Follow
                 // the speakers rather than the id: whichever group now holds them is the
                 // same room to a listener, even though it is a different group. By the one
                 // rule every screen follows a room by, which puts the coordinator first: any
                 // shared speaker used to do, and a split sent the selection to whichever
-                // fragment the household listed first.
-                val followed = lastSelected?.let { groups.followingRoom(it.coordinatorId, it.playerIds) }
-                    ?: savedSelection.findIn(groups)
+                // fragment the household listed first. And by the room chosen, so a party the
+                // room only joined is left when it splits, though its host keeps its id (P-71).
+                val followed = savedSelection.findIn(groups)
+                if (current != null && groups.any { it.id == current } && (followed == null || followed.id == current)) return@collect
 
                 _selectedGroupId.value = (
                     followed
-                        ?: TvSoundbar.groupOf(roomPrefsStore.tvPlayerId.value, groups)
-                        ?: defaultSelection(groups)
+                        ?: (TvSoundbar.groupOf(roomPrefsStore.tvPlayerId.value, groups) ?: defaultSelection(groups))
+                            ?.also { savedSelection.remember(it) }
                     )?.id
             }
         }
 
-        // Remembered so a vanished selection can be followed to wherever its speakers went.
+        // Kept up to date as the chosen room grows or shrinks, so it can be followed to wherever its
+        // speakers go; not moved onto a group another speaker coordinates, which it only joined.
         viewModelScope.launch {
             combine(household.state, _selectedGroupId) { state, id -> state.groups.firstOrNull { it.id == id } }
-                .collect { group ->
-                    if (group != null) {
-                        lastSelected = group
-                        savedSelection.remember(group)
-                    }
-                }
+                .collect { group -> if (group != null) savedSelection.refresh(group) }
         }
         // Which soundbar this television feeds, learned once and then remembered. Only
         // detectable while that room is on its TV input, so this watches rather than asking
@@ -310,7 +315,10 @@ class HomeViewModel @Inject constructor(
                 val groups = household.state.value.groups
                 val untouched = _selectedGroupId.value == defaultSelection(groups)?.id
                 if (untouched) {
-                    TvSoundbar.groupOf(detected, groups)?.let { _selectedGroupId.value = it.id }
+                    TvSoundbar.groupOf(detected, groups)?.let {
+                        savedSelection.remember(it)
+                        _selectedGroupId.value = it.id
+                    }
                 }
             }
         }
@@ -357,7 +365,15 @@ class HomeViewModel @Inject constructor(
     /** Back to Sonos's alphabetical order. */
     fun resetRoomOrder() = roomPrefsStore.setRoomRanks(emptyList())
 
-    fun selectGroup(id: String) { _selectedGroupId.value = id }
+    /**
+     * The viewer chose [id]: it is the room now. The same id again is no choice — focus coming back
+     * to the selected row — and leaves the room chosen as it was, whatever group it is following.
+     */
+    fun selectGroup(id: String) {
+        if (_selectedGroupId.value == id) return
+        findGroup(id)?.let { savedSelection.remember(it) }
+        _selectedGroupId.value = id
+    }
 
 
     // Grouping changes arrive back as a groups:1 event, so none of these re-fetch.
@@ -366,7 +382,7 @@ class HomeViewModel @Inject constructor(
         val source = findGroup(sourceGroupId) ?: return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(targetGroupId, add = source.playerIds, remove = emptyList()) }
-                .onFailure { _notice.failure("add ${source.name}", it) }
+                .onFailure { failure("add ${source.name}", it) }
         }
     }
 
@@ -377,14 +393,14 @@ class HomeViewModel @Inject constructor(
         if (others.isEmpty()) return
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = others) }
-                .onFailure { _notice.failure("separate ${group.name}", it) }
+                .onFailure { failure("separate ${group.name}", it) }
         }
     }
 
     fun removePlayerFromGroup(groupId: String, playerId: String) {
         viewModelScope.launch {
             runCatching { household.modifyGroupMembers(groupId, add = emptyList(), remove = listOf(playerId)) }
-                .onFailure { _notice.failure("remove ${household.playerName(playerId)}", it) }
+                .onFailure { failure("remove ${household.playerName(playerId)}", it) }
         }
     }
 
@@ -412,17 +428,17 @@ class HomeViewModel @Inject constructor(
         val level = household.groupState(host.id).volume?.volume.takeIf { evenVolume }
         // Asked to even out and no level known yet (the room's volume not yet pushed): joining
         // anyway would be the loud start evening out was for.
-        if (evenVolume && level == null) return _notice.post("Couldn't read ${host.name}'s volume yet, so no room joined")
+        if (evenVolume && level == null) return post("Couldn't read ${host.name}'s volume yet, so no room joined")
         viewModelScope.launch {
             // A speaker whose level could not be set stays out: joining, it would play at once at
             // whatever level it was left on, which is what evening out was for (P-40).
             val failed = level?.let { household.setLevelsBeforeJoining(groups.flatMap { it.playerIds }.associateWith { level }) }.orEmpty()
             val joining = joiners.filter { it !in failed }
             val leftOut = joiners.filter { it in failed }.joinToString { household.playerName(it) }
-            if (joining.isEmpty()) return@launch _notice.post("Couldn't set the volume in $leftOut, so no room joined")
+            if (joining.isEmpty()) return@launch post("Couldn't set the volume in $leftOut, so no room joined")
             runCatching { household.modifyGroupMembers(host.id, add = joining, remove = emptyList()) }
-                .onSuccess { if (leftOut.isNotEmpty()) _notice.post("Left out $leftOut: couldn't set its volume") }
-                .onFailure { _notice.failure("start the party", it) }
+                .onSuccess { if (leftOut.isNotEmpty()) post("Left out $leftOut: couldn't set its volume") }
+                .onFailure { failure("start the party", it) }
         }
     }
 
@@ -436,7 +452,7 @@ class HomeViewModel @Inject constructor(
         val named = roomPrefsStore.tvPlayerId.value
         viewModelScope.launch {
             runCatching { household.useTvInput(groupId, preferSoundbar = named) }
-                .onFailure { _notice.failure("switch to the TV", it) }
+                .onFailure { failure("switch to the TV", it) }
         }
     }
 
@@ -448,7 +464,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { household.useLineIn(groupId, playerId) }
                 .onFailure {
-                    _notice.failure("switch to the line-in", it)
+                    failure("switch to the line-in", it)
                     betaFeatures.noteRefusal("Line-In (${household.playerName(playerId)})", it)
                 }
         }
@@ -488,13 +504,25 @@ class HomeViewModel @Inject constructor(
      */
     val notice: StateFlow<String?> = _notice.text
 
+    /**
+     * Whether the home screen is in front, as it says: its banner is the only reader of [notice]. An
+     * outcome that lands once the viewer has gone on goes to the shared line instead, which every
+     * screen draws — a TV input can take 20s to fail and a party retries its regroup, and both used to
+     * be posted, unseen, to a banner nobody could see while Queue or Browse was in front (P-79).
+     */
+    @Volatile var shown = false
+
+    private fun post(message: String) = if (shown) _notice.post(message) else shared.post(message)
+
+    private fun failure(what: String, e: Throwable) = if (shown) _notice.failure(what, e) else shared.failure(what, e)
+
 
     /** Turn crossfade over in [groupId], keeping its shuffle and repeat as they are. */
     fun toggleCrossfade(groupId: String) {
         val mode = household.groupState(groupId).playMode
         viewModelScope.launch {
             runCatching { household.setPlayMode(groupId, mode.copy(crossfade = !mode.crossfade)) }
-                .onFailure { _notice.failure("change Crossfade", it) }
+                .onFailure { failure("change Crossfade", it) }
         }
     }
 
@@ -597,7 +625,7 @@ class HomeViewModel @Inject constructor(
             delay(VOLUME_DEBOUNCE_MILLIS)
             toneWrites.remove(key)
             toneSends.withLock {
-                runCatching { send(edited.playerId) }.onFailure { _notice.failure(what, it) }
+                runCatching { send(edited.playerId) }.onFailure { failure(what, it) }
             }
             if (toneWrites.isEmpty()) readTone(edited.playerId, edited.soundbarId)
         }
@@ -726,11 +754,11 @@ class HomeViewModel @Inject constructor(
                 presetStore.add(preset)
                 preset
             }.onSuccess { preset ->
-                _notice.post(
+                post(
                     if (preset.favoriteId != null) "Saved \"${preset.name}\" to Browse"
                     else "Saved \"${preset.name}\" to Browse — rooms and levels only, since what plays isn't a favourite",
                 )
-            }.onFailure { _notice.failure("save the preset", it) }
+            }.onFailure { failure("save the preset", it) }
         }
     }
 

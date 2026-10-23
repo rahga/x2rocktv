@@ -199,9 +199,11 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── PreferredServicesViewModel.kt  the household's services, for the preferred-services sorter
     ├── ServiceItemMenu.kt          an item's menu, shared by both: play now/next, queue, its service's say
     ├── StartGuard.kt               one thing starting at a time, marked for its row; every screen's start
-    ├── Notices.kt                  TransientNotice: one line of "that didn't work", and its wording
+    ├── Notices.kt                  TransientNotice: one line of "that didn't work", and its wording;
+    │                               SharedNotice, the player's line every screen draws
     ├── RoomTarget.kt               the room a screen was opened for, followed across regroups; SavedRoom,
-    │                               the player's and the selection's room kept through process death
+    │                               the room chosen, the one anchor every surface follows, kept through
+    │                               process death; RoomRoute, a room as one screen hands it to the next
     ├── MonotonicClock.kt           milliseconds that only go up (sleep timer ends), a test seam
     ├── VolumeBurst.kt              how far one volume press moves: 2, 3, 5 within a burst, finer when quiet
     ├── FavoriteGroups.kt           favourites grouped and labelled, and which open on a page
@@ -497,8 +499,10 @@ All ViewModels are `@HiltViewModel` and injected automatically.
 **Commands fail out loud.** They are fire-and-forget, because their effect returns as an event,
 but a failure is reported through `TransientNotice`: one line for a few seconds, worded by
 `failureNotice`. The home screen draws its line above the room panel, which stays open while
-grouping. A cancellation is never reported: a newer press cancels a debounced volume send,
-and `runCatching` catches that too.
+grouping. An answer that lands once the viewer has left the screen that asked — Home's, a
+preset's — goes to `SharedNotice`, the player's line, which the pane and every other screen draw
+when they have nothing of their own to say. A cancellation is never reported: a newer press
+cancels a debounced volume send, and `runCatching` catches that too.
 
 ---
 

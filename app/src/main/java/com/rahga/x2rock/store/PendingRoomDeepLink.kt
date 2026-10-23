@@ -24,13 +24,23 @@ class PendingRoomDeepLink @Inject constructor() {
      */
     @Volatile private var notice: String? = null
 
-    fun set(roomId: String, notice: String? = null) {
+    /** Whether the room is also to be shown: false selects it for when the viewer goes back to it. */
+    @Volatile private var navigate: Boolean = true
+
+    fun set(roomId: String, notice: String? = null, navigate: Boolean = true) {
         this.notice = notice
+        this.navigate = navigate
         _roomId.value = roomId
     }
 
     /** The line [set] carried, once. */
     fun takeNotice(): String? = notice.also { notice = null }
+
+    /**
+     * Whether [set] asked for the room to be shown. A preset only selects its room: whether the
+     * viewer goes there is the Stay pin's to say, as for everything else that starts (2026-10-23).
+     */
+    fun navigates(): Boolean = navigate
 
     fun clear() { _roomId.value = null }
 }

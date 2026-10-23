@@ -64,7 +64,7 @@ class SearchViewModel @Inject constructor(
     private val room = RoomTarget(household, savedStateHandle)
 
     /** The room's group now, for the next screen to open on: never the route's own after a regroup (P-42). */
-    val groupId: String get() = room.forNavigation()
+    val route: RoomRoute get() = room.forNavigation()
 
     /** One result, whichever search it came from. */
     sealed interface Hit {
@@ -123,8 +123,12 @@ class SearchViewModel @Inject constructor(
         val waiting: List<Section> = emptyList(),
     )
 
-    private val _query = MutableStateFlow("")
-    val query: StateFlow<String> = _query.asStateFlow()
+    /**
+     * Kept in saved state, so a screen Android restores after reclaiming the app opens on the term
+     * rather than an empty field (P-93, 2026-10-23); the results are asked for again with one press.
+     */
+    private val saved = savedStateHandle
+    val query: StateFlow<String> = savedStateHandle.getStateFlow(QUERY, "")
 
     private val _results = MutableStateFlow(Results())
     val results: StateFlow<Results> = _results.asStateFlow()
@@ -144,18 +148,18 @@ class SearchViewModel @Inject constructor(
     /** This device's recent terms, newest first, offered under the field before a search. */
     val recent: StateFlow<List<String>> = recentSearches.terms
 
-    fun setQuery(text: String) { _query.value = text }
+    fun setQuery(text: String) { saved[QUERY] = text }
 
     /** A recent [term], searched again: one press for what once took a keyboard. */
     fun searchAgain(term: String) {
-        _query.value = term
+        saved[QUERY] = term
         search()
     }
 
     fun forget(term: String) = recentSearches.remove(term)
 
     fun search() {
-        val term = _query.value.trim().ifEmpty { return }
+        val term = query.value.trim().ifEmpty { return }
         recentSearches.add(term)
         job?.cancel()
         job = viewModelScope.launch {
@@ -247,6 +251,7 @@ class SearchViewModel @Inject constructor(
     private suspend fun appleAccount(): String = household.appleMusicAccount() ?: error(NO_ACCOUNT)
 
     companion object {
+        private const val QUERY = "search.query"
         private const val SERVICE_TIMEOUT_MILLIS = 10_000L
         private const val PER_CATEGORY = 6
         private const val PER_SERVICE = 8

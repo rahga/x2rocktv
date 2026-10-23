@@ -34,9 +34,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import kotlinx.coroutines.flow.first
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
@@ -49,6 +47,7 @@ import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
 import com.rahga.x2rock.viewmodel.AlarmDraft
 import com.rahga.x2rock.viewmodel.AlarmsViewModel
 
@@ -59,7 +58,12 @@ import com.rahga.x2rock.viewmodel.AlarmsViewModel
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel()) {
+fun AlarmsScreen(
+    onBack: () -> Unit,
+    /** The shared player's line, drawn when this screen has none of its own (P-80). */
+    sharedNotice: String? = null,
+    viewModel: AlarmsViewModel = hiltViewModel(),
+) {
     val state by viewModel.uiState.collectAsState()
     val draft by viewModel.draft.collectAsState()
     val notice by viewModel.notice.collectAsState()
@@ -88,16 +92,10 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
                         LaunchedEffect(Unit) { backFocus.requestFocusRetrying() }
                     }
                     is AlarmsViewModel.UiState.Ready -> {
-                        // Only once this screen is resumed, which is when its navigation's fade has ended.
-                        // The list is read fast enough to ask during the fade, while the home screen is
-                        // still composed and handing focus back to its Settings button; when that screen
-                        // left, focus fell to Back (Shield, 2026-10-10). Preferred services is spared only
-                        // by loading more slowly. The list on the way back from a new alarm asks the same.
+                        // Only once this screen is resumed, which is when its navigation's fade has ended:
+                        // see requestFocusWhenResumed. The list on the way back from a new alarm asks the same.
                         val lifecycle = LocalLifecycleOwner.current.lifecycle
-                        LaunchedEffect(Unit) {
-                            lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
-                            firstFocus.requestFocusRetrying()
-                        }
+                        LaunchedEffect(Unit) { firstFocus.requestFocusWhenResumed(lifecycle) }
                         s.clock?.let { clock ->
                             Text(
                                 "Times are this system's clock, now ${clock.time}." +
@@ -141,7 +139,7 @@ fun AlarmsScreen(onBack: () -> Unit, viewModel: AlarmsViewModel = hiltViewModel(
                     }
                 }
             }
-            notice?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
+            (notice ?: sharedNotice)?.let { NoticeBanner(it, Modifier.align(Alignment.BottomCenter)) }
         }
     }
 }

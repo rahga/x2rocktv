@@ -74,7 +74,7 @@ interface NowPlayingPublisher {
      *
      * Still true while a room is merely **idle**, which is not the same case. A play key or
      * a voice "play in the living room" has to land somewhere, and idle is precisely when
-     * one is worth acting on.
+     * one is worth acting on. False, too, before there is any room to name (P-91).
      */
     fun setPresenting(presenting: Boolean)
 
@@ -132,7 +132,12 @@ class MediaSessionPublisher @Inject constructor(
 
     @Volatile private var attached: NowPlayingPublisher.Controls? = null
 
-    @Volatile private var presenting = true
+    /**
+     * Not until the player says there is a room to name: an attach before any room is known — still
+     * connecting, or a household that never answered — would advertise a session with a blank title,
+     * the launcher's "Unknown" card (P-91, 2026-10-23).
+     */
+    @Volatile private var presenting = false
 
     override fun attach(controls: NowPlayingPublisher.Controls) {
         attached = controls

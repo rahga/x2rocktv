@@ -57,6 +57,45 @@ class RoomTargetTest {
     }
 
     /**
+     * Opened while its group id was already gone — the topology empty through a reconnect, then new
+     * ids — a screen handed only the id could never learn its room. The route carries the speakers
+     * now, and the room is found by them (P-88).
+     */
+    @Test fun `a target opened on a gone id finds its room by the speakers handed on`() = runBlocking<Unit> {
+        val household = household()
+        household.connectTo(fake)
+        val now = regroup(household)
+        val route = RoomRoute(kitchen.get("id").asString, kitchen.get("coordinatorId").asString, listOf(kitchen.get("coordinatorId").asString))
+        val target = RoomTarget(household, SavedStateHandle(mapOf("groupId" to route.groupId, RoomRoute.SPEAKERS to route.speakers)))
+
+        assertEquals(now, target.currentOrNull())
+    }
+
+    /**
+     * Opened on Guest TV's party, which Kitchen — the room chosen — only joined: when the party splits
+     * the host keeps its id, and the screen goes with Kitchen, as the home screen and the player do (P-71).
+     */
+    @Test fun `a target opened on a party its room only joined leaves it with the room`() = runBlocking<Unit> {
+        val household = household()
+        household.connectTo(fake)
+        val party = regroup(household)
+        val coordinator = kitchen.get("coordinatorId").asString
+        val target = RoomTarget(
+            household,
+            SavedStateHandle(mapOf("groupId" to party, RoomRoute.SPEAKERS to RoomRoute(party, coordinator, listOf(coordinator)).speakers)),
+        )
+        assertEquals("the party, while Kitchen is in it", party, target.currentOrNull())
+
+        fake.pushTopology(splitKeepingHost(party, hostRoom = "Guest TV", memberRoom = "Kitchen"))
+        val alone = withTimeout(5_000) {
+            household.state.first { s -> s.groups.size == 5 && s.groups.none { it.id == kitchen.get("id").asString } }
+        }.groups.first { coordinator in it.playerIds }
+
+        assertEquals(alone.id, target.currentOrNull())
+        assertEquals("handed on with Kitchen's speakers", coordinator, target.forNavigation().coordinatorId)
+    }
+
+    /**
      * Android reclaimed the app while the room was regrouped elsewhere: the restored screen has only
      * its saved state, and its group id no longer exists. The speakers saved there still find it.
      */

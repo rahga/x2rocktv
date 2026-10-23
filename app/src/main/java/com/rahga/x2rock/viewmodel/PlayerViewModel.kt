@@ -1,7 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
 import kotlinx.coroutines.flow.map
-import com.rahga.x2rock.model.followingRoom
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -15,9 +14,11 @@ import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.Track
 import com.rahga.x2rock.model.hasLoadedContent
 import com.rahga.x2rock.model.isPlaying
+import com.rahga.x2rock.smapi.Thumb
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -155,6 +156,20 @@ private fun trackCaption(label: String, title: String?, artist: String?): String
     return if (by == null) "$label · $name" else "$label · $name — $by"
 }
 
+/**
+ * The rating shown while the new track's is read: the last one's buttons, unselected, while the same
+ * room moves on to another track with an id, and none otherwise. Cleared, the buttons left on every
+ * track change, and a Ban or thumbs-down — which skips by design — took the focused button, and focus,
+ * out of the pane on the press itself (P-78, 2026-10-23). The read that lands settles it, and takes
+ * the buttons away only where the new track cannot be rated.
+ */
+internal fun ratingWhileReading(
+    last: Pair<String, SonosHousehold.RatingState>?,
+    groupId: String?,
+    trackId: Any?,
+): Pair<String, SonosHousehold.RatingState>? =
+    last?.takeIf { it.first == groupId && trackId != null }?.let { (room, rating) -> room to rating.copy(current = Thumb.NONE) }
+
 /** What one read of `settings:1` yielded, with the speaker it came from. */
 data class HomeTheaterUi(
     val soundbarId: String,
@@ -168,16 +183,23 @@ class PlayerViewModel @Inject constructor(
     private val nowPlaying: NowPlayingPublisher,
     private val clock: MonotonicClock,
     saved: SavedStateHandle = SavedStateHandle(),
+    /**
+     * The line [PlayerUiState.notice] carries: the shared one, which every screen draws and other view
+     * models post to when the screen that asked has gone (P-79, P-80).
+     */
+    private val notice: SharedNotice = SharedNotice(MainScope()),
 ) : ViewModel() {
 
-    /** The room, kept for a restore after the app was reclaimed: only the home screen names it otherwise. */
+    /**
+     * The room chosen, by its speakers: followed across a regroup, and kept for a restore after the
+     * app was reclaimed, since only the home screen names it otherwise. See [SavedRoom].
+     */
     private val savedRoom = SavedRoom(saved, "player.room")
 
     private val _groupId = MutableStateFlow<String?>(null)
     private val _groupName = MutableStateFlow("")
     private val _sleepEndsAt = MutableStateFlow<Long?>(null)
     private val _homeTheater = MutableStateFlow<HomeTheaterUi?>(null)
-    private val notice = TransientNotice(viewModelScope)
     /** The last [SonosHousehold.ratingState] answer, with the room it answered for. */
     private val _rating = MutableStateFlow<Pair<String, SonosHousehold.RatingState>?>(null)
     /** The track Prev goes to, keyed to the room it was read for, as [_rating] is. */
@@ -327,7 +349,7 @@ class PlayerViewModel @Inject constructor(
             combine(_groupId, household.groupStates) { id, states ->
                 id to states[id]?.track?.id?.takeIf { it.isReal }
             }.distinctUntilChanged().collectLatest { (id, trackId) ->
-                _rating.value = null
+                _rating.value = ratingWhileReading(_rating.value, id, trackId)
                 if (id != null && trackId != null) loadRating(id)
             }
         }
@@ -357,41 +379,50 @@ class PlayerViewModel @Inject constructor(
      * so. The home screen is not composed while Queue, Browse or Full screen is in front, yet the
      * media keys, the media session and the now-playing bar all act through this view model: after
      * another controller regrouped the room they went on naming its old group and were refused
-     * ("no group …", P-43). By the one rule every screen follows a room by, coordinator first.
+     * ("no group …", P-43). By the one rule every screen follows a room by, coordinator first, and
+     * by the room chosen — the home screen's ([selectGroup]'s `room`) — so a party the room only
+     * joined is left with it when the party splits, though its host keeps its id (P-71).
      */
-    private var lastGroup: com.rahga.x2rock.model.Group? = null
-
     init {
         viewModelScope.launch {
             household.state.map { it.groups }.distinctUntilChanged().collect { groups ->
                 val id = _groupId.value
-                if (id == null) {
-                    // Restored with no room: the one saved before the process went, if it is still here.
-                    savedRoom.findIn(groups)?.let { selectGroup(it.id, it.name) }
-                    return@collect
-                }
-                val now = groups.firstOrNull { it.id == id }
-                if (now != null) {
-                    remember(now)
+                // Restored with no room: the one saved before the process went, if it is still here.
+                val followed = savedRoom.findIn(groups)
+                val now = id?.let { groups.firstOrNull { g -> g.id == it } }
+                if (now != null && (followed == null || followed.id == now.id)) {
+                    savedRoom.refresh(now)
                     if (_groupName.value != now.name) _groupName.value = now.name
                     return@collect
                 }
-                val was = lastGroup ?: return@collect
-                groups.followingRoom(was.coordinatorId, was.playerIds)?.let { selectGroup(it.id, it.name) }
+                followed?.let { show(it.id, it.name) }
             }
         }
     }
 
-    private fun remember(group: com.rahga.x2rock.model.Group) {
-        lastGroup = group
-        savedRoom.remember(group)
-    }
-
+    /**
+     * Only into the room still selected: a re-read after a rating, landing once the viewer has moved
+     * on, wrote the room left into the one slot, which then hid the new room's rating as another's
+     * until its track changed (P-86, 2026-10-23).
+     */
     private suspend fun loadRating(groupId: String) {
-        _rating.value = household.ratingState(groupId)?.let { groupId to it }
+        val read = household.ratingState(groupId)
+        if (_groupId.value == groupId) _rating.value = read?.let { groupId to it }
     }
 
-    fun selectGroup(id: String, name: String) {
+    /**
+     * The home screen's selection: [id], for the room it chose, [room] — its speakers, which may be
+     * a room [id] only holds as a member of another's party (P-71). Without one, [id]'s own room.
+     */
+    fun selectGroup(id: String, name: String, room: RoomRoute? = null) {
+        val coordinator = room?.coordinatorId
+        if (coordinator != null) savedRoom.adopt(coordinator, room.playerIds)
+        else household.state.value.groups.firstOrNull { it.id == id }?.let { savedRoom.remember(it) }
+        show(id, name)
+    }
+
+    /** Show [id]: chosen or followed, the room chosen stays as it is. */
+    private fun show(id: String, name: String) {
         _groupName.value = name
         // Re-selecting the same room must do nothing. The caller re-runs whenever the group
         // *list* changes, and a `playback:1` event rewrites that list for any room in the
@@ -400,7 +431,6 @@ class PlayerViewModel @Inject constructor(
         if (_groupId.value == id) return
         _groupId.value?.let { settlePending(it) }
         _groupId.value = id
-        household.state.value.groups.firstOrNull { it.id == id }?.let { remember(it) }
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.
         _homeTheater.value = null
@@ -458,16 +488,19 @@ class PlayerViewModel @Inject constructor(
     private fun publish(state: PlayerUiState) {
         if (state.isLoading) return
 
-        // A soundbar on its HDMI input is not something to advertise as playing media: the
-        // television is the source. Everything else is, idle rooms included — a play key
-        // needs somewhere to land.
-        nowPlaying.setPresenting(!state.onTvInput)
-
         // Never blank. An empty title renders as "Unknown" on the Google TV home screen —
         // its media card showed "Unknown · x2rock · Unknown" for any room without track
         // metadata, which is every idle room and every soundbar on TV audio. The room is
         // what this session is *about*, so it is the honest fallback for both lines.
         val title = state.trackName ?: state.groupName.takeIf { it.isNotBlank() }
+
+        // A soundbar on its HDMI input is not something to advertise as playing media: the
+        // television is the source. Everything else is, idle rooms included — a play key
+        // needs somewhere to land. But not before there is a room at all, a household that
+        // never connected included: there is nothing to name, and a blank title is the
+        // launcher's "Unknown" card again (P-91, 2026-10-23).
+        nowPlaying.setPresenting(!state.onTvInput && title != null)
+        if (title == null) return
         val subtitle = state.artistName ?: when {
             state.onTvInput -> state.inputFormat.takeIf { it.isNotBlank() } ?: "TV Audio"
             // The room's own word, as the list and pane say it: the transport's "Idle" told the
@@ -808,12 +841,17 @@ class PlayerViewModel @Inject constructor(
     // whoever made it — `x2rock sleep 15` was the case that showed it was needed. Counted down
     // where it is drawn, for the display alone: nothing is asked of the speaker on a timer.
 
-    fun setSleepTimer(minutes: Int) = changeSleepTimer(minutes, "set the sleep timer")
+    /**
+     * [groupId] is the room panel's room, which the panel names: the panel follows its room on its
+     * own, and its Sleep row sent to this view model's room instead, which a party's split could
+     * leave on another (P-71). The pane's own button sends to the room it shows.
+     */
+    fun setSleepTimer(minutes: Int, groupId: String? = _groupId.value) = changeSleepTimer(groupId, minutes, "set the sleep timer")
 
-    fun cancelSleepTimer() = changeSleepTimer(null, "cancel the sleep timer")
+    fun cancelSleepTimer(groupId: String? = _groupId.value) = changeSleepTimer(groupId, null, "cancel the sleep timer")
 
-    private fun changeSleepTimer(minutes: Int?, what: String) {
-        val groupId = _groupId.value ?: return
+    private fun changeSleepTimer(groupId: String?, minutes: Int?, what: String) {
+        groupId ?: return
         viewModelScope.launch {
             runCatching { household.setSleepTimer(groupId, minutes) }.onFailure { notice.failure(what, it) }
         }
