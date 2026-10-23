@@ -3,6 +3,7 @@ package com.rahga.x2rock.net
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Build
 import android.util.Log
 import com.rahga.x2rock.BuildConfig
 import com.rahga.x2rock.lan.Discovery
@@ -65,28 +66,53 @@ class NsdMdnsDiscovery @Inject constructor(
         }
     }
 
-    /**
-     * One resolve at a time, and never abandoned: before API 34 a second resolve while one is
-     * in flight fails `FAILURE_ALREADY_ACTIVE`, and the system's cannot be cancelled. A window
-     * that runs out mid-resolve therefore waits for that resolve to finish, a few seconds at
-     * most, rather than leaving it to fail the next find's first player.
-     */
     @Suppress("DEPRECATION") // resolveService is deprecated from API 34; this app runs from 26.
-    private suspend fun resolve(nsd: NsdManager, service: NsdServiceInfo): NsdServiceInfo? =
-        resolving.withLock {
-            withContext(NonCancellable) {
-                suspendCancellableCoroutine { cont ->
-                    nsd.resolveService(service, object : NsdManager.ResolveListener {
-                        override fun onServiceResolved(info: NsdServiceInfo) { if (cont.isActive) cont.resume(info) }
-                        override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) { if (cont.isActive) cont.resume(null) }
-                    })
+    private suspend fun resolve(nsd: NsdManager, service: NsdServiceInfo): NsdServiceInfo? {
+        lateinit var listener: NsdManager.ResolveListener
+        return resolving.resolve(
+            start = { answer ->
+                listener = object : NsdManager.ResolveListener {
+                    override fun onServiceResolved(info: NsdServiceInfo) = answer(info)
+                    override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = answer(null)
                 }
-            }
-        }
+                nsd.resolveService(service, listener)
+            },
+            stop = { if (Build.VERSION.SDK_INT >= 34) runCatching { nsd.stopServiceResolution(listener) } },
+        )
+    }
 
-    private val resolving = Mutex()
+    private val resolving = OneResolveAtATime(RESOLVE_TIMEOUT_MILLIS)
 
     private companion object {
         const val SERVICE_TYPE = "_sonos._tcp"
+        /** Far past an answering speaker's resolve, which takes well under a second. */
+        const val RESOLVE_TIMEOUT_MILLIS = 5_000L
+    }
+}
+
+/**
+ * One resolve at a time, and not abandoned by a caller: before API 34 a second resolve while one is
+ * in flight fails `FAILURE_ALREADY_ACTIVE`, and the system's cannot be cancelled. A window that runs
+ * out mid-resolve therefore waits for that resolve to finish rather than leaving it to fail the next
+ * find's first player — but for [timeoutMillis] at most, and then [resolve]'s `stop` is asked (which
+ * only API 34 and later can do).
+ *
+ * That bound was assumed ("a few seconds at most") and not enforced: a resolve the platform never
+ * answered, a speaker gone between found and resolved, held the lock for good, and with it every
+ * later find and so every connect for the life of the process (review, 2026-10-23, P-74).
+ */
+internal class OneResolveAtATime(private val timeoutMillis: Long) {
+    private val lock = Mutex()
+
+    /** [start] begins a resolve that answers through the function it is given, once; `null` is a failure. */
+    suspend fun <T : Any> resolve(start: ((T?) -> Unit) -> Unit, stop: () -> Unit): T? = lock.withLock {
+        withContext(NonCancellable) {
+            withTimeoutOrNull(timeoutMillis) {
+                suspendCancellableCoroutine { cont ->
+                    cont.invokeOnCancellation { stop() }
+                    start { if (cont.isActive) cont.resume(it) }
+                }
+            }
+        }
     }
 }
