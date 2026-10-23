@@ -51,12 +51,17 @@ class LossDuringSetupTest {
     private fun reconnectJob(): Job? =
         SonosHousehold::class.java.getDeclaredField("reconnectJob").apply { isAccessible = true }.get(household) as Job?
 
+    /**
+     * A caller leaving no longer cancels a connect (P-73, `SupersededConnectTest`); a disconnect
+     * does, and that cancellation is not a failure either.
+     */
     @Test(timeout = 20_000) fun `a cancelled connect leaves no error behind`() = runBlocking {
         fake.holdRepliesTo("getGroups")
         val connecting = async(Dispatchers.IO) { household.connect(fake.seed) }
         fake.awaitCommand("getGroups", 5_000)
-        connecting.cancel()
+        household.disconnect()
         fake.releaseReplies()
+        withTimeout(5_000) { connecting.await() }
         delay(500)
         assertNull("a cancellation was written as an error: ${household.state.value.error}", household.state.value.error)
         assertFalse(household.state.value.connected)

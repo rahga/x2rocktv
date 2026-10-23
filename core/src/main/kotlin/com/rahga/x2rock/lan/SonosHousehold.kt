@@ -50,6 +50,7 @@ import com.rahga.x2rock.smapi.Token
 import com.rahga.x2rock.smapi.linkedServices
 import com.rahga.x2rock.smapi.parseServices
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
@@ -461,25 +462,52 @@ class SonosHousehold(
      * is enough, because `getGroups` then reports where all the others are.
      */
     suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
-        if (_state.value.connected || reconnectJob?.isActive == true) return
-        // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
-        // boots and starts this app before the LAN is up, and without this the network
-        // coming back would be ignored and the user left on the error screen.
-        wantConnection = true
-        // One at a time: the home screen and the channel receiver both ask on start, and
-        // `connected` is not set until getGroups has answered, so two set-ups used to run
-        // side by side, subscribing the seed twice over. Taken atomically: the two ask from
-        // different threads.
-        if (!connecting.compareAndSet(false, true)) return
-        try {
-            establish(seed)
-        } finally {
-            connecting.set(false)
+        val attempt = synchronized(this) {
+            if (_state.value.connected || reconnectJob?.isActive == true) return
+            // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
+            // boots and starts this app before the LAN is up, and without this the network
+            // coming back would be ignored and the user left on the error screen.
+            wantConnection = true
+            // One at a time: the home screen and the channel receiver both ask on start, and
+            // `connected` is not set until getGroups has answered, so two set-ups used to run
+            // side by side, subscribing the seed twice over. A second caller waits on the
+            // attempt under way rather than starting its own.
+            connectAttempt?.takeIf { !it.isCompleted } ?: startConnect(seed).also { connectAttempt = it }
         }
+        attempt.await()
     }
 
-    /** A [connect] is setting up; see there. */
-    private val connecting = java.util.concurrent.atomic.AtomicBoolean(false)
+    /**
+     * The [connect] under way. It runs in the household's own [scope], not its caller's, and
+     * [reconnect] and [disconnect] cancel it (review, 2026-10-23).
+     *
+     * Run by its caller, it went wrong both ways. The channel receiver's 8s budget cancelled a
+     * set-up the home screen was waiting on through the guard above, leaving it not connected,
+     * with no error and no Retry (P-73): a caller that stops waiting no longer abandons it. And
+     * nothing else could stop it: a network change's reconnect tore the session down and
+     * connected, then the first attempt's discovery came back and set up over the new session,
+     * subscribing a second time from a seed that may be the previous network's (P-72). One
+     * attempt owns the session at a time now.
+     *
+     * The caller is answered with the set-up's failure, and with nothing when it is cancelled:
+     * superseded is not failed, and whatever superseded it owns the state from then on.
+     */
+    private var connectAttempt: CompletableDeferred<Unit>? = null
+    private var connectJob: Job? = null
+
+    private fun startConnect(seed: Discovery.DiscoveredPlayer?): CompletableDeferred<Unit> {
+        val answer = CompletableDeferred<Unit>()
+        connectJob = scope.launch {
+            try {
+                establish(seed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                answer.completeExceptionally(e)
+            }
+        }.apply { invokeOnCompletion { answer.complete(Unit) } }
+        return answer
+    }
 
     /**
      * Connect to the household the viewer picked from [HouseholdState.householdChoices]. Its
@@ -661,7 +689,7 @@ class SonosHousehold(
                 throw IOException("$hostname went away while the connection was being set up")
             }
         } catch (e: CancellationException) {
-            // A cancelled attempt — a newer reconnect, a disconnect, the caller leaving — is not
+            // A cancelled attempt — a newer reconnect, a disconnect, the household's scope ending — is not
             // a failure to report: written as one, "StandaloneCoroutine was cancelled" stood on
             // screen in place of "reconnecting", and after a disconnect it stuck.
             throw e
@@ -706,6 +734,7 @@ class SonosHousehold(
         /** See [findEntryPoint]: the speaker whose socket just died, not tried in this run. */
         avoid: String? = null,
     ) {
+        connectJob?.cancel()
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
             teardown()
@@ -789,7 +818,7 @@ class SonosHousehold(
         clearSession { runCatching { it.cancel() } }
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
-        storedAppleRead = false
+        synchronized(this) { storedAppleRead = false; storedApple = null }
         lastReread = null
         categoryCache.clear()
         appleAccount = null
@@ -820,8 +849,10 @@ class SonosHousehold(
         _playerVolumes.value = emptyMap()
     }
 
+    @Synchronized
     fun disconnect() {
         wantConnection = false
+        connectJob?.cancel()
         reconnectJob?.cancel()
         reconnectJob = null
         clearSession { it.close() }
@@ -1148,20 +1179,31 @@ class SonosHousehold(
      */
     suspend fun storedAppleMusicAccount(): String? {
         if (storedAppleRead) return storedApple
+        val session = generation
         // Only the sign-ins, not the whole service list: nothing else here needs it.
         val read = runCatching {
             val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
-            storedAccounts(hostnameOf(coordinator), householdId())
+            storedAccounts(hostnameOf(coordinator), householdId(), session)
         }.onFailure { if (it is CancellationException) throw it }.getOrNull() ?: return null
-        noteStoredApple(read)
-        return storedApple
+        return if (noteStoredApple(read, session)) storedApple else null
     }
     @Volatile private var storedApple: String? = null
     /** Whether the sign-ins were read this connection, so a household without Apple is not asked again. */
     @Volatile private var storedAppleRead = false
-    private fun noteStoredApple(accounts: List<StoredAccount>) {
+
+    /**
+     * Keeps what a read begun in [session] found, if that is still this session's; answers whether
+     * it did. A read still running when a reconnect tore its session down used to mark the new one
+     * read, so the new household was never asked and its Apple Music was listed, or not, by the old
+     * one's answer until the next reconnect (P-77, 2026-10-23). Checked and kept under the monitor
+     * [teardown] clears these under, after its generation moves, so the two cannot interleave.
+     */
+    @Synchronized
+    private fun noteStoredApple(accounts: List<StoredAccount>, session: Int): Boolean {
+        if (generation != session) return false
         storedApple = accounts.firstOrNull { it.serviceId.toString() == AppleMusic.SERVICE_ID }?.let { "sn_${it.serial}" }
         storedAppleRead = true
+        return true
     }
 
     /**
@@ -1236,7 +1278,7 @@ class SonosHousehold(
         // The sign-ins first: Apple Music's is read from them, and a household whose service list
         // cannot be read (UPnP off, a speaker that does not answer) still has them.
         val accounts = try {
-            storedAccounts(hostname, household)
+            storedAccounts(hostname, household, session)
         } catch (e: CancellationException) {
             // A caller that left is not a capture that failed: it says nothing about which
             // accounts the household has. Degrading here cached anonymous services for the whole
@@ -1245,7 +1287,7 @@ class SonosHousehold(
         } catch (e: Exception) {
             emptyList()
         }
-        noteStoredApple(accounts)
+        noteStoredApple(accounts, session)
         val answer = upnp.listAvailableServices(hostname)
         val services = parseServices(answer.descriptors, answer.types)
         // Three services carry a token but still dead-end here, so they are dropped rather than shown
@@ -1265,9 +1307,15 @@ class SonosHousehold(
      * publishing them, or changes their format, would first show — as services vanishing from browse
      * and search with no word why.
      */
-    private suspend fun storedAccounts(hostname: String, household: String): List<StoredAccount> {
+    private suspend fun storedAccounts(
+        hostname: String,
+        household: String,
+        /** The session the read is for: a read that outlives it says nothing about the next (P-77). */
+        session: Int = generation,
+    ): List<StoredAccount> {
+        fun record(read: StoredAccountsRead) { if (generation == session) _accountsRead.value = read }
         val salt = speakerSalt
-            ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "this build has no speaker salt") }
+            ?: return emptyList<StoredAccount>().also { record(StoredAccountsRead(0, "this build has no speaker salt")) }
         val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
         val envelope = try {
             ip?.let { accountCapture(it) }
@@ -1275,20 +1323,20 @@ class SonosHousehold(
             throw e
         } catch (e: Exception) {
             // Recorded like every other read: an unreachable speaker throws rather than sending none.
-            _accountsRead.value = StoredAccountsRead(0, "the speaker could not be reached")
+            record(StoredAccountsRead(0, "the speaker could not be reached"))
             throw e
-        } ?: return emptyList<StoredAccount>().also { _accountsRead.value = StoredAccountsRead(0, "the speaker sent none") }
+        } ?: return emptyList<StoredAccount>().also { record(StoredAccountsRead(0, "the speaker sent none")) }
         val accounts = try {
             // The decrypt key is the short household id (`Sonos_xxx`), not the long form.
             StoredAccounts.decryptAccounts(envelope, household.substringBefore('.'), salt)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            _accountsRead.value = StoredAccountsRead(0, "they could not be read (${e.message ?: e.javaClass.simpleName})")
+            record(StoredAccountsRead(0, "they could not be read (${e.message ?: e.javaClass.simpleName})"))
             throw e
         }
         val withTokens = accounts.count { it.hasToken }
-        _accountsRead.value = StoredAccountsRead(withTokens, "the speaker sent none with a sign-in".takeIf { withTokens == 0 })
+        record(StoredAccountsRead(withTokens, "the speaker sent none with a sign-in".takeIf { withTokens == 0 }))
         return accounts
     }
 
@@ -1324,7 +1372,7 @@ class SonosHousehold(
             val session = generation
             val read = try {
                 val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
-                storedAccounts(hostnameOf(coordinator), householdId())
+                storedAccounts(hostnameOf(coordinator), householdId(), session)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
