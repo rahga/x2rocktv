@@ -242,8 +242,10 @@ class ServiceBrowseViewModel @Inject constructor(
 
     /**
      * Open a service on its library, learning its search categories alongside. A root that comes
-     * back empty or refused, from a service that can be searched, gives way to the search: Sonos
-     * Radio answers its SMAPI root with nothing at all.
+     * back empty, from a service that can be searched, gives way to the search: Sonos Radio answers
+     * its SMAPI root with nothing at all. A *refused* root says so, with the search one press up:
+     * falling to the search hid the refusal, and a lapsed Saavn account opened on a keyboard whose
+     * every search failed the same way (P-96, 2026-10-23).
      */
     fun open(service: LinkedService) {
         _active.value = service
@@ -266,7 +268,8 @@ class ServiceBrowseViewModel @Inject constructor(
             _categories.value = cats.await()
             _category.value = _categories.value.firstOrNull()
             shelves = ownPage.await()
-            val rootItems = page.await().getOrNull()?.items.orEmpty()
+            val answered = page.await()
+            val rootItems = answered.getOrNull()?.items.orEmpty()
             if (shelves.isNotEmpty()) {
                 // The shelves first, then the root's own rows, so nothing the root reached is lost:
                 // Spotify's page holds no "Your Music" that opens (2026-10-11). A row a shelf already
@@ -277,13 +280,12 @@ class ServiceBrowseViewModel @Inject constructor(
                 } + rootItems.filterNot { r -> shelves.any { it.title.trim().equals(r.title.trim(), ignoreCase = true) } }))
                 return@launch
             }
-            val empty = rootItems.isEmpty()
-            if (empty && _categories.value.isNotEmpty()) {
+            if (answered.isSuccess && rootItems.isEmpty() && _categories.value.isNotEmpty()) {
                 trail.clear()
                 show(Level(null, service.service.name).also { trail.addLast(it) })
                 return@launch
             }
-            publish(root, page.await().fold(
+            publish(root, answered.fold(
                 onSuccess = { found(it) },
                 onFailure = { Results.Failed("${service.service.name} wouldn't open: ${it.message ?: it}") },
             ))

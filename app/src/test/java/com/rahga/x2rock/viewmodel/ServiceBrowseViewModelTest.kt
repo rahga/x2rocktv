@@ -47,6 +47,8 @@ class ServiceBrowseViewModelTest {
     private lateinit var viewModel: ServiceBrowseViewModel
     /** Whether the service answers its root with nothing at all, as Sonos Radio does over SMAPI. */
     @Volatile private var emptyRoot = false
+    /** Whether the service refuses its root with an empty 200, as a lapsed Saavn account did (P-96). */
+    @Volatile private var refusedRoot = false
     /** Whether the service's manifest names a browse endpoint, as Sonos Radio's does. */
     @Volatile private var shelvesOn = false
     /** The second page of "long" answers 503 while this is set. */
@@ -86,6 +88,7 @@ class ServiceBrowseViewModelTest {
                             "<id>$EMPTY_ALBUM</id>" in body -> FakePlayer.fixtureText("getMetadata.soundcloud.emptyAlbum.xml")
                             "<getMetadata" !in body -> SEARCH_ALBUM
                             "<id>root</id>" in body && emptyRoot -> EMPTY
+                            "<id>root</id>" in body && refusedRoot -> ""
                             "<id>root</id>" in body && rootFixture != null -> FakePlayer.fixtureText(rootFixture!!)
                             // A page naming one item twice, as radio directories do: t1 at 1 and 2.
                             "<id>dups</id><index>0</index>" in body -> pageOf(listOf(0, 1, 1), total = 4)
@@ -240,6 +243,21 @@ class ServiceBrowseViewModelTest {
         withTimeout(5_000) { viewModel.searching.first { it } }
         assertTrue(viewModel.back())
         assertEquals("Back from that search leaves the service", null, viewModel.active.value)
+    }
+
+    /**
+     * P-96: a lapsed Saavn account answered its root with HTTP 200 and no body (office, 2026-10-23),
+     * and the service opened on a keyboard with nothing said. The refusal is the library's answer.
+     */
+    @Test fun `a searchable service whose root is refused says so, rather than opening on the search`() = runBlocking {
+        refusedRoot = true
+        val qobuz = ready().first { it.service.id == "31" }
+        viewModel.open(qobuz)
+        val failed = withTimeout(5_000) { viewModel.results.first { it is ServiceBrowseViewModel.Results.Failed } }
+        assertEquals("Qobuz wouldn't open: Qobuz answered HTTP 200 with an empty body",
+            (failed as ServiceBrowseViewModel.Results.Failed).message)
+        assertFalse("the search waits to be asked for", viewModel.searching.value)
+        assertTrue("and is one press up", viewModel.categories.value.isNotEmpty())
     }
 
     /** Sonos Radio: an empty SMAPI root, and a page of shelves from its own browse endpoint instead. */

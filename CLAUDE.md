@@ -800,7 +800,8 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   longer lists it; it still supplies the account for playing when no stored sign-in names one.
 - **A service opens on its library, never on a keyboard.** Browsing is the cheap path on a remote;
   "Search <service>" is one press up. A searchable service used to open on its search and hid every
-  library behind it.
+  library behind it. Only an *empty* root (Sonos Radio's) opens on the search; a *refused* one says so,
+  with the search still one press up (P-96: a lapsed Saavn account opened on a keyboard, refusal unsaid).
 - **Hold or Menu on an item is its menu** (`ServiceItemMenu`), Sonos's actions first and the
   service's under its name. **Every button and card ignores a select release it did not see
   pressed** (`ignoreUnpressedRelease`, 2026-10-17): tv-material3 clicks on the release, and a hold
