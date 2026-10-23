@@ -296,6 +296,14 @@ class FakePlayer(
     /** Serve and announce a topology, the way a real regrouping arrives. */
     fun pushTopology(topology: JsonObject) {
         groups = topology
+        announceTopology(topology)
+    }
+
+    /**
+     * Announce a topology while `getGroups` goes on serving the old one, so a test can tell what
+     * only the push could have shown from what asking again would (P-81, 2026-10-23).
+     */
+    fun announceTopology(topology: JsonObject) {
         emit("groups:1", "groups", topology, groupId = null)
     }
 

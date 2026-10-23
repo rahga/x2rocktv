@@ -95,6 +95,23 @@ class UnansweredChangeTest {
         withTimeout(10_000) { call.await() }
     }
 
+    /**
+     * The push alone ends the wait: `getGroups` still serves the old topology, so asking again
+     * would find nothing landed. The test above passed with the wait for the push removed, because
+     * [FakePlayer.pushTopology] serves what it announces and the ask-again found it (P-81).
+     */
+    @Test fun `an unanswered regroup is ended by the pushed topology, without asking again`() = runBlocking<Unit> {
+        fake.holdRepliesTo("modifyGroupMembers")
+        fake.clearHistory()
+        val call = scope.async(Dispatchers.IO) {
+            household.modifyGroupMembers(group("Kitchen").id, listOf(group("Guest TV").coordinatorId), emptyList())
+        }
+        fake.awaitCommand("modifyGroupMembers")
+        fake.announceTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        withTimeout(10_000) { call.await() }
+        assertEquals("the topology was asked for again", 0, fake.commandsNamed("getGroups"))
+    }
+
     @Test fun `an unanswered regroup that never lands fails, after looking`() = runBlocking<Unit> {
         fake.holdRepliesTo("modifyGroupMembers")
         val call = scope.async(Dispatchers.IO) {
