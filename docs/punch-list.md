@@ -135,8 +135,9 @@ capture, said there.
 **Review round of 2026-10-23** (at `4f0563e`; five lanes by kind of defect rather than by area —
 concurrency and lifecycle in `:core`, the written rules against the code, app state and focus, tests that
 cannot fail, what ships and what leaks — each finding then verified by a different agent kind). Its 31
-findings are the local queue's P-69..P-94; P-69, a held Menu key repeating a row's second action, is fixed
-(`36abc0a`), the rest open. What was checked and found sound, so the next round need not redo it:
+findings are the local queue's P-69..P-94, all answered the same day: P-69, a held Menu key repeating a
+row's second action, in `36abc0a`; the rest in `09a7398`..`66b957b`, except P-84 (decided no change) and
+Browse's trail across process death (not saved; Search's term is). Checks owed on a TV are in the queue. What was checked and found sound, so the next round need not redo it:
 every clickable goes through the guarded buttons and cards; presets, alarms, the TV room, room ranks and
 channel tiles key on player ids; the shared player's media-session controls go through the same
 `canPlay`/`canSkip`/`canSeek` gates as the pane; stores are written on Main only; no `@Singleton` holds an
