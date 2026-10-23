@@ -182,10 +182,19 @@ class FavoritesViewModel @Inject constructor(
     private fun startOne(key: String, what: String, onDone: () -> Unit, block: suspend () -> Unit) =
         guard.start(key, what, { onDone() }, block)
 
+    /**
+     * The read in flight, cancelled by the next: [reload] used to start a second read beside the one
+     * from opening, and whichever landed last won — the opening read could overwrite the reload's
+     * "Recently played is off" (P-99, 2026-10-23).
+     */
+    private var loadJob: Job? = null
+
     private fun load() {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.value = UiState.Loading
-            runCatching {
+            // Not `runCatching`: a read cancelled by the next must not publish its cancellation as an error.
+            attempt {
                 // Hidden, not greyed: a favourite whose service was removed cannot be played,
                 // and only the Sonos app can delete or re-add it, so a row for it would be one
                 // with nothing behind it. Re-add the service and they return by themselves.
