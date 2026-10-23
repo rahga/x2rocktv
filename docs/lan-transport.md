@@ -196,6 +196,22 @@ It arrived after three IDLE statuses, not before them. x2rock's capture of an ex
 was `ERROR_PLAYBACK_FAILED` / `ERROR_CANT_REACH_SERVER` with a `trackName` and an `itemId`,
 and a second error three seconds later had no `itemId`; no field can be relied on.
 
+**A queue the player cannot play is walked, then given up on.** Captured 2026-10-23 off the office One
+SL (97.1) on Play over a queue of Saavn tracks whose subscription had lapsed: the player tried each
+track in turn, about 0.3s apiece (six in 2.4s), sending one error per track that names the service and
+the queue version (`event.playbackError.serviceTrack.json`):
+
+```json
+{"_objectType":"playbackError","errorCode":"ERROR_PLAYBACK_FAILED","reason":"ERROR_LOST_CONNECTION",
+ "itemId":"…","queueVersion":"252","serviceId":164,"serviceName":"Saavn","trackName":"…"}
+```
+
+then went IDLE on the first track and sent one last error naming nothing but the queue version
+(`event.playbackError.queueEnd.json`, `ERROR_NO_PLAYABLE_CONTENT`, `serviceId: -1`). That last one keeps
+the service the track errors named, so the room says "Couldn't play from Saavn" (`PlaybackError.givingUpOn`).
+Nothing in any of them says the subscription lapsed; Saavn's own SMAPI answered every call with HTTP 200
+and an empty body, and the speaker's `/getaa` art for its tracks with 404.
+
 **The sleep timer is pushed, by `sleepTimer:1`** — a namespace in no published reference, found
 in x2rock's prefix walk and first probed here (office One SL, 2026-10-05). Group-scoped: player
 and household scope answer `ERROR_MISSING_PARAMETERS (Missing groupId)`. `subscribe` answers

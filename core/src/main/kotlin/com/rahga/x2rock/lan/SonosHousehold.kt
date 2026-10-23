@@ -2581,7 +2581,7 @@ class SonosHousehold(
                 // (the header's type agrees), and it is what x2rock reads too.
                 if (body.string("_objectType") == "playbackError") {
                     val error = gson.fromJson(body, PlaybackError::class.java) ?: return
-                    update(groupId) { it.copy(lastError = error) }
+                    update(groupId) { it.copy(lastError = error.givingUpOn(it.lastError)) }
                     return
                 }
                 // Keep the groups list in step. It carries its own playbackState, which only

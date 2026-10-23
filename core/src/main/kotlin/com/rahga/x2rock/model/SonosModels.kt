@@ -219,23 +219,46 @@ data class ContainerMetadata(
  * URL that does not resolve: `errorCode` and `reason`, `serviceId: -1`, and no track at all.
  * x2rock's capture of an expired stream carried `trackName` and `itemId`, and a second error
  * three seconds later carried no `itemId`.
+ *
+ * A queue from a lapsed Saavn subscription (office One SL, 2026-10-23): one error per track as the
+ * player walked the queue by itself, each naming the service, the track and the `queueVersion`
+ * (`ERROR_LOST_CONNECTION`), then a last one naming neither (`ERROR_NO_PLAYABLE_CONTENT`,
+ * `serviceId: -1`) as it gave up. See [givingUpOn].
  */
 data class PlaybackError(
     val errorCode: String? = null,
     val reason: String? = null,
     val trackName: String? = null,
+    val serviceName: String? = null,
+    val queueVersion: String? = null,
 ) {
-    /** What to tell someone holding a remote: the reason in words, and the track if named. */
+    /** What to tell someone holding a remote: the reason in words, and the track or service if named. */
     fun describe(): String {
         val code = reason ?: errorCode
         val why = when (code) {
             "ERROR_CANT_REACH_SERVER" -> "couldn't reach its server"
             "ERROR_NO_PLAYABLE_CONTENT", "ERROR_PLAYBACK_NO_PLAYABLE_CONTENT" -> "found nothing it could play"
+            "ERROR_LOST_CONNECTION" -> "lost the connection"
             null -> "failed"
             else -> code.removePrefix("ERROR_").lowercase().replace('_', ' ')
         }
-        return if (trackName.isNullOrBlank()) "Couldn't play this: $why" else "Couldn't play $trackName: $why"
+        val from = serviceName?.takeUnless { it.isBlank() }?.let { " from $it" } ?: ""
+        return when {
+            !trackName.isNullOrBlank() -> "Couldn't play $trackName$from: $why"
+            from.isNotEmpty() -> "Couldn't play$from: $why"
+            else -> "Couldn't play this: $why"
+        }
     }
+
+    /**
+     * What the room says once the player gives up on a queue: the last error names no service and
+     * no track, so it would bury the ones that did. One from the same queue version keeps what the
+     * track errors said and drops only the track, since the whole queue failed, not that track.
+     */
+    fun givingUpOn(standing: PlaybackError?): PlaybackError =
+        if (standing?.serviceName != null && serviceName == null && trackName.isNullOrBlank() &&
+            queueVersion != null && queueVersion == standing.queueVersion
+        ) standing.copy(trackName = null) else this
 }
 
 /**

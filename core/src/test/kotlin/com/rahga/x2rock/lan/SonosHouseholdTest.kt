@@ -330,6 +330,33 @@ class SonosHouseholdTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError == null } }
     }
 
+    /**
+     * P-95: a lapsed Saavn queue. The player fails each track naming Saavn, then gives up with an
+     * error naming nothing; that last one used to replace them, and the pane said only "found
+     * nothing it could play". Both captured off the office One SL, 2026-10-23.
+     */
+    @Test fun `a queue the player gives up on still names the service that failed`() = runBlocking<Unit> {
+        connected()
+        val groupId = fake.groupId(household)
+        fun error(name: String) = fake.push("playback:1", "playbackError", FakePlayer.fixtureText(name), groupId)
+
+        error("event.playbackError.serviceTrack.json")
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError?.trackName != null } }
+        assertEquals(
+            "Couldn't play God Mode (From \"Karuppu\") from Saavn: lost the connection",
+            household.groupState(groupId).lastError?.describe(),
+        )
+
+        error("event.playbackError.queueEnd.json")
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError?.trackName == null } }
+        assertEquals("Couldn't play from Saavn: lost the connection", household.groupState(groupId).lastError?.describe())
+
+        // A failure with no queue version is not that queue giving up: a dead URL says so as before.
+        error("event.playbackError.json")
+        withTimeout(5_000) { household.groupStates.first { it[groupId]?.lastError?.serviceName == null } }
+        assertEquals("Couldn't play this: found nothing it could play", household.groupState(groupId).lastError?.describe())
+    }
+
     @Test fun `a playback event without playModes leaves the play mode alone`() = runBlocking {
         connected()
         val groupId = fake.groupId(household)
