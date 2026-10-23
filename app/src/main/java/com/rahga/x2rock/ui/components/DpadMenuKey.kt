@@ -17,10 +17,13 @@ import androidx.compose.ui.input.key.type
  * let the release through to the Card — so holding a playlist row appended it to the queue and,
  * on release, replaced the queue with it. Where a hold opened an overlay the stolen focus hid
  * that; where it only posted a notice it did not.
+ *
+ * Menu acts once per press too. Consume its repeated downs without acting: a repeat must not
+ * confirm a deletion armed by this same press, or act on the next row after focus moves.
  */
 fun Modifier.dpadMenuKey(onMenu: () -> Unit): Modifier = onKeyEvent { event ->
     if (event.type == KeyEventType.KeyDown && event.key == Key.Menu) {
-        onMenu()
+        if (event.nativeKeyEvent.repeatCount == 0) onMenu()
         true
     } else false
 }

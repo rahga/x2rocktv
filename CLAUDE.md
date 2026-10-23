@@ -810,6 +810,9 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   app; it is a queue slot, not a flag. **Add to Sonos Favorites** follows Add to end of queue for
   what a queue can hold — a track, an album, a playlist — or **Remove from Sonos Favorites** once the
   item is found among them by its service's id (T-32). Browse and Search share the menu.
+- **Menu acts once per press** (`dpadMenuKey`, P-69). Repeated Menu key-downs are consumed without
+  acting, including after focus moves: a held key must not confirm the deletion it just armed or
+  repeat the next row's action. A second action needs another press, as a Select hold fires once.
 - **An album's tracks carry their numbers; a playlist's do not** (T-24, 2026-10-12), as the Sonos
   app draws them: in a playlist a track's number is its own album's. **A container that lists nothing
   offers no Play or Shuffle** (P-23): SoundCloud's albums say `canPlay` and hold nothing, and the app's
