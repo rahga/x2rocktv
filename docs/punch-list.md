@@ -132,6 +132,33 @@ pins the version; a token reply with no `expires_in` refreshing on every call, s
 sends one; Upnp's "GENA is not used" while `AccountCapture` subscribes once — that is the one-shot
 capture, said there.
 
+**Review round of 2026-10-23** (at `4f0563e`; five lanes by kind of defect rather than by area —
+concurrency and lifecycle in `:core`, the written rules against the code, app state and focus, tests that
+cannot fail, what ships and what leaks — each finding then verified by a different agent kind). Its 31
+findings are the local queue's P-69..P-94; P-69, a held Menu key repeating a row's second action, is fixed
+(`36abc0a`), the rest open. What was checked and found sound, so the next round need not redo it:
+every clickable goes through the guarded buttons and cards; presets, alarms, the TV room, room ranks and
+channel tiles key on player ids; the shared player's media-session controls go through the same
+`canPlay`/`canSkip`/`canSeek` gates as the pane; stores are written on Main only; no `@Singleton` holds an
+Activity. 41 of 45 mutations across 41 test files were caught by the test they named, and one more by
+another test; the three caught by nothing are queued. The public APK and AAB were inspected as built
+artefacts, not from the build script: no integration key or secret, no private class or provider, the
+version without `+hardcore`. Production logging is four sites, none logging a token by design (an exception's own text is not
+vouched for). The sixteen `delay(` calls in main sources are debounces, arming windows, local clocks
+and indicators, the reconnect and catch-up backoffs and one measured guard before play; none fetches
+speaker state. Looked at and left alone: two quick presses
+on a screen header's Back popping two screens — the remote's Back does the same with two presses, and
+the 2026-10-20 guard is for the blank screen, which holds.
+
+**An expired service subscription (2026-10-23, office):** a queue of Saavn tracks on a lapsed account, on
+the Chromecast with Google TV and Media Room. The player walks the queue failing each track with an error
+naming Saavn, then gives up with one naming nothing; Saavn's SMAPI answers browse and search with HTTP 200
+and an empty body; art is 404 (`docs/lan-transport.md`). Fixed: the pane names the service (P-95,
+`bc31351`), and a refused library says so instead of opening on a keyboard (P-96, `d80ad82`, seen on the
+TV). Open as T-41: Search's "didn't answer" names none of the services that refused, and the empty-body
+refusal reads as HTTP. The Sonos app says "Error occurred" on search and "No content items available" on
+browse.
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`;
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
 2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an
