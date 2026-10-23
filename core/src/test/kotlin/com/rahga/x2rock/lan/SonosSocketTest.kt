@@ -73,6 +73,33 @@ class SonosSocketTest {
         )
     }
 
+    private fun refusal(header: com.google.gson.JsonObject): String? = runBlocking {
+        val socket = open()
+        try {
+            (runCatching { withTimeout(5_000) { socket.command(header) } }.exceptionOrNull() as? SonosCommandException)?.detail
+        } finally {
+            socket.close()
+        }
+    }
+
+    /**
+     * The short household id is a different string, not a prefix, and a real player refuses it; the
+     * fake answered it, so a path that produced one passed every fake-backed test (P-82).
+     */
+    @Test fun `the short household id is refused, and the long one answered`() {
+        val short = fake.householdId.substringBefore('.')
+        assertTrue(refusal(Frames.onHousehold("groups:1", "getGroups", short))!!.contains("ERROR_INVALID_OBJECT_ID"))
+        assertNull(refusal(Frames.onHousehold("groups:1", "getGroups", fake.householdId)))
+    }
+
+    /** A command the player does not have is refused, not answered with an empty success (P-82). */
+    @Test fun `an unknown command or namespace is refused as a player refuses it`() {
+        // Addressed in scope, to the player's own socket, so nothing but the command is wrong.
+        assertTrue(refusal(Frames.onPlayer("playerVolume:1", "setSleepTimer", fake.id))!!.contains("ERROR_UNSUPPORTED_COMMAND"))
+        assertTrue(refusal(Frames.onPlayer("queue:1", "getQueue", fake.id))!!.contains("ERROR_UNSUPPORTED_NAMESPACE"))
+        assertNull(refusal(Frames.onPlayer("playerVolume:1", "getVolume", fake.id)))
+    }
+
     /**
      * A caller's own deadline arrives in a command as a TimeoutCancellationException too; caught
      * as the reply timeout, it became "no reply" — an IOException — and a cold connect run under

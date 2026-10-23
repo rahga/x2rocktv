@@ -530,6 +530,7 @@ class FakePlayer(
             )
             return
         }
+        if (refusedOutright(webSocket, request, namespace, command, cmdId)) return
         // Captured off the office One SL, eight items, one a playlist since deleted.
         // Three of the home household's favourites, one stripped to the shell a removed
         // service leaves behind.
@@ -613,6 +614,30 @@ class FakePlayer(
         respond(webSocket, cmdId, namespace, "none", success = true, body = JsonObject())
     }
 
+    /**
+     * What a real player refuses before it looks at anything else, so a test of a command path
+     * cannot pass whether or not the command exists (P-82, 2026-10-23; extends P-67).
+     *
+     * A household id other than the household's own — the short `Sonos_xxxxx` above all — is
+     * `ERROR_INVALID_OBJECT_ID` (docs/lan-transport.md, "The household id has three names"). A
+     * namespace the player has not is `ERROR_UNSUPPORTED_NAMESPACE`, echoed under the namespace
+     * `global`; an unknown command in a namespace it has is `ERROR_UNSUPPORTED_COMMAND` (x2rock's
+     * `docs/architecture.md`; lan-transport.md's queue and sleep timer notes). Those codes were seen
+     * on hardware, but no such reply frame is captured whole, so they are sent in the `globalError`
+     * shape this fake's other refusals use.
+     */
+    private fun refusedOutright(webSocket: WebSocket, request: JsonObject, namespace: String?, command: String?, cmdId: String?): Boolean {
+        val household = request.get("householdId")?.takeIf { !it.isJsonNull }?.asString
+        val (code, echoed) = when {
+            household != null && household != householdId -> "ERROR_INVALID_OBJECT_ID" to namespace
+            namespace !in COMMANDS -> "ERROR_UNSUPPORTED_NAMESPACE" to "global"
+            command !in COMMANDS.getValue(namespace!!) -> "ERROR_UNSUPPORTED_COMMAND" to namespace
+            else -> return false
+        }
+        respond(webSocket, cmdId, echoed, "globalError", success = false, body = JsonObject().apply { addProperty("errorCode", code) })
+        return true
+    }
+
     private fun refuseObject(webSocket: WebSocket, cmdId: String?, namespace: String?, reason: String) =
         respond(
             webSocket, cmdId, namespace, "globalError", success = false,
@@ -648,6 +673,32 @@ class FakePlayer(
     }
 
     companion object {
+
+        /**
+         * The commands this fake knows, by namespace: those the household sends, each of which a
+         * real player answers, and `playerVolume:1 getVolume`, which the socket tests send. Anything
+         * else is refused (see `refusedOutright`); a new command is added here when the code first
+         * sends it, never by answering everything.
+         */
+        private val COMMANDS: Map<String, Set<String>> = mapOf(
+            "groups:1" to setOf("getGroups", "subscribe", "modifyGroupMembers"),
+            "playback:1" to setOf(
+                "subscribe", "getPlaybackStatus", "play", "pause", "togglePlayPause", "skipToNextTrack",
+                "skipToPreviousTrack", "seek", "setPlayModes", "loadContent", "loadLineIn",
+            ),
+            "playbackMetadata:1" to setOf("subscribe", "getMetadataStatus"),
+            "playbackSession:1" to setOf("createSession", "loadStreamUrl"),
+            "groupVolume:1" to setOf("subscribe", "setVolume", "setRelativeVolume", "setMute"),
+            "playerVolume:1" to setOf("subscribe", "getVolume", "setVolume", "setRelativeVolume", "setMute"),
+            "sleepTimer:1" to setOf("subscribe"),
+            "favorites:1" to setOf("getFavorites", "loadFavorite"),
+            "playlists:1" to setOf("getPlaylists", "loadPlaylist"),
+            "history:1" to setOf("getHistory"),
+            "zones:1" to setOf("subscribe"),
+            "hdmi:1" to setOf("subscribe"),
+            "settings:1" to setOf("getPlayerSettings"),
+            "effectiveSettings:1" to setOf("subscribe", "getSettingsGroup"),
+        )
 
         /** Reads a verbatim capture from `src/testFixtures/resources/fixtures/`, as JSON. */
         fun fixture(name: String): JsonObject = JsonParser.parseString(fixtureText(name)).asJsonObject
