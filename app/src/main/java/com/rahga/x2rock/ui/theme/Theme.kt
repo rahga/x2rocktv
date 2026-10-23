@@ -169,7 +169,7 @@ private val TenFootTypography: Typography = Typography().let { t ->
         bodySmall = t.bodySmall.copy(fontSize = 14.sp, lineHeight = 20.sp),
         labelLarge = t.labelLarge.copy(fontSize = 16.sp, lineHeight = 22.sp),
         labelMedium = t.labelMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
-        labelSmall = t.labelSmall.copy(fontSize = 13.sp, lineHeight = 18.sp),
+        labelSmall = t.labelSmall.copy(fontSize = 14.sp, lineHeight = 20.sp),
     )
 }
 

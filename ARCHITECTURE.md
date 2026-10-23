@@ -232,6 +232,8 @@ home  ────────────────────────�
   └─→ Settings, at the foot of the room list
         ├─→ preferredServices
         ├─→ alarms                     every room's, made a step at a time
+        ├─→ account                    Sonos account (T-27): only in a build carrying an integration, Beta on
+        ├─→ report                     Send a report: only with Beta features on
         └─→ about                      About this system: each speaker and its update state
 ```
 
@@ -294,13 +296,14 @@ State in each ViewModel is derived rather than assembled by hand, so it recomput
 something actually changes and at no other time. A command's effect arrives as an event
 like any other, which is why nothing re-fetches after acting.
 
-Four things are asked for rather than pushed, each because nothing pushes it:
+Five things are asked for rather than pushed, each because nothing pushes it:
 - **The queue**, over UPnP — the Control API has none. Stale until re-read.
 - **Night Sound and Speech Enhancement**, from `settings:1 getPlayerSettings`: `homeTheater:1`
   accepts a subscription and never fires. Read once per room and after each write. Tone and
   the volume limit come from the same read.
 - **A track's rating**, from the service. Read once per room and track and after each press.
 - **Favourites**, read when their screen opens.
+- **Alarms**, read when their screen opens and after each change made there.
 
 ---
 
