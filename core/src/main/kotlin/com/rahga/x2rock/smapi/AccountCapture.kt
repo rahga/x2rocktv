@@ -1,8 +1,12 @@
 package com.rahga.x2rock.smapi
 
+import com.rahga.x2rock.lan.within
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -52,54 +56,70 @@ object AccountCapture {
      */
     suspend fun captureEnvelope(playerIp: String, timeoutMillis: Long = 10_000, playerPort: Int = PLAYER_PORT): String? =
         withContext(Dispatchers.IO) {
-            ServerSocket().use { server ->
-                server.bind(InetSocketAddress(0))
-                // `accept` cannot be interrupted by cancellation, only by closing what it
-                // waits on: a caller that left — a search replaced by another — otherwise held
-                // this thread, and the service lock above it, for the whole deadline. A child is
-                // cancelled the moment its parent is, while the parent's own completion waits for
-                // this blocked body to return — which is why a completion handler closed it too late (P-46).
-                val letGo = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { runCatching { server.close() } } }
-                val localIp = localIpToward(playerIp)
-                val callback = "<http://$localIp:${server.localPort}/notify>"
-                val sid = subscribe(playerIp, playerPort, callback) ?: run { letGo.cancel(); return@withContext null }
-                try {
-                    // The deadline is the sockets', not a coroutine timeout's: `accept` and `read`
-                    // block, and `withTimeoutOrNull` cannot interrupt either — so a player that never
-                    // called back held this thread, and the service lock above it, for good.
-                    val deadline = System.currentTimeMillis() + timeoutMillis
-                    run {
-                        // The first NOTIFY carries the full initial state, so one accept is
-                        // enough — but loop in case a keepalive or partial event lands first.
-                        var found: String? = null
-                        while (found == null) {
-                            val left = deadline - System.currentTimeMillis()
-                            if (left <= 0) break
-                            server.soTimeout = left.toInt()
-                            val socket = runCatching { server.accept() }.getOrNull() ?: break
-                            socket.soTimeout = READ_TIMEOUT_MILLIS
-                            socket.use {
-                                val request = runCatching { readHttpMessage(it) }.getOrNull().orEmpty()
+            try {
+                capture(playerIp, timeoutMillis, playerPort)
+            } catch (e: IOException) {
+                // The listener closed under the wait is the cancellation, not a read that failed:
+                // reported as one, it was recorded as the sign-ins being unreadable (P-75, 2026-10-23).
+                ensureActive()
+                throw e
+            }
+        }
+
+    private suspend fun CoroutineScope.capture(playerIp: String, timeoutMillis: Long, playerPort: Int): String? =
+        ServerSocket().use { server ->
+            server.bind(InetSocketAddress(0))
+            // `accept` cannot be interrupted by cancellation, only by closing what it
+            // waits on: a caller that left — a search replaced by another — otherwise held
+            // this thread, and the service lock above it, for the whole deadline. A child is
+            // cancelled the moment its parent is, while the parent's own completion waits for
+            // this blocked body to return — which is why a completion handler closed it too late (P-46).
+            val letGo = launch(start = CoroutineStart.UNDISPATCHED) { try { awaitCancellation() } finally { runCatching { server.close() } } }
+            val localIp = localIpToward(playerIp)
+            val callback = "<http://$localIp:${server.localPort}/notify>"
+            val sid = subscribe(playerIp, playerPort, callback) ?: run { letGo.cancel(); return null }
+            try {
+                // The deadline is the sockets', not a coroutine timeout's: `accept` and `read`
+                // block, and `withTimeoutOrNull` cannot interrupt either — so a player that never
+                // called back held this thread, and the service lock above it, for good.
+                val deadline = System.currentTimeMillis() + timeoutMillis
+                run {
+                    // The first NOTIFY carries the full initial state, so one accept is
+                    // enough — but loop in case a keepalive or partial event lands first.
+                    var found: String? = null
+                    while (found == null) {
+                        val left = deadline - System.currentTimeMillis()
+                        if (left <= 0) break
+                        server.soTimeout = left.toInt()
+                        val socket = runCatching { server.accept() }.getOrNull() ?: break
+                        socket.soTimeout = READ_TIMEOUT_MILLIS
+                        // Bounded as a whole, and closed by a cancellation too: the listener's
+                        // closing never reached it, and a peer that sent part of a NOTIFY held a
+                        // cancelled capture here, a read timeout at a time (P-75, 2026-10-23).
+                        found = socket.use {
+                            it.within(READ_TIMEOUT_MILLIS.toLong()) { s ->
+                                val request = runCatching { readHttpMessage(s) }.getOrNull().orEmpty()
                                 // A GENA NOTIFY wants a 200 or the player retries, then drops the sub.
                                 runCatching {
-                                    it.getOutputStream().write(
+                                    s.getOutputStream().write(
                                         "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray()
                                     )
                                 }
-                                found = extractVariable(request, "ThirdPartyMediaServersX")
+                                extractVariable(request, "ThirdPartyMediaServersX")
                             }
                         }
-                        found
                     }
-                } finally {
-                    letGo.cancel()
-                    runCatching { unsubscribe(playerIp, playerPort, sid) }
+                    found
                 }
+            } finally {
+                letGo.cancel()
+                // After a cancellation too: best-effort, bounded by its own deadline alone.
+                withContext(NonCancellable) { runCatching { unsubscribe(playerIp, playerPort, sid) } }
             }
         }
 
     /** SUBSCRIBE to ZoneGroupTopology, returning the subscription id to cancel with. */
-    private fun subscribe(playerIp: String, playerPort: Int, callback: String): String? {
+    private suspend fun subscribe(playerIp: String, playerPort: Int, callback: String): String? {
         val request = "SUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
             "HOST: $playerIp:$playerPort\r\n" +
             "CALLBACK: $callback\r\n" +
@@ -107,26 +127,31 @@ object AccountCapture {
             "TIMEOUT: Second-60\r\n" +
             "Content-Length: 0\r\n" +
             "Connection: close\r\n\r\n"
-        Socket().use { stream ->
-            stream.connect(InetSocketAddress(playerIp, playerPort), 5_000)
-            stream.soTimeout = READ_TIMEOUT_MILLIS
-            stream.getOutputStream().write(request.toByteArray())
-            return header(readHttpMessage(stream), "SID")
+        // Connect and reply together, and closed by a cancellation, as a NOTIFY's read is.
+        return Socket().use { stream ->
+            stream.within(5_000L + READ_TIMEOUT_MILLIS) {
+                it.connect(InetSocketAddress(playerIp, playerPort), 5_000)
+                it.soTimeout = READ_TIMEOUT_MILLIS
+                it.getOutputStream().write(request.toByteArray())
+                header(readHttpMessage(it), "SID")
+            }
         }
     }
 
     /** Best-effort UNSUBSCRIBE. A lost one costs nothing: the subscription expires in a minute. */
-    private fun unsubscribe(playerIp: String, playerPort: Int, sid: String) {
+    private suspend fun unsubscribe(playerIp: String, playerPort: Int, sid: String) {
         val request = "UNSUBSCRIBE $EVENT_PATH HTTP/1.1\r\n" +
             "HOST: $playerIp:$playerPort\r\n" +
             "SID: $sid\r\n" +
             "Connection: close\r\n\r\n"
         runCatching {
             Socket().use { stream ->
-                stream.connect(InetSocketAddress(playerIp, playerPort), 2_000)
-                stream.soTimeout = 2_000
-                stream.getOutputStream().write(request.toByteArray())
-                readHttpMessage(stream)
+                stream.within(4_000) {
+                    it.connect(InetSocketAddress(playerIp, playerPort), 2_000)
+                    it.soTimeout = 2_000
+                    it.getOutputStream().write(request.toByteArray())
+                    readHttpMessage(it)
+                }
             }
         }
     }

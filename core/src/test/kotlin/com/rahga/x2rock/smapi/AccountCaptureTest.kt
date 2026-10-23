@@ -2,7 +2,11 @@ package com.rahga.x2rock.smapi
 
 import org.junit.Assert.assertTrue
 import kotlin.concurrent.thread
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -118,6 +122,76 @@ class AccountCaptureTest {
         player.close()
         assertNull(envelope)
         assertTrue("took ${took}ms", took < 3_000)
+    }
+
+    /**
+     * A stand-in player that takes the SUBSCRIBE, then calls back with [notify] on a connection it
+     * holds open until the test ends; its UNSUBSCRIBE is answered too. [called] is completed once the
+     * NOTIFY is sent.
+     */
+    private fun callingPlayer(notify: (java.io.OutputStream) -> Unit, called: CompletableDeferred<Unit>): java.net.ServerSocket {
+        val player = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        thread(isDaemon = true) {
+            runCatching {
+                player.accept().use { s ->
+                    val request = AccountCapture.readHttpMessage(s.getInputStream())
+                    val target = java.net.URI(AccountCapture.header(request, "CALLBACK")!!.removeSurrounding("<", ">"))
+                    s.getOutputStream().write("HTTP/1.1 200 OK\r\nSID: uuid:test\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                    thread(isDaemon = true) {
+                        runCatching { java.net.Socket(target.host, target.port).use { peer -> notify(peer.getOutputStream()); called.complete(Unit); Thread.sleep(15_000) } }
+                    }
+                }
+                while (true) player.accept().use { s ->
+                    AccountCapture.readHttpMessage(s.getInputStream())
+                    s.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                }
+            }
+        }
+        return player
+    }
+
+    /**
+     * A NOTIFY whose body never comes in full, and a caller that leaves meanwhile. Only the listener
+     * was closed on a cancellation, so the read of the accepted connection went on — the service lock
+     * held above it — and when it did end it was as a `SocketException`, recorded as the sign-ins
+     * being unreadable rather than as the caller leaving (P-75).
+     */
+    @Test(timeout = 20_000) fun `a cancelled capture lets go of a half-sent notify, as a cancellation`() = runBlocking {
+        val called = CompletableDeferred<Unit>()
+        val player = callingPlayer({ it.write("NOTIFY /notify HTTP/1.1\r\nContent-Length: 100\r\n\r\nx".toByteArray()) }, called)
+        val failure = java.util.concurrent.atomic.AtomicReference<Throwable?>()
+        val capture = launch(kotlinx.coroutines.Dispatchers.Default) {
+            try {
+                AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 10_000, playerPort = player.localPort)
+            } catch (e: Throwable) {
+                failure.set(e); throw e
+            }
+        }
+        withTimeout(5_000) { called.await() }
+        delay(250)
+        capture.cancel()
+        // Well inside the 5s a read may take, with the player's connection still open.
+        withTimeout(1_500) { capture.join() }
+        player.close()
+        assertTrue("ended as ${failure.get()}", failure.get() is CancellationException)
+    }
+
+    /**
+     * A NOTIFY trickled a byte at a time: every read inside the read timeout, so the capture's own
+     * deadline was passed by as long as the peer kept going (P-75).
+     */
+    @Test(timeout = 25_000) fun `a trickled notify does not hold the capture past its bound`() = runBlocking {
+        val called = CompletableDeferred<Unit>()
+        val player = callingPlayer({ out ->
+            out.write("NOTIFY /notify HTTP/1.1\r\nContent-Length: 100000\r\n\r\n".toByteArray())
+            runCatching { repeat(60) { out.write('x'.code); out.flush(); Thread.sleep(300) } }
+        }, called)
+        val started = System.currentTimeMillis()
+        val envelope = AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 1_000, playerPort = player.localPort)
+        val took = System.currentTimeMillis() - started
+        player.close()
+        assertNull(envelope)
+        assertTrue("took ${took}ms", took < 9_000)
     }
 
     @Test(timeout = 20_000) fun `a message is not read past its bound`() {

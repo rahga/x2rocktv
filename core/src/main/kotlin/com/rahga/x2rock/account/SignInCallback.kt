@@ -1,5 +1,6 @@
 package com.rahga.x2rock.account
 
+import com.rahga.x2rock.lan.within
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -26,7 +27,7 @@ import java.net.URLDecoder
  */
 object SignInCallback {
 
-    /** How long a connected client gets to send its request, and how much of one is read. */
+    /** How long a connected client gets for its whole exchange, and how much of a request is read. */
     private const val READ_TIMEOUT_MILLIS = 5_000
     private const val MAX_REQUEST = 16 * 1024
 
@@ -49,7 +50,10 @@ object SignInCallback {
                         if (server.isClosed) throw CancellationException("the sign-in's listener was closed").apply { initCause(e) }
                         throw e
                     }
-                    outcome = socket.use { answer(it, state) }
+                    // The client's whole exchange is bounded, and a cancellation closes it as it closes
+                    // the listener: one that sent part of a request held a cancelled sign-in here, and
+                    // the listener with it, a read timeout at a time (P-76, 2026-10-23).
+                    outcome = socket.use { it.within(READ_TIMEOUT_MILLIS.toLong()) { client -> answer(client, state) } }
                 }
                 outcome.getOrThrow()
             }

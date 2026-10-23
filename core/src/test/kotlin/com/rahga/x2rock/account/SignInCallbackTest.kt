@@ -59,4 +59,42 @@ class SignInCallbackTest {
         runCatching { waiting.await() }
         assertTrue(server.isClosed)
     }
+
+    /**
+     * A client connected and sent half a request when the sign-in was cancelled. Closing the listener
+     * did not reach its socket, so the cancelled wait read on until the client stopped (P-76).
+     */
+    @Test(timeout = 20_000) fun `cancelling the wait lets go of a client that sent half a request`() = runBlocking {
+        val server = ServerSocket(0, 4, InetAddress.getLoopbackAddress())
+        val waiting = async(Dispatchers.Default) { SignInCallback.awaitCode(server, "s-1") }
+        java.net.Socket("127.0.0.1", server.localPort).use { peer ->
+            peer.getOutputStream().write("GET /callback?".toByteArray())
+            kotlinx.coroutines.delay(250)
+            waiting.cancel()
+            // Well inside the 5s a read may take, and with the client still connected.
+            withTimeout(1_500) { waiting.join() }
+        }
+        assertTrue(waiting.isCancelled)
+        assertTrue(server.isClosed)
+    }
+
+    /**
+     * A client sending a byte at a time, never finishing: each read was inside the read timeout, so
+     * nothing bounded the request, and the one listener served nobody else meanwhile (P-76).
+     */
+    @Test(timeout = 20_000) fun `a client that never finishes its request is let go`() = runBlocking {
+        val server = ServerSocket(0, 4, InetAddress.getLoopbackAddress())
+        val waiting = async(Dispatchers.Default) { SignInCallback.awaitCode(server, "s-1") }
+        val started = System.currentTimeMillis()
+        val dropped = java.net.Socket("127.0.0.1", server.localPort).use { peer ->
+            val out = peer.getOutputStream()
+            out.write("GET /callback?code=x&state=s-1 HTTP/1.1\r\n".toByteArray())
+            // Header bytes, one every 300ms, until the listener stops reading them.
+            runCatching { while (System.currentTimeMillis() - started < 12_000) { out.write('a'.code); out.flush(); Thread.sleep(300) } }
+                .isFailure
+        }
+        val took = System.currentTimeMillis() - started
+        waiting.cancel()
+        assertTrue("still held after ${took}ms", dropped && took < 9_000)
+    }
 }
