@@ -39,6 +39,8 @@ import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.components.SectionTitle
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rahga.x2rock.viewmodel.PreferredServicesViewModel
 import kotlinx.coroutines.launch
 
@@ -65,6 +67,7 @@ fun PreferredServicesScreen(onBack: () -> Unit, viewModel: PreferredServicesView
     var focusId by remember { mutableStateOf<String?>(null) }
     val keyFocus = remember { FocusRequester() }
     val scope = rememberCoroutineScope()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
@@ -80,8 +83,9 @@ fun PreferredServicesScreen(onBack: () -> Unit, viewModel: PreferredServicesView
                     val preferred = order.mapNotNull { id -> s.services.firstOrNull { it.id == id } }
                     // The household's own services before the anonymous radio, as Music Services lists them.
                     val others = s.services.filter { it.id !in order }.sortedByDescending { it.added }
-                    // Focus starts on the first row there is, once.
-                    LaunchedEffect(Unit) { firstFocus.requestFocusRetrying() }
+                    // Focus starts on the first row there is, once, past the navigation's fade: the list
+                    // is kept for the session, so a second opening is fast enough to ask during it (P-87).
+                    LaunchedEffect(Unit) { firstFocus.requestFocusWhenResumed(lifecycle) }
                     val preferredIds = preferred.map { it.id }
                     val otherIds = others.map { it.id }
                     // A row preferred or taken out leaves its list from under the cursor, and the

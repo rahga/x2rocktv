@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.theme
 
+import androidx.lifecycle.Lifecycle
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
@@ -357,6 +359,18 @@ suspend fun FocusRequester.requestFocusRetrying(attempts: Int = 10, evenOnTouch:
         withFrameNanos { }
     }
     return false
+}
+
+/**
+ * [requestFocusRetrying] once [lifecycle] is resumed, which is when the navigation's fade has ended.
+ * A screen that loads fast asks during the fade otherwise, while the home screen is still composed and
+ * its Settings panel hands focus back to its button; when that screen left, focus fell to Back (Alarms,
+ * Shield, 2026-10-10). One helper since Preferred services, cached for the session and so fast on a
+ * second opening, made the fifth screen to need it (P-87, 2026-10-23).
+ */
+suspend fun FocusRequester.requestFocusWhenResumed(lifecycle: Lifecycle): Boolean {
+    lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+    return requestFocusRetrying()
 }
 
 /**

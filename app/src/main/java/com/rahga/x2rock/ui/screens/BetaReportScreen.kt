@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -44,8 +43,8 @@ import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppCard
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
 import com.rahga.x2rock.viewmodel.BetaReportViewModel
-import kotlinx.coroutines.flow.first
 
 /**
  * Settings → Beta features → Send a report (T-21): the report's text on the left, exactly as the
@@ -67,12 +66,9 @@ fun BetaReportScreen(onBack: () -> Unit, viewModel: BetaReportViewModel = hiltVi
             when (val s = state) {
                 BetaReportViewModel.UiState.Loading -> DotScanner()
                 is BetaReportViewModel.UiState.Ready -> {
-                    // Once resumed, past the navigation's fade: see AlarmsScreen.
+                    // Once resumed, past the navigation's fade: see requestFocusWhenResumed.
                     val lifecycle = LocalLifecycleOwner.current.lifecycle
-                    LaunchedEffect(Unit) {
-                        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
-                        firstFocus.requestFocusRetrying()
-                    }
+                    LaunchedEffect(Unit) { firstFocus.requestFocusWhenResumed(lifecycle) }
                     val blocks = remember(s.report.text) { s.report.text.split("\n\n").filter { it.isNotBlank() } }
                     Row(horizontalArrangement = Arrangement.spacedBy(48.dp)) {
                         LazyColumn(

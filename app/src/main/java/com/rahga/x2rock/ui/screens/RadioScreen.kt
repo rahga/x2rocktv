@@ -46,7 +46,6 @@ import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
-import com.rahga.x2rock.ui.theme.requestFocusSafely
 import com.rahga.x2rock.viewmodel.AfterPlayingViewModel
 import com.rahga.x2rock.viewmodel.PlayerViewModel
 import com.rahga.x2rock.viewmodel.RadioViewModel
@@ -80,7 +79,9 @@ fun RadioScreen(
     LaunchedEffect(byUrl) { if (byUrl) addressFocus.requestFocusRetrying(evenOnTouch = true) }
     val firstFocus = remember { FocusRequester() }
     BackHandler { onBack() }
-    LaunchedEffect(Unit) { firstFocus.requestFocusSafely() }
+    // Retried: the first category is a lazy item, which need not be composed on the first frame, and
+    // a single try that missed left Radio with nothing focused until a key was pressed (P-87).
+    LaunchedEffect(Unit) { firstFocus.requestFocusRetrying() }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {

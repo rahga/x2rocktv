@@ -20,7 +20,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -31,9 +30,9 @@ import com.rahga.x2rock.ui.components.MediaRow
 import com.rahga.x2rock.ui.components.RowStatus
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
 import com.rahga.x2rock.viewmodel.AboutSystemViewModel
 import com.rahga.x2rock.viewmodel.detail
-import kotlinx.coroutines.flow.first
 
 /**
  * About this system, from Settings: every speaker by room, what it is and what it runs, and whether
@@ -58,12 +57,9 @@ fun AboutSystemScreen(onBack: () -> Unit, viewModel: AboutSystemViewModel = hilt
                     LaunchedEffect(Unit) { backFocus.requestFocusRetrying() }
                 }
                 is AboutSystemViewModel.UiState.Ready -> {
-                    // Once resumed, past the navigation's fade: see AlarmsScreen.
+                    // Once resumed, past the navigation's fade: see requestFocusWhenResumed.
                     val lifecycle = LocalLifecycleOwner.current.lifecycle
-                    LaunchedEffect(Unit) {
-                        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
-                        firstFocus.requestFocusRetrying()
-                    }
+                    LaunchedEffect(Unit) { firstFocus.requestFocusWhenResumed(lifecycle) }
                     Text(
                         when (s.waiting) {
                             0 -> "Every speaker is up to date."

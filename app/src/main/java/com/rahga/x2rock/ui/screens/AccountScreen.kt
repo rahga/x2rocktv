@@ -20,7 +20,6 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -30,9 +29,9 @@ import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.ScreenHeader
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
 import com.rahga.x2rock.viewmodel.AccountViewModel
 import com.rahga.x2rock.viewmodel.AccountViewModel.Step
-import kotlinx.coroutines.flow.first
 
 /**
  * Settings → Sonos account (T-27): sign this TV in from a phone, or out. Signed out, it starts at once
@@ -47,11 +46,10 @@ fun AccountScreen(onBack: () -> Unit, viewModel: AccountViewModel = hiltViewMode
     val backFocus = remember { FocusRequester() }
     val actionFocus = remember { FocusRequester() }
     LaunchedEffect(signedIn) { if (!signedIn) viewModel.start() }
-    // Once resumed, past the navigation's fade: see AlarmsScreen.
+    // Once resumed, past the navigation's fade: see requestFocusWhenResumed.
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(signedIn, step is Step.Failed) {
-        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
-        if (signedIn || step is Step.Failed) actionFocus.requestFocusRetrying() else backFocus.requestFocusRetrying()
+        (if (signedIn || step is Step.Failed) actionFocus else backFocus).requestFocusWhenResumed(lifecycle)
     }
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(start = 48.dp, top = 32.dp, end = 48.dp)) {
