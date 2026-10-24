@@ -160,6 +160,21 @@ TV). Open as T-41: Search's "didn't answer" names none of the services that refu
 refusal reads as HTTP. The Sonos app says "Error occurred" on search and "No content items available" on
 browse.
 
+**Review pass of 2026-10-23 evening** (at `a3c5075`, after the day's T-39..T-42; five area reviews —
+core/lan, core services, view models, UI, build/record/today's diff — each claim re-read against the code
+before it was recorded). 41 findings, none high; the open ones are the local queue's P-100..P-126. The day's
+own edits held on a whole read: one attempt owns the connect, the one-anchor rule traces cleanly, the preset
+on the application scope is safe; what the day left behind is two functions inserted between a KDoc and its
+subject (the recurring defect, now with a one-line `awk` check), the shared player not told the preset's room
+while Browse is in front (a regression of following the Stay pin), and the record behind the code (this
+file's head, `play-release.md`'s closing paragraph, the changelog, the privacy page). Looked at and left
+alone: every room row recomposing on any household event (the `:core` model classes read as unstable to
+Compose without the stability plugin — unmeasured, and the list is five rows; revisit only if the list
+ever stutters), and CLAUDE.md's "reads the topology itself" for the catch-up, which means what the code
+does (it reads `_state`, not the handler's parameter), so no fresh `getGroups` is to be "restored" there —
+the P-81 test pins that. The connect lifecycle and the room anchor were read whole by hand as well as by
+the lanes.
+
 **Not built, and nothing has asked for it**: adding a Sonos favourite to the queue; the Control API TV-input fallback for a solo soundbar with UPnP off; `globalError`;
 the port-1443 connect-scan; `tvPowerStatus` in TV detection. (The "Play URL" row was built
 2026-10-10, T-06: Radio's "Play a URL"; adding to a service's own playlist and picking an
