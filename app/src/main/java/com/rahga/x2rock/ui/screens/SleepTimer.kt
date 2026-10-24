@@ -52,10 +52,10 @@ internal fun sleepChoiceLabel(minutes: Int): String = when {
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-internal fun ConfigureButton(state: PlayerUiState, onClick: () -> Unit, focusRequester: FocusRequester) {
+internal fun ConfigureButton(state: PlayerUiState, onClick: () -> Unit, focusRequester: FocusRequester, modifier: Modifier = Modifier) {
     val endsAt = rememberSleepEnd(state.sleepTimerEndsAt.takeIf { !state.upnpOff })
     Named(if (endsAt != null) "Configure · sleep at $endsAt" else "Configure") { named ->
-        IconAppButton(onClick = onClick, modifier = Modifier.focusRequester(focusRequester).then(named)) {
+        IconAppButton(onClick = onClick, modifier = modifier.focusRequester(focusRequester).then(named)) {
             Icon(Icons.Filled.Tune, contentDescription = "Configure", modifier = Modifier.size(30.dp))
             if (endsAt != null) {
                 Spacer(modifier = Modifier.width(8.dp))

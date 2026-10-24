@@ -1,6 +1,8 @@
 package com.rahga.x2rock.ui
 
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -73,6 +75,8 @@ fun X2RockNavGraph() {
             homeViewModel.connect()
         }
     }
+
+    PlayerFollowsHome(homeViewModel, playerViewModel)
 
     val navigateToRoom by homeViewModel.navigateToRoom.collectAsState()
     LaunchedEffect(navigateToRoom) {
@@ -232,5 +236,26 @@ fun X2RockNavGraph() {
                 onPlayed = { played(entry) },
             )
         }
+    }
+}
+
+/**
+ * The shared player is the home screen's selection wherever the viewer is. Told only by the home
+ * screen, it stayed on the old room while any other screen was in front: a preset started with the
+ * Stay pin held left the bar, the media keys and the launcher's card on the room Browse was opened
+ * from (P-100), and a room that left the household went on being advertised until Back. Collected
+ * rather than composed: the list changes with every event in the house.
+ */
+@Composable
+fun PlayerFollowsHome(homeViewModel: HomeViewModel, playerViewModel: PlayerViewModel) {
+    LaunchedEffect(homeViewModel, playerViewModel) {
+        combine(homeViewModel.selectedGroupId, homeViewModel.uiState) { id, state ->
+            // Keyed on the groups too: a deep link can select a room before they have loaded.
+            val group = (state as? HomeViewModel.UiState.Success)?.groups?.find { it.id == id }
+            group?.let { Triple(it.id, it.name, homeViewModel.route(it.id)) }
+        }
+            .filterNotNull()
+            .distinctUntilChanged()
+            .collect { (id, name, route) -> playerViewModel.selectGroup(id, name, route) }
     }
 }

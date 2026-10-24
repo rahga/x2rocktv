@@ -271,10 +271,6 @@ class SearchViewModel @Inject constructor(
             return (preferred.ifEmpty { available }).take(2)
         }
 
-        /**
-         * Whether the top of [sections] is where focus should start: there is one, and none of the
-         * services still [waiting] would sort above it.
-         */
         /** These results with [section]'s [answer] folded in: null is a service that did not answer in time. */
         internal fun Results.answered(section: Section, answer: Result<List<Hit>>?, order: List<String>): Results {
             val hits = answer?.getOrNull()
@@ -289,6 +285,10 @@ class SearchViewModel @Inject constructor(
             )
         }
 
+        /**
+         * Whether the top of [sections] is where focus should start: there is one, and none of the
+         * services still [waiting] would sort above it.
+         */
         internal fun leadSettled(sections: List<Section>, waiting: List<Section>, preferred: List<String>): Boolean {
             val first = sections.firstOrNull() ?: return false
             return waiting.none { sectionOrder(preferred).compare(it, first) < 0 }

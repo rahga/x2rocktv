@@ -23,6 +23,7 @@ import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.PresetStore
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
+import com.rahga.x2rock.ui.PlayerFollowsHome
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.theme.X2RockTheme
 import com.rahga.x2rock.viewmodel.HomeViewModel
@@ -78,6 +79,9 @@ class AlarmPaneTest {
         scope = CoroutineScope(SupervisorJob())
         household = fakeHousehold(fake, scope, addressBook = PlayerAddressBook(), upnpPort = upnp.port)
         household.connectTo(fake, 10_000)
+        // Its own, not left to another class having run first: in touch mode no first focus is
+        // placed, and the Downs walked rooms instead of reaching Snooze (P-125).
+        compose.activity.useDpadInput()
     }
 
     @After fun tearDown() {
@@ -93,6 +97,7 @@ class AlarmPaneTest {
         val player = PlayerViewModel(household, SilentNowPlaying, testClock)
         compose.setContent {
             X2RockTheme {
+                PlayerFollowsHome(home, player)
                 HomeScreen(
                     onOpenQueue = {}, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
                     onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},

@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
@@ -75,11 +77,16 @@ fun QueueScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
+                        // Retry takes first focus: with nothing asking, the first Select did nothing
+                        // and the first arrow let the platform choose, which was Back (P-119).
+                        val retryFocus = remember { FocusRequester() }
+                        val lifecycle = LocalLifecycleOwner.current.lifecycle
+                        LaunchedEffect(Unit) { retryFocus.requestFocusWhenResumed(lifecycle) }
                         Text("Failed to load queue", style = MaterialTheme.typography.titleLarge)
                         Spacer(Modifier.height(8.dp))
                         Text(s.message, style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(24.dp))
-                        AppButton(onClick = { viewModel.reload() }) { Text("Retry") }
+                        AppButton(onClick = { viewModel.reload() }, modifier = Modifier.focusRequester(retryFocus)) { Text("Retry") }
                     }
                     is QueueViewModel.UiState.Success -> QueueList(
                         room = room,
@@ -164,12 +171,17 @@ private fun QueueList(
     }
     val focusTargetIndex = if (currentIndex >= 0) currentIndex else 0
 
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(entries.isNotEmpty()) {
         if (entries.isNotEmpty()) {
             if (currentIndex > 0) listState.scrollToItem(currentIndex)
             // Retried: the row scrolled to is composed in the frames after the scroll, so a single
             // request found nothing in a long queue and focus fell to the buttons above.
             firstFocus.requestFocusRetrying()
+        } else {
+            // Empty, Back has it — on opening, and once a Clear has taken the rows and its own
+            // button away. Nothing asked before, so the first Select did nothing (P-119).
+            firstFocus.requestFocusWhenResumed(lifecycle)
         }
     }
 

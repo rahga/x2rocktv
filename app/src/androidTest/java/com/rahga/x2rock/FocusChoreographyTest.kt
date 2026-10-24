@@ -30,6 +30,7 @@ import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.PresetStore
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
+import com.rahga.x2rock.ui.PlayerFollowsHome
 import com.rahga.x2rock.ui.screens.HomeScreen
 import com.rahga.x2rock.ui.screens.QueueScreen
 import com.rahga.x2rock.ui.theme.X2RockTheme
@@ -96,6 +97,7 @@ class FocusChoreographyTest {
 
     private fun showHome(onOpenQueue: (com.rahga.x2rock.viewmodel.RoomRoute) -> Unit = {}) = compose.setContent {
         X2RockTheme {
+            PlayerFollowsHome(home, player)
             HomeScreen(
                 onOpenQueue = onOpenQueue, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
                 onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
@@ -157,11 +159,42 @@ class FocusChoreographyTest {
 
     /** Back from Queue lands on the Queue button, not on the room and not on the primary control. */
     @Test fun backFromQueueReturnsToTheQueueButton() {
+        showHomeWithQueue()
+        awaitRoomList()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Queue")).requestFocus()
+        waitForFocusOn("Queue", hasContentDescription("Queue"))
+        press(Key.DirectionCenter)
+        // On the queue screen once the home screen, and its Queue button, have gone. The screen's own
+        // title depends on a UPnP read this fake does not answer, so it is not what is waited for.
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isEmpty() }
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        waitForFocusOn("Queue", hasContentDescription("Queue"))
+    }
+
+    /**
+     * A queue that cannot be read — this fake answers no UPnP — shows Retry, and Retry has focus with
+     * no key pressed. Nothing asked before: the first Select did nothing, and the first arrow let the
+     * platform choose, which was Back (P-119).
+     */
+    @Test fun aQueueThatFailsToLoadOffersRetryWithFocus() {
+        showHomeWithQueue()
+        awaitRoomList()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Queue")).requestFocus()
+        waitForFocusOn("Queue", hasContentDescription("Queue"))
+        press(Key.DirectionCenter)
+        compose.waitUntil(20_000) { compose.onAllNodes(hasText("Retry")).fetchSemanticsNodes().isNotEmpty() }
+        waitForFocusOn("Retry", hasText("Retry"))
+    }
+
+    private fun showHomeWithQueue() {
         compose.setContent {
             val nav = rememberNavController()
             X2RockTheme {
                 NavHost(nav, startDestination = "home") {
                     composable("home") {
+                        PlayerFollowsHome(home, player)
                         HomeScreen(
                             onOpenQueue = { room -> nav.navigate("queue/${room.groupId}") }, onOpenFavorites = {}, onOpenSearch = {},
                             onOpenNowPlaying = {}, onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
@@ -180,16 +213,6 @@ class FocusChoreographyTest {
                 }
             }
         }
-        awaitRoomList()
-        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasContentDescription("Queue")).requestFocus()
-        waitForFocusOn("Queue", hasContentDescription("Queue"))
-        press(Key.DirectionCenter)
-        // On the queue screen once the home screen, and its Queue button, have gone. The screen's own
-        // title depends on a UPnP read this fake does not answer, so it is not what is waited for.
-        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Queue")).fetchSemanticsNodes().isEmpty() }
-        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
-        waitForFocusOn("Queue", hasContentDescription("Queue"))
     }
 
     /**
@@ -219,5 +242,64 @@ class FocusChoreographyTest {
         repeat(4) { press(Key.DirectionDown) }
         waitForFocusOn("Living Room's row", hasText("Living Room"))
         compose.waitUntil(5_000) { home.selectedGroupId.value == household.state.value.groups.first { it.name == "Living Room" }.id }
+    }
+
+    /**
+     * Reset room order leaves the composition on its own press. Left to fall, focus landed on a room
+     * row behind the open Settings panel, which Up and Down then selected (P-101). It goes to the row
+     * above it first.
+     */
+    @Test fun resettingTheRoomOrderKeepsFocusInSettings() {
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        RoomPreferencesStore(prefs).setRoomRanks(listOf(bedroom.coordinatorId))
+        buildViewModels()
+        showHome()
+        awaitRoomList()
+        compose.onNode(isFocusable() and hasText("Settings")).requestFocus()
+        press(Key.DirectionCenter)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Reset room order")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(isFocusable() and hasText("Reset room order", substring = true)).requestFocus()
+        waitForFocusOn("Reset room order", hasText("Reset room order"))
+        press(Key.DirectionCenter)
+        waitForFocusOn("Preferred services", hasText("Preferred services"))
+        org.junit.Assert.assertEquals("the room under the panel was selected", bedroom.id, home.selectedGroupId.value)
+    }
+
+    /**
+     * Parked on Settings, at the foot of the list and outside it: a regroup of the selected room mints
+     * it a new id, and that took focus to the room's row, so the Select meant for Settings entered the
+     * pane (P-121).
+     */
+    @Test fun aRegroupLeavesFocusOnTheSettingsButton() {
+        showHome()
+        awaitRoomList()
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        compose.onNode(isFocusable() and hasText("Settings")).requestFocus()
+        waitForFocusOn("Settings", hasText("Settings"))
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Bedroom", memberRoom = "Kitchen"))
+        compose.waitUntil(10_000) { home.selectedGroupId.value.let { it != null && it != bedroom.id } }
+        compose.waitForIdle()
+        Thread.sleep(500)
+        compose.waitForIdle()
+        waitForFocusOn("Settings, still", hasText("Settings"))
+    }
+
+    /**
+     * Next leaves when the player stops offering a skip — a queue's last track — and focus on it fell
+     * to the room list with no key pressed (P-102). It goes to Play/Pause.
+     */
+    @Test fun aControlLeavingUnderFocusHandsItToPlayPause() {
+        showHome()
+        awaitRoomList()
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Next")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Next")).requestFocus()
+        waitForFocusOn("Next", hasContentDescription("Next"))
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        val lastTrack = com.google.gson.JsonParser.parseString(FakePlayer.fixtureText("event.playbackStatus.json")).asJsonObject.apply {
+            getAsJsonObject("availablePlaybackActions").addProperty("canSkip", false)
+        }
+        fake.push("playback:1", "playbackStatus", lastTrack.toString(), bedroom.id)
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Next")).fetchSemanticsNodes().isEmpty() }
+        waitForFocusOn("Play/Pause", playPause)
     }
 }

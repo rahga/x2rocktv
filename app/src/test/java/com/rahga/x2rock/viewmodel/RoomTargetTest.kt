@@ -112,4 +112,58 @@ class RoomTargetTest {
 
         assertEquals(now, RoomTarget(after, saved).currentOrNull())
     }
+
+    /** The captured topology without [room], its speaker gone, and Dining Room's group under a new id. */
+    private fun without(room: String) = FakePlayer.reachableTopology().also { topology ->
+        val groups = topology.getAsJsonArray("groups")
+        val gone = groups.map { it.asJsonObject }.first { it.get("name").asString == room }
+        val player = gone.get("coordinatorId").asString
+        groups.remove(gone)
+        topology.getAsJsonArray("players").let { players -> players.remove(players.first { it.asJsonObject.get("id").asString == player }) }
+        groups.map { it.asJsonObject }.first { it.get("name").asString == "Dining Room" }.let { dining ->
+            dining.addProperty("id", dining.get("id").asString.substringBeforeLast(":") + ":" + (System.nanoTime() % 1_000_000_000))
+        }
+    }
+
+    /**
+     * Opened on Kitchen alone; Dining Room joins it, then Kitchen drops off the network and Dining Room
+     * is left. Home and the pane follow the room to Dining Room; the screen, frozen at what it opened
+     * on, said "Kitchen is no longer in this system" for every press (P-106).
+     */
+    @Test fun `a target follows its room as it grows, and then to the speaker left`() = runBlocking<Unit> {
+        val household = household()
+        household.connectTo(fake)
+        val target = RoomTarget(household, SavedStateHandle(mapOf("groupId" to kitchen.get("id").asString)))
+        val coordinator = kitchen.get("coordinatorId").asString
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Dining Room"))
+        val grown = withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { coordinator in it.playerIds && it.playerIds.size == 2 } }
+        }.groups.first { coordinator in it.playerIds }
+        assertEquals(grown.id, target.currentOrNull())
+
+        fake.pushTopology(without("Kitchen"))
+        val left = withTimeout(5_000) { household.state.first { s -> s.players.none { it.id == coordinator } } }
+            .groups.first { it.name == "Dining Room" }
+        assertEquals(left.id, target.currentOrNull())
+    }
+
+    /**
+     * Opened on Guest TV's party, which Kitchen only joined: the party's name is the host's, so none
+     * was kept, and once Kitchen left the household every press said "That room is no longer…" (P-106).
+     */
+    @Test fun `a target opened on a party names its own room once it is gone`() = runBlocking<Unit> {
+        val household = household()
+        household.connectTo(fake)
+        val party = regroup(household)
+        val coordinator = kitchen.get("coordinatorId").asString
+        val target = RoomTarget(
+            household,
+            SavedStateHandle(mapOf("groupId" to party, RoomRoute.SPEAKERS to RoomRoute(party, coordinator, listOf(coordinator)).speakers)),
+        )
+        target.currentOrNull()
+        fake.pushTopology(without("Kitchen"))
+        withTimeout(5_000) { household.state.first { s -> s.players.none { it.id == coordinator } } }
+        val failure = runCatching { target.current() }.exceptionOrNull()
+        assertEquals("Kitchen is no longer in this system", failure?.message)
+    }
 }

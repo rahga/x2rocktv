@@ -110,7 +110,7 @@ class FavoritesViewModel @Inject constructor(
     fun applyPreset(preset: Preset, onDone: () -> Unit) {
         val what = "start ${preset.name}"
         startOne(presetKey(preset.id), what, onDone) {
-            appScope.async {
+            val formed = appScope.async {
                 try {
                     bringBack(preset)
                 } catch (e: Throwable) {
@@ -119,10 +119,15 @@ class FavoritesViewModel @Inject constructor(
                     throw e
                 }
             }.await()
+            // And this screen's own presses go there too, as its header and the shared player now
+            // do: with the pin held the viewer is still here, and the next favourite pressed is
+            // for the room just started, not the one Browse was opened from (P-100).
+            room.choose(formed)
         }
     }
 
-    private suspend fun bringBack(preset: Preset) {
+    /** Brings [preset] back; answers a player of the room it formed. */
+    private suspend fun bringBack(preset: Preset): String {
         // All at once, each to its own speaker. One whose level could not be set stays out, as does
         // an adjustable one the preset holds no level for: either would play at once at whatever
         // level it was left on (P-40). A fixed line-out is the amplifier's and always comes.
@@ -141,6 +146,7 @@ class FavoritesViewModel @Inject constructor(
             notice = "Left out $names: couldn't set its volume".takeIf { leftOut.isNotEmpty() },
             navigate = false,
         )
+        return joining.first()
     }
 
     /** Set once this screen has gone, so a preset still running says its own failure. */
@@ -274,10 +280,6 @@ class FavoritesViewModel @Inject constructor(
 fun playlistKey(playlistId: String) = "playlist:$playlistId"
 
 /**
- * The favourite a room is playing, found by its container's name — the only link the player gives
- * from what plays back to a favourite. Browse marks it, and a preset saved from the room keeps it.
- */
-/**
  * The mark on the favourite the room has loaded, by what the room is doing ([roomActivity]): "Now
  * playing" while it plays, "Paused" while paused, and none once stopped. A lapsed Saavn playlist,
  * stopped and unable to play, was marked "Now playing" (P-98, 2026-10-23).
@@ -288,6 +290,10 @@ fun favoriteMark(playbackState: String?): String? = when (roomActivity(playbackS
     else -> null
 }
 
+/**
+ * The favourite a room is playing, found by its container's name — the only link the player gives
+ * from what plays back to a favourite. Browse marks it, and a preset saved from the room keeps it.
+ */
 fun playingFavorite(favorites: List<Favorite>, containerName: String): Favorite? =
     favorites.firstOrNull { it.playable && it.name == containerName }
 

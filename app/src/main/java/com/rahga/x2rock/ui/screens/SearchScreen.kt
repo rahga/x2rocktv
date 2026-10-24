@@ -77,9 +77,10 @@ import com.rahga.x2rock.viewmodel.key
  * One search across the household's services: type or dictate once, and every service that can
  * search answers in its own section. See [SearchViewModel].
  *
- * Opens on the field, so the system keyboard and its microphone are up at once. When the first
- * answers arrive, focus moves to the first result — the field above otherwise traps a downward
- * press, as the service screen's did on the Streamer — and up from the first result returns to it.
+ * Opens on the field, so the system keyboard and its microphone are up at once. Once the answers
+ * have settled what leads — no service still out would sort above the first section (P-34) — focus
+ * moves to the first result: the field above otherwise traps a downward press, as the service
+ * screen's did on the Streamer. Up from the first result returns to it.
  */
 @OptIn(ExperimentalTvMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable

@@ -545,16 +545,16 @@ class ServiceBrowseViewModelTest {
     }
 
     private companion object {
-        /**
-         * Audible's Dune as captured (2026-10-06): the book's id, two of its chapter ids and its
-         * place. The second chapter's title was not recorded, so it is named by the span its id
-         * gives in book time, 1:59–29:55, rather than invented.
-         */
         /** Deezer's one playlist as its listing names it (number redacted), and the track added. */
         const val PLAYLIST = "playlist_spotify:playlist-10000000001"
         const val ALBUM = "plex-album"
         const val EMPTY_ALBUM = "playlist-&gt;soundcloud:playlists:867830924"
 
+        /**
+         * Audible's Dune as captured (2026-10-06): the book's id, two of its chapter ids and its
+         * place. The second chapter's title was not recorded, so it is named by the span its id
+         * gives in book time, 1:59–29:55, rather than invented.
+         */
         const val BOOK = "reftitle:B002V1OF70_com"
         const val RESUME_CHAPTER = "refchapter:B002V1OF70_119953071_com_119000_1795000"
         const val CHAPTERS = """<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body>

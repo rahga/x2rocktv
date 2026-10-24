@@ -75,7 +75,7 @@ import kotlin.math.roundToInt
  * Room…" each led somewhere else — with the shape the desktop widget settled on: the rooms
  * playing together with this one, then the rooms that could, and Enter does whatever the
  * row it is on says. Grouping is the same decision at two sizes, so party mode sits at the
- * top of the same list rather than in a button of its own.
+ * top of the same half, a button under its own "Everywhere" heading.
  *
  * Order is deliberate. Party is first because it is the one press that answers "put this
  * everywhere", which is what the remote is usually reached for. Source — TV Input, Line-In —
@@ -137,6 +137,8 @@ fun RoomPanel(
     sleepEndsAt: String? = null,
     onSetSleep: (minutes: Int) -> Unit = {},
     onCancelSleep: () -> Unit = {},
+    /** True while the panel is closing and handing focus back: focus leaving it then is the point. */
+    releasing: Boolean = false,
 ) {
     val firstFocus = rememberAutoFocusRequester()
     val members = playerNames.size
@@ -163,8 +165,11 @@ fun RoomPanel(
         return keys.getOrNull(at + 1) ?: keys.getOrNull(at - 1)?.takeIf { at > 0 }
     }
     var panelHasFocus by remember { mutableStateOf(false) }
-    LaunchedEffect(panelHasFocus) {
-        if (panelHasFocus) return@LaunchedEffect
+    // Not while closing: a hand-off whose first attempt missed retries a frame later, and this pulled
+    // focus back in between, so the panel closed with focus inside it and the gap-fill took it to
+    // the room list (P-120).
+    LaunchedEffect(panelHasFocus, releasing) {
+        if (panelHasFocus || releasing) return@LaunchedEffect
         val next = focusNext?.let { rowFocus[it] }
         focusNext = null
         if (next?.requestFocusSafely() != true) firstFocus.requestFocusSafely()

@@ -170,6 +170,19 @@ internal fun ratingWhileReading(
 ): Pair<String, SonosHousehold.RatingState>? =
     last?.takeIf { it.first == groupId && trackId != null }?.let { (room, rating) -> room to rating.copy(current = Thumb.NONE) }
 
+/**
+ * The rating held for [from], carried to [to] when the room was [followed] there rather than left:
+ * keyed on the group id alone, another controller's regroup — a new id for the same room — took the
+ * buttons away, and focus with them, as P-78's track change had (P-118).
+ */
+internal fun ratingFollowing(
+    last: Pair<String, SonosHousehold.RatingState>?,
+    from: String?,
+    to: String,
+    followed: Boolean,
+): Pair<String, SonosHousehold.RatingState>? =
+    if (followed && last != null && last.first == from) to to last.second else last
+
 /** What one read of `settings:1` yielded, with the speaker it came from. */
 data class HomeTheaterUi(
     val soundbarId: String,
@@ -421,6 +434,9 @@ class PlayerViewModel @Inject constructor(
         show(id, name)
     }
 
+    /** The chosen room's coordinator when the group showing was shown: see [show]. */
+    private var shownRoom: String? = null
+
     /** Show [id]: chosen or followed, the room chosen stays as it is. */
     private fun show(id: String, name: String) {
         _groupName.value = name
@@ -429,7 +445,12 @@ class PlayerViewModel @Inject constructor(
         // house — so without this, a track boundary in another room would clear the home
         // theatre reading and blank both toggles for a round-trip.
         if (_groupId.value == id) return
-        _groupId.value?.let { settlePending(it) }
+        val from = _groupId.value
+        from?.let { settlePending(it) }
+        // The same room under a new id, if the room chosen is the one this id was shown for.
+        val room = savedRoom.coordinator
+        _rating.value = ratingFollowing(_rating.value, from, id, followed = room != null && room == shownRoom)
+        shownRoom = room
         _groupId.value = id
         // Cleared rather than left standing: the previous room's answer would otherwise sit
         // on screen against the new room's name until this read came back.

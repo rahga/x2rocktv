@@ -227,6 +227,14 @@ class HomeViewModel @Inject constructor(
     private val savedSelection = SavedRoom(saved, "home.selected")
 
     /**
+     * A choice of one speaker's room: a tile names a player, and so does the TV room. Anchored on the
+     * speaker alone, not on the group holding it, which may be a party it only joined: anchored on the
+     * party's host, the selection stayed with the host when the party split (P-116). The room's own
+     * group is kept once it is the one selected (see the refresh in `init`).
+     */
+    private fun chooseSpeaker(playerId: String) = savedSelection.adopt(playerId, listOf(playerId))
+
+    /**
      * The selected room as a screen opened on it is handed it: [groupId], and the speakers of the room
      * chosen, which that screen follows it by (P-71, P-88).
      */
@@ -243,9 +251,10 @@ class HomeViewModel @Inject constructor(
             pendingRoomDeepLink.roomId.collectLatest { roomId ->
                 if (roomId == null) return@collectLatest
                 val groups = household.state.map { it.groups }.first { it.isNotEmpty() }
-                val group = groups.firstOrNull { it.id == roomId } ?: TvSoundbar.groupOf(roomId, groups)
+                val named = groups.firstOrNull { it.id == roomId }
+                val group = named ?: TvSoundbar.groupOf(roomId, groups)
                 if (group != null) {
-                    savedSelection.remember(group)
+                    if (named != null) savedSelection.remember(group) else chooseSpeaker(roomId)
                     _selectedGroupId.value = group.id
                     if (pendingRoomDeepLink.navigates()) _navigateToRoom.value = true
                 }
@@ -272,10 +281,12 @@ class HomeViewModel @Inject constructor(
                 val followed = savedSelection.findIn(groups)
                 if (current != null && groups.any { it.id == current } && (followed == null || followed.id == current)) return@collect
 
+                val tvPlayer = roomPrefsStore.tvPlayerId.value
+                val tvRoom = TvSoundbar.groupOf(tvPlayer, groups)
                 _selectedGroupId.value = (
                     followed
-                        ?: (TvSoundbar.groupOf(roomPrefsStore.tvPlayerId.value, groups) ?: defaultSelection(groups))
-                            ?.also { savedSelection.remember(it) }
+                        ?: tvRoom?.also { chooseSpeaker(tvPlayer!!) }
+                        ?: defaultSelection(groups)?.also { savedSelection.remember(it) }
                     )?.id
             }
         }
@@ -316,7 +327,7 @@ class HomeViewModel @Inject constructor(
                 val untouched = _selectedGroupId.value == defaultSelection(groups)?.id
                 if (untouched) {
                     TvSoundbar.groupOf(detected, groups)?.let {
-                        savedSelection.remember(it)
+                        chooseSpeaker(detected)
                         _selectedGroupId.value = it.id
                     }
                 }

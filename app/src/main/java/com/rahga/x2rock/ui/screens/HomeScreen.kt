@@ -94,6 +94,7 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
@@ -191,14 +192,6 @@ fun HomeScreen(
 
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
     val rooms = (state as? HomeViewModel.UiState.Success)?.rooms ?: emptyMap()
-
-    // Keyed on groups too: a deep link can select a room before the group list has loaded, and
-    // without the re-run the player pane would keep the empty name it resolved to first.
-    LaunchedEffect(selectedGroupId, groups) {
-        val id = selectedGroupId ?: return@LaunchedEffect
-        val name = groups.find { it.id == id }?.name ?: return@LaunchedEffect
-        playerViewModel.selectGroup(id, name, homeViewModel.route(id))
-    }
 
     // Selection follows focus only once this screen has put focus somewhere itself. Until then a
     // row taking focus is Android's automatic first focus, not the viewer: it lands on the first
@@ -300,11 +293,10 @@ fun HomeScreen(
     // on the selection too, for a regroup whose old row goes in the same frame the new
     // selection arrives. Not while a panel is open, which has its own, nor with focus in the
     // player pane, which the viewer put there.
-    var paneHasFocus by remember { mutableStateOf(false) }
     // And not while the list already holds it: the sidebar selects on focus, so arrowing down
     // the rooms changes the selection at every press, and each would otherwise re-request the
-    // row it is already on.
-    var listHasFocus by remember { mutableStateOf(false) }
+    // row it is already on — nor while anything else on the screen does (see screenHasFocus).
+    var paneHasFocus by remember { mutableStateOf(false) }
 
     // Back from the player pane goes to the room list. A BackHandler rather than a key handler
     // on the pane: the key handler took every Back pressed inside the pane, a menu drawn there
@@ -314,10 +306,15 @@ fun HomeScreen(
         sidebarFocusRequester.requestFocusSafely()
     }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
+    // Anywhere on this screen, the Settings button at the foot of the list included: a regroup of
+    // the selected room mints a new id, and with the viewer parked on Settings — outside the list
+    // and the pane both — this took focus to the room's row, and the Select meant for Settings
+    // entered the pane (P-121).
+    var screenHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(listReady, selectedGroupId) {
-        // "The list already has it" counts only once focus was placed: before that, the list holding
-        // focus is the automatic first focus on the wrong row, and is exactly what to correct.
-        if (!listReady || modalVisible || paneHasFocus || (listHasFocus && focusPlaced) || opener != null) return@LaunchedEffect
+        // "Something here already has it" counts only once focus was placed: before that, the list
+        // holding focus is the automatic first focus on the wrong row, and is exactly what to correct.
+        if (!listReady || modalVisible || paneHasFocus || (screenHasFocus && focusPlaced) || opener != null) return@LaunchedEffect
         // The row is composed, and may scroll into view, in the frames after it arrives.
         if (sidebarFocusRequester.requestFocusRetrying()) focusPlaced = true
     }
@@ -325,6 +322,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .onFocusChanged { screenHasFocus = it.hasFocus }
             // Seen before anything handles it, and never consumed: only noted, for [rowFocused].
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && (event.key == Key.DirectionUp || event.key == Key.DirectionDown)) {
@@ -341,6 +339,7 @@ fun HomeScreen(
                 sidebarFocusRequester = sidebarFocusRequester,
                 detailFocusRequester = detailFocusRequester,
                 onFocused = ::rowFocused,
+                onChosen = { homeViewModel.selectGroup(it.id) },
                 onOpenPanel = { panelFromPane = false; panelConfigure = false; panelGroup = it },
                 roomRanks = roomRanks,
                 movingGroupId = movingGroupId,
@@ -359,7 +358,6 @@ fun HomeScreen(
                 onRetry = { homeViewModel.connect() },
                 onChooseHousehold = { homeViewModel.chooseHousehold(it) },
                 upnpOff = upnpOff,
-                onListFocusChanged = { listHasFocus = it },
             )
 
             Box(
@@ -498,6 +496,7 @@ fun HomeScreen(
             LaunchedEffect(liveGroup.id) { homeViewModel.loadTone(liveGroup.id) }
             Overlay(onDismiss = ::closePanel, trapped = !panelReleasing) {
                 RoomPanel(
+                    releasing = panelReleasing,
                     group = liveGroup,
                     info = rooms[liveGroup.id] ?: HomeViewModel.RoomInfo(),
                     otherGroups = sortGroups(groups, roomRanks)
@@ -568,6 +567,8 @@ private fun RoomSidebar(
     sidebarFocusRequester: FocusRequester,
     detailFocusRequester: FocusRequester,
     onFocused: (Group) -> Unit,
+    /** A tap on a room not selected: a choice, made without focus (see [RoomListItem]). */
+    onChosen: (Group) -> Unit,
     onOpenPanel: (Group) -> Unit,
     roomRanks: List<String>,
     /** The room picked up to be moved, if any: Up and Down carry it, Select or Back puts it down. */
@@ -586,8 +587,6 @@ private fun RoomSidebar(
     onChooseHousehold: (HouseholdChoice) -> Unit,
     /** The household's UPnP switch is off: said here once, at the foot of the list. */
     upnpOff: Boolean,
-    /** Whether a room row holds focus, as opposed to the gear or nothing. */
-    onListFocusChanged: (Boolean) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val groups = (state as? HomeViewModel.UiState.Success)?.groups ?: emptyList()
@@ -656,7 +655,7 @@ private fun RoomSidebar(
                 LazyColumn(
                     state = listState,
                     // The rest of the height, so the footer sits at the foot of the list.
-                    modifier = Modifier.weight(1f).onFocusChanged { onListFocusChanged(it.hasFocus) },
+                    modifier = Modifier.weight(1f),
                     contentPadding = PaddingValues(bottom = 8.dp),
                 ) {
                     items(sorted, key = { it.id }) { group ->
@@ -669,6 +668,7 @@ private fun RoomSidebar(
                             focusRequester = if (isSelected) sidebarFocusRequester else itemFocus,
                             detailFocusRequester = detailFocusRequester,
                             onFocused = { onFocused(group) },
+                            onChosen = { onChosen(group) },
                             onOpenPanel = { onOpenPanel(group) },
                             moving = group.id == movingGroupId,
                             partyAsked = group.id == movingGroupId && partyAsked,
@@ -718,6 +718,12 @@ private fun RoomListItem(
     /** Right from a room crosses into the player pane, at its primary control. */
     detailFocusRequester: FocusRequester,
     onFocused: () -> Unit,
+    /**
+     * A tap on this room while another is selected. A choice, so it selects outright: it used to ask
+     * for focus, which since P-55 no request takes in touch mode, and the row's focus gate is shut
+     * there too, so on a phone a tap on another room did nothing (P-107).
+     */
+    onChosen: () -> Unit,
     onOpenPanel: () -> Unit,
     /** Picked up to be moved within the list. */
     moving: Boolean,
@@ -746,7 +752,7 @@ private fun RoomListItem(
         onLongClick = if (holdable) ({ onMoving(!moving) }) else null,
         // A remote selects a room by moving onto it and opens it with a press; a tap does both in
         // turn — the first selects, a tap on the selected room opens its panel.
-        onTap = { if (isSelected) onOpenPanel() else focusRequester.requestFocusSafely() },
+        onTap = { if (isSelected) onOpenPanel() else onChosen() },
         // The room the pane is showing keeps a quiet tint while focus is elsewhere — in the pane,
         // say — so the list still says which room the controls beside it act on. Text takes the
         // theme's root content colour; see X2RockTheme.
@@ -1017,14 +1023,21 @@ private fun SettingsPanel(
             Spacer(Modifier.height(12.dp))
             // Which services Search starts on and lists first: a screen of its own, since ordering
             // a list needs more room than this panel has.
-            AppButton(onClick = onOpenPreferredServices, modifier = Modifier.fillMaxWidth()) {
+            val preferredFocus = remember { FocusRequester() }
+            AppButton(onClick = onOpenPreferredServices, modifier = Modifier.fillMaxWidth().focusRequester(preferredFocus)) {
                 Text("Preferred services")
             }
             // Rooms are ordered in the list itself, by a hold on one; this only undoes it. Shown only
             // once there is something to undo, so it is never a row that does nothing.
             if (roomsPlaced) {
+                // It leaves on its own press, so focus is handed to the row above first: left to
+                // fall, it landed on a room row behind the panel, which Up and Down then selected (P-101).
+                val handOver = rememberCoroutineScope()
                 Spacer(Modifier.height(8.dp))
-                AppButton(onClick = onResetRoomOrder, modifier = Modifier.fillMaxWidth()) {
+                AppButton(
+                    onClick = { handOver.launch { preferredFocus.requestFocusRetrying(); onResetRoomOrder() } },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Column {
                         Text("Reset room order")
                         Text("Back to alphabetical", style = MaterialTheme.typography.bodySmall)
@@ -1102,6 +1115,16 @@ private fun ThemeSelector(
 
     Surface(
         onClick = {},
+        // The app's one focus language, as every button speaks it: filled with the primary colour and
+        // not grown. tv-material's own — near white, a tenth larger, over the panel's padding — was the
+        // second language the ten-foot pass took off cards and the volume pill (P-122).
+        colors = ClickableSurfaceDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.primary,
+            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+            pressedContainerColor = MaterialTheme.colorScheme.primary,
+            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         modifier = modifier
             .fillMaxWidth()
             // The arrows drawn at either end, as a tap: the left half steps back, the right on.

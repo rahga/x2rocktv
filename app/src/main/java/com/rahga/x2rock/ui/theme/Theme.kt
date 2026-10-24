@@ -240,7 +240,9 @@ fun Modifier.ignoreUnpressedRelease(): Modifier {
         .onPreviewKeyEvent { event ->
             if (event.key !in SELECT_KEYS) return@onPreviewKeyEvent false
             when (event.type) {
-                KeyEventType.KeyDown -> { pressed = true; false }
+                // A first down only: a held key goes on repeating once its hold has moved focus here,
+                // and a repeat counted as a press made the hold's release this control's click.
+                KeyEventType.KeyDown -> { if (event.nativeKeyEvent.repeatCount == 0) pressed = true; false }
                 KeyEventType.KeyUp -> !pressed.also { pressed = false }
                 else -> false
             }
@@ -387,10 +389,15 @@ fun IconLabelButton(icon: ImageVector, label: String, onClick: () -> Unit, modif
     }
 }
 
+/**
+ * A requester that takes focus once it is composed, retried a frame at a time: the item menu's first
+ * action is a lazy list's item, and a single try that came before the list had laid it out left the
+ * menu open with focus on the row behind it (P-108; P-87's Radio slip showed one miss on a device).
+ */
 @Composable
 fun rememberAutoFocusRequester(evenOnTouch: Boolean = false): FocusRequester {
     val requester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { requester.requestFocusSafely(evenOnTouch) }
+    LaunchedEffect(Unit) { requester.requestFocusRetrying(evenOnTouch = evenOnTouch) }
     return requester
 }
 

@@ -73,10 +73,6 @@ class PlayerViewModelTest {
     // ---------------------------------------------------------------- known volume
 
     /**
-     * Regression: volume defaulted to 0, so the app claimed a speaker sitting at 12 was at
-     * zero for the moment before its first `groupVolume` snapshot.
-     */
-    /**
      * Nothing re-selects the room while another screen is in front, yet the media keys and the
      * now-playing bar act through this view model. After a regroup elsewhere it must follow its
      * speakers to their new group by itself, rather than name the old one and be refused (P-43).
@@ -133,6 +129,18 @@ class PlayerViewModelTest {
         withTimeout(5_000) { while (!roomless.presenting) delay(20) }
     }
 
+    /** Nor while the household is still connecting, a room already chosen or not (P-91, P-125). */
+    @Test fun `nothing is advertised while the household is still connecting`() = runBlocking<Unit> {
+        val unconnected = fakeHousehold(fake, scope, addressBook = PlayerAddressBook())
+        val publisher = RecordingNowPlaying()
+        val player = PlayerViewModel(unconnected, publisher, testClock)
+        player.selectGroup(groupId, "Test Room")
+        delay(500)
+        assertFalse("a session was presented before the household answered", publisher.presenting)
+        assertTrue("something was published before the household answered", publisher.metadata.isEmpty())
+        unconnected.disconnect()
+    }
+
     /** P-78: a new track in the same room keeps the last one's buttons, unselected, until its read lands. */
     @Test fun `the rating buttons are held through a track change`() {
         val rated = "G1" to SonosHousehold.RatingState("Deezer", com.rahga.x2rock.smapi.Thumb.UP, SonosHousehold.RatingStyle.FAVORITE)
@@ -144,6 +152,18 @@ class PlayerViewModelTest {
         assertNull("a track with nothing to rate has none", ratingWhileReading(rated, "G1", null))
     }
 
+    /** P-118: the same room under a new id keeps its buttons; a room left does not carry them. */
+    @Test fun `the rating buttons follow the room to a new group id`() {
+        val rating = SonosHousehold.RatingState("Deezer", com.rahga.x2rock.smapi.Thumb.UP, SonosHousehold.RatingStyle.FAVORITE)
+        assertEquals("G2" to rating, ratingFollowing("G1" to rating, "G1", "G2", followed = true))
+        assertEquals("left, it stays keyed to the room left", "G1" to rating, ratingFollowing("G1" to rating, "G1", "G2", followed = false))
+        assertEquals("another room's stays its own", "G0" to rating, ratingFollowing("G0" to rating, "G1", "G2", followed = true))
+    }
+
+    /**
+     * Regression: volume defaulted to 0, so the app claimed a speaker sitting at 12 was at
+     * zero for the moment before its first `groupVolume` snapshot.
+     */
     @Test fun `volume is null until the speaker has said, not zero`() {
         assertNull("volume was reported before the speaker said anything", viewModel.uiState.value.volume)
     }

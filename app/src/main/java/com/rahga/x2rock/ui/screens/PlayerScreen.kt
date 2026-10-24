@@ -70,6 +70,7 @@ import com.rahga.x2rock.lan.SNOOZE_MINUTES
 import com.rahga.x2rock.smapi.Thumb
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -98,6 +99,7 @@ import com.rahga.x2rock.model.RepeatModes
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.handOffFocus
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.requestFocusSafely
@@ -173,14 +175,15 @@ fun PlayerPane(
     var previousFocused by remember { mutableStateOf(false) }
     val volumeEntry = VolumeEntry(open = { showSetVolume = true }, focus = volumeFocusRequester, focused = volumeFocused)
     var paneHasFocus by remember { mutableStateOf(false) }
+    val paneScope = rememberCoroutineScope()
 
     // Where focus starts, once, for the life of this pane.
     //
     // Deliberately not inside the controls themselves. The music pane and the TV pane are
     // separate composables, so every change of source re-enters one of them — and a grab
     // there pulls focus out of the room list while the viewer is still arrowing through it.
-    // HomeScreen owns the policy otherwise: it requests this pane on a right-press, when the
-    // sidebar hides, and on resume.
+    // HomeScreen owns the policy otherwise: a right-press from a room enters this pane, and its
+    // resume puts focus back on the room list or the Settings button, never here.
     //
     // On the way back from Queue, Browse or Search it starts on that button instead, from the first
     // frame. Starting on the primary control and leaving HomeScreen's resume handler to move it
@@ -277,6 +280,7 @@ fun PlayerPane(
                         onSeekBy = { viewModel.seekBy(it) },
                         onSeekTo = { viewModel.seekTo(it) },
                         onFocused = { seekFocused = it },
+                        onLeave = { paneScope.launch { detailFocusRequester.requestFocusRetrying() } },
                         caption = when {
                             nextFocused && state.actions.canSkip -> state.upNextLine()
                             previousFocused && state.actions.canSkipToPrevious -> state.previousLine()
@@ -302,7 +306,7 @@ fun PlayerPane(
                         onOpenGroup = onOpenGroup,
                         onNextFocused = { nextFocused = it },
                         onPreviousFocused = { previousFocused = it },
-                        alarm = if (state.ringingAlarm != null) { { AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester) } } else null,
+                        alarm = if (state.ringingAlarm != null) { { AlarmControls(viewModel, sidebarFocusRequester, detailFocusRequester, paneScope) } } else null,
                     )
                 }
             }
@@ -341,7 +345,7 @@ fun PlayerPane(
  * This row leaves the screen the moment the room stops, so a press on it takes the focused
  * button away from under the remote; focus then lands wherever Compose finds first, which on
  * the Shield was the settings gear. It is handed to Play/Pause instead, the control that was
- * one press below.
+ * one press below ([handFocusOnLeave], which every optional control in the pane now uses).
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -349,17 +353,15 @@ private fun AlarmControls(
     viewModel: PlayerViewModel,
     exitLeftFocusRequester: FocusRequester,
     playPauseFocusRequester: FocusRequester,
+    /** The pane's, which outlives this row: see [handFocusOnLeave]. */
+    rescue: CoroutineScope,
 ) {
-    var hadFocus by remember { mutableStateOf(false) }
-    DisposableEffect(Unit) {
-        onDispose { if (hadFocus) playPauseFocusRequester.requestFocusSafely() }
-    }
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
-            .focusGroup()
-            .onFocusChanged { hadFocus = it.hasFocus },
+            .handFocusOnLeave(playPauseFocusRequester, rescue)
+            .focusGroup(),
     ) {
         Text("Alarm", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.width(12.dp))
@@ -514,6 +516,37 @@ internal fun PlayerUiState.playPauseGlyph(): Pair<ImageVector, String> = when {
  */
 private fun Modifier.exitLeftTo(target: FocusRequester): Modifier = exitOnKey(Key.DirectionLeft, target)
 
+/**
+ * Hands focus to [target] when this control leaves the composition while it holds focus. The pane's
+ * optional controls are each drawn by a state bit the player can change under the viewer — Next at a
+ * queue's end, Save favorite on a track with no service id, Configure when a timer runs out on an
+ * empty room, the places row when an alarm rings — and a focused control leaving dropped focus, which
+ * the platform handed to the first room row: the viewer was in the pane and was then in the list,
+ * with no key pressed (P-102, P-64). [AlarmControls] had solved it for its own row. Retried from
+ * [scope], the pane's: the target may attach in the same frame, as Play/Pause's requester moves to
+ * Browse when the transport goes.
+ */
+@Composable
+private fun Modifier.handFocusOnLeave(target: FocusRequester, scope: CoroutineScope): Modifier {
+    val had = remember { booleanArrayOf(false) }
+    val gone = remember { booleanArrayOf(false) }
+    // Either order: Compose may report the loss before the composition lets go of the control, or
+    // not at all once it has. A loss followed within a frame by the control going is this case.
+    DisposableEffect(Unit) {
+        onDispose {
+            gone[0] = true
+            if (had[0]) scope.launch { target.requestFocusRetrying() }
+        }
+    }
+    return onFocusChanged { focus ->
+        if (had[0] && !focus.hasFocus) scope.launch {
+            withFrameNanos { }
+            if (gone[0]) target.requestFocusRetrying()
+        }
+        had[0] = focus.hasFocus
+    }
+}
+
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 private fun PlaybackControls(
@@ -552,6 +585,7 @@ private fun PlaybackControls(
     // disabled tv-material button takes focus and draws nothing, and the row would be
     // nothing but such buttons.
     val hasContent = state.actions.canPlay
+    val rescue = rememberCoroutineScope()
 
     // The pane's full width, so the rows centre on the pane: as wide as its widest row only, the
     // column sat at the left and centred them on itself, off the pane's middle.
@@ -565,7 +599,7 @@ private fun PlaybackControls(
                 // pair of thumbs all fit the pane at 1080p.
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.focusGroup()
+                modifier = Modifier.handFocusOnLeave(playPauseFocusRequester, rescue).focusGroup()
             ) {
                 // Drawn only where the source permits them. A live stream refuses skip, seek
                 // and shuffle outright, and a row of controls that cannot act is worse on a
@@ -580,7 +614,7 @@ private fun PlaybackControls(
                         icon = if (state.shuffle) Icons.Filled.ShuffleOn else Icons.Filled.Shuffle,
                         description = if (state.shuffle) "Shuffle, on" else "Shuffle, off",
                         onClick = { viewModel.toggleShuffle() },
-                        modifier = Modifier.claimExit(transportExit),
+                        modifier = Modifier.handFocusOnLeave(playPauseFocusRequester, rescue).claimExit(transportExit),
                     )
                 }
                 if (state.actions.canGoBack) {
@@ -588,7 +622,10 @@ private fun PlaybackControls(
                         icon = Icons.Filled.SkipPrevious,
                         description = "Previous",
                         onClick = { viewModel.skipToPreviousTrack() },
-                        modifier = Modifier.claimExit(transportExit).onFocusChanged { onPreviousFocused(it.isFocused) },
+                        modifier = Modifier
+                            .handFocusOnLeave(playPauseFocusRequester, rescue)
+                            .claimExit(transportExit)
+                            .onFocusChanged { onPreviousFocused(it.isFocused) },
                     )
                 }
                 AppButton(
@@ -620,7 +657,7 @@ private fun PlaybackControls(
                         icon = Icons.Filled.SkipNext,
                         description = "Next",
                         onClick = { viewModel.skipToNextTrack() },
-                        modifier = Modifier.onFocusChanged { onNextFocused(it.isFocused) },
+                        modifier = Modifier.handFocusOnLeave(playPauseFocusRequester, rescue).onFocusChanged { onNextFocused(it.isFocused) },
                     )
                 }
                 if (state.actions.canRepeat) {
@@ -636,6 +673,7 @@ private fun PlaybackControls(
                             else -> "Repeat, off"
                         },
                         onClick = { viewModel.cycleRepeat() },
+                        modifier = Modifier.handFocusOnLeave(playPauseFocusRequester, rescue),
                     )
                 }
                 // Drawn only where a press can succeed: the track has an id, its service needs no
@@ -676,6 +714,7 @@ private fun PlaybackControls(
             // so it reaches LABEL_OVERHANG past the pane on both sides and its content is inset by
             // the same, leaving the buttons where they were and room for a name at either end.
             modifier = Modifier
+                .handFocusOnLeave(playPauseFocusRequester, rescue)
                 .lowerZone("places")
                 .overhang(LABEL_OVERHANG)
                 .focusGroup()
@@ -703,20 +742,23 @@ private fun PlaybackControls(
             )
             PlaceButton(Icons.Filled.Search, "Search", onOpenSearch, Modifier.focusRequester(searchFocusRequester))
             if (state.canSaveFavorite) {
-                PlaceButton(Icons.Outlined.StarBorder, "Save favorite", viewModel::saveFavorite)
+                PlaceButton(
+                    Icons.Outlined.StarBorder, "Save favorite", viewModel::saveFavorite,
+                    Modifier.handFocusOnLeave(playPauseFocusRequester, rescue),
+                )
             }
             GroupButton(onOpenGroup, groupFocusRequester)
             // With nothing loaded there is nothing for a timer to stop, so it goes with the
             // transport. Kept while one is running, so a timer is never there and unseen.
             if (hasContent || state.sleepTimerEndsAt != null) {
-                ConfigureButton(state, onOpenConfigure, configureFocusRequester)
+                ConfigureButton(state, onOpenConfigure, configureFocusRequester, Modifier.handFocusOnLeave(playPauseFocusRequester, rescue))
             }
             // The room's music on the whole screen, for an hour of listening; with nothing loaded
             // there is nothing to show there.
             if (hasContent) {
                 PlaceButton(
                     Icons.Filled.Fullscreen, "Full screen", onOpenNowPlaying,
-                    Modifier.focusRequester(nowPlayingFocusRequester),
+                    Modifier.handFocusOnLeave(playPauseFocusRequester, rescue).focusRequester(nowPlayingFocusRequester),
                 )
             }
         }

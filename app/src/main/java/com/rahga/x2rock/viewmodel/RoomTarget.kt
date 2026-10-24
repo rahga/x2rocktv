@@ -27,7 +27,7 @@ import com.rahga.x2rock.model.followingRoom
  */
 class RoomTarget(private val household: SonosHousehold, private val saved: SavedStateHandle) {
 
-    private val openedOn: String = checkNotNull(saved[GROUP]) { "a room screen opened with no group" }
+    private val openedOn: String get() = checkNotNull(saved[GROUP]) { "a room screen opened with no group" }
     private val room = SavedRoom(saved, "room")
 
     init {
@@ -40,8 +40,22 @@ class RoomTarget(private val household: SonosHousehold, private val saved: Saved
 
     /** Note the opened group's speakers while it exists, so they can be followed once it does not. */
     private fun learn() {
-        val group = household.state.value.groups.firstOrNull { it.id == openedOn } ?: return
-        if (room.refresh(group)) saved[NAME] = group.name
+        val state = household.state.value
+        state.groups.firstOrNull { it.id == openedOn }?.let { if (room.refresh(it)) saved[NAME] = it.name }
+        // Opened on a party the room only joined, the group's name is the host's and is never kept:
+        // the room's own speaker names it, or every press said "That room is no longer…" (P-106).
+        if (saved.get<String>(NAME) == null) state.players.firstOrNull { it.id == room.coordinator }?.let { saved[NAME] = it.name }
+    }
+
+    /**
+     * The viewer's room is now the one holding [playerId]: something this screen started formed it,
+     * and the screen stays open on it. Nothing if no group holds it.
+     */
+    fun choose(playerId: String) {
+        val group = household.state.value.groups.firstOrNull { playerId in it.playerIds } ?: return
+        saved[GROUP] = group.id
+        room.remember(group)
+        saved[NAME] = group.name
     }
 
     /** The room's group now, or `null` when it is no longer in the household at all. */
@@ -49,6 +63,11 @@ class RoomTarget(private val household: SonosHousehold, private val saved: Saved
         val groups = household.state.value.groups
         val followed = room.findIn(groups)
         if (groups.any { it.id == openedOn } && (followed == null || followed.id == openedOn)) return openedOn.also { learn() }
+        // Kept up to date as the room is followed, as the home screen and the player keep theirs:
+        // frozen at what the screen opened on, a room that grew and then lost the speaker the
+        // screen opened with was "no longer in this system" here while the pane beside it had
+        // followed it to the speaker left (P-106).
+        followed?.let { if (room.refresh(it)) saved[NAME] = it.name }
         return followed?.id
     }
 
@@ -123,11 +142,18 @@ internal class SavedRoom(private val saved: SavedStateHandle, private val key: S
 
     /**
      * [group] is where the room is now: kept as the room if it is the room's own — coordinated by the
-     * same speaker — or nothing is kept yet. True if it was.
+     * same speaker, or by another of the very speakers kept — or nothing is kept yet. True if it was.
+     *
+     * The second because coordination can move inside a room: a grouped soundbar taking the TV takes
+     * the group with it. Refused, the anchor kept the old coordinator, and a later split went with
+     * that speaker rather than the soundbar's room the viewer was sitting at (P-117). A party is never
+     * that: its host is not among the speakers kept.
      */
     fun refresh(group: Group): Boolean {
         val kept = coordinator
-        if (kept != null && kept != group.coordinatorId) return false
+        if (kept != null && kept != group.coordinatorId && group.playerIds.toSet() != players.toSet()) return false
+        // Unchanged is not written again: this runs on every event in the house.
+        if (kept == group.coordinatorId && group.playerIds == players) return true
         remember(group)
         return true
     }

@@ -184,6 +184,53 @@ class HomeViewModelTest {
         withTimeout(5_000) { viewModel.selectedGroupId.first { it == joined.id } }
     }
 
+    /**
+     * A tile names a speaker in another room's party: the selection anchored on the party's host, so
+     * when the party split, the host keeping its id, it stayed with the host, not the tile's room (P-116).
+     */
+    @Test fun `a tile opened on a party member stays with its room when the party splits`() = runBlocking<Unit> {
+        val state = connect()
+        val guestSpeaker = state.groups.first { it.name == "Guest TV" }.coordinatorId
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val party = withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { guestSpeaker in it.playerIds && it.coordinatorId != guestSpeaker } }
+        }.groups.first { guestSpeaker in it.playerIds }
+        deepLink.set(guestSpeaker)
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == party.id } }
+
+        fake.pushTopology(splitKeepingHost(party.id, hostRoom = "Kitchen", memberRoom = "Guest TV"))
+        val alone = withTimeout(5_000) {
+            household.state.first { s -> s.groups.size == 5 && s.groups.any { it.coordinatorId == guestSpeaker } }
+        }.groups.first { it.coordinatorId == guestSpeaker }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == alone.id } }
+    }
+
+    /**
+     * Kitchen + Guest TV chosen, Kitchen coordinating; Guest TV's soundbar takes the TV and the group
+     * with it — the same two speakers, Guest TV coordinating. The anchor refused that and kept Kitchen,
+     * so when the two were split the selection went to Kitchen, away from the TV room (P-117).
+     */
+    @Test fun `coordination moving inside the chosen room moves the anchor with it`() = runBlocking<Unit> {
+        connect()
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Kitchen", memberRoom = "Guest TV"))
+        val together = withTimeout(5_000) { household.state.first { s -> s.groups.any { it.playerIds.size == 2 } } }
+            .groups.first { it.playerIds.size == 2 }
+        viewModel.selectGroup(together.id)
+        val guestSpeaker = together.playerIds.first { it != together.coordinatorId }
+
+        fake.pushTopology(FakePlayer.groupedTopology(coordinatorRoom = "Guest TV", memberRoom = "Kitchen"))
+        val handed = withTimeout(5_000) {
+            household.state.first { s -> s.groups.any { it.playerIds.size == 2 && it.coordinatorId == guestSpeaker } }
+        }.groups.first { it.playerIds.size == 2 }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == handed.id } }
+        // The refresh is the view model's own collector: give it the event before the split.
+        kotlinx.coroutines.delay(300)
+
+        fake.pushTopology(FakePlayer.reachableTopology())
+        val guest = withTimeout(5_000) { household.state.first { s -> s.groups.size == 5 } }.groups.first { it.coordinatorId == guestSpeaker }
+        withTimeout(5_000) { viewModel.selectedGroupId.first { it == guest.id } }
+    }
+
     /** A tile published before tiles were keyed by player carries a group id; it still opens. */
     @Test fun `a tile carrying a group id still opens its room`() = runBlocking<Unit> {
         val state = connect()

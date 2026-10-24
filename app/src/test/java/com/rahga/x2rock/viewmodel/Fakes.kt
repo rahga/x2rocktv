@@ -100,8 +100,12 @@ class RecordingNowPlaying : NowPlayingPublisher {
         states += State(playing, idle, positionMillis, actions)
     }
 
-    /** Whether a media session is being advertised at all; false on a soundbar's TV input. */
-    var presenting: Boolean = true
+    /**
+     * Whether a media session is being advertised at all; false on a soundbar's TV input. Starts
+     * false, as the real publisher's session does: started true, "nothing is advertised while still
+     * connecting" was never exercised (P-125).
+     */
+    var presenting: Boolean = false
         private set
 
     override fun setPresenting(presenting: Boolean) { this.presenting = presenting }

@@ -31,10 +31,10 @@ import org.junit.runner.RunWith
 class DpadMenuKeyTest {
     @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
 
-    private fun key(action: Int, code: Int = AndroidKeyEvent.KEYCODE_MENU, repeat: Int = 0) {
+    private fun key(action: Int, code: Int = AndroidKeyEvent.KEYCODE_MENU, repeat: Int = 0, flags: Int = 0) {
         compose.runOnIdle {
             val now = SystemClock.uptimeMillis()
-            compose.activity.dispatchKeyEvent(AndroidKeyEvent(now, now, action, code, repeat))
+            compose.activity.dispatchKeyEvent(AndroidKeyEvent(now, now, action, code, repeat, 0, -1, 0, flags))
         }
         compose.waitForIdle()
     }
@@ -115,5 +115,42 @@ class DpadMenuKeyTest {
         key(AndroidKeyEvent.ACTION_DOWN)
         key(AndroidKeyEvent.ACTION_UP)
         compose.runOnIdle { assertEquals("the next deliberate press still works", 1, nextActions) }
+    }
+
+    /**
+     * P-37/P-38's mechanism, with Select: a hold that hands focus to another row, whose click then
+     * fired on that hold's release — the item menu closed as it opened, the last preset's deletion
+     * clicked Back. A release is a click only where its press began (`ignoreUnpressedRelease`, P-125).
+     */
+    @Test fun aHoldsReleaseDoesNotClickTheRowItMovedFocusTo() {
+        val first = FocusRequester()
+        val next = FocusRequester()
+        var nextClicks = 0
+        compose.setContent {
+            X2RockTheme {
+                Column {
+                    MediaRow(
+                        title = "First row", subtitle = null, artUrl = null,
+                        modifier = Modifier.focusRequester(first), onClick = {},
+                        onLongClick = { next.requestFocus() },
+                    )
+                    MediaRow(
+                        title = "Next row", subtitle = null, artUrl = null,
+                        modifier = Modifier.focusRequester(next), onClick = { nextClicks++ },
+                    )
+                }
+            }
+        }
+        compose.runOnIdle { first.requestFocus() }
+        val center = AndroidKeyEvent.KEYCODE_DPAD_CENTER
+        key(AndroidKeyEvent.ACTION_DOWN, center)
+        for (repeat in 1..3) key(AndroidKeyEvent.ACTION_DOWN, center, repeat, AndroidKeyEvent.FLAG_LONG_PRESS)
+        compose.onNodeWithText("Next row").assertIsFocused()
+        key(AndroidKeyEvent.ACTION_UP, center)
+        compose.runOnIdle { assertEquals("the hold's release clicked the row it moved focus to", 0, nextClicks) }
+
+        key(AndroidKeyEvent.ACTION_DOWN, center)
+        key(AndroidKeyEvent.ACTION_UP, center)
+        compose.runOnIdle { assertEquals("a press of its own still clicks", 1, nextClicks) }
     }
 }

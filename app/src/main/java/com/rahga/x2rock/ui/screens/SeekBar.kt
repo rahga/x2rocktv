@@ -1,5 +1,6 @@
 package com.rahga.x2rock.ui.screens
 
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -64,6 +65,8 @@ internal fun ProgressBar(
     onSeekBy: (Long) -> Unit,
     onSeekTo: (Long) -> Unit,
     onFocused: (Boolean) -> Unit = {},
+    /** The bar stopped taking focus while it had it: see the effect on `seekable` below. */
+    onLeave: () -> Unit = {},
     /** "Up next · …" or "Previous · …", drawn between the times while set: see PlayerPane's nextFocused. */
     caption: String? = null,
 ) {
@@ -132,8 +135,24 @@ internal fun ProgressBar(
     // line would be a hard thing to hit. Started once and reading the latest handler, as
     // tapToClick does: the displayed position is a new state at every report, and a stale
     // handler measured from an old one.
+    // `canSeek` is per content, so it can go under the viewer — the next track an artist station's —
+    // and the bar stops being focusable with focus on it. That drops focus, and the platform handed it
+    // to the first room row (P-102). Said once, as it goes.
+    var lostAt by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(seekable) {
+        // Focused still, or lost with the change: Compose may report the loss as the bar lets go.
+        if (!seekable && (isFocused || SystemClock.uptimeMillis() - lostAt < LEAVE_WINDOW_MILLIS)) {
+            isFocused = false
+            onFocused(false)
+            onLeave()
+        }
+    }
     val seekControls = if (!seekable) Modifier else Modifier
-        .onFocusChanged { isFocused = it.isFocused; onFocused(it.isFocused) }
+        .onFocusChanged {
+            if (isFocused && !it.isFocused) lostAt = SystemClock.uptimeMillis()
+            isFocused = it.isFocused
+            onFocused(it.isFocused)
+        }
         .focusable()
         .pointerInput(Unit) {
             detectTapGestures { offset -> tapAt(offset.x / size.width) }
@@ -273,3 +292,6 @@ internal fun Long.toTimeString(): String {
     return if (hours > 0) "%d:%02d:%02d".format(java.util.Locale.ROOT, hours, minutes, seconds)
            else "%d:%02d".format(java.util.Locale.ROOT, minutes, seconds)
 }
+
+/** How recent a focus loss must be to count as the bar's own leaving: see `ProgressBar`. */
+private const val LEAVE_WINDOW_MILLIS = 500L

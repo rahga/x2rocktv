@@ -1,5 +1,7 @@
 package com.rahga.x2rock.ui.screens
 
+import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rahga.x2rock.ui.components.SignInsNote
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
@@ -103,6 +105,13 @@ fun ServiceBrowseScreen(
     // The row a service was opened from, so Back lands on it rather than on the first row. Saved,
     // because Apple Music is a screen of its own and this one is rebuilt on the way back.
     var opened by rememberSaveable { mutableStateOf<String?>(null) }
+    // Where focus goes when what it was on is replaced by a failure's words: with nothing asked, the
+    // next arrow landed on Back and a reflexive Select left the service (P-119, as P-52).
+    val backFocus = remember { FocusRequester() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(services is ServiceBrowseViewModel.Services.Failed) {
+        if (services is ServiceBrowseViewModel.Services.Failed && active == null) backFocus.requestFocusWhenResumed(lifecycle)
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
@@ -112,6 +121,7 @@ fun ServiceBrowseScreen(
                     title = active?.title(ready?.services.orEmpty()) ?: "Music Services",
                     room = room,
                     onBack = back,
+                    backModifier = Modifier.focusRequester(backFocus),
                 ) { StayPin(afterPlaying) }
                 Spacer(Modifier.height(20.dp))
 
@@ -130,7 +140,7 @@ fun ServiceBrowseScreen(
                         onOpenAppleMusic = { opened = Entry.Apple.key; onOpenAppleMusic(viewModel.route) },
                     )
                 } else {
-                    ServicePage(viewModel, service, room, onPlayed)
+                    ServicePage(viewModel, service, room, onPlayed, backFocus)
                 }
             }
             // Over the whole screen, not inside the column: there the list takes every pixel of
@@ -269,7 +279,14 @@ internal fun ServiceRow(
 /** One service, opened: its library, or its page of shelves, with its search one press up. */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedService, room: String, onPlayed: () -> Unit) {
+private fun ServicePage(
+    viewModel: ServiceBrowseViewModel,
+    service: LinkedService,
+    room: String,
+    onPlayed: () -> Unit,
+    /** The header's Back, for a level that failed with nothing else to press. */
+    backFocus: FocusRequester,
+) {
     val categories by viewModel.categories.collectAsState()
     val category by viewModel.category.collectAsState()
     val query by viewModel.query.collectAsState()
@@ -283,6 +300,13 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
     val resume by viewModel.resume.collectAsState()
     val fieldFocus = remember { FocusRequester() }
     val resultsFocus = remember { FocusRequester() }
+    val searchButtonFocus = remember { FocusRequester() }
+    // A level that fails replaces the rows focus was on with its words: focus goes to the search, one
+    // press up as always, or to Back where the service has none — never left to fall (P-119).
+    LaunchedEffect(results is ServiceBrowseViewModel.Results.Failed) {
+        if (results !is ServiceBrowseViewModel.Results.Failed || searching) return@LaunchedEffect
+        if (!(categories.isNotEmpty() && searchButtonFocus.requestFocusRetrying())) backFocus.requestFocusRetrying()
+    }
     // The field takes focus, and with it the keyboard, only on stepping into the search — never on
     // opening the service, which used to cover half the screen with a keyboard before anything was
     // asked for. Retried, because the field is composed in the same frame the flag turns.
@@ -314,7 +338,7 @@ private fun ServicePage(viewModel: ServiceBrowseViewModel, service: LinkedServic
         // the library is what a remote meets first.
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (categories.isNotEmpty()) {
-                AppButton(onClick = viewModel::openSearch) {
+                AppButton(onClick = viewModel::openSearch, modifier = Modifier.focusRequester(searchButtonFocus)) {
                     Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Search ${service.service.name}")
