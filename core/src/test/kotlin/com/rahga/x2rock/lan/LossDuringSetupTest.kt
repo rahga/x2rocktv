@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -17,6 +18,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.Executors
 
 /**
  * What a set-up does when something happens to it part-way: it is cancelled, it loses the
@@ -118,5 +120,59 @@ class LossDuringSetupTest {
             fake.commandsNamed("subscribe", "playback:1") > before,
         )
         assertEquals(before + 1, fake.commandsNamed("subscribe", "playback:1"))
+    }
+
+    /**
+     * The same loss, landing while the group's last subscribe reply is still out: a firmware that
+     * ignores `sleepTimer:1` keeps it out for the whole reply timeout. The group used to be marked
+     * subscribed only after that reply, so the loss found nothing to unmark and the mark that
+     * followed stood over the dead socket (P-103).
+     */
+    @Test(timeout = 30_000) fun `a coordinator lost while its last subscribe reply is out is subscribed again`() = runBlocking {
+        // One thread, as a TV's main-bound scope can be: the loss's handler is then dispatched
+        // ahead of the waiter it failed, which is the order that left the mark standing.
+        val one = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
+        val oneScope = CoroutineScope(SupervisorJob() + one)
+        household.disconnect()
+        household = fakeHousehold(
+            fake,
+            oneScope,
+            seeds = FakeSeedStore(keyedByNetwork = true, held = fake.seed),
+            ssdp = { listOf(fake.seed) },
+        )
+        try {
+            lostWhileTheLastReplyIsOut()
+        } finally {
+            household.disconnect()
+            oneScope.cancel()
+            one.close()
+        }
+    }
+
+    private suspend fun lostWhileTheLastReplyIsOut() {
+        val state = household.connectTo(fake)
+        withTimeout(5_000) { while (fake.commandsNamed("subscribe", "playerVolume:1") < state.players.size) delay(50) }
+        val other = state.groups.first { it.coordinatorId != fake.id }
+        fake.clearHistory()
+        fake.holdReplyAside { header ->
+            header.get("namespace")?.asString == "sleepTimer:1" && header.get("groupId")?.asString == other.id
+        }
+        household.onNetworkChanged()
+        fake.awaitCommand(5_000) { it.get("namespace")?.asString == "sleepTimer:1" && it.get("groupId")?.asString == other.id }
+        // The other three are answered at once; the drop has to land after them, before the fourth.
+        delay(300)
+        val subscribes = {
+            fake.commandsMatching {
+                it.get("namespace")?.asString == "playback:1" && it.get("command")?.asString == "subscribe" &&
+                    it.get("groupId")?.asString == other.id
+            }
+        }
+        val before = subscribes()
+        fake.dropConnection(other.coordinatorId)
+        fake.releaseReplies()
+        withTimeout(10_000) { reconnectJob()?.join() }
+        val deadline = System.currentTimeMillis() + 8_000
+        while (subscribes() <= before && System.currentTimeMillis() < deadline) delay(100)
+        assertTrue("${other.name}'s group was left marked subscribed over its dead socket", subscribes() > before)
     }
 }

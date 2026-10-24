@@ -124,4 +124,24 @@ class SupersededConnectTest {
             household.disconnect()
         }
     }
+
+    /**
+     * SSDP drew nothing and the connect is waiting on mDNS when it is cancelled. The fallback
+     * swallowed the cancellation, so the attempt went on to "no Sonos players answered on this
+     * network", wrote it as the error and threw it at the caller — superseded read as failed (P-104).
+     */
+    @Test(timeout = 20_000) fun `a connect cancelled during the mDNS fallback is not a failure`() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val household = fakeHousehold(fake, scope, mdns = { entered.complete(Unit); release.await(); emptyList() })
+        try {
+            val connecting = async(Dispatchers.Default) { runCatching { household.connect() } }
+            withTimeout(5_000) { entered.await() }
+            household.disconnect()
+            val outcome = withTimeout(5_000) { connecting.await() }
+            assertNull("the cancelled connect threw: ${outcome.exceptionOrNull()}", outcome.exceptionOrNull())
+            assertNull("a cancellation was written as an error", household.state.value.error)
+        } finally {
+            household.disconnect()
+        }
+    }
 }

@@ -1,7 +1,10 @@
 package com.rahga.x2rock.lan
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -17,6 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import java.net.InetAddress
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Two Sonos systems on one network — an office running two, say — and nothing remembered.
@@ -93,6 +97,43 @@ class TwoHouseholdsTest {
         assertEquals(fake.householdId, state.householdId)
         assertTrue(state.householdChoices.isEmpty())
         assertEquals(fake.id, seeds.held?.id)
+    }
+
+    /**
+     * The chooser is up and something — the channel receiver, a Retry — sweeps again. A household
+     * chosen during that sweep used to wait on it, and the sweep only asked the question again:
+     * the chooser came back and the press did nothing (P-111).
+     */
+    @Test(timeout = 20_000) fun `a household chosen while a sweep is under way is connected`() = runBlocking<Unit> {
+        val sweeps = AtomicInteger()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val gated = fakeHousehold(
+            fake,
+            scope,
+            addressBook = PlayerAddressBook(),
+            upnpPort = status.port,
+            ssdp = {
+                if (sweeps.incrementAndGet() == 2) { entered.complete(Unit); release.await() }
+                bothHouseholds()
+            },
+        )
+        try {
+            runCatching { gated.connect() }
+            val choice = gated.state.value.householdChoices.first { it.label == "Kitchen" }
+            val sweep = async(Dispatchers.Default) { runCatching { gated.connect() } }
+            withTimeout(5_000) { entered.await() }
+            val choosing = async(Dispatchers.Default) { gated.chooseHousehold(choice) }
+            val state = withTimeout(10_000) { gated.state.first { it.connected } }
+            release.complete(Unit)
+            withTimeout(5_000) { choosing.await(); sweep.await() }
+            assertEquals(fake.householdId, state.householdId)
+            assertTrue("the chooser came back", gated.state.value.householdChoices.isEmpty())
+            assertTrue(gated.state.value.connected)
+        } finally {
+            release.complete(Unit)
+            gated.disconnect()
+        }
     }
 
     /** The office case, SSDP dropped, with two systems on it: mDNS must not guess either. */

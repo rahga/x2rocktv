@@ -17,6 +17,7 @@ import okhttp3.tls.HeldCertificate
 import java.net.InetAddress
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 
 /**
  * A Sonos household, near enough to test against.
@@ -81,11 +82,18 @@ class FakePlayer(
     fun commandsNamed(command: String, namespace: String? = null): Int =
         commandLog.count { (ns, c) -> c == command && (namespace == null || ns == namespace) }
 
+    /** Every command's header in order, never consumed: [commandLog] for what a name cannot pick out. */
+    private val headerLog = mutableListOf<JsonObject>()
+
+    @Synchronized
+    fun commandsMatching(header: (JsonObject) -> Boolean): Int = headerLog.count(header)
+
     @Synchronized
     fun clearHistory() {
         received.clear()
         bodies.clear()
         commandLog.clear()
+        headerLog.clear()
     }
 
     /** The body of the most recent [command], or null if it was never sent. */
@@ -436,9 +444,26 @@ class FakePlayer(
         heldCommand.set(command)
     }
 
+    /**
+     * Hold the reply to the first command whose header matches [header] until [releaseReplies],
+     * *aside*: the socket goes on answering the rest meanwhile, as a player does whose firmware
+     * ignores one namespace of four sent at once.
+     */
+    fun holdReplyAside(header: (JsonObject) -> Boolean) {
+        releaseLatch.set(CountDownLatch(1))
+        heldAside.set(header)
+    }
+
     fun releaseReplies() {
         heldCommand.set(null)
+        heldAside.set(null)
         releaseLatch.get().countDown()
+    }
+
+    private fun heldAside(header: JsonObject): CountDownLatch? {
+        val held = heldAside.get() ?: return null
+        if (!held(header) || !heldAside.compareAndSet(held, null)) return null
+        return releaseLatch.get()
     }
 
     private fun awaitRelease(command: String?) {
@@ -464,6 +489,7 @@ class FakePlayer(
 
     private val heldCommand = java.util.concurrent.atomic.AtomicReference<String?>(null)
     private val releaseLatch = java.util.concurrent.atomic.AtomicReference(CountDownLatch(0))
+    private val heldAside = java.util.concurrent.atomic.AtomicReference<((JsonObject) -> Boolean)?>(null)
 
     private fun upgrade(host: String) = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -491,6 +517,7 @@ class FakePlayer(
                 synchronized(this@FakePlayer) {
                     bodies += command to body
                     commandLog += header.get("namespace")?.asString to command
+                    headerLog += header
                 }
             }
             // The topology as it stood when the command arrived, which is what a player judges it by.
@@ -499,6 +526,13 @@ class FakePlayer(
             // "Incorrect groupId", once on CI and twice under load here (PUNCH P-17).
             val topology = groups
             received += header
+            heldAside(header)?.let { latch ->
+                thread(isDaemon = true) {
+                    latch.await(10, TimeUnit.SECONDS)
+                    reply(webSocket, header, host, topology)
+                }
+                return
+            }
             awaitRelease(header.get("command")?.asString)
             reply(webSocket, header, host, topology)
         }

@@ -347,6 +347,31 @@ class ServiceSearchTest {
         assertEquals("and it is the account Apple Music plays with", "sn_19", household.appleMusicAccount())
     }
 
+    /**
+     * Home's Apple Music check and the first search used to take a capture each, two at once
+     * when Search opened before Home's had landed (P-115). One read serves a session.
+     */
+    @Test fun `the stored sign-ins are read once a session`() = runBlocking {
+        connected()
+        assertEquals("sn_19", household.storedAppleMusicAccount())
+        household.searchableServices()
+        assertEquals("sn_19", household.storedAppleMusicAccount())
+        assertEquals(1, captures.get())
+    }
+
+    /**
+     * A sign-ins read that fails is not an answer. The service list's read used to mark Apple
+     * Music as read and absent for the session on one unreachable moment, which dropped it from
+     * Music Services and Search on a household that stores it (P-110).
+     */
+    @Test fun `a failed sign-ins read leaves Apple Music to be asked again`() = runBlocking {
+        captureFailure = java.net.ConnectException("Connection refused")
+        connected()
+        household.searchableServices()
+        captureFailure = null
+        assertEquals("sn_19", household.storedAppleMusicAccount())
+    }
+
     @Test fun `no stored Apple Music sign-in means no stored Apple account`() = runBlocking {
         envelope = null
         connected()

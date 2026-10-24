@@ -279,14 +279,6 @@ class LiveHouseholdTest {
     }
 
     /**
-     * Every key path in a document, ignoring values and array length.
-     *
-     * Unions across *all* array elements rather than sampling the first. Players differ
-     * from one another — a stereo pair carries fields a single speaker does not — and the
-     * order they arrive in is not stable, so sampling one made the comparison report
-     * ordering as drift. That was this test's own first finding, about itself.
-     */
-    /**
      * Read-only. The household's UPnP switch, as `SonosHousehold` reads it off the seed:
      * captured on the office One SL, 2026-10-01. Nothing asserts which way it is set.
      */
@@ -316,6 +308,14 @@ class LiveHouseholdTest {
         }
     }
 
+    /**
+     * Every key path in a document, ignoring values and array length.
+     *
+     * Unions across *all* array elements rather than sampling the first. Players differ
+     * from one another — a stereo pair carries fields a single speaker does not — and the
+     * order they arrive in is not stable, so sampling one made the comparison report
+     * ordering as drift. That was this test's own first finding, about itself.
+     */
     private fun shapeOf(element: JsonElement, prefix: String = ""): Set<String> = when {
         element.isJsonObject -> element.asJsonObject.entrySet().flatMap { (key, value) ->
             listOf("$prefix.$key") + shapeOf(value, "$prefix.$key")
