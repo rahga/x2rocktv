@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
@@ -57,5 +58,12 @@ class RadioDirectoryTest {
         rows[1].asJsonObject.addProperty("url_resolved", "")
         server.enqueue(MockResponse().setBody(rows.toString()))
         assertEquals(2, directory.stations().size)
+    }
+
+    /** A mirror answering a web page with 200 is said in words, not in Gson's (P-113). */
+    @Test fun `a page that is not the directory's list is said as such`() = runBlocking<Unit> {
+        server.enqueue(MockResponse().setBody("<html><body>Sign in to this network</body></html>"))
+        val failure = runCatching { directory.stations("jazz") }.exceptionOrNull()
+        assertTrue("$failure", failure is java.io.IOException && failure.message == "it sent back something other than a station list")
     }
 }

@@ -49,8 +49,8 @@ object StoredAccounts {
     /**
      * Decrypt the `ThirdPartyMediaServersX` envelope into the accounts it holds.
      *
-     * [householdId] is the **short** form (`Sonos_xxxxx`, no `.suffix`), as `GetHouseholdID`
-     * returns it — not the long form the SMAPI/Control header wants. A wrong household id
+     * [householdId] is the **short** form (`Sonos_xxxxx`, no `.suffix`): the long id `/status/zp`
+     * gives, cut at its dot — not the long form the SMAPI/Control header wants. A wrong household id
      * fails the integrity check rather than returning nonsense.
      */
     fun decryptAccounts(encoded: String, householdId: String, salt: ByteArray): List<StoredAccount> =

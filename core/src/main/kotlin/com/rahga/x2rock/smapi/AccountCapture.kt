@@ -37,7 +37,10 @@ object AccountCapture {
 
     private const val PLAYER_PORT = 1400
 
-    /** How long one connected player may take to send its NOTIFY. */
+    /**
+     * How long one connected player may take to answer: the SUBSCRIBE's connect and reply, and
+     * then the whole NOTIFY exchange.
+     */
     private const val READ_TIMEOUT_MILLIS = 5_000
 
     /**

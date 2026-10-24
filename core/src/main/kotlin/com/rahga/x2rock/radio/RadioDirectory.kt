@@ -3,6 +3,7 @@ package com.rahga.x2rock.radio
 import com.rahga.x2rock.lan.awaitReply
 import com.rahga.x2rock.smapi.USER_AGENT
 import com.google.gson.Gson
+import com.google.gson.JsonParseException
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +68,12 @@ class RadioDirectory(
                 if (!response.isSuccessful) throw IOException("the radio directory answered HTTP ${response.code}")
                 response.body
             }
-            val rows: List<Row> = gson.fromJson(body, object : TypeToken<List<Row>>() {}.type) ?: emptyList()
+            // A mirror answering a web page with 200 reached the viewer in Gson's words (P-113).
+            val rows: List<Row> = try {
+                gson.fromJson(body, object : TypeToken<List<Row>>() {}.type) ?: emptyList()
+            } catch (e: JsonParseException) {
+                throw IOException("it sent back something other than a station list", e)
+            }
             rows.mapNotNull { it.toStation() }
         }
 

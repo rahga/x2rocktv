@@ -20,7 +20,7 @@ import org.w3c.dom.Element
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-/**
+/*
  * SMAPI: talking directly to the music service that carries an item — not a Sonos API. Sonos
  * is the client here and the service is the server, so this is the one part of the app that
  * leaves both the LAN and Sonos itself: a service's presentation map and manifest live on
@@ -49,6 +49,9 @@ internal const val USER_AGENT = "x2rock-tv/1.0"
 
 /** Short: every call here is a viewer waiting on a press, not a background job. */
 private const val TIMEOUT_SECONDS = 8L
+
+/** Refresh faults one call takes before it gives up: see `SmapiClient.call`. */
+private const val MAX_REFRESHES = 2
 
 /** How a service expects to be authenticated, from its `<Policy Auth=...>`. */
 enum class Auth { ANONYMOUS, DEVICE_LINK, APP_LINK }
@@ -130,7 +133,7 @@ data class Shelf(val title: String, val items: List<Item>)
  */
 fun parseShelves(json: String): List<Shelf> {
     val root = runCatching { JsonParser.parseString(json).asJsonObject }.getOrNull() ?: return emptyList()
-    val views = root.getAsJsonArray("views") ?: return emptyList()
+    val views = root.get("views")?.takeIf { it.isJsonArray }?.asJsonArray ?: return emptyList()
     // Row by row: a JSON null where a string or object is expected throws in Gson, and one odd row
     // must not throw the whole page away (it would fall back to the SMAPI root, silently).
     return views.mapNotNull { v -> runCatching { shelf(v) }.getOrNull() }
@@ -306,7 +309,7 @@ class SmapiClient(
     /**
      * A service's rating rules, from its presentation map — empty if it publishes none,
      * which is the ordinary case: ratings are a Pandora/iHeartRadio-shaped radio feature,
-     * not a Sonos-wide capability.
+     * not a Sonos-wide capability. A manifest or map that could not be had throws (P-45).
      */
     suspend fun ratings(service: Service): List<RatingsMatch> = withContext(Dispatchers.IO) {
         presentationMap(service)?.let { parseRatingsMap(it) } ?: emptyList()
@@ -407,7 +410,7 @@ class SmapiClient(
     /**
      * The categories a service will accept in `search`, from its presentation map — empty when
      * it publishes none, which is a fact about the service (it cannot be searched, only
-     * browsed) rather than an error.
+     * browsed) rather than an error. A manifest or map that could not be had throws (P-45).
      */
     suspend fun categories(service: Service): List<Category> = withContext(Dispatchers.IO) {
         presentationMap(service)?.let { parseSearchCategories(it) } ?: emptyList()
@@ -429,7 +432,8 @@ class SmapiClient(
      * service's page, rather than SMAPI's `root`. Empty when its manifest declares no `browse`
      * endpoint, or the endpoint does not answer. [stored] goes as a bearer: with it, Spotify answers
      * its personal page (22 views where SMAPI's root has 5 rows) and Deezer its own (2026-10-11);
-     * Amazon Music answers 401 to it, TuneIn 403 and Apple Music 500, and fall back to the root.
+     * Amazon Music answers 401 to it and Apple Music 500, and fall back to the root; TuneIn answers
+     * this client 200 with it (2026-10-12; its 403 was Cloudflare refusing a Python client).
      *
      * Sonos Radio is why: its SMAPI root is empty, yet its manifest names
      * `https://sali.sonos.superhi.fi/browse/v1`, which answers anonymously with twenty-eight shelves
@@ -440,8 +444,10 @@ class SmapiClient(
         val manifest = service.manifestUri?.let { fetch(it, null).body } ?: return@withContext emptyList()
         val endpoint = runCatching { JsonParser.parseString(manifest).asJsonObject.getAsJsonArray("endpoints") }.getOrNull()
             ?.mapNotNull { it.takeIf { e -> e.isJsonObject }?.asJsonObject }
-            ?.firstOrNull { it.get("type")?.asString == "browse" }
-            ?.get("uri")?.asString ?: return@withContext emptyList()
+            // Guarded as every other read of this JSON is: a JSON null where a string is expected
+            // throws in Gson, and threw the service's whole page away (P-114).
+            ?.firstOrNull { it.str("type") == "browse" }
+            ?.str("uri") ?: return@withContext emptyList()
         // The token a refresh fault handed back, where one has: the stored one is what aged.
         fun bearer() = stored?.let { (refreshed[it.token] ?: it).token }
         val first = bearer()
@@ -504,7 +510,15 @@ class SmapiClient(
     private fun id(value: String) = "<id>${Xml.escape(value)}</id>"
 
     /** One SMAPI call. A service that needs an account is refused here, not sent and rejected. */
-    private suspend fun call(service: Service, stored: Token?, action: String, params: String, retried: Boolean = false): String {
+    private suspend fun call(
+        service: Service,
+        stored: Token?,
+        action: String,
+        params: String,
+        retried: Boolean = false,
+        /** Refresh faults already taken by this call. */
+        refreshes: Int = 0,
+    ): String {
         val token = stored?.let { refreshed[it.token] ?: it }
         if (service.auth != Auth.ANONYMOUS && token == null) {
             throw SmapiException("${service.name} needs an account linked before it can be used")
@@ -534,9 +548,13 @@ class SmapiClient(
                 // household whose token had aged (2026-10-06). The replacement is kept for the rest of
                 // the session, against the token the caller stored; it is not written back to the
                 // household, and the next connection reads whatever the household then holds.
-                refreshedToken(root, token)?.takeUnless { retried }?.let { fresh ->
+                //
+                // A retry answered with another refresh takes that one too, once: two calls side by
+                // side on one aged token — Search asks two categories at once — each take a refresh,
+                // and a service that keeps only its latest replacement refuses the other's (P-112).
+                refreshedToken(root, token)?.takeIf { refreshes < MAX_REFRESHES }?.let { fresh ->
                     if (stored != null) refreshed[stored.token] = fresh
-                    return call(service, stored, action, params, retried = true)
+                    return call(service, stored, action, params, retried = true, refreshes = refreshes + 1)
                 }
                 // No refresh offered: the household may hold a newer token than this connection read.
                 // Kept the same way as a refresh.
@@ -551,6 +569,10 @@ class SmapiClient(
             if (!response.isSuccessful) {
                 throw SmapiException("${service.name} $action failed: HTTP ${response.code}")
             }
+            // A success that is not XML at all — a captive portal's page, a CDN's error page — went
+            // on to the parser and reached the viewer in its words, "Content is not allowed in
+            // prolog" (P-113).
+            if (root == null) throw SmapiException("${service.name} sent back something other than an answer")
             return body
         }
     }

@@ -103,6 +103,19 @@ class AppleMusicTest {
         assertEquals("khruangbin", asked.queryParameter("term"))
     }
 
+    /** A web page answered with 200 is said in words, not in Gson's (P-113). */
+    @Test fun `a page that is not Apple's reply is said as such`() = runBlocking<Unit> {
+        val portal = MockWebServer().apply { enqueue(MockResponse().setBody("<html><body>Sign in</body></html>")); start() }
+        try {
+            val failure = runCatching {
+                ITunesSearch(OkHttpClient(), portal.url("/").toString().trimEnd('/')).search("khruangbin", AppleMusicItem.Kind.SONG, "US")
+            }.exceptionOrNull()
+            assertTrue("$failure", failure is java.io.IOException && failure.message == "it sent back something other than search results")
+        } finally {
+            portal.shutdown()
+        }
+    }
+
     @Test fun `albums are read by their collection id`() = runBlocking<Unit> {
         val albums = search().search("khruangbin", AppleMusicItem.Kind.ALBUM, country = "US")
         assertEquals(listOf(1299241642L, 1845322228L, 1721004325L), albums.map { it.catalogId })

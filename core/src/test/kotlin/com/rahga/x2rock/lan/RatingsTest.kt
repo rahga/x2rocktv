@@ -282,7 +282,7 @@ class RatingsTest {
     @Test fun `a service publishing no ratings is not offered, and its track is never looked up`() = runBlocking {
         val groupId = playing(NO_RATINGS)
         assertNull(household.ratingState(groupId))
-        assertTrue("a manifest was not even fetched", service.requestCount > 0)
+        assertTrue("its manifest should have been fetched to learn it publishes none", service.requestCount > 0)
         assertTrue(smapiCalls.toString(), smapiCalls.isEmpty())
     }
 

@@ -22,12 +22,12 @@ class SmapiRefreshTest {
     private lateinit var client: SmapiClient
     private lateinit var service: Service
 
-    private fun refreshFault() =
+    private fun refreshFault(fresh: String = "fresh-token") =
         """<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault>""" +
             """<faultcode>s:Client.TokenRefreshRequired</faultcode>""" +
             """<faultstring>Token has expired</faultstring><detail>""" +
             """<refreshAuthTokenResult xmlns="http://www.sonos.com/Services/1.1">""" +
-            """<authToken>fresh-token</authToken><privateKey>fresh-key</privateKey>""" +
+            """<authToken>$fresh</authToken><privateKey>fresh-key</privateKey>""" +
             """<userInfo><userIdHashCode>abc</userIdHashCode></userInfo>""" +
             """</refreshAuthTokenResult></detail></s:Fault></s:Body></s:Envelope>"""
 
@@ -76,6 +76,54 @@ class SmapiRefreshTest {
         server.takeRequest(); server.takeRequest()
         val next = server.takeRequest().body.readUtf8()
         assertTrue("the second search sent the fresh token", "<token>fresh-token</token>" in next)
+    }
+
+    /**
+     * Search asks a service's two categories at once, and on an aged token each takes a refresh.
+     * A service that keeps only its latest replacement answers the other's retry with a refresh
+     * of its own, which used to be dropped: one of the two sections read as refused (P-112).
+     */
+    @Test fun `a retry answered with another refresh takes it`() = runBlocking {
+        server.enqueue(MockResponse().setBody(refreshFault("fresh-1")))
+        server.enqueue(MockResponse().setBody(refreshFault("fresh-2")))
+        server.enqueue(MockResponse().setBody(searchResult()))
+
+        val page = client.search(service, Token("stale-token", "stale-key", "hh"), category = "tracks", term = "jazz")
+
+        assertEquals("So What", page.items.single().title)
+        assertEquals(3, server.requestCount)
+        server.takeRequest(); server.takeRequest()
+        assertTrue("the second replacement was used", "<token>fresh-2</token>" in server.takeRequest().body.readUtf8())
+    }
+
+    /** And it gives up at the bound: a service refreshing every call is not retried forever. */
+    @Test fun `a call stops taking refreshes at its bound`() = runBlocking {
+        repeat(4) { server.enqueue(MockResponse().setBody(refreshFault("fresh-$it"))) }
+        val failed = runCatching { client.search(service, Token("stale-token", "stale-key", "hh"), "tracks", "jazz") }.isFailure
+        assertTrue(failed)
+        assertEquals("the call and two refreshed retries", 3, server.requestCount)
+    }
+
+    /**
+     * A captive portal or a CDN's error page answered with 200 went on to the parser, and reached
+     * the viewer as "Content is not allowed in prolog" (P-113).
+     */
+    @Test fun `a success that is not an answer is said as such`() = runBlocking {
+        server.enqueue(MockResponse().setBody("Sign in to this network to continue"))
+        val failure = runCatching { client.search(service, Token("t", "k", "hh"), "tracks", "jazz") }.exceptionOrNull()
+        assertEquals("TIDAL sent back something other than an answer", (failure as? SmapiException)?.message)
+    }
+
+    /** A JSON null in a manifest's endpoints used to throw the service's whole page away (P-114). */
+    @Test fun `a manifest endpoint with a null type is passed over`() = runBlocking {
+        val paged = service.copy(manifestUri = server.url("/manifest").toString())
+        server.enqueue(
+            MockResponse().setBody(
+                """{"endpoints":[{"type":null,"uri":null},{"type":"browse","uri":"${server.url("/browse")}"}]}"""
+            )
+        )
+        server.enqueue(MockResponse().setBody(com.rahga.x2rock.lan.FakePlayer.fixtureText("spotify.browse.json")))
+        assertEquals("More like Tyler, The Creator", client.shelves(paged, null).first().title)
     }
 
     @Test fun `a fault with no refresh token is not retried`() = runBlocking {

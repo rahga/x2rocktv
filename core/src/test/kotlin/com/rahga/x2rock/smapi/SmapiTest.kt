@@ -240,6 +240,11 @@ class SmapiTest {
         assertEquals(28, shelves.size)
     }
 
+    /** A page whose `views` is a JSON null has no shelves; it used to throw (P-114). */
+    @Test fun `a page with null views has no shelves`() {
+        assertEquals(emptyList<Shelf>(), parseShelves("""{"views":null}"""))
+    }
+
     /**
      * Browse Radio's four rows play nothing and open (canEnumerate): kept as containers, with the
      * path ids SMAPI's getMetadata answers. Left out until 2026-10-11, when no way to open them was known.

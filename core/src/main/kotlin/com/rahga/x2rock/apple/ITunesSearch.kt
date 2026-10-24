@@ -2,6 +2,7 @@ package com.rahga.x2rock.apple
 
 import com.rahga.x2rock.lan.awaitReply
 import com.google.gson.Gson
+import com.google.gson.JsonParseException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -45,7 +46,13 @@ class ITunesSearch(
                 if (!response.isSuccessful) throw IOException("Apple's search answered HTTP ${response.code}")
                 response.body
             }
-            (gson.fromJson(body, Reply::class.java)?.results ?: emptyList()).mapNotNull { it.toItem(kind) }
+            // A web page answered with 200 reached the viewer in Gson's words (P-113).
+            val reply = try {
+                gson.fromJson(body, Reply::class.java)
+            } catch (e: JsonParseException) {
+                throw IOException("it sent back something other than search results", e)
+            }
+            (reply?.results ?: emptyList()).mapNotNull { it.toItem(kind) }
         }
 
     /** The API's reply, as much of it as is used. */
