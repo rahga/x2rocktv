@@ -1,11 +1,17 @@
 # Punch list: catching up with x2rock
 
-**Current open review (2026-10-18, Codex, against `4aa7f6a`):**
-[Release-readiness review](review-2026-10-18-codex.md). Proposed P1/P2 defects and engineering
-tasks for the owner, Claude and Gemini to review **before implementation or commits**. The local
-queue mirrors these as P-39..P-49 and T-34..T-36; the tracked review carries the evidence on a
-fresh clone. Public APKs from the maintainer include the local speaker salt; undocumented cloud
-catalogue access is not proposed for distribution. The catch-up tiers below remain closed history.
+**Closed review (2026-10-18, Codex, against `4aa7f6a`):**
+[Release-readiness review](review-2026-10-18-codex.md). Its defects, the local queue's P-39..P-49,
+were all fixed by Claude Code on 2026-10-18: the private-bundle guard checking resolved tasks at
+execution (P-47, `563f21a`, which CI now proves with the abbreviated `:app:bR`), minSdk 26 (P-39,
+`782f208`), presets and volume-evening leaving out a speaker whose level failed (P-40, `f6717a4`), a
+stale queue menu's edit refused (P-41, `09b1a4f`), nested screens handed the room's current group
+(P-42, P-44, `a9ad883`), the report's free text redacted (P-48, `9012268`), the shared player
+following its speakers (P-43, `0e3054a`), a failed manifest never cached (P-45, `86dbc2b`), a
+cancelled account capture letting go at once (P-46, `07d78df`), and a failed next page offering
+Try again (P-49, `c52bcd8`). Public APKs from the maintainer include the local speaker salt;
+undocumented cloud catalogue access is not proposed for distribution. The catch-up tiers below
+remain closed history.
 
 **Closed review (2026-10-11, Codex, against `d9a45a8`):**
 [Correctness and simplification review](review-2026-10-11-codex.md). Answered by Claude Code
@@ -162,7 +168,11 @@ browse.
 
 **Review pass of 2026-10-23 evening** (at `a3c5075`, after the day's T-39..T-42; five area reviews —
 core/lan, core services, view models, UI, build/record/today's diff — each claim re-read against the code
-before it was recorded). 41 findings, none high; the open ones are the local queue's P-100..P-126. The day's
+before it was recorded). 41 findings, none high; they are the local queue's P-100..P-126, answered
+2026-10-24 (T-44, from `ce3f647`): all fixed but P-105, tested and found not a defect, with a TV look
+owed for the theme row's focus and a phone's tap on a room. Two more turned up on the emulator while
+testing them: a held Select's repeats counted as a press by the control focus moved to, and the pane's
+alarm-row focus hand-off never firing on current Compose. The day's
 own edits held on a whole read: one attempt owns the connect, the one-anchor rule traces cleanly, the preset
 on the application scope is safe; what the day left behind is two functions inserted between a KDoc and its
 subject (the recurring defect, now with a one-line `awk` check), the shared player not told the preset's room

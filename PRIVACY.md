@@ -19,8 +19,11 @@ analytics of its own, and its developer receives nothing from it.
 
 On the TV device only, in the app's own storage: the speaker it last connected to on each network,
 the room you named as the TV's, your theme, preferred services and which account of a service to
-use, presets, recent searches, and whether Beta features is on. Uninstalling the app removes all of it. Nothing is backed up off the
-device.
+use, presets, recent searches, and whether Beta features is on. Also the order you put the rooms in,
+whether Browse's pin is held, the Advanced Apple Music switch, and each music service's rating rules
+as its published map gave them. A build that carries a developer's own Sonos integration also keeps
+that Sonos account's sign-in token there; no build anyone else makes from the source does.
+Uninstalling the app removes all of it. Nothing is backed up off the device.
 
 ## Reports
 

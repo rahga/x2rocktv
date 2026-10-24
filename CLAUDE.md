@@ -281,6 +281,16 @@ Two things this costs, both of which were wrong once:
   screen's `RoomTarget` and the room panel follow that one anchor, and a route hands it on
   (`RoomRoute`) with the group id, so a screen opened while the id was already gone still finds it (P-88).
 
+  Four more things the anchor keeps doing (T-44, 2026-10-24). **A screen keeps it current as it
+  follows**, as Home and the player do: frozen at what it opened on, a room that grew and then lost the
+  speaker the screen opened with was gone from the screen while the pane beside it had followed it
+  (P-106). **Coordination moving inside the room moves the anchor**: the same speakers under another of
+  them — a grouped soundbar taking the TV — are still the room chosen (P-117); a party never is, its host
+  not being among them. **A tile or the TV room anchors on its own speaker**, not on whatever group holds
+  it, which may be a party it only joined (P-116). And **the shared player is Home's selection wherever
+  the viewer is** (`PlayerFollowsHome`, in the nav graph): told only by the home screen, it stayed on
+  the old room while another screen was in front (P-100).
+
 When writing a test for this, a derived topology must change the host group's **id**, not
 just its membership — `FakePlayer.groupedTopology` does. Keeping the id made the fixture
 look right while testing nothing, because a household that never re-subscribes passes it.
@@ -710,6 +720,13 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   as the pane's buttons, and each checks the player's `availablePlaybackActions` first: Next on a
   station used to send the skip and answer "Couldn't skip: ERROR_DISALLOWED_BY_POLICY", a press
   on a button that was not there. Play with nothing loaded is the same; idle with content is not.
+- **A control the pane draws by a state bit hands focus to Play/Pause when it leaves under focus**
+  (`handFocusOnLeave`, P-102, 2026-10-24): Next at a queue's end, the seek bar on content that cannot
+  seek, Save favorite, Configure, Full screen, the transport and the places row (an alarm replacing it).
+  Left to fall, the platform gave focus to the first room row with no key pressed. Compose reports the
+  loss *before* the composition lets go of the control, so a `DisposableEffect` reading "had focus" saw
+  false: the loss is caught and checked a frame later. Play/Pause's requester moves to Browse when the
+  transport goes, so there is always somewhere to land.
 - **A refusal is said in words where the code has been met** (`plainRefusal`, 2026-10-10):
   `ERROR_DISALLOWED_BY_POLICY` "this source doesn't allow it", `ERROR_PLAYBACK_NO_CONTENT` "nothing is
   loaded", `ERROR_ACCOUNT_INVALID_ID` "it isn't available from this system's accounts". Any other
@@ -778,7 +795,8 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   room stores a player. Applying one sets levels **before** it starts the music, so nothing starts
   loud. Music that is not a favourite is not kept, and saving says so. **A preset follows the Stay
   pin** (owner, 2026-10-23): the room it forms becomes the selected room, and with the pin held the
-  viewer stays in Browse. It runs in the application's scope, so Back while it is "Starting…" leaves
+  viewer stays in Browse — whose own presses go to that room from then on, as its header and the
+  shared player do (P-100). It runs in the application's scope, so Back while it is "Starting…" leaves
   it to finish rather than half-grouped, and how it went is said on the shared line (P-70).
 - **A book's chapters and a service's playlists are the item menu's** (2026-10-10). On a book,
   **Chapters** lists them as a Browse level, opening on the chapter its service has the listener
@@ -824,7 +842,9 @@ the Sonos app" and `lan-transport.md`'s "A service item". What it settled:
   pressed** (`ignoreUnpressedRelease`, 2026-10-17): tv-material3 clicks on the release, and a hold
   that opens, removes or replaces the focused control hands focus to another, which then clicked on
   that hold's release — the item menu closed as it opened (P-38), and deleting Browse's last preset
-  clicked the header's Back (P-37). First fixed in the menu alone, then for every control. **Play next only while the room plays from its queue**, as the Sonos
+  clicked the header's Back (P-37). First fixed in the menu alone, then for every control. Only a
+  first key-down counts as the press: a held key goes on repeating once focus has moved, and a repeat
+  counted made the hold's release the new control's click anyway (`DpadMenuKeyTest`, T-44). **Play next only while the room plays from its queue**, as the Sonos
   app; it is a queue slot, not a flag. **Add to Sonos Favorites** follows Add to end of queue for
   what a queue can hold — a track, an album, a playlist — or **Remove from Sonos Favorites** once the
   item is found among them by its service's id (T-32). Browse and Search share the menu.

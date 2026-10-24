@@ -5,11 +5,37 @@ rise by one with every build that leaves the developer's machine.
 
 ## Unreleased
 
+### Changed
+
+- A preset started from Browse follows Browse's pin: with the pin held you stay in Browse, and the room
+  the preset formed becomes the selected room — its name, the now-playing bar, the remote's media keys
+  and Browse's own next press all go to it.
+- Answers that land once you have moved on — a TV input that failed 20 seconds later, a party that left
+  a room out, a preset that could not start — are said on whatever screen you are on.
+
 ### Fixed
 
 - On a touchscreen, a screen no longer opens with its first button drawn highlighted as if chosen.
+- On a touchscreen, tapping a room in the list selects it again.
 - When the speakers can't be reached, the app says so in plain words — check this device is on the
   same network as them — instead of a network error's own text. The beta report keeps the details.
+- Holding the Menu key no longer repeats a row's action, such as confirming the removal it just armed.
+- A queue the speakers give up on names the service that failed ("Couldn't play from Saavn").
+- A music service that refuses its library says so, instead of opening on a keyboard; Search names
+  the services that refused, and keeps "didn't answer" for the ones that ran out of time.
+- The favourite a room has loaded reads Paused, or nothing, when the room is not playing it.
+- A preset finishes even if you press Back while it is starting.
+- Alarms say "Saving…" while a change is being written, and a late save no longer closes another alarm.
+- The rating buttons stay put through a track change or another app's regroup, and focus with them.
+- When a control in the player disappears under the remote — Next at the end of a queue, the seek bar
+  on a station that cannot seek — focus goes to Play/Pause rather than to the room list.
+- Reset room order, a failed queue or service page, and a regroup while Settings' button has focus no
+  longer leave the remote's focus somewhere unseen.
+- A room opened from its home-screen tile while in another room's party stays with that room when the
+  party splits; so do screens opened on a room that later grows and loses a speaker.
+- A household chosen while the app was still searching the network is connected at once.
+- A room is no longer left frozen when its speaker drops out while the app is still subscribing to it.
+- A service sign-in that could not be read once no longer drops Apple Music for the session.
 
 ### Under the hood
 

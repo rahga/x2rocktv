@@ -130,6 +130,7 @@ An organization account requires organization/identity verification, including a
 in the usual case; obtaining the number alone is not Play approval.
 [Google's verification requirements](https://support.google.com/googleplay/android-developer/answer/10841920).
 
-The [2026-10-18 release-readiness review](review-2026-10-18-codex.md) records proposed fixes and
-checks before wider distribution, including a bypass in the current private-bundle guard. Until
-that is resolved, use the full task names above and inspect the actual artifacts before upload.
+The [2026-10-18 release-readiness review](review-2026-10-18-codex.md) found a bypass in the
+private-bundle guard: an abbreviated task name built a bundle with private inputs. It was closed in
+`563f21a` (P-47): the refusal now runs on every `package*Bundle` task at execution, and CI proves it
+with `:app:bR` and the integration flag. Inspect the actual artifacts before upload all the same.
