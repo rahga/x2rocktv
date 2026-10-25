@@ -236,6 +236,13 @@ fun HomeScreen(
             // Shield: a link to Bedroom left Kitchen selected.
             withFrameNanos { }
             withFrameNanos { }
+            // Asked for from Music Services or Search: Settings opens, and takes focus itself.
+            if (homeViewModel.takeSettingsRequest()) {
+                opener = null
+                focusPlaced = true
+                showSettings = true
+                return@repeatOnLifecycle
+            }
             // Back from another screen returns to the control that opened it — Queue, Browse,
             // Search — rather than to the room. The pane puts it there itself, from its first frame
             // (`startFocusRequester`); here it only counts as placed, and the opener is spent.

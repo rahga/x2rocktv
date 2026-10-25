@@ -88,6 +88,8 @@ fun ServiceBrowseScreen(
     onOpenAppleMusic: (RoomRoute) -> Unit,
     onBack: () -> Unit,
     onPlayed: () -> Unit,
+    /** Home's Settings panel, from the list's last row. */
+    onOpenSettings: () -> Unit,
     /** The shared player's line, drawn when this screen has none of its own (P-80). */
     sharedNotice: String? = null,
     viewModel: ServiceBrowseViewModel = hiltViewModel(),
@@ -131,6 +133,7 @@ fun ServiceBrowseScreen(
                     ServiceList(
                         services,
                         reach = reach,
+                        onOpenSettings = onOpenSettings,
                         primaries = primaries,
                         preferred = preferred,
                         returnTo = opened,
@@ -182,6 +185,7 @@ private fun ServiceList(
     services: ServiceBrowseViewModel.Services,
     /** What is named below the services: see [serviceReachItems]. */
     reach: com.rahga.x2rock.viewmodel.ServiceReach,
+    onOpenSettings: () -> Unit,
     primaries: Map<String, String>,
     /** This device's preferred services, which lead each section in their order. */
     preferred: List<String>,
@@ -252,7 +256,7 @@ private fun ServiceList(
                         )
                     }
                 }
-                serviceReachItems(reach)
+                serviceReachItems(reach, onOpenSettings)
             }
         }
     }

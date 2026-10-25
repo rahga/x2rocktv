@@ -109,6 +109,12 @@ fun X2RockNavGraph() {
                 "&kind=${Uri.encode(kind)}"
         )
 
+    // Home's Settings panel, from a screen opened on top of it: back to Home, which opens it once in front.
+    fun openSettings() {
+        homeViewModel.requestSettings()
+        navController.popBackStack("home", inclusive = false)
+    }
+
     // Never past home: the leaving screen keeps focus through the fade, so a second quick press on
     // its Back would pop the start destination too and leave nothing but a blank.
     val back: () -> Unit = { if (navController.previousBackStackEntry != null) navController.popBackStack() }
@@ -192,6 +198,7 @@ fun X2RockNavGraph() {
                 onSearchService = { opened, serviceKey, query ->
                     navController.navigate("services?${roomQuery(opened)}&service=${Uri.encode(serviceKey)}&query=${Uri.encode(query)}")
                 },
+                onOpenSettings = ::openSettings,
                 sharedNotice = sharedNotice,
             )
         }
@@ -215,6 +222,7 @@ fun X2RockNavGraph() {
                 onOpenAppleMusic = { navController.navigate("applemusic?${roomQuery(it)}") },
                 onBack = back,
                 onPlayed = { played(entry) },
+                onOpenSettings = ::openSettings,
                 sharedNotice = sharedNotice,
             )
         }

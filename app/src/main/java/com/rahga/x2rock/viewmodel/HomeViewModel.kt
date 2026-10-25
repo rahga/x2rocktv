@@ -234,6 +234,14 @@ class HomeViewModel @Inject constructor(
      */
     private fun chooseSpeaker(playerId: String) = savedSelection.adopt(playerId, listOf(playerId))
 
+    /** Settings asked for from another screen (Music Services' and Search's last row), until Home shows it. */
+    @Volatile private var settingsRequested = false
+
+    fun requestSettings() { settingsRequested = true }
+
+    /** Whether Settings was asked for since Home last looked; looking spends it. */
+    fun takeSettingsRequest(): Boolean = settingsRequested.also { settingsRequested = false }
+
     /**
      * The selected room as a screen opened on it is handed it: [groupId], and the speakers of the room
      * chosen, which that screen follows it by (P-71, P-88).

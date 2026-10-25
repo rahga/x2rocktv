@@ -93,6 +93,8 @@ fun SearchScreen(
     onOpen: (room: RoomRoute, serviceKey: String, item: Item) -> Unit,
     /** Open one service's own search for [query]: every category, every page. */
     onSearchService: (room: RoomRoute, serviceKey: String, query: String) -> Unit,
+    /** Home's Settings panel, from the list's last row. */
+    onOpenSettings: () -> Unit,
     /** The shared player's line, drawn when this screen has none of its own (P-80). */
     sharedNotice: String? = null,
     viewModel: SearchViewModel = hiltViewModel(),
@@ -279,7 +281,7 @@ fun SearchScreen(
                     }
                     // Below every section, and before a search too: what this household has that it
                     // cannot search here, and what Settings can turn on.
-                    serviceReachItems(reach)
+                    serviceReachItems(reach, onOpenSettings)
                 }
             }
             menuTarget?.let { target ->
