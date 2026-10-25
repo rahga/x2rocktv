@@ -2,7 +2,7 @@ package com.rahga.x2rock.ui.screens
 
 import com.rahga.x2rock.ui.theme.requestFocusWhenResumed
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.rahga.x2rock.ui.components.SignInsNote
+import com.rahga.x2rock.ui.components.serviceReachItems
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -127,10 +127,10 @@ fun ServiceBrowseScreen(
 
                 val service = active
                 if (service == null) {
-                    val signIns by viewModel.signIns.collectAsState()
-                    SignInsNote(signIns)
+                    val reach by viewModel.reach.collectAsState()
                     ServiceList(
                         services,
+                        reach = reach,
                         primaries = primaries,
                         preferred = preferred,
                         returnTo = opened,
@@ -180,6 +180,8 @@ fun ServiceBrowseScreen(
 @Composable
 private fun ServiceList(
     services: ServiceBrowseViewModel.Services,
+    /** What is named below the services: see [serviceReachItems]. */
+    reach: com.rahga.x2rock.viewmodel.ServiceReach,
     primaries: Map<String, String>,
     /** This device's preferred services, which lead each section in their order. */
     preferred: List<String>,
@@ -250,6 +252,7 @@ private fun ServiceList(
                         )
                     }
                 }
+                serviceReachItems(reach)
             }
         }
     }

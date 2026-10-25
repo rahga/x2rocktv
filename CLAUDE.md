@@ -307,7 +307,12 @@ carries it, and tests seal with a salt of their own (`TestEnvelope.SALT`). Never
 public build stands in: services needing an account would drop out of Music Services and Search, while
 playback, favourites, grouping and everything over the Control API go on working. So it is never
 silent (2026-10-18): each read is recorded (`SonosHousehold.accountsRead`), Music Services and Search
-say when none could be used (`SignInsNote`), the beta report carries a "Service sign-ins" line, and
+end on **"Unavailable:"** — every service this household is known to have, from its favourites, play
+history or stored sign-ins, that cannot be reached here, then "See the Sonos app for iPhone and Android
+to access those services." — and on **"Available via Settings:"** for Apple Music while its switch is off
+(`ServiceReach`, owner, 2026-10-25). YouTube Music is always among the unavailable: Google's gate refuses
+this app whatever the token. **The word "salt" never reaches the screen**, the beta report included; the
+line saying sign-ins "couldn't be used" was removed for the list. The beta report carries a "Service sign-ins" line, and
 the live suite asserts the household's sign-ins still decrypt (skipped when a speaker sends none, as
 a firewall on the machine running it can cause). The owner's hardcore builds have the cloud page
 source (T-28) as a partial stand-in; porting x2rock's per-service device link is the public option,

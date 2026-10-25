@@ -139,8 +139,13 @@ class SearchViewModel @Inject constructor(
     val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
-    /** The last read of the household's stored service sign-ins; see [SignInsNote]. */
-    val signIns: StateFlow<com.rahga.x2rock.lan.StoredAccountsRead?> = household.accountsRead
+    private val _reach = MutableStateFlow(ServiceReach())
+    /** What the screen names below its sections: see [ServiceReach]. */
+    val reach: StateFlow<ServiceReach> = _reach.asStateFlow()
+
+    init {
+        viewModelScope.launch { _reach.value = serviceReach(household, appleMusic) }
+    }
 
     private val country = Locale.getDefault().country.ifEmpty { "US" }
     private var job: Job? = null

@@ -171,7 +171,7 @@ class LiveHouseholdTest {
         connected()
         household.searchableServices()
         val read = household.accountsRead.value
-        assumeTrue("no speaker salt on this machine (~/x2rock-sonos.speaker.salt)", read?.problem != "this build has no speaker salt")
+        assumeTrue("no speaker salt on this machine (~/x2rock-sonos.speaker.salt)", read?.problem != "this build does not read stored sign-ins")
         assumeTrue("the speaker sent no sign-ins to read (firewall here, or none stored): ${read?.problem}",
             read?.problem != "the speaker sent none")
         assertTrue("the stored sign-ins no longer decrypt: ${read?.problem}", read?.problem?.startsWith("they could not be read") != true)

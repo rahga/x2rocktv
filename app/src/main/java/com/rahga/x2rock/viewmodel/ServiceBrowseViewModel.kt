@@ -202,8 +202,9 @@ class ServiceBrowseViewModel @Inject constructor(
     val starting: StateFlow<String?> = guard.starting
     val notice: StateFlow<String?> = _notice.text
 
-    /** The last read of the household's stored service sign-ins; see [SignInsNote]. */
-    val signIns: StateFlow<com.rahga.x2rock.lan.StoredAccountsRead?> = household.accountsRead
+    private val _reach = MutableStateFlow(ServiceReach())
+    /** What the list names below its services: see [ServiceReach]. */
+    val reach: StateFlow<ServiceReach> = _reach.asStateFlow()
 
     private val trail = ArrayDeque<Level>()
 
@@ -237,6 +238,7 @@ class ServiceBrowseViewModel @Inject constructor(
                 onSuccess = { Services.Ready(it, apple.await()) },
                 onFailure = { Services.Failed("Couldn't read this system's services: ${it.message ?: it}") },
             )
+            if (services.isSuccess) _reach.value = serviceReach(household, appleMusic)
         }
     }
 

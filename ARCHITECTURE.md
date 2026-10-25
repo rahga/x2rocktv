@@ -154,7 +154,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
 │   │   ├── StepMark.kt            − and + beside a level, while it has focus or by touch
 │   │   ├── Touch.kt               a tap as a press, for the emulator and tablets; inert on a remote
 │   │   ├── DotEqualizer.kt        a playing room's mark, and DotScanner for loading
-│   │   ├── SignInsNote.kt         why services needing an account are missing, when stored sign-ins could not be read
+│   │   ├── ServiceReach.kt        the foot of Music Services and Search: Unavailable:, and Available via Settings:
 │   │   └── Overlay.kt             pins focus inside a modal
 │   └── screens/
 │       ├── HomeScreen.kt          room sidebar + player pane; settings slide-in
@@ -192,6 +192,7 @@ app/src/main/java/com/rahga/x2rock/             (Android TV)
     ├── AppleMusicViewModel.kt
     ├── ServiceBrowseViewModel.kt   browse/search the household's own services, a level at a time
     ├── SearchViewModel.kt          fan one query out to every searchable service and Apple Music
+    ├── ServiceReach.kt             which known services cannot be reached here, and Apple Music behind its switch
     ├── AboutSystemViewModel.kt     every speaker's description and update state, read once
     ├── AccountViewModel.kt         the T-27 sign-in: show the consent page's QR, listen once, redeem the code
     ├── AfterPlayingViewModel.kt    AfterPlaying, for the nav graph and Browse's header

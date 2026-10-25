@@ -372,6 +372,31 @@ class ServiceSearchTest {
         assertEquals("sn_19", household.storedAppleMusicAccount())
     }
 
+    /**
+     * A service the household is known to have — here YouTube Music, by a favourite captured off the
+     * office household — that cannot be searched from here is named, so the screens can say so rather
+     * than leave it absent (owner, 2026-10-25). Apple Music, reached another way, is not among them.
+     */
+    @Test fun `the services this household has that cannot be reached are named`() = runBlocking {
+        connected()
+        val names = household.unreachableServices().map { it.name }
+        assertTrue(names.toString(), "YouTube Music" in names)
+        // And Bandcamp, known by its stored sign-in, whose household token the speakers alone may use.
+        assertTrue(names.toString(), "Bandcamp" in names)
+        assertTrue(names.toString(), "Apple Music" !in names)
+        val listed = household.searchableServices().map { it.service.name }
+        assertTrue("a listed service named unreachable: $names", names.none { it in listed })
+    }
+
+    /** With no stored sign-ins to go on, a favourite is still enough to know the household has it. */
+    @Test fun `with no stored sign-ins, a favourite names a service that cannot be reached`() = runBlocking {
+        envelope = null
+        connected()
+        val names = household.unreachableServices().map { it.name }
+        assertTrue(names.toString(), "YouTube Music" in names)
+        assertTrue("nothing names Bandcamp now: $names", "Bandcamp" !in names)
+    }
+
     @Test fun `no stored Apple Music sign-in means no stored Apple account`() = runBlocking {
         envelope = null
         connected()

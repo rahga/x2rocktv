@@ -860,6 +860,7 @@ class SonosHousehold(
         clearSession { runCatching { it.cancel() } }
         // A different household has its own services and tokens; make the next search re-read.
         searchable = null
+        catalogue = null
         synchronized(this) { keptAccounts = null; appleAccount = null }
         lastReread = null
         categoryCache.clear()
@@ -1347,6 +1348,7 @@ class SonosHousehold(
         }
         val answer = upnp.listAvailableServices(hostname)
         val services = parseServices(answer.descriptors, answer.types)
+        if (generation == session) catalogue = services
         // Three services carry a token but still dead-end here, so they are dropped rather than shown
         // and left to fail: Apple Music, whose stored credential has an empty key and whose SMAPI
         // refuses every call (searched through iTunes on its own screen instead); YouTube Music,
@@ -1356,6 +1358,30 @@ class SonosHousehold(
         linkedServices(services, accounts, household)
             .filterNot { it.service.id in UNSEARCHABLE && it.service.id !in servicePages?.onlyHere.orEmpty() }
             .also { if (generation == session) searchable = it }
+    }
+
+    /** Every service the speakers offer, read with [searchable], for naming the ones it leaves out. */
+    @Volatile private var catalogue: List<Service>? = null
+
+    /**
+     * The services this household is known to have that [searchableServices] cannot reach: YouTube
+     * Music always (Google's gate refuses this app's calls, the household's own token too), Bandcamp,
+     * and, where the stored sign-ins cannot be read, every service that needs an account. Known from
+     * its favourites, its play history and, where they could be read, its stored sign-ins: the
+     * speakers say which services exist, not which a household uses. Apple Music is not among them;
+     * it is reached another way. Each read is best-effort, and one refused leaves its services out.
+     */
+    suspend fun unreachableServices(): List<Service> {
+        val listed = searchableServices().map { it.service.id }.toSet()
+        val all = catalogue ?: return emptyList()
+        val known = buildSet {
+            catching { favorites() }.getOrNull()?.items?.forEach { favorite -> favorite.service?.id?.let(::add) }
+            catching { history() }.getOrDefault(emptyList()).forEach { item -> item.id.serviceId?.let(::add) }
+            keptAccounts?.forEach { add(it.serviceId.toString()) }
+        }
+        return all.filter { it.id in known && it.id !in listed && it.id != AppleMusic.SERVICE_ID }
+            .distinctBy { it.id }
+            .sortedBy { it.name.lowercase() }
     }
 
     /**
@@ -1372,7 +1398,7 @@ class SonosHousehold(
         val household = householdId()
         fun record(read: StoredAccountsRead) { if (generation == session) _accountsRead.value = read }
         val salt = speakerSalt
-            ?: return emptyList<StoredAccount>().also { record(StoredAccountsRead(0, "this build has no speaker salt")) }
+            ?: return emptyList<StoredAccount>().also { record(StoredAccountsRead(0, "this build does not read stored sign-ins")) }
         val ip = addressBook.lookup(hostname).firstOrNull()?.hostAddress
         val envelope = try {
             ip?.let { accountCapture(it) }
