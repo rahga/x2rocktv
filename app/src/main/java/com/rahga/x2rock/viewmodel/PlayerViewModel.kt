@@ -183,6 +183,16 @@ internal fun ratingFollowing(
 ): Pair<String, SonosHousehold.RatingState>? =
     if (followed && last != null && last.first == from) to to last.second else last
 
+/**
+ * A playing room's position now: its last report moved on by the time since, held within the track.
+ * As the pane's bar reckons it (`livePosition`); [reportedAt] is wall-clock, as the household stamps it.
+ */
+internal fun positionNow(positionMillis: Long, reportedAt: Long, playing: Boolean, durationMillis: Long, now: Long = System.currentTimeMillis()): Long {
+    val since = if (playing && reportedAt > 0) (now - reportedAt).coerceAtLeast(0) else 0
+    val position = positionMillis + since
+    return if (durationMillis > 0) position.coerceAtMost(durationMillis) else position
+}
+
 /** What one read of `settings:1` yielded, with the speaker it came from. */
 data class HomeTheaterUi(
     val soundbarId: String,
@@ -243,6 +253,7 @@ class PlayerViewModel @Inject constructor(
     private var lastMetadataKey = ""
     private var lastPbStateCode = -1
     private var lastPbPositionMillis = -1L
+    private var lastPbReportedAt = -1L
     private var lastPbActions: PlaybackActions? = null
 
     /**
@@ -419,9 +430,14 @@ class PlayerViewModel @Inject constructor(
      * until its track changed (P-86, 2026-10-23).
      */
     private suspend fun loadRating(groupId: String) {
+        val track = trackIdIn(groupId)
         val read = household.ratingState(groupId)
-        if (_groupId.value == groupId) _rating.value = read?.let { groupId to it }
+        // And only for the track it was read for: a Ban skips, and its own re-read, landing after the
+        // next track's, painted the old track's state on the new one until the track after (P-60).
+        if (_groupId.value == groupId && trackIdIn(groupId) == track) _rating.value = read?.let { groupId to it }
     }
+
+    private fun trackIdIn(groupId: String) = household.groupStates.value[groupId]?.track?.id
 
     /**
      * The home screen's selection: [id], for the room it chose, [room] — its speakers, which may be
@@ -542,11 +558,19 @@ class PlayerViewModel @Inject constructor(
         val code = if (idle) 0 else if (playing) 1 else 2
         // Seek the way the pane offers it: only with a duration to seek within.
         val actions = state.actions.copy(canSeek = state.actions.canSeek && state.durationMillis > 0)
-        if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis && actions == lastPbActions) return
+        // Keyed on the report too, so another room's report at the same position is published.
+        val reportedAt = state.positionUpdatedAt
+        if (code == lastPbStateCode && state.positionMillis == lastPbPositionMillis &&
+            reportedAt == lastPbReportedAt && actions == lastPbActions
+        ) return
         lastPbStateCode = code
         lastPbPositionMillis = state.positionMillis
+        lastPbReportedAt = reportedAt
         lastPbActions = actions
-        nowPlaying.publishState(playing, idle, state.positionMillis, actions)
+        // Where it is now, not where it was last reported: Sonos reports only on play, pause, seek
+        // and a new track, and the session stamps the position "now", so a room selected minutes
+        // after its last report was published minutes behind (P-61).
+        nowPlaying.publishState(playing, idle, positionNow(state.positionMillis, reportedAt, playing, state.durationMillis), actions)
     }
 
     // ------------------------------------------------------------ transport
@@ -640,11 +664,11 @@ class PlayerViewModel @Inject constructor(
             // Re-read rather than assumed: whether a second "up" clears the first is the
             // service's rule, and only its answer says which state the track is now in.
             if (outcome.isSuccess) loadRating(groupId)
-            val message = outcome.fold(
-                onSuccess = { outcome -> rateMessage(outcome) },
-                onFailure = { it.message ?: "Could not rate this track" },
+            // In the same words as every other failure, a cancellation saying nothing (P-60).
+            outcome.fold(
+                onSuccess = { notice.post(rateMessage(it)) },
+                onFailure = { notice.failure("rate this track", it) },
             )
-            notice.post(message)
         }
     }
 
@@ -762,7 +786,9 @@ class PlayerViewModel @Inject constructor(
      * finer when quiet — see [VolumeBurst]. Aimed from the level the presses so far will leave.
      */
     fun stepVolume(direction: Int) {
-        val level = (uiState.value.volume ?: return) + pendingVolumeDelta
+        // Before the first `groupVolume:1` there is no level, and a press used to be dropped. It
+        // moves now, by the finest step, which is what a level of 0 gives: never loud, never lost (P-65).
+        val level = (uiState.value.volume ?: 0) + pendingVolumeDelta
         adjustVolume(volumeBurst.step(level, direction))
     }
 

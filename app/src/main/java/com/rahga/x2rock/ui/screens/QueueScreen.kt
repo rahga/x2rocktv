@@ -92,6 +92,7 @@ fun QueueScreen(
                         room = room,
                         entries = s.entries,
                         currentTrackName = s.currentTrackName,
+                        currentSlot = s.currentSlot,
                         inUse = s.inUse,
                         onBack = onBack,
                         onPlayItem = viewModel::playItem,
@@ -121,6 +122,8 @@ private fun QueueList(
     room: String,
     entries: List<QueueEntry>,
     currentTrackName: String?,
+    /** The slot playing, where known: it, not the name, then marks the row. */
+    currentSlot: Int?,
     inUse: Boolean,
     onBack: () -> Unit,
     onPlayItem: (Int) -> Unit,
@@ -166,9 +169,10 @@ private fun QueueList(
         returnTo = null
     }
 
-    val currentIndex = remember(entries, currentTrackName) {
-        if (currentTrackName != null) entries.indexOfFirst { it.item.track?.name == currentTrackName } else -1
-    }
+    fun isCurrent(entry: QueueEntry) =
+        if (currentSlot != null) entry.trackNumber == currentSlot
+        else currentTrackName != null && entry.item.track?.name == currentTrackName
+    val currentIndex = remember(entries, currentTrackName, currentSlot) { entries.indexOfFirst(::isCurrent) }
     val focusTargetIndex = if (currentIndex >= 0) currentIndex else 0
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
@@ -222,7 +226,7 @@ private fun QueueList(
                 itemsIndexed(entries) { index, entry ->
                     QueueRow(
                         entry = entry,
-                        isCurrent = currentTrackName != null && entry.item.track?.name == currentTrackName,
+                        isCurrent = isCurrent(entry),
                         onClick = { pressed = entry to entries; onPlayItem(entry.trackNumber) },
                         onLongPress = { menuOpenedAt = queueVersion(); contextMenuEntry = entry },
                         modifier = Modifier

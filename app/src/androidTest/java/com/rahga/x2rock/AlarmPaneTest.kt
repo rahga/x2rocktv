@@ -9,6 +9,8 @@ import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.requestFocus
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -129,5 +131,34 @@ class AlarmPaneTest {
             ups++
         }
         assertTrue("Down from the transport never reached Snooze or Stop", compose.onAllNodes(isFocused() and (alarmButton or hasAnyDescendant(alarmButton))).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /**
+     * Focus on the places row when the alarm rings: the row leaves for the alarm's, and focus fell to
+     * the room list (P-64). It goes to Play/Pause, one press above Snooze.
+     */
+    @Test fun aRingingAlarmTakingThePlacesRowHandsFocusToPlayPause() {
+        val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs), com.rahga.x2rock.store.AppleMusicSetting(prefs, household))
+        val player = PlayerViewModel(household, SilentNowPlaying, testClock)
+        compose.setContent {
+            X2RockTheme {
+                PlayerFollowsHome(home, player)
+                HomeScreen(
+                    onOpenQueue = {}, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
+                    onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
+                    homeViewModel = home, playerViewModel = player,
+                )
+            }
+        }
+        fake.pushFixture("metadataStatus", bedroom.id)
+        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PAUSED")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Browse")).requestFocus()
+        compose.waitUntil(5_000) { compose.onAllNodes(isFocused() and hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
+        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PLAYING")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Snooze", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        val playPause = hasContentDescription("Play") or hasContentDescription("Pause")
+        compose.waitUntil(10_000) { compose.onAllNodes(isFocused() and (playPause or hasAnyDescendant(playPause))).fetchSemanticsNodes().isNotEmpty() }
     }
 }

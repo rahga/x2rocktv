@@ -34,6 +34,13 @@ import javax.inject.Inject
  */
 data class QueueEntry(val trackNumber: Int, val item: QueueItem)
 
+/**
+ * The slot to mark as playing: [slot], the player's, while the track there is [name] — a slot read a
+ * moment before a track change still names the last one — else null, and the name decides.
+ */
+fun currentSlotIn(entries: List<QueueEntry>, slot: Int?, name: String?): Int? =
+    slot?.takeIf { name != null && entries.firstOrNull { it.trackNumber == slot }?.item?.track?.name == name }
+
 /** Numbers every item by its slot in the queue. */
 fun queueEntries(items: List<QueueItem>): List<QueueEntry> =
     items.mapIndexed { index, item -> QueueEntry(trackNumber = index + 1, item = item) }
@@ -93,19 +100,28 @@ class QueueViewModel @Inject constructor(
              * input it is not, though the tracks are all still here; choosing one switches back.
              */
             val inUse: Boolean = true,
+            /**
+             * The slot playing, where the player said and the track there is the one playing; null
+             * otherwise, and the name is all there is to go on. See [currentSlotIn].
+             */
+            val currentSlot: Int? = null,
         ) : UiState
         data class Error(val message: String) : UiState
     }
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Loading)
-    private val source = MutableStateFlow<Pair<String?, Boolean>>(null to true)
+    /** The room the source was last read for, whether it plays the queue, and the slot it plays. */
+    private val source = MutableStateFlow(Source(null, true, null))
+    private data class Source(val groupId: String?, val inUse: Boolean, val slot: Int?)
     val uiState: StateFlow<UiState> = combine(
         _uiState, household.state, household.groupStates, source,
     ) { read, _, states, source ->
         if (read is UiState.Success) {
             val id = room.currentOrNull()
-            val inUse = if (source.first == id) source.second else true
-            read.copy(currentTrackName = states[id]?.track?.name?.takeIf { inUse }, inUse = inUse)
+            val inUse = if (source.groupId == id) source.inUse else true
+            val name = states[id]?.track?.name?.takeIf { inUse }
+            val slot = source.slot.takeIf { source.groupId == id }
+            read.copy(currentTrackName = name, inUse = inUse, currentSlot = currentSlotIn(read.entries, slot, name))
         } else read
     }.stateIn(viewModelScope, SharingStarted.Eagerly, UiState.Loading)
 
@@ -123,7 +139,10 @@ class QueueViewModel @Inject constructor(
                 Triple(id, states[id]?.container, states[id]?.track)
             }.distinctUntilChanged().collectLatest { (id, _, _) ->
                 if (id != null) {
-                    source.value = id to attempt { household.playingFromQueue(id) }.getOrDefault(true)
+                    // The slot with it, a second read on a track change only: the name alone marked
+                    // both of two tracks of one name, and opened on the first (P-63).
+                    source.value = attempt { household.queueSlot(id) }
+                        .fold({ slot -> Source(id, slot != null, slot?.takeIf { it > 0 }) }, { Source(id, true, null) })
                 }
             }
         }

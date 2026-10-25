@@ -604,8 +604,15 @@ private fun RoomSidebar(
 
     val selectedIndex = sorted.indexOfFirst { it.id == selectedGroupId }
 
-    LaunchedEffect(selectedGroupId, sorted) {
-        if (selectedIndex >= 0) listState.animateScrollToItem(selectedIndex)
+    // Brought into view when it is not, and only then. Keyed on the list it scrolled on every play or
+    // pause anywhere in the house, and to the top rather than into view: with more rooms than fit,
+    // the list jumped under the viewer for nothing (P-62). A move within the list changes the index.
+    LaunchedEffect(selectedGroupId, selectedIndex) {
+        if (selectedIndex < 0) return@LaunchedEffect
+        val layout = listState.layoutInfo
+        val row = layout.visibleItemsInfo.firstOrNull { it.index == selectedIndex }
+        val inView = row != null && row.offset >= layout.viewportStartOffset && row.offset + row.size <= layout.viewportEndOffset
+        if (!inView) listState.animateScrollToItem(selectedIndex)
     }
 
     Column(

@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.lan.EMPTY_SOAP
+import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.connectTo
 import com.rahga.x2rock.lan.soapAction
@@ -55,6 +56,9 @@ class QueueViewModelTest {
     /** Serve slot 1 as a different track, as if an edit elsewhere had moved one into it. */
     @Volatile private var slotOneReplaced = false
     @Volatile private var fromQueue = true
+    @Volatile private var playingSlot = 1
+    /** Serve slot 5 under slot 1's title: one name twice in the queue, as a song queued twice is. */
+    @Volatile private var nameTwice = false
 
 
     @Before fun setUp() {
@@ -80,11 +84,19 @@ class QueueViewModelTest {
                                 FakePlayer.fixtureText(if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                                     .replace("<UpdateID>58</UpdateID>", "<UpdateID>$updateId</UpdateID>")
                                     .let { if (slotOneReplaced) it.replaceFirst("Cómo Me Quieres", "Somebody Else") else it }
+                                    .let { if (nameTwice) it.replace("Cómo Te Quiero", "Cómo Me Quieres") else it }
                             )
                         }
                         "GetMediaInfo" -> MockResponse().setBody("<s:Envelope><s:Body><u:GetMediaInfoResponse><CurrentURI>${if (fromQueue) "x-rincon-queue:X#0" else "http://radio.example/stream"}</CurrentURI></u:GetMediaInfoResponse></s:Body></s:Envelope>")
+                        // The captured reply, at the slot a test says is playing.
+                        "GetPositionInfo" -> MockResponse().setBody(
+                            FakePlayer.fixtureText("GetPositionInfo.tidal.xml").replace("<Track>1</Track>", "<Track>$playingSlot</Track>")
+                        )
+                        // The edits this test sends, accepted with nothing to say unless refused above.
+                        "ReorderTracksInQueue", "RemoveTrackFromQueue", "RemoveAllTracksFromQueue", "Seek", "Play" ->
+                            MockResponse().setBody(EMPTY_SOAP)
                         "SaveQueue" -> MockResponse().setBody("<s:Envelope><s:Body><u:SaveQueueResponse><AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>")
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }
@@ -325,7 +337,7 @@ class QueueViewModelTest {
         val newTitle = "A later queue snapshot"
         upnp.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
-                if (soapAction(request) != "Browse") return MockResponse().setBody(EMPTY_SOAP)
+                if (soapAction(request) != "Browse") return unknownAction()
                 val body = request.body.readUtf8()
                 val fixture = if ("<StartingIndex>0<" in body) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
                 val answer = FakePlayer.fixtureText(fixture)
@@ -364,7 +376,7 @@ class QueueViewModelTest {
         val pages = java.util.concurrent.atomic.AtomicInteger()
         upnp.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
-                if (soapAction(request) != "Browse") return MockResponse().setBody(EMPTY_SOAP)
+                if (soapAction(request) != "Browse") return unknownAction()
                 pages.incrementAndGet()
                 val first = "<StartingIndex>0<" in request.body.readUtf8()
                 val fixture = if (first) "Browse.queue.page1.xml" else "Browse.queue.page2.xml"
@@ -390,6 +402,30 @@ class QueueViewModelTest {
         withTimeout(5_000) { household.groupStates.first { it[groupId]?.track?.name == "Next queue track" } }
         withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.currentTrackName == "Next queue track" } }
         assertEquals("a track change should not browse the queue", readsBefore, fullReads())
+    }
+
+    /**
+     * One name twice in the queue: both rows were marked "Now playing" and the screen opened on the
+     * first, whichever played. The player's slot decides (P-63). Slot 5 of the captured page renamed.
+     */
+    @Test fun `of two tracks of one name, the slot playing is the one marked`() = runBlocking<Unit> {
+        nameTwice = true
+        playingSlot = 5
+        viewModel.reload()
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.entries?.count { e -> e.item.track?.name == "Cómo Me Quieres" } == 2 } }
+        fake.push("playbackMetadata:1", "metadataStatus", FakePlayer.fixtureText("event.metadataStatus.json").replace("Ironic (2015 remaster)", "Cómo Me Quieres"), groupId)
+        // The slot read before this test moved it names the same title, until the track change's read lands.
+        withTimeout(5_000) { viewModel.uiState.first { (it as? QueueViewModel.UiState.Success)?.currentSlot == 5 } }
+    }
+
+    /** A slot read for the track before still names it: until it is read again, the name decides. */
+    @Test fun `a slot that no longer holds the track playing is not marked`() {
+        val entries = queueEntries(listOf(
+            com.rahga.x2rock.model.QueueItem("1", com.rahga.x2rock.model.Track("A", null, null, null)),
+            com.rahga.x2rock.model.QueueItem("2", com.rahga.x2rock.model.Track("B", null, null, null)),
+        ))
+        assertEquals(2, currentSlotIn(entries, 2, "B"))
+        assertEquals(null, currentSlotIn(entries, 1, "B"))
     }
 
     @Test fun `a source change updates in use without browsing the queue`() = runBlocking<Unit> {

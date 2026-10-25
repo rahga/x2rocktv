@@ -51,6 +51,11 @@ jobs:
           echo "$name"
           if grep -q hardcore <<<"$name"; then echo "the public APK is marked +hardcore"; exit 1; fi
           if grep -q "0.0.0-dev" <<<"$name"; then echo "the APK carries no version: git describe found no tag"; exit 1; fi
+          # What the "+hardcore" mark stands for, read off the build itself: the version name is only
+          # set from the same flags, so it could not fail on its own (P-68). Any integration key or
+          # secret compiled in is a value here.
+          config=app/build/generated/source/buildConfig/release/com/rahga/x2rock/BuildConfig.java
+          if grep -E 'SONOS_(KEY|SECRET) = "[^"]+"' "$config"; then echo "the public build carries an integration"; exit 1; fi
 
       # P-47: a build with the developer integration must refuse to write a bundle, however the bundle
       # is asked for. Dummy key files, never real ones; an abbreviated task name, as the bypass was.

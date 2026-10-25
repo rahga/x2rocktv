@@ -5,6 +5,7 @@ import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
 import com.rahga.x2rock.lan.EMPTY_SOAP
+import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.soapAction
 import com.rahga.x2rock.lan.PlayerAddressBook
@@ -82,7 +83,7 @@ class ToneStepsTest {
                         "SetLEDFeedbackState" -> FakePlayer.fixtureText("SetLEDFeedbackState.xml")
                         // Kitchen's SubGain reply, 2026-10-11, standing for every EQ type read here.
                         "GetEQ" -> FakePlayer.fixtureText("GetEQ.SubGain.xml")
-                        else -> EMPTY_SOAP
+                        else -> return unknownAction()
                     })
                 }
             }

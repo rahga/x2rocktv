@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.lan.EMPTY_SOAP
+import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
@@ -68,7 +69,7 @@ class SonosFavoriteEditsTest {
                     return when (action) {
                         "DestroyObject" -> MockResponse().setBody(FakePlayer.fixtureText("DestroyObject.favorite.xml"))
                         "CreateObject" -> MockResponse().setBody(FakePlayer.fixtureText("CreateObject.serviceTrack.xml"))
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

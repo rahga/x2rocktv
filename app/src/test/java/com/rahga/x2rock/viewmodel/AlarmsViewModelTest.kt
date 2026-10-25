@@ -1,6 +1,7 @@
 package com.rahga.x2rock.viewmodel
 
 import com.rahga.x2rock.lan.EMPTY_SOAP
+import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.PlayerAddressBook
 import com.rahga.x2rock.lan.SonosHousehold
@@ -73,7 +74,7 @@ class AlarmsViewModelTest {
                         "GetTimeNow" -> FakePlayer.fixtureText("GetTimeNow.xml")
                         "GetTimeZone" -> FakePlayer.fixtureText("GetTimeZone.xml")
                         "Browse" -> FakePlayer.fixtureText("Browse.FV2.xml")
-                        else -> EMPTY_SOAP
+                        else -> return unknownAction()
                     }
                     return MockResponse().setBody(body.replace("RINCON_ALARMROOM0001400", playerId))
                 }

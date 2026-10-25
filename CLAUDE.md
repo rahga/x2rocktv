@@ -206,7 +206,10 @@ been written that could not fail — an assertion allowing the null it always go
 `coerceAtMost(0)` compared against 0, a fake that refused nothing, and twice a captured
 topology with one player per group making anything about *members* unreachable. In every
 case the assertion read correctly and the input made it moot. Break the code the test names
-and confirm it fails; nothing else reliably catches this.
+and confirm it fails; nothing else reliably catches this. A UPnP stand-in's default answer is
+`unknownAction()`, the fault a player sends for an action it has not got, not an empty success: name
+each action a test expects to succeed (P-67, 2026-10-24). An empty success for anything let a wrong or
+extra action pass.
 
 ### Households
 A household is discovered, not configured: SSDP's reply carries

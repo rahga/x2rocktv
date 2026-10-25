@@ -152,6 +152,27 @@ class PlayerViewModelTest {
         assertNull("a track with nothing to rate has none", ratingWhileReading(rated, "G1", null))
     }
 
+    /** P-61: a room last reported minutes ago is published where it is now, not where it was. */
+    @Test fun `the media session is given the position now, not the last report`() {
+        assertEquals(190_000, positionNow(10_000, reportedAt = 1_000, playing = true, durationMillis = 300_000, now = 181_000))
+        assertEquals("paused, it has not moved", 10_000, positionNow(10_000, reportedAt = 1_000, playing = false, durationMillis = 300_000, now = 181_000))
+        assertEquals("never past the track's end", 300_000, positionNow(10_000, reportedAt = 1_000, playing = true, durationMillis = 300_000, now = 9_000_000))
+    }
+
+    /** And the room selected a while after its report is published moved on by that while. */
+    @Test fun `a room selected after its last report is published where it is now`() = runBlocking<Unit> {
+        val other = household.state.value.groups.first { it.id != groupId }
+        fake.pushPlaybackStatus(other.id, "PLAYBACK_STATE_PLAYING")
+        withTimeout(5_000) { household.groupStates.first { it[other.id]?.playbackState == "PLAYBACK_STATE_PLAYING" } }
+        delay(1_200)
+        viewModel.selectGroup(other.id, other.name)
+        val published = withTimeout(5_000) {
+            while (publisher.states.lastOrNull()?.playing != true) delay(20)
+            publisher.states.last()
+        }
+        assertTrue("published at ${published.positionMillis}, the report's own position", published.positionMillis >= 1_000)
+    }
+
     /** P-118: the same room under a new id keeps its buttons; a room left does not carry them. */
     @Test fun `the rating buttons follow the room to a new group id`() {
         val rating = SonosHousehold.RatingState("Deezer", com.rahga.x2rock.smapi.Thumb.UP, SonosHousehold.RatingStyle.FAVORITE)
@@ -237,6 +258,32 @@ class PlayerViewModelTest {
     }
 
     private fun sentDelta(): Int? = fake.lastCommandBody("setRelativeVolume")?.get("volumeDelta")?.asInt
+
+    /**
+     * The pills' path, which every earlier test missed by calling `adjustVolume`: a press before the
+     * first `groupVolume:1` was dropped. It moves by the finest step (P-65).
+     */
+    @Test fun `a pill press before a volume is known moves it by one`() = runBlocking<Unit> {
+        fake.clearHistory()
+        viewModel.stepVolume(+1)
+        fake.awaitCommand("setRelativeVolume", 3_000)
+        assertEquals(1, sentDelta())
+    }
+
+    /**
+     * Presses within a burst climb 2, then 3, judged from the level plus what is still unsent, and go
+     * as one. From 8 the second press is judged at 10, past the quiet cap; judged at 8 it would be 2.
+     */
+    @Test fun `pill presses in a burst climb and are sent as one`() = runBlocking<Unit> {
+        fake.pushGroupVolume(groupId, 8)
+        awaitVolume(8)
+        fake.clearHistory()
+        viewModel.stepVolume(+1)
+        viewModel.stepVolume(+1)
+        fake.awaitCommand("setRelativeVolume", 3_000)
+        assertEquals(5, sentDelta())
+        assertEquals("one send for the burst", 1, fake.commandsNamed("setRelativeVolume"))
+    }
 
 
     // ---------------------------------------------------------------- play modes
@@ -559,7 +606,7 @@ class PlayerViewModelTest {
     @Test fun `a failed rating attempt surfaces a message rather than nothing`() = runBlocking<Unit> {
         viewModel.rateUp()
         val state = withTimeout(5_000) { viewModel.uiState.first { it.notice != null } }
-        assertEquals("nothing rateable is playing in this room", state.notice)
+        assertEquals("Couldn't rate this track: nothing rateable is playing in this room", state.notice)
     }
 
     // ---------------------------------------------------------------- failure
