@@ -52,7 +52,7 @@ class AlarmTest {
                             else if (ringing) MockResponse().setBody(FakePlayer.fixtureText("GetRunningAlarmProperties.ringing.xml"))
                             else MockResponse().setResponseCode(500).setBody(FakePlayer.fixtureText("GetRunningAlarmProperties.none.xml"))
                         "SnoozeAlarm" -> MockResponse().setBody(FakePlayer.fixtureText("SnoozeAlarm.reply.xml"))
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

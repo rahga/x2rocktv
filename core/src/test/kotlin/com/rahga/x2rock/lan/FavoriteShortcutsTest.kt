@@ -40,7 +40,7 @@ class FavoriteShortcutsTest {
             dispatcher = object : Dispatcher() {
                 override fun dispatch(request: RecordedRequest): MockResponse =
                     if (soapAction(request) == "Browse") MockResponse().setBody(FakePlayer.fixtureText("Browse.FV2.shortcuts.xml"))
-                    else MockResponse().setBody(EMPTY_SOAP)
+                    else unknownAction()
             }
             start(InetAddress.getByName("127.0.0.1"), 0)
         }

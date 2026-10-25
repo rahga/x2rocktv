@@ -56,7 +56,7 @@ class FavoriteEditsTest {
                     return when (action) {
                         "CreateObject" -> reply(create)
                         "DestroyObject" -> reply(destroy)
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

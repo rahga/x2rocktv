@@ -63,7 +63,7 @@ class AlarmListTest {
                         "GetTimeNow" -> MockResponse().setBody(FakePlayer.fixtureText("GetTimeNow.xml"))
                         "GetTimeZone" -> MockResponse().setBody(FakePlayer.fixtureText("GetTimeZone.xml"))
                         "Browse" -> MockResponse().setBody(FakePlayer.fixtureText("Browse.FV2.xml"))
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

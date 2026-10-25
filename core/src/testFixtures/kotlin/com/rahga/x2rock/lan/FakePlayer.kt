@@ -491,8 +491,14 @@ class FakePlayer(
     private val releaseLatch = java.util.concurrent.atomic.AtomicReference(CountDownLatch(0))
     private val heldAside = java.util.concurrent.atomic.AtomicReference<((JsonObject) -> Boolean)?>(null)
 
+    /** WebSockets a client has opened, ever, by the hostname asked for: a fresh socket told from a reused one. */
+    private val opened = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
+    fun socketsOpenedTo(playerId: String): Int = opened[PlayerNames.localHostname(playerId)!!.lowercase()] ?: 0
+
     private fun upgrade(host: String) = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
         override fun onOpen(webSocket: WebSocket, response: Response) {
+            opened.merge(host.lowercase(), 1, Int::plus)
             sockets[host] = webSocket
             socket = webSocket
         }

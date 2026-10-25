@@ -1,7 +1,8 @@
 package com.rahga.x2rock.lan
 
 import org.w3c.dom.Element
-import java.io.ByteArrayInputStream
+import java.io.StringReader
+import org.xml.sax.InputSource
 import java.io.IOException
 import javax.xml.parsers.DocumentBuilderFactory
 
@@ -28,7 +29,10 @@ internal object Xml {
             isExpandEntityReferences = false
             runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
         }.newDocumentBuilder()
-            .parse(ByteArrayInputStream(xml.toByteArray()))
+            // As characters: the reply is already decoded text, and handed over as UTF-8 bytes the
+            // parser went by the prolog's `encoding=` instead, decoding a second time — a reply
+            // declaring ISO-8859-1 read "Beyoncé" as "BeyoncÃ©" (P-66). A reader's encoding is final.
+            .parse(InputSource(StringReader(xml)))
             .documentElement
     }
 

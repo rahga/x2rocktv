@@ -40,7 +40,7 @@ class AboutSystemTest {
                 override fun dispatch(request: RecordedRequest): MockResponse = when {
                     request.path == "/xml/device_description.xml" -> MockResponse().setBody(description)
                     soapAction(request) == "CheckForUpdate" -> MockResponse().setBody(offer).also { actions += soapFields(request.body.readUtf8()).toString() }
-                    else -> MockResponse().setBody(EMPTY_SOAP)
+                    else -> unknownAction()
                 }
             }
             start(InetAddress.getByName("127.0.0.1"), 0)

@@ -151,6 +151,45 @@ class AccountCaptureTest {
     }
 
     /**
+     * The whole exchange, as a player makes it: SUBSCRIBE answered with a SID, a NOTIFY to the
+     * CALLBACK carrying the variable entity-escaped (as the player sends it, per the test above), a
+     * 200 back, the value extracted, and an UNSUBSCRIBE naming the SID. Nothing tested it end to end
+     * (P-67). The envelope is a placeholder: the real one is verified against a player, not here.
+     */
+    @Test(timeout = 20_000) fun `a player that calls back is answered, its variable kept, and let go`() = runBlocking {
+        val player = java.net.ServerSocket(0, 50, java.net.InetAddress.getByName("127.0.0.1"))
+        val notifyAnswer = CompletableDeferred<String>()
+        val unsubscribe = CompletableDeferred<String>()
+        thread(isDaemon = true) {
+            runCatching {
+                player.accept().use { s ->
+                    val request = AccountCapture.readHttpMessage(s.getInputStream())
+                    val target = java.net.URI(AccountCapture.header(request, "CALLBACK")!!.removeSurrounding("<", ">"))
+                    s.getOutputStream().write("HTTP/1.1 200 OK\r\nSID: uuid:test-sid\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                    val body = "<e:propertyset><e:property>&lt;ThirdPartyMediaServersX&gt;2:AAAA&lt;/ThirdPartyMediaServersX&gt;</e:property></e:propertyset>"
+                    java.net.Socket(target.host, target.port).use { peer ->
+                        peer.getOutputStream().write(
+                            ("NOTIFY ${target.path} HTTP/1.1\r\nNT: upnp:event\r\nSID: uuid:test-sid\r\n" +
+                                "Content-Length: ${body.toByteArray().size}\r\n\r\n$body").toByteArray()
+                        )
+                        notifyAnswer.complete(peer.getInputStream().bufferedReader().readLine().orEmpty())
+                    }
+                }
+                player.accept().use { s ->
+                    unsubscribe.complete(AccountCapture.readHttpMessage(s.getInputStream()))
+                    s.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".toByteArray())
+                }
+            }
+        }
+        val envelope = AccountCapture.captureEnvelope("127.0.0.1", timeoutMillis = 10_000, playerPort = player.localPort)
+        assertEquals("2:AAAA", envelope)
+        assertEquals("HTTP/1.1 200 OK", withTimeout(5_000) { notifyAnswer.await() })
+        val unsub = withTimeout(5_000) { unsubscribe.await() }
+        assertTrue(unsub, unsub.startsWith("UNSUBSCRIBE ") && AccountCapture.header(unsub, "SID") == "uuid:test-sid")
+        player.close()
+    }
+
+    /**
      * A NOTIFY whose body never comes in full, and a caller that leaves meanwhile. Only the listener
      * was closed on a cancellation, so the read of the accepted connection went on — the service lock
      * held above it — and when it did end it was as a `SocketException`, recorded as the sign-ins

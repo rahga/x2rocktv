@@ -427,6 +427,14 @@ class SonosHousehold(
     private val subscribedGroups = ConcurrentHashMap<String, String>()
     /** Players whose own subscriptions stand: see [subscribePlayer]. */
     private val subscribedPlayers: MutableSet<String> = ConcurrentHashMap.newKeySet()
+    /**
+     * Players whose subscriptions stood and whose socket was then lost: retried by the catch-up
+     * until subscribed again or gone from the topology. A member's socket dropping without the
+     * speaker leaving — a ping timeout, a Wi-Fi blip — is no topology change, and its level waited
+     * for one that might never come (P-58). Only these: a player that never took `playerVolume:1`
+     * would otherwise keep the catch-up running for good.
+     */
+    private val lostPlayers: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val resubscribeLock = Mutex()
 
     /**
@@ -732,6 +740,12 @@ class SonosHousehold(
             if (fromMemory && !refused) {
                 withContext(Dispatchers.IO) { seeds.clear() }
             }
+            // And what this attempt opened goes with it: a player that took the handshake and then
+            // stalled `getGroups` (Dining Room's Symfonisk, for two minutes once) was pooled still,
+            // and every later attempt reused the hung socket at a reply timeout each, until the
+            // ping evicted it (P-59). Not when the attempt tore down already, or the session is not
+            // its own, or the player answered and refused: a refusal is the switch, not the socket.
+            if (!ownTeardown && !refused && e !is HouseholdChoiceNeeded) teardown()
             _state.update {
                 it.copy(
                     connected = false,
@@ -811,6 +825,7 @@ class SonosHousehold(
         // value nothing will update.
         val players = playersOn(socket.hostname).toSet()
         takeJobs(socket).forEach { it.cancel() }
+        lostPlayers.addAll(players.filter { it in subscribedPlayers })
         subscribedPlayers.removeAll(players)
         subscribedGroups.entries.removeIf { it.value in players }
         _playerVolumes.update { it - players }
@@ -822,7 +837,10 @@ class SonosHousehold(
             if (unsubscribedGroupsRemain()) catchUpLater()
             return
         }
-        if (!carried) return
+        if (!carried) {
+            if (unsubscribedGroupsRemain()) catchUpLater()
+            return
+        }
         // Said as reconnecting, not as [cause]: a speaker unplugged is ordinary, and the
         // error is for a reconnect that fails. Tried at once, past the speaker that went —
         // other speakers are very likely there, and the backoff is for when they are not.
@@ -867,6 +885,7 @@ class SonosHousehold(
         gone.forEach(dispose)
         subscribedGroups.clear()
         subscribedPlayers.clear()
+        lostPlayers.clear()
         addressBook.clear()
         upnp.switchedOff = false
         _groupStates.value = emptyMap()
@@ -1051,6 +1070,18 @@ class SonosHousehold(
         if (slot <= 1) return null
         // Slots are 1-based and a browse's index 0-based, so the slot before is index slot - 2.
         return upnp.browseQueue(hostname, start = slot - 2, count = 1).items.firstOrNull()?.track
+    }
+
+    /**
+     * The queue slot [groupId] is playing, 1-based (0 where the player names none), or null while
+     * the queue is not its source. A
+     * name cannot say which of two tracks of one name plays — a classical album's "I. Allegro", a
+     * song queued twice — and the slot can (P-63).
+     */
+    suspend fun queueSlot(groupId: String): Int? {
+        val hostname = coordinatorHostname(groupId)
+        if (!upnp.mediaInfo(hostname).playingFromQueue) return null
+        return upnp.currentTrackNumber(hostname)
     }
 
     /** For the live suite, which must put a room's source back as it found it. */
@@ -2565,8 +2596,11 @@ class SonosHousehold(
 
     @Volatile private var catchUpJob: Job? = null
 
-    private fun unsubscribedGroupsRemain(): Boolean =
-        _state.value.groups.any { subscribedGroups[it.id] != it.coordinatorId }
+    private fun unsubscribedGroupsRemain(): Boolean {
+        val state = _state.value
+        lostPlayers.retainAll(state.players.map { it.id }.toSet())
+        return state.groups.any { subscribedGroups[it.id] != it.coordinatorId } || lostPlayers.isNotEmpty()
+    }
 
     /**
      * Keep trying the groups that could not be subscribed, with the reconnect's backoff.
@@ -2606,7 +2640,7 @@ class SonosHousehold(
         }.isSuccess && subscribeHdmi(player)
         // Either failing leaves the player to the next catch-up: a soundbar whose port was never
         // heard from could not tell an empty socket from a television, for the whole session.
-        if (!subscribed) subscribedPlayers.remove(player.id)
+        if (!subscribed) subscribedPlayers.remove(player.id) else lostPlayers.remove(player.id)
     }
 
     /**

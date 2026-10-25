@@ -57,7 +57,7 @@ class PreviousTrackTest {
                         "Browse" -> MockResponse().setBody(
                             FakePlayer.fixtureText(if (f["StartingIndex"] == "0") "Browse.queue.page1.xml" else "Browse.queue.page2.xml")
                         )
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

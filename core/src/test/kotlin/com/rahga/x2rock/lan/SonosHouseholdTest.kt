@@ -695,6 +695,32 @@ class SonosHouseholdTest {
         assertEquals("watchers of the lost socket are still running", 2 * household.openSockets(), household.liveWatchers())
     }
 
+    /**
+     * And it comes back by itself. A member's socket dropping with the speaker still in the topology —
+     * a ping timeout, a Wi-Fi blip — is no topology change, and its level waited for one (P-58).
+     */
+    @Test fun `a member's lost socket is subscribed again with no regroup`() = runBlocking<Unit> {
+        val (member, _) = guestTvJoinsKitchen()
+        // The regroup's own catch-ups finished first, or one landing after the drop brings the member
+        // back by luck: they queue on the household's lock, so it has to have been free a while.
+        val lock = SonosHousehold::class.java.getDeclaredField("resubscribeLock").apply { isAccessible = true }
+            .get(household) as kotlinx.coroutines.sync.Mutex
+        withTimeout(10_000) {
+            var free = 0
+            while (free < 5) { free = if (lock.isLocked) 0 else free + 1; delay(100) }
+        }
+        fake.clearHistory()
+        fake.dropConnection(member)
+        withTimeout(5_000) { household.playerVolumes.first { member !in it } }
+        fake.awaitCommand(timeoutMillis = 10_000) {
+            it.get("namespace")?.asString == "playerVolume:1" && it.get("command")?.asString == "subscribe" &&
+                it.get("playerId")?.asString == member
+        }
+        fake.pushPlayerVolume(member, volume = 11)
+        withTimeout(5_000) { household.playerVolumes.first { it[member]?.volume == 11 } }
+        assertEquals("no topology was read to bring it back", 0, fake.commandsNamed("getGroups"))
+    }
+
     /** The other half: a coordinator's socket carries its group's subscriptions, so it rebuilds. */
     @Test fun `a coordinator's lost socket still rebuilds the session`() = runBlocking<Unit> {
         val (_, coordinator) = guestTvJoinsKitchen()

@@ -54,7 +54,9 @@ class QueueEditTest {
                                 "<u:SaveQueueResponse xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">" +
                                 "<AssignedObjectID>SQ:11</AssignedObjectID></u:SaveQueueResponse></s:Body></s:Envelope>"
                         )
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        // The edits this test sends, answered as accepted with nothing to say.
+                        "ReorderTracksInQueue", "RemoveTrackFromQueue", "RemoveAllTracksFromQueue" -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

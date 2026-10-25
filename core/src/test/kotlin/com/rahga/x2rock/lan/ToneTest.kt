@@ -51,7 +51,9 @@ class ToneTest {
                         "GetLEDFeedbackState" -> MockResponse().setBody(FakePlayer.fixtureText("GetLEDFeedbackState.xml"))
                         "GetIRRepeaterState" -> MockResponse().setBody(FakePlayer.fixtureText("GetIRRepeaterState.xml"))
                         "SetLEDFeedbackState", "SetIRRepeaterState" -> MockResponse().setBody(FakePlayer.fixtureText("SetLEDFeedbackState.xml"))
-                        else -> MockResponse().setBody(EMPTY_SOAP)
+                        // The tone writes this test sends, answered as accepted with nothing to say.
+                        "SetBass", "SetTreble", "SetLoudness", "SetRoomCalibrationStatus", "SetEQ" -> MockResponse().setBody(EMPTY_SOAP)
+                        else -> unknownAction()
                     }
                 }
             }

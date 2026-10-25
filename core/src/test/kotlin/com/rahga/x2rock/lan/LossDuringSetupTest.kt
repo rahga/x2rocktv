@@ -175,4 +175,19 @@ class LossDuringSetupTest {
         while (subscribes() <= before && System.currentTimeMillis() < deadline) delay(100)
         assertTrue("${other.name}'s group was left marked subscribed over its dead socket", subscribes() > before)
     }
+
+    /**
+     * A player that takes the handshake and then stalls `getGroups`, as Dining Room's Symfonisk once
+     * did for two minutes: the attempt fails at the reply timeout, and its socket used to stay pooled,
+     * so the next attempt reused the hung socket instead of opening another (P-59).
+     */
+    @Test(timeout = 30_000) fun `a failed attempt's socket is not reused by the next`() = runBlocking {
+        fake.holdRepliesTo("getGroups")
+        val first = runCatching { withTimeout(10_000) { household.connect(fake.seed) } }
+        assertTrue("the stalled attempt should have failed: $first", first.isFailure)
+        fake.releaseReplies()
+        val opened = fake.socketsOpenedTo(fake.id)
+        household.connectTo(fake, 10_000)
+        assertTrue("the next attempt reused the stalled socket", fake.socketsOpenedTo(fake.id) > opened)
+    }
 }

@@ -46,4 +46,14 @@ class UpnpParseTest {
             assertEquals("refusing a reply that declares a DOCTYPE", e.message)
         }
     }
+
+    /**
+     * The reply reaches the parser already decoded. Handed over as UTF-8 bytes, a prolog declaring
+     * another encoding was obeyed and the text decoded twice (P-66). The parser's behaviour, so the
+     * document is a minimal one, not a capture: no reply seen so far declares anything but UTF-8.
+     */
+    @Test fun `a reply's text is not decoded again by its prolog`() {
+        val root = Xml.parse("""<?xml version="1.0" encoding="ISO-8859-1"?><a>Beyoncé</a>""")
+        assertEquals("Beyoncé", root.textContent)
+    }
 }
