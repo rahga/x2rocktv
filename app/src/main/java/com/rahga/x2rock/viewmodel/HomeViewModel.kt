@@ -281,11 +281,9 @@ class HomeViewModel @Inject constructor(
                 val followed = savedSelection.findIn(groups)
                 if (current != null && groups.any { it.id == current } && (followed == null || followed.id == current)) return@collect
 
-                val tvPlayer = roomPrefsStore.tvPlayerId.value
-                val tvRoom = TvSoundbar.groupOf(tvPlayer, groups)
                 _selectedGroupId.value = (
                     followed
-                        ?: tvRoom?.also { chooseSpeaker(tvPlayer!!) }
+                        ?: roomPrefsStore.tvPlayerId.value?.let { tv -> TvSoundbar.groupOf(tv, groups)?.also { chooseSpeaker(tv) } }
                         ?: defaultSelection(groups)?.also { savedSelection.remember(it) }
                     )?.id
             }

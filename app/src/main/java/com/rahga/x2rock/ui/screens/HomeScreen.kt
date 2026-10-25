@@ -12,6 +12,8 @@ import com.rahga.x2rock.ui.components.DotEqualizer
 import com.rahga.x2rock.ui.components.DotScanner
 import com.rahga.x2rock.ui.components.exitOnKey
 import com.rahga.x2rock.ui.theme.requestFocusRetrying
+import com.rahga.x2rock.ui.theme.AppSurfaceScale
+import com.rahga.x2rock.ui.theme.appSurfaceColors
 import com.rahga.x2rock.ui.theme.IconLabelButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -94,7 +96,6 @@ import androidx.tv.material3.Card
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
-import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.rahga.x2rock.model.AppColorTheme
@@ -292,11 +293,14 @@ fun HomeScreen(
     // speakers to the new one); and a reconnect, which withdraws the list while it runs. Keyed
     // on the selection too, for a regroup whose old row goes in the same frame the new
     // selection arrives. Not while a panel is open, which has its own, nor with focus in the
-    // player pane, which the viewer put there.
-    // And not while the list already holds it: the sidebar selects on focus, so arrowing down
-    // the rooms changes the selection at every press, and each would otherwise re-request the
-    // row it is already on — nor while anything else on the screen does (see screenHasFocus).
+    // player pane, which the viewer put there. And not while anything else on the screen holds
+    // it: the list, since the sidebar selects on focus and arrowing down the rooms changes the
+    // selection at every press, each of which would re-request the row it is already on; or the
+    // Settings button at the foot of the list, outside the list and the pane both, which a regroup
+    // of the selected room minting a new id took focus from, so the Select meant for Settings
+    // entered the pane (P-121).
     var paneHasFocus by remember { mutableStateOf(false) }
+    var screenHasFocus by remember { mutableStateOf(false) }
 
     // Back from the player pane goes to the room list. A BackHandler rather than a key handler
     // on the pane: the key handler took every Back pressed inside the pane, a menu drawn there
@@ -306,11 +310,6 @@ fun HomeScreen(
         sidebarFocusRequester.requestFocusSafely()
     }
     val listReady = selectedGroupId != null && groups.any { it.id == selectedGroupId }
-    // Anywhere on this screen, the Settings button at the foot of the list included: a regroup of
-    // the selected room mints a new id, and with the viewer parked on Settings — outside the list
-    // and the pane both — this took focus to the room's row, and the Select meant for Settings
-    // entered the pane (P-121).
-    var screenHasFocus by remember { mutableStateOf(false) }
     LaunchedEffect(listReady, selectedGroupId) {
         // "Something here already has it" counts only once focus was placed: before that, the list
         // holding focus is the automatic first focus on the wrong row, and is exactly what to correct.
@@ -1125,13 +1124,8 @@ private fun ThemeSelector(
         // The app's one focus language, as every button speaks it: filled with the primary colour and
         // not grown. tv-material's own — near white, a tenth larger, over the panel's padding — was the
         // second language the ten-foot pass took off cards and the volume pill (P-122).
-        colors = ClickableSurfaceDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.primary,
-            focusedContentColor = MaterialTheme.colorScheme.onPrimary,
-            pressedContainerColor = MaterialTheme.colorScheme.primary,
-            pressedContentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+        colors = appSurfaceColors(),
+        scale = AppSurfaceScale,
         modifier = modifier
             .fillMaxWidth()
             // The arrows drawn at either end, as a tap: the left half steps back, the right on.

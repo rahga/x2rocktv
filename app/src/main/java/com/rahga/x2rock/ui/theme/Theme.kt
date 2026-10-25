@@ -47,6 +47,7 @@ import androidx.tv.material3.CardColors
 import androidx.tv.material3.CardDefaults
 import androidx.tv.material3.Typography
 import androidx.tv.material3.ButtonDefaults
+import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.tv.material3.Card
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.MaterialTheme
@@ -260,6 +261,20 @@ private fun appButtonColors() = ButtonDefaults.colors(
     pressedContainerColor = MaterialTheme.colorScheme.primary,
     pressedContentColor = MaterialTheme.colorScheme.onPrimary,
 )
+
+/** [appButtonColors] for a clickable surface that is not a button: the theme row, a pill. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+@Composable
+fun appSurfaceColors() = ClickableSurfaceDefaults.colors(
+    focusedContainerColor = MaterialTheme.colorScheme.primary,
+    focusedContentColor = MaterialTheme.colorScheme.onPrimary,
+    pressedContainerColor = MaterialTheme.colorScheme.primary,
+    pressedContentColor = MaterialTheme.colorScheme.onPrimary,
+)
+
+/** No grow on focus or press: focus shows in its colour, and growing pushed a control past its row. */
+@OptIn(ExperimentalTvMaterial3Api::class)
+val AppSurfaceScale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f)
 
 /**
  * [AppButton] holding only an icon: tighter padding, so a row of them — the transport — fits the

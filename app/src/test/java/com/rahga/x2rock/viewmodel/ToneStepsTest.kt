@@ -4,7 +4,6 @@ import com.rahga.x2rock.store.BetaFeatures
 import com.rahga.x2rock.store.PendingRoomDeepLink
 import com.rahga.x2rock.store.RoomPreferencesStore
 import com.rahga.x2rock.store.ThemeStore
-import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.soapAction

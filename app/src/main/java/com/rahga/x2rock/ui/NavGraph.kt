@@ -249,9 +249,11 @@ fun X2RockNavGraph() {
 @Composable
 fun PlayerFollowsHome(homeViewModel: HomeViewModel, playerViewModel: PlayerViewModel) {
     LaunchedEffect(homeViewModel, playerViewModel) {
-        combine(homeViewModel.selectedGroupId, homeViewModel.uiState) { id, state ->
-            // Keyed on the groups too: a deep link can select a room before they have loaded.
-            val group = (state as? HomeViewModel.UiState.Success)?.groups?.find { it.id == id }
+        // The groups alone, not the rooms' details, which move with every event in the house. Keyed on
+        // them too: a deep link can select a room before they have loaded.
+        val groups = homeViewModel.uiState.map { (it as? HomeViewModel.UiState.Success)?.groups }.distinctUntilChanged()
+        combine(homeViewModel.selectedGroupId, groups) { id, groups ->
+            val group = groups?.find { it.id == id }
             group?.let { Triple(it.id, it.name, homeViewModel.route(it.id)) }
         }
             .filterNotNull()

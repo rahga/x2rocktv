@@ -71,28 +71,24 @@ class FakePlayer(
     private val bodies = mutableListOf<Pair<String, JsonObject>>()
 
     /**
-     * Every command name in order, never consumed.
+     * Every command's header in order, never consumed.
      *
      * [received] is a queue and [awaitCommand] *polls* it, so anything waited for is gone
      * afterwards — counting it after a wait reports zero. This is the log to count.
      */
-    private val commandLog = mutableListOf<Pair<String?, String>>()
-
-    @Synchronized
-    fun commandsNamed(command: String, namespace: String? = null): Int =
-        commandLog.count { (ns, c) -> c == command && (namespace == null || ns == namespace) }
-
-    /** Every command's header in order, never consumed: [commandLog] for what a name cannot pick out. */
     private val headerLog = mutableListOf<JsonObject>()
 
     @Synchronized
     fun commandsMatching(header: (JsonObject) -> Boolean): Int = headerLog.count(header)
 
+    fun commandsNamed(command: String, namespace: String? = null): Int = commandsMatching {
+        it.get("command")?.asString == command && (namespace == null || it.get("namespace")?.asString == namespace)
+    }
+
     @Synchronized
     fun clearHistory() {
         received.clear()
         bodies.clear()
-        commandLog.clear()
         headerLog.clear()
     }
 
@@ -378,10 +374,17 @@ class FakePlayer(
         }
 
     /** A playback status from the capture, with the state or queue version a test is about. */
-    fun pushPlaybackStatus(groupId: String, state: String? = null, queueVersion: String? = null) {
+    fun pushPlaybackStatus(
+        groupId: String,
+        state: String? = null,
+        queueVersion: String? = null,
+        /** `availablePlaybackActions` overridden by name, as a queue's last track says `canSkip` false. */
+        actions: Map<String, Boolean> = emptyMap(),
+    ) {
         val body = fixture("event.playbackStatus.json").apply {
             state?.let { addProperty("playbackState", it) }
             queueVersion?.let { addProperty("queueVersion", it) }
+            actions.forEach { (name, allowed) -> getAsJsonObject("availablePlaybackActions").addProperty(name, allowed) }
         }
         emit("playback:1", "playbackStatus", body, groupId)
     }
@@ -522,7 +525,6 @@ class FakePlayer(
                 val body = frame[1].takeIf { it.isJsonObject }?.asJsonObject ?: JsonObject()
                 synchronized(this@FakePlayer) {
                     bodies += command to body
-                    commandLog += header.get("namespace")?.asString to command
                     headerLog += header
                 }
             }

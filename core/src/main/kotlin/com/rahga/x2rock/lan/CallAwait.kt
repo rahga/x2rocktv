@@ -40,3 +40,12 @@ internal suspend fun Call.awaitReply(): HttpReply = suspendCancellableCoroutine 
         }
     })
 }
+
+/**
+ * [runCatching] that lets a cancellation through: a read that fails can fall back to a default,
+ * but a caller that left is not a failure, and swallowed it went on as though the read had answered
+ * nothing — "no Sonos players answered" over "Reconnecting…" (P-104), an abandoned history read
+ * filling the Apple account (P-109).
+ */
+internal inline fun <T> catching(block: () -> T): Result<T> =
+    runCatching(block).onFailure { if (it is kotlin.coroutines.cancellation.CancellationException) throw it }

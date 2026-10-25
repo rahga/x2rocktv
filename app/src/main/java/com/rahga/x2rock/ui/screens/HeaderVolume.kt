@@ -58,6 +58,7 @@ import com.rahga.x2rock.ui.components.StepMark
 import com.rahga.x2rock.ui.components.mutedInk
 import com.rahga.x2rock.ui.components.stepMarksShown
 import com.rahga.x2rock.ui.components.tapToClick
+import com.rahga.x2rock.ui.theme.AppSurfaceScale
 import com.rahga.x2rock.ui.theme.ignoreUnpressedRelease
 import com.rahga.x2rock.ui.theme.AppButton
 import com.rahga.x2rock.ui.theme.rememberAutoFocusRequester
@@ -177,7 +178,7 @@ internal fun VolumePill(
         onLongClick = setExactly,
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(50)),
         // Focus shows in its colour; tv-material3's grow on focus pushed it past its own row.
-        scale = ClickableSurfaceDefaults.scale(focusedScale = 1f, pressedScale = 1f),
+        scale = AppSurfaceScale,
         modifier = modifier
             .ignoreUnpressedRelease()
             .then(if (setExactly != null) Modifier.dpadMenuKey(setExactly) else Modifier)

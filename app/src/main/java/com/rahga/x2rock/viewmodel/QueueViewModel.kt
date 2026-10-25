@@ -39,7 +39,8 @@ data class QueueEntry(val trackNumber: Int, val item: QueueItem)
  * moment before a track change still names the last one — else null, and the name decides.
  */
 fun currentSlotIn(entries: List<QueueEntry>, slot: Int?, name: String?): Int? =
-    slot?.takeIf { name != null && entries.firstOrNull { it.trackNumber == slot }?.item?.track?.name == name }
+    // Entries are numbered by position (see [queueEntries]), so the slot is an index.
+    slot?.takeIf { name != null && entries.getOrNull(it - 1)?.item?.track?.name == name }
 
 /** Numbers every item by its slot in the queue. */
 fun queueEntries(items: List<QueueItem>): List<QueueEntry> =

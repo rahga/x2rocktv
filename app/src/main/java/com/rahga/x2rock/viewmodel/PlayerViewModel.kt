@@ -185,7 +185,8 @@ internal fun ratingFollowing(
 
 /**
  * A playing room's position now: its last report moved on by the time since, held within the track.
- * As the pane's bar reckons it (`livePosition`); [reportedAt] is wall-clock, as the household stamps it.
+ * The pane's bar and the media session both reckon it so; [reportedAt] is wall-clock, as the
+ * household stamps it.
  */
 internal fun positionNow(positionMillis: Long, reportedAt: Long, playing: Boolean, durationMillis: Long, now: Long = System.currentTimeMillis()): Long {
     val since = if (playing && reportedAt > 0) (now - reportedAt).coerceAtLeast(0) else 0

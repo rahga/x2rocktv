@@ -95,18 +95,7 @@ class AlarmPaneTest {
 
     @Test fun aRingingAlarmLeavesThePaneOnTheScreen() {
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
-        val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs), com.rahga.x2rock.store.AppleMusicSetting(prefs, household))
-        val player = PlayerViewModel(household, SilentNowPlaying, testClock)
-        compose.setContent {
-            X2RockTheme {
-                PlayerFollowsHome(home, player)
-                HomeScreen(
-                    onOpenQueue = {}, onOpenFavorites = {}, onOpenSearch = {}, onOpenNowPlaying = {},
-                    onOpenPreferredServices = {}, onOpenAlarms = {}, onOpenAbout = {}, onOpenReport = {},
-                    homeViewModel = home, playerViewModel = player,
-                )
-            }
-        }
+        showHome()
         // The captured album, a two-line title, then playing: the start the household asks about.
         fake.pushFixture("metadataStatus", bedroom.id)
         fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PAUSED")
@@ -139,6 +128,19 @@ class AlarmPaneTest {
      */
     @Test fun aRingingAlarmTakingThePlacesRowHandsFocusToPlayPause() {
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
+        showHome()
+        fake.pushFixture("metadataStatus", bedroom.id)
+        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PAUSED")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasContentDescription("Browse")).requestFocus()
+        compose.waitUntil(5_000) { compose.onAllNodes(isFocused() and hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
+        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PLAYING")
+        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Snooze", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        val playPause = hasContentDescription("Play") or hasContentDescription("Pause")
+        compose.waitUntil(10_000) { compose.onAllNodes(isFocused() and (playPause or hasAnyDescendant(playPause))).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    private fun showHome() {
         val home = HomeViewModel(household, ThemeStore(prefs), RoomPreferencesStore(prefs), NoChannelSync, PendingRoomDeepLink(), PresetStore(prefs), BetaFeatures(prefs), com.rahga.x2rock.store.AppleMusicSetting(prefs, household))
         val player = PlayerViewModel(household, SilentNowPlaying, testClock)
         compose.setContent {
@@ -151,14 +153,5 @@ class AlarmPaneTest {
                 )
             }
         }
-        fake.pushFixture("metadataStatus", bedroom.id)
-        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PAUSED")
-        compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasContentDescription("Browse")).requestFocus()
-        compose.waitUntil(5_000) { compose.onAllNodes(isFocused() and hasContentDescription("Browse")).fetchSemanticsNodes().isNotEmpty() }
-        fake.pushPlaybackStatus(bedroom.id, "PLAYBACK_STATE_PLAYING")
-        compose.waitUntil(10_000) { compose.onAllNodes(hasText("Snooze", substring = true)).fetchSemanticsNodes().isNotEmpty() }
-        val playPause = hasContentDescription("Play") or hasContentDescription("Pause")
-        compose.waitUntil(10_000) { compose.onAllNodes(isFocused() and (playPause or hasAnyDescendant(playPause))).fetchSemanticsNodes().isNotEmpty() }
     }
 }

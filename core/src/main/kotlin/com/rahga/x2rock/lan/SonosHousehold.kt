@@ -472,7 +472,15 @@ class SonosHousehold(
      * [seed] is any player's address. With none, SSDP finds one — reaching a single player
      * is enough, because `getGroups` then reports where all the others are.
      */
-    suspend fun connect(seed: Discovery.DiscoveredPlayer? = null) {
+    suspend fun connect(
+        seed: Discovery.DiscoveredPlayer? = null,
+        /**
+         * Replace the attempt under way rather than wait on it: a household chosen while a discovery
+         * sweeps is the viewer's answer to the question that sweep will only ask again, and waiting
+         * on it put the chooser back and dropped the press (P-111).
+         */
+        supersede: Boolean = false,
+    ) {
         val attempt = synchronized(this) {
             if (_state.value.connected || reconnectJob?.isActive == true) return
             // Remembered so a *failed* first attempt is still recoverable: a TV box commonly
@@ -482,12 +490,9 @@ class SonosHousehold(
             // One at a time: the home screen and the channel receiver both ask on start, and
             // `connected` is not set until getGroups has answered, so two set-ups used to run
             // side by side, subscribing the seed twice over. A second caller waits on the
-            // attempt under way rather than starting its own — unless it names a player that
-            // attempt was not started for. A household chosen while a discovery sweeps is the
-            // viewer's answer to the question that sweep will only ask again; waiting on it put
-            // the chooser back and dropped the press (P-111).
+            // attempt under way rather than starting its own — unless it [supersede]s it.
             val under = connectAttempt?.takeIf { !it.isCompleted }
-            if (under != null && (seed == null || seed == connectSeed)) under
+            if (under != null && !supersede) under
             else startConnect(seed, replacing = connectJob.takeIf { under != null }).also { connectAttempt = it }
         }
         attempt.await()
@@ -498,9 +503,6 @@ class SonosHousehold(
      * cancelled — superseded is not failed, and whatever superseded it owns the state from then on.
      */
     private var connectAttempt: CompletableDeferred<Unit>? = null
-
-    /** The player [connectAttempt] was started for; null for a discovery. */
-    private var connectSeed: Discovery.DiscoveredPlayer? = null
 
     /**
      * The [connect] under way. It runs in the household's own [scope], not its caller's, and
@@ -519,7 +521,6 @@ class SonosHousehold(
     /** [replacing] is an attempt this one supersedes: stopped, and whatever it opened let go, first. */
     private fun startConnect(seed: Discovery.DiscoveredPlayer?, replacing: Job? = null): CompletableDeferred<Unit> {
         val answer = CompletableDeferred<Unit>()
-        connectSeed = seed
         connectJob = scope.launch {
             if (replacing != null) {
                 replacing.cancelAndJoin()
@@ -542,7 +543,7 @@ class SonosHousehold(
      */
     suspend fun chooseHousehold(choice: HouseholdChoice) {
         _state.update { it.copy(householdChoices = emptyList(), error = null) }
-        connect(choice.seed)
+        connect(choice.seed, supersede = true)
     }
 
     /**
@@ -604,9 +605,7 @@ class SonosHousehold(
             // A cancellation is let through: swallowed, a network change's reconnect cancelling
             // this read it as "no Sonos players answered" and wrote that over "Reconnecting…" (P-104).
             .ifEmpty {
-                runCatching { mdns.find(MDNS_TIMEOUT_MILLIS) }
-                    .onFailure { if (it is CancellationException) throw it }
-                    .getOrDefault(emptyList())
+                catching { mdns.find(MDNS_TIMEOUT_MILLIS) }.getOrDefault(emptyList())
             }
             .let { all -> all.filterNot { it.hostname.equals(avoid, ignoreCase = true) }.ifEmpty { all } }
         val households = found.filter { it.householdId != null }.groupBy { it.householdId!! }
@@ -1064,19 +1063,16 @@ class SonosHousehold(
      * even on a queue's first track. Null unless the queue is the source and a slot precedes this.
      */
     suspend fun previousInQueue(groupId: String): Track? {
-        val hostname = coordinatorHostname(groupId)
-        if (!upnp.mediaInfo(hostname).playingFromQueue) return null
-        val slot = upnp.currentTrackNumber(hostname)
+        val slot = queueSlot(groupId) ?: return null
         if (slot <= 1) return null
         // Slots are 1-based and a browse's index 0-based, so the slot before is index slot - 2.
-        return upnp.browseQueue(hostname, start = slot - 2, count = 1).items.firstOrNull()?.track
+        return upnp.browseQueue(coordinatorHostname(groupId), start = slot - 2, count = 1).items.firstOrNull()?.track
     }
 
     /**
      * The queue slot [groupId] is playing, 1-based (0 where the player names none), or null while
-     * the queue is not its source. A
-     * name cannot say which of two tracks of one name plays — a classical album's "I. Allegro", a
-     * song queued twice — and the slot can (P-63).
+     * the queue is not its source. A name cannot say which of two tracks of one name plays — a
+     * classical album's "I. Allegro", a song queued twice — and the slot can (P-63).
      */
     suspend fun queueSlot(groupId: String): Int? {
         val hostname = coordinatorHostname(groupId)
@@ -1230,7 +1226,7 @@ class SonosHousehold(
         // read that outlived a reconnect named the previous household's account (P-109).
         val found = storedAppleMusicAccount()
             ?: AppleMusic.accountIn(
-                runCatching { history() }.onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList()),
+                catching { history() }.getOrDefault(emptyList()),
                 _groupStates.value.values.map { it.track },
             )
         if (found != null) synchronized(this) { if (generation == session) appleAccount = found }
@@ -1244,9 +1240,7 @@ class SonosHousehold(
      */
     suspend fun storedAppleMusicAccount(): String? {
         val session = generation
-        val accounts = runCatching { sessionAccounts(session) }
-            .onFailure { if (it is CancellationException) throw it }
-            .getOrNull() ?: return null
+        val accounts = catching { sessionAccounts(session) }.getOrNull() ?: return null
         if (generation != session) return null
         return accounts.firstOrNull { it.serviceId.toString() == AppleMusic.SERVICE_ID }?.let { "sn_${it.serial}" }
     }
@@ -1264,20 +1258,10 @@ class SonosHousehold(
      */
     private suspend fun sessionAccounts(session: Int): List<StoredAccount> = accountsLock.withLock {
         keptAccounts?.let { return@withLock it }
-        val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
-        storedAccounts(hostnameOf(coordinator), householdId(), session).also { keep(it, session) }
-    }
-
-    /**
-     * Keeps a read begun in [session], if that is still this session. A read still running when a
-     * reconnect tore its session down used to mark the new one read, so the new household was never
-     * asked and its Apple Music was listed, or not, by the old one's answer (P-77, 2026-10-23).
-     * Checked and kept under the monitor [teardown] clears it under, after its generation moves, so
-     * the two cannot interleave.
-     */
-    @Synchronized
-    private fun keep(accounts: List<StoredAccount>, session: Int) {
-        if (generation == session) keptAccounts = accounts
+        // Kept only for the session it was begun in: a read still running when a reconnect tore its
+        // session down used to mark the new one read, so the new household was never asked (P-77).
+        // Under the monitor [teardown] clears it under, after its generation moves.
+        storedAccounts(session).also { synchronized(this) { if (generation == session) keptAccounts = it } }
     }
 
     /**
@@ -1381,11 +1365,11 @@ class SonosHousehold(
      * and search with no word why.
      */
     private suspend fun storedAccounts(
-        hostname: String,
-        household: String,
         /** The session the read is for: a read that outlives it says nothing about the next (P-77). */
-        session: Int = generation,
+        session: Int,
     ): List<StoredAccount> {
+        val hostname = hostnameOf(_state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet"))
+        val household = householdId()
         fun record(read: StoredAccountsRead) { if (generation == session) _accountsRead.value = read }
         val salt = speakerSalt
             ?: return emptyList<StoredAccount>().also { record(StoredAccountsRead(0, "this build has no speaker salt")) }
@@ -1444,8 +1428,7 @@ class SonosHousehold(
             if (last != null && System.nanoTime() - last.first < REREAD_KEEP_NANOS) return@withLock last.second
             val session = generation
             val read = try {
-                val coordinator = _state.value.groups.firstOrNull()?.coordinatorId ?: error("no players yet")
-                storedAccounts(hostnameOf(coordinator), householdId(), session)
+                storedAccounts(session)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1493,8 +1476,7 @@ class SonosHousehold(
         val wanted = if (favorite) SAVE_TRACK else DELETE_TRACK
         // A map that could not be read is not one without ratings, but either way the service's own
         // favourite call is the way left to try.
-        val rating = runCatching { ratingsCatalogue.ratingsFor(linked.service) }
-            .onFailure { if (it is CancellationException) throw it }.getOrDefault(emptyList())
+        val rating = catching { ratingsCatalogue.ratingsFor(linked.service) }.getOrDefault(emptyList())
             .flatMap { it.ratings }.firstOrNull { it.stringId == wanted }
         if (rating != null) smapi.rateItem(linked.service, linked.token, item.id, rating.id)
         else smapi.setFavorite(linked.service, linked.token, item.id, favorite)
@@ -2659,28 +2641,24 @@ class SonosHousehold(
         // that followed left the room marked subscribed over a dead socket, frozen (P-103).
         subscribedGroups[group.id] = group.coordinatorId
         try {
-            subscribeOn(group)
+            val socket = socketForPlayer(group.coordinatorId)
+            // Subscribing returns the current state as the first event, so there is no
+            // separate "get" needed to seed the flow. All four at once, replies matched by cmdId:
+            // one round-trip per group rather than four, and a namespace a firmware ignores costs
+            // one reply timeout rather than one per room.
+            coroutineScope {
+                // Allowed to fail on its own. It is not in Sonos's reference, so a firmware without it
+                // is plausible, and a room with no sleep timer shown is far better than a room frozen
+                // because its fourth subscription was refused.
+                val sleepTimer = async { runCatching { socket.subscribe(Frames.onGroup("sleepTimer:1", "subscribe", group.id)) } }
+                listOf("playback:1", "playbackMetadata:1", "groupVolume:1")
+                    .map { namespace -> async { socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id)) } }
+                    .awaitAll()
+                sleepTimer.await()
+            }
         } catch (e: Throwable) {
             subscribedGroups.remove(group.id, group.coordinatorId)
             throw e
-        }
-    }
-
-    private suspend fun subscribeOn(group: Group) {
-        val socket = socketForPlayer(group.coordinatorId)
-        // Subscribing returns the current state as the first event, so there is no
-        // separate "get" needed to seed the flow. All four at once, replies matched by cmdId:
-        // one round-trip per group rather than four, and a namespace a firmware ignores costs
-        // one reply timeout rather than one per room.
-        coroutineScope {
-            // Allowed to fail on its own. It is not in Sonos's reference, so a firmware without it
-            // is plausible, and a room with no sleep timer shown is far better than a room frozen
-            // because its fourth subscription was refused.
-            val sleepTimer = async { runCatching { socket.subscribe(Frames.onGroup("sleepTimer:1", "subscribe", group.id)) } }
-            listOf("playback:1", "playbackMetadata:1", "groupVolume:1")
-                .map { namespace -> async { socket.subscribe(Frames.onGroup(namespace, "subscribe", group.id)) } }
-                .awaitAll()
-            sleepTimer.await()
         }
     }
 

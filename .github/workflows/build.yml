@@ -55,6 +55,7 @@ jobs:
           # set from the same flags, so it could not fail on its own (P-68). Any integration key or
           # secret compiled in is a value here.
           config=app/build/generated/source/buildConfig/release/com/rahga/x2rock/BuildConfig.java
+          test -f "$config" || { echo "no release BuildConfig at $config to check"; exit 1; }
           if grep -E 'SONOS_(KEY|SECRET) = "[^"]+"' "$config"; then echo "the public build carries an integration"; exit 1; fi
 
       # P-47: a build with the developer integration must refuse to write a bundle, however the bundle

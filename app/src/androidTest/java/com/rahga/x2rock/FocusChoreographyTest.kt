@@ -295,10 +295,7 @@ class FocusChoreographyTest {
         compose.onNode(hasContentDescription("Next")).requestFocus()
         waitForFocusOn("Next", hasContentDescription("Next"))
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }
-        val lastTrack = com.google.gson.JsonParser.parseString(FakePlayer.fixtureText("event.playbackStatus.json")).asJsonObject.apply {
-            getAsJsonObject("availablePlaybackActions").addProperty("canSkip", false)
-        }
-        fake.push("playback:1", "playbackStatus", lastTrack.toString(), bedroom.id)
+        fake.pushPlaybackStatus(bedroom.id, actions = mapOf("canSkip" to false))
         compose.waitUntil(10_000) { compose.onAllNodes(hasContentDescription("Next")).fetchSemanticsNodes().isEmpty() }
         waitForFocusOn("Play/Pause", playPause)
     }

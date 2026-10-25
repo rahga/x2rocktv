@@ -1,7 +1,6 @@
 package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
-import com.rahga.x2rock.lan.EMPTY_SOAP
 import com.rahga.x2rock.lan.unknownAction
 import com.rahga.x2rock.lan.FakePlayer
 import com.rahga.x2rock.lan.PlayerAddressBook

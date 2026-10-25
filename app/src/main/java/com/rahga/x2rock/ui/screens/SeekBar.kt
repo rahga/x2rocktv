@@ -1,6 +1,5 @@
 package com.rahga.x2rock.ui.screens
 
-import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
@@ -54,6 +53,7 @@ import androidx.tv.material3.Text
 import com.rahga.x2rock.model.isPlaying
 import com.rahga.x2rock.ui.components.tapToClick
 import com.rahga.x2rock.viewmodel.PlayerUiState
+import com.rahga.x2rock.viewmodel.positionNow
 import kotlinx.coroutines.delay
 
 // The pane's seek bar: the progress line, the knob and the burst of steps a held key makes, and
@@ -138,10 +138,11 @@ internal fun ProgressBar(
     // `canSeek` is per content, so it can go under the viewer — the next track an artist station's —
     // and the bar stops being focusable with focus on it. That drops focus, and the platform handed it
     // to the first room row (P-102). Said once, as it goes.
-    var lostAt by remember { mutableLongStateOf(0L) }
+    val watch = remember { LeaveWatch() }
     LaunchedEffect(seekable) {
         // Focused still, or lost with the change: Compose may report the loss as the bar lets go.
-        if (!seekable && (isFocused || SystemClock.uptimeMillis() - lostAt < LEAVE_WINDOW_MILLIS)) {
+        if (!seekable && (watch.had || watch.lostJustNow())) {
+            watch.changed(false)
             isFocused = false
             onFocused(false)
             onLeave()
@@ -149,7 +150,7 @@ internal fun ProgressBar(
     }
     val seekControls = if (!seekable) Modifier else Modifier
         .onFocusChanged {
-            if (isFocused && !it.isFocused) lostAt = SystemClock.uptimeMillis()
+            watch.changed(it.isFocused)
             isFocused = it.isFocused
             onFocused(it.isFocused)
         }
@@ -261,11 +262,8 @@ internal fun Long.toSeekLabel(): String {
  * composed after it — the pane on the way back from any screen, the full-screen view — behind by
  * however long ago the player last spoke, until it spoke again (Shield, 2026-10-10).
  */
-internal fun livePosition(positionMillis: Long, updatedAt: Long, playbackState: String, durationMillis: Long): Long {
-    val since = if (playbackState.isPlaying() && updatedAt > 0) System.currentTimeMillis() - updatedAt else 0
-    val now = positionMillis + since.coerceAtLeast(0)
-    return if (durationMillis > 0) now.coerceAtMost(durationMillis) else now
-}
+internal fun livePosition(positionMillis: Long, updatedAt: Long, playbackState: String, durationMillis: Long): Long =
+    positionNow(positionMillis, updatedAt, playbackState.isPlaying(), durationMillis)
 
 /** [livePosition], counting on a second at a time while the room plays, until the player next reports. */
 @Composable
@@ -292,6 +290,3 @@ internal fun Long.toTimeString(): String {
     return if (hours > 0) "%d:%02d:%02d".format(java.util.Locale.ROOT, hours, minutes, seconds)
            else "%d:%02d".format(java.util.Locale.ROOT, minutes, seconds)
 }
-
-/** How recent a focus loss must be to count as the bar's own leaving: see `ProgressBar`. */
-private const val LEAVE_WINDOW_MILLIS = 500L

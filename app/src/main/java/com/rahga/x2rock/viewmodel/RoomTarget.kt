@@ -2,6 +2,7 @@ package com.rahga.x2rock.viewmodel
 
 import androidx.lifecycle.SavedStateHandle
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.TvSoundbar
 import com.rahga.x2rock.model.Group
 import com.rahga.x2rock.model.followingRoom
 
@@ -52,7 +53,7 @@ class RoomTarget(private val household: SonosHousehold, private val saved: Saved
      * and the screen stays open on it. Nothing if no group holds it.
      */
     fun choose(playerId: String) {
-        val group = household.state.value.groups.firstOrNull { playerId in it.playerIds } ?: return
+        val group = TvSoundbar.groupOf(playerId, household.state.value.groups) ?: return
         saved[GROUP] = group.id
         room.remember(group)
         saved[NAME] = group.name
@@ -62,7 +63,8 @@ class RoomTarget(private val household: SonosHousehold, private val saved: Saved
     fun currentOrNull(): String? {
         val groups = household.state.value.groups
         val followed = room.findIn(groups)
-        if (groups.any { it.id == openedOn } && (followed == null || followed.id == openedOn)) return openedOn.also { learn() }
+        val opened = openedOn
+        if (groups.any { it.id == opened } && (followed == null || followed.id == opened)) return opened.also { learn() }
         // Kept up to date as the room is followed, as the home screen and the player keep theirs:
         // frozen at what the screen opened on, a room that grew and then lost the speaker the
         // screen opened with was "no longer in this system" here while the pane beside it had
@@ -151,9 +153,11 @@ internal class SavedRoom(private val saved: SavedStateHandle, private val key: S
      */
     fun refresh(group: Group): Boolean {
         val kept = coordinator
-        if (kept != null && kept != group.coordinatorId && group.playerIds.toSet() != players.toSet()) return false
+        val players = players
         // Unchanged is not written again: this runs on every event in the house.
         if (kept == group.coordinatorId && group.playerIds == players) return true
+        val sameSpeakers = group.playerIds.size == players.size && group.playerIds.containsAll(players)
+        if (kept != null && kept != group.coordinatorId && !sameSpeakers) return false
         remember(group)
         return true
     }
