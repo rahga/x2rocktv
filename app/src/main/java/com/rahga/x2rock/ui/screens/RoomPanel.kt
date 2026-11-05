@@ -114,6 +114,7 @@ fun RoomPanel(
     tone: HomeViewModel.ToneUi?,
     onStepBass: (Int) -> Unit,
     onStepTreble: (Int) -> Unit,
+    onStepBalance: (Int) -> Unit,
     onToggleLoudness: () -> Unit,
     onToggleTrueplay: () -> Unit,
     onToggleSub: () -> Unit,
@@ -324,6 +325,9 @@ fun RoomPanel(
                 if (shownTone != null) {
                     ToneRow("Bass", shownTone.bass, onStepBass)
                     ToneRow("Treble", shownTone.treble, onStepTreble)
+                    // A stereo pair's, as the Sonos app's EQ has it after Treble. Beta: never written
+                    // to a pair, so read only with Beta features on (`Balance`, issue #2).
+                    shownTone.balance?.let { ToneRow("Balance", it, onStepBalance, shown = balanceLabel(it), beta = true) }
                     AppButton(onClick = onToggleLoudness, modifier = Modifier.fillMaxWidth()) {
                         Text(if (shownTone.loudness) "Loudness   On" else "Loudness   Off")
                     }
@@ -488,9 +492,15 @@ private fun RoomRow(
  */
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
+private fun ToneRow(
+    label: String,
+    level: Int,
+    onStep: (Int) -> Unit,
+    shown: String = if (level > 0) "+$level" else "$level",
+    beta: Boolean = false,
+) {
     var focused by remember { mutableStateOf(false) }
-    val shown = stepMarksShown(focused)
+    val marks = stepMarksShown(focused)
     AppButton(
         onClick = {},
         modifier = Modifier
@@ -509,16 +519,28 @@ private fun ToneRow(label: String, level: Int, onStep: (Int) -> Unit) {
         // line with Loudness and TruePlay below whether they are drawn or not.
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(label, modifier = Modifier.weight(1f))
-            StepMark("\u2212", shown) { onStep(-1) }
+            if (beta) {
+                BetaMark()
+                Spacer(Modifier.width(8.dp))
+            }
+            StepMark("\u2212", marks) { onStep(-1) }
             Text(
-                text = if (level > 0) "+$level" else "$level",
+                text = shown,
                 textAlign = TextAlign.Center,
-                // Wide enough for "+10", so the marks stay put as the value moves.
+                // Wide enough for "+10", so the marks stay put as the value moves; a balance's
+                // words are wider, and the row's longest, "Right 100", sets its own.
                 modifier = Modifier.widthIn(min = 36.dp),
             )
-            StepMark("+", shown) { onStep(+1) }
+            StepMark("+", marks) { onStep(+1) }
         }
     }
+}
+
+/** A balance in words: "Centre", or the side it leans to and by how much — "Left 20". */
+internal fun balanceLabel(balance: Int): String = when {
+    balance < 0 -> "Left ${-balance}"
+    balance > 0 -> "Right $balance"
+    else -> "Centre"
 }
 
 /** Says a row is a beta feature, at its end: in the content colour, so it shows on a focused row too. */

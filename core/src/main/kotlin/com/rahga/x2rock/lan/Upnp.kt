@@ -519,6 +519,22 @@ class Upnp(
         rendering(hostname, "SetEQ", "EQType" to eqType, "DesiredValue" to value.toString())
     }
 
+    /**
+     * One channel's level, `LF` or `RF`, 0..100: `GetVolume` with that `Channel` rather than
+     * `Master`. A single One SL answered 100 for each, and its Master level apart (Media Room, 97.1,
+     * 2026-11-05: `GetVolume.LF.xml`, `GetVolume.RF.xml`). What a stereo pair's balance is made of.
+     */
+    suspend fun channelVolume(hostname: String, channel: String): Int = withContext(Dispatchers.IO) {
+        parse(rendering(hostname, "GetVolume", "Channel" to channel)).text("CurrentVolume")?.trim()?.toIntOrNull()
+            ?: throw IOException("GetVolume $channel answered no value")
+    }
+
+    /** One channel's level, as [channelVolume] reads it. **Never sent to a stereo pair yet**: see [Balance]. */
+    suspend fun setChannelVolume(hostname: String, channel: String, level: Int): Unit = withContext(Dispatchers.IO) {
+        require(level in 0..100) { "$level is outside the 0..100 a channel takes" }
+        rendering(hostname, "SetVolume", "Channel" to channel, "DesiredVolume" to level.toString())
+    }
+
     /** Bass or treble, −10..10. The player answers an empty body; re-read to see it. */
     suspend fun setTone(hostname: String, which: Tone, level: Int): Unit = withContext(Dispatchers.IO) {
         require(level in TONE_RANGE) { "$level is outside the ${TONE_RANGE.first}..${TONE_RANGE.last} the player accepts" }

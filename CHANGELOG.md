@@ -9,6 +9,8 @@ rise by one with every build that leaves the developer's machine.
 
 - The player shows how the track is delivered, between the seek bar's times — "Lossless · 16-bit ·
   44.1 kHz", or "Compressed" — where the speakers say. Asked for by a tester.
+- **Balance** for a stereo pair, in Configure → Sound, as a beta feature: it has not yet been tried on
+  a pair. Asked for by a tester with two Moves.
 
 ### Changed
 

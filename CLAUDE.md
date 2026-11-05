@@ -515,6 +515,14 @@ now pick the room up to move it in the list (2026-10-17, below). Closing
 it returns focus to whichever opened it. Group is in the pane's row rather than above or below the
 room list, for the reason in "Nothing that acts on the selected room" below.
 
+**A stereo pair has a Balance row, in Beta** (issue #2, 2026-11-05), after Treble as in the Sonos
+app's EQ, only where `zones:1` bonds a speaker to the room on a front channel (`isStereoPair`). It is
+RenderingControl `GetVolume`/`SetVolume` with `Channel` `LF` and `RF` on the room's own player, as
+SoCo's `balance`, folded into one number (`Balance`): the side it leans to at 100, the other turned
+down, a tenth per press. The read is captured (Media Room's One SL, 100 each); **the write has never
+reached a pair**, and whether setting the pair's own player moves its other speaker is unseen, so it
+stays behind Beta features until a tester's pair has been heard to move.
+
 **A Sub and surrounds are in the Sound section too** (T-16, 2026-10-11), only for a room whose
 `zones:1` members name them (`SW`, `LR`/`RR`): Sub on/off and level, surrounds on/off and their TV
 and music levels, −15..15, as the Sonos app's Sub audio and Surround audio. Never offered from an EQ

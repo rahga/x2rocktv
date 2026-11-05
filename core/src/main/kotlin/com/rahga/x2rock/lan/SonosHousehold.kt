@@ -246,6 +246,12 @@ data class HouseholdState(
     /** Whether the room whose own player is [playerId] has a Sub bonded to it. */
     fun hasSub(playerId: String): Boolean = "SW" in bondedChannels[playerId].orEmpty()
 
+    /**
+     * Whether the room whose own player is [playerId] is a stereo pair: a speaker bonded to it on a
+     * front channel. A Sub (`SW`) and surrounds (`LR`, `RR`) are not one.
+     */
+    fun isStereoPair(playerId: String): Boolean = bondedChannels[playerId].orEmpty().any { it == "LF" || it == "RF" }
+
     /** Whether the room whose own player is [playerId] has surrounds bonded to it. */
     fun hasSurrounds(playerId: String): Boolean = bondedChannels[playerId].orEmpty().any { it == "LR" || it == "RR" }
 
@@ -289,6 +295,24 @@ data class HouseholdChoice(val householdId: String, val label: String, val seed:
 /** Connecting stopped to ask which household: see [HouseholdState.householdChoices]. */
 class HouseholdChoiceNeeded(count: Int) :
     IllegalStateException("$count Sonos systems answer on this network. Choose one.")
+
+/**
+ * A stereo pair's balance as one number: −100 is the left speaker alone, 100 the right alone, 0 both
+ * at full. The side it leans to stays at 100 and the other is turned down by the amount, as SoCo's
+ * `balance` reads the two channels (`RenderingControl` `GetVolume`, `LF` and `RF`, each 0..100).
+ *
+ * **Beta: never written to a pair.** The channels read on a single One SL (100 each); whether the
+ * pair's own player setting them moves its other speaker, as the Sonos app's Balance does, is unseen.
+ */
+object Balance {
+    val RANGE = -100..100
+
+    fun of(left: Int, right: Int): Int = (right - left).coerceIn(RANGE)
+
+    /** The (left, right) channel levels for [balance]. */
+    fun channels(balance: Int): Pair<Int, Int> =
+        (100 - balance.coerceIn(0, 100)) to (100 + balance.coerceIn(-100, 0))
+}
 
 /** The capability a soundbar reports, and the only way to know a room can take a TV input. */
 const val HT_PLAYBACK = "HT_PLAYBACK"
@@ -2077,6 +2101,31 @@ class SonosHousehold(
     suspend fun setBass(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.BASS, level)
     suspend fun setTreble(playerId: String, level: Int) = upnp.setTone(hostnameOf(playerId), Upnp.Tone.TREBLE, level)
     suspend fun setLoudness(playerId: String, on: Boolean) = upnp.setLoudness(hostnameOf(playerId), on)
+
+    // ---------------------------------------------------------------- balance
+
+    /**
+     * A stereo pair's balance, −100..100 (see [Balance]), or `null` where the room is no pair. Read
+     * off the room's own player, as tone is; asked for by a tester with a pair of Moves (issue #2).
+     */
+    suspend fun balance(playerId: String): Int? {
+        if (!_state.value.isStereoPair(playerId)) return null
+        val host = hostnameOf(playerId)
+        return coroutineScope {
+            val left = async { upnp.channelVolume(host, "LF") }
+            val right = async { upnp.channelVolume(host, "RF") }
+            Balance.of(left.await(), right.await())
+        }
+    }
+
+    /** Set a stereo pair's balance, both channels on the room's own player. See [Balance]. */
+    suspend fun setBalance(playerId: String, balance: Int) {
+        require(_state.value.isStereoPair(playerId)) { "balance is for a stereo pair, and $playerId's room is none" }
+        val host = hostnameOf(playerId)
+        val (left, right) = Balance.channels(balance)
+        upnp.setChannelVolume(host, "LF", left)
+        upnp.setChannelVolume(host, "RF", right)
+    }
 
     // ---------------------------------------------------------------- Sub and surrounds
     //
