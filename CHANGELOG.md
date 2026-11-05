@@ -25,6 +25,8 @@ rise by one with every build that leaves the developer's machine.
   the services that refused, and keeps "didn't answer" for the ones that ran out of time.
 - The favourite a room has loaded reads Paused, or nothing, when the room is not playing it.
 - A preset finishes even if you press Back while it is starting.
+- A preset saved before two speakers were made a stereo pair (or given a Sub or surrounds) plays on
+  the room they now form, instead of leaving one out under a speaker id.
 - Alarms say "Saving…" while a change is being written, and a late save no longer closes another alarm.
 - The rating buttons stay put through a track change or another app's regroup, and focus with them.
 - When a control in the player disappears under the remote — Next at the end of a queue, the seek bar

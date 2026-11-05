@@ -28,7 +28,14 @@ data class Player(
     /**
      * `wss://<ip>:1443/websocket/api`, and so the only place a player's address is reported.
      */
-    val websocketUrl: String? = null
+    val websocketUrl: String? = null,
+    /**
+     * Every speaker this player answers for: itself, then whatever is bonded to it — a stereo
+     * pair's second speaker, a Sub, surrounds. Those are never players of their own while bonded,
+     * so this is the only place their ids appear in the topology. Nullable, as Gson leaves it
+     * when a payload has none.
+     */
+    val deviceIds: List<String>? = null,
 )
 
 data class GroupsResponse(

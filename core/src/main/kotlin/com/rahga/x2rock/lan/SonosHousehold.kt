@@ -2393,6 +2393,26 @@ class SonosHousehold(
     }
 
     /**
+     * [playerIds] and their [levels] as the household's rooms stand now. A speaker kept on its own
+     * and bonded since — the second of a stereo pair made after a preset was saved, as a tester's
+     * Moves were (issue #2) — is no player any more, only one of its room's `deviceIds`, so its
+     * level could not be set and it was left out under its raw id. It is answered by that room's
+     * player instead, keeping its level where the room's own has none. Anything else is kept as it
+     * is, for [gatherRooms] to name if it is not on the network.
+     */
+    fun asRoomsNow(playerIds: List<String>, levels: Map<String, Int>): Pair<List<String>, Map<String, Int>> {
+        val players = _state.value.players
+        fun roomOf(id: String) = if (players.any { it.id == id }) id
+        else players.firstOrNull { id in it.deviceIds.orEmpty() }?.id ?: id
+        val rooms = playerIds.map(::roomOf).distinct()
+        val roomLevels = buildMap {
+            levels.forEach { (id, level) -> if (id == roomOf(id)) put(id, level) }
+            levels.forEach { (id, level) -> putIfAbsent(roomOf(id), level) }
+        }
+        return rooms to roomLevels
+    }
+
+    /**
      * Put exactly [playerIds] in one group led by the first of them, and answer that group's id
      * once the topology shows it — which is a new id whenever anything moved, because a regroup
      * mints one. A preset's first step; what plays and how loud are for the caller.

@@ -131,10 +131,12 @@ class FavoritesViewModel @Inject constructor(
         // All at once, each to its own speaker. One whose level could not be set stays out, as does
         // an adjustable one the preset holds no level for: either would play at once at whatever
         // level it was left on (P-40). A fixed line-out is the amplifier's and always comes.
-        val failed = household.setLevelsBeforeJoining(preset.volumes)
+        // A speaker bonded into a room since the preset was saved stands as that room (issue #2).
+        val (playerIds, volumes) = household.asRoomsNow(preset.playerIds, preset.volumes)
+        val failed = household.setLevelsBeforeJoining(volumes)
         val fixed = household.playerVolumes.value.filterValues { it.fixed }.keys
-        val leftOut = preset.playerIds.filter { it in failed || (it !in preset.volumes && it !in fixed) }
-        val joining = preset.playerIds - leftOut.toSet()
+        val leftOut = playerIds.filter { it in failed || (it !in volumes && it !in fixed) }
+        val joining = playerIds - leftOut.toSet()
         val names = leftOut.joinToString { household.playerName(it) }
         if (joining.isEmpty()) error("couldn't set the volume in $names")
         val groupId = household.gatherRooms(joining)
