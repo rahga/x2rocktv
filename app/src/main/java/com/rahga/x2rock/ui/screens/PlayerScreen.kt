@@ -285,7 +285,9 @@ fun PlayerPane(
                         caption = when {
                             nextFocused && state.actions.canSkip -> state.upNextLine()
                             previousFocused && state.actions.canSkipToPrevious -> state.previousLine()
-                            else -> null
+                            // How the track is delivered, where the player says (issue #2): dim, between
+                            // the times, so it costs no height, and giving way to Up next and Previous.
+                            else -> state.quality
                         },
                     )
                     PlaybackControls(

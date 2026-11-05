@@ -5,6 +5,11 @@ rise by one with every build that leaves the developer's machine.
 
 ## Unreleased
 
+### New
+
+- The player shows how the track is delivered, between the seek bar's times — "Lossless · 16-bit ·
+  44.1 kHz", or "Compressed" — where the speakers say. Asked for by a tester.
+
 ### Changed
 
 - A portable's battery shows in Room settings without Beta features: a tester's Move read it right,

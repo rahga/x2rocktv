@@ -1,0 +1,109 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "accountId": "sn_19",
+      "objectId": "album:1471051942",
+      "serviceId": "204"
+    },
+    "images": [],
+    "name": "Is a Real Boy",
+    "service": {
+      "_objectType": "service",
+      "id": "204",
+      "images": [],
+      "name": "Apple Music"
+    },
+    "type": "album"
+  },
+  "currentItem": {
+    "_objectType": "queueItem",
+    "policies": {
+      "_objectType": "playbackPolicy"
+    },
+    "track": {
+      "_objectType": "track",
+      "album": {
+        "_objectType": "album",
+        "name": "Is a Real Boy"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Say Anything"
+      },
+      "durationMillis": 239000,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_19",
+        "objectId": "song:1471052391",
+        "serviceId": "204"
+      },
+      "imageUrl": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-http%3asong%253a1471052391.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-http%3asong%253a1471052391.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19"
+        }
+      ],
+      "name": "Spidersong",
+      "quality": {
+        "_objectType": "trackQuality",
+        "bitDepth": 16,
+        "immersive": false,
+        "lossless": true,
+        "sampleRate": 44100
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "204",
+        "images": [],
+        "name": "Apple Music"
+      },
+      "type": "track"
+    }
+  },
+  "nextItem": {
+    "_objectType": "queueItem",
+    "policies": {
+      "_objectType": "playbackPolicy"
+    },
+    "track": {
+      "_objectType": "track",
+      "album": {
+        "_objectType": "album",
+        "name": "Is a Real Boy"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Say Anything"
+      },
+      "durationMillis": 236000,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_19",
+        "objectId": "song:1471052612",
+        "serviceId": "204"
+      },
+      "imageUrl": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-http%3asong%253a1471052612.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-http%3asong%253a1471052612.mp4%3fsid%3d204%26flags%3d8232%26sn%3d19"
+        }
+      ],
+      "name": "An Orgy of Critics",
+      "quality": {
+        "_objectType": "trackQuality"
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "204",
+        "images": [],
+        "name": "Apple Music"
+      },
+      "type": "track"
+    }
+  }
+}

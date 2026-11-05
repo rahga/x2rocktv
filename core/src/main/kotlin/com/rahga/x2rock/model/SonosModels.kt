@@ -79,7 +79,44 @@ data class Track(
     val id: MusicObjectId? = null,
     /** The service this track is playing from, as the player names it: `Deezer`, `Plex`. */
     val service: ServiceRef? = null,
+    /** How it is being delivered, where the player says: see [TrackQuality]. */
+    val quality: TrackQuality? = null,
 )
+
+/**
+ * How a track is delivered, as `playbackMetadata:1` puts it on `track.quality` (`trackQuality`).
+ * Captured three ways: **empty** on a Plex album (the object and no fields), **lossy 16-bit 24 kHz**
+ * on an iHeartRadio station, **lossless 16-bit 44.1 kHz** on Apple Music (Media Room, 2026-11-05,
+ * `event.losslessMetadataStatus.json`). `immersive` has only ever been seen false. Asked for by a
+ * tester (issue #2), who plays from Spotify Connect.
+ */
+data class TrackQuality(
+    val bitDepth: Int? = null,
+    /** In Hz: 44100. */
+    val sampleRate: Int? = null,
+    val lossless: Boolean? = null,
+    val immersive: Boolean? = null,
+) {
+    /**
+     * "Lossless · 16-bit · 44.1 kHz", "Compressed · 24 kHz", or null where the player said nothing
+     * of it. A lossy stream's bit depth is its decoder's, not the music's, so it is not named. An
+     * immersive track is said in the field's own word, "Immersive": none has been seen, and the
+     * format it stands for (Dolby Atmos, presumably) is not named in the reply.
+     */
+    fun summary(): String? {
+        val kind = when (lossless) {
+            true -> "Lossless"
+            false -> "Compressed"
+            null -> null
+        }
+        val depth = bitDepth?.takeIf { lossless == true && it > 0 }?.let { "$it-bit" }
+        val rate = sampleRate?.takeIf { it > 0 }?.let {
+            java.math.BigDecimal(it).movePointLeft(3).stripTrailingZeros().toPlainString() + " kHz"
+        }
+        val parts = listOfNotNull("Immersive".takeIf { immersive == true }, kind, depth, rate)
+        return if (kind == null && immersive != true) null else parts.joinToString(" · ")
+    }
+}
 
 /**
  * A music service as a track or container names it, `{"name": "Plex", "id": "212"}` in every

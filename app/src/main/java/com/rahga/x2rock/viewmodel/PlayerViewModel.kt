@@ -54,6 +54,8 @@ data class PlayerUiState(
     val previousArtistName: String? = null,
     /** The service the room is playing from, as the player names it — for its logo on the art. */
     val serviceName: String? = null,
+    /** "Lossless · 16-bit · 44.1 kHz", where the player says: see `TrackQuality.summary`. */
+    val quality: String? = null,
     /** On a soundbar's HDMI input, which carries no track at all. */
     val onTvInput: Boolean = false,
     /** e.g. "Dolby Digital 5.1"; empty unless on a TV input with a signal. */
@@ -292,6 +294,7 @@ class PlayerViewModel @Inject constructor(
                     nextTrackName = state.nextTrack?.name,
                     nextArtistName = state.nextTrack?.artist?.name,
                     serviceName = state.track?.service?.name ?: state.container?.service?.name,
+                    quality = state.track?.quality?.summary(),
                     onTvInput = state.onTvInput,
                     inputFormat = state.inputFormat,
                     streamInfo = state.streamInfo,
