@@ -162,8 +162,9 @@ private val SHORTCUT_SERVICE = Regex("^SA_RINCON(\\d+)_")
 
 /**
  * The `<Data name="…">` rows of a `LocalBatteryStatus` block, or null where there is none. **The
- * populated shape is x2rock's, not a capture**: no household this was built against has a portable,
- * so a Roam or Move's real reply is owed (PUNCH P-16) — and release notes say battery is untested.
+ * populated shape is x2rock's, not a capture**: no household this was built against has a portable.
+ * A tester's Move 1 (issue #2, 2026-11-03) showed its level through this parse, dropping a few percent
+ * off its base and saying so, so the shape holds; its raw reply is still owed as a fixture (PUNCH P-16).
  */
 internal fun parseBattery(body: String): Battery? {
     val root = runCatching { Xml.parse(body) }.getOrNull() ?: return null
@@ -425,7 +426,7 @@ class Upnp(
     /**
      * A portable's battery, or null from a speaker on mains — which answers 200 with an empty
      * `<ZPSupportInfo>` (Kitchen, 2026-10-10; a Beam for x2rock): the absent block is the answer.
-     * **Untested against a portable**: see [parseBattery].
+     * Read off a tester's Move: see [parseBattery].
      */
     suspend fun battery(hostname: String): Battery? = page(hostname, "/status/batterystatus")?.let(::parseBattery)
 

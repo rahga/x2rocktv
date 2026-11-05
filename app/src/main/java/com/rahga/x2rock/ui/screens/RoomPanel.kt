@@ -367,8 +367,6 @@ fun RoomPanel(
                         pack.level?.let { "Battery $it%" } ?: "Battery",
                         when (pack.charging) { true -> "charging"; false -> "on battery"; null -> null },
                         pack.health?.takeUnless { it.equals("GREEN", ignoreCase = true) },
-                        // Read only with Beta features on: never seen on a portable (T-21).
-                        "Beta",
                     )
                     Text(
                         parts.joinToString(" · "),

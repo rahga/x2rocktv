@@ -210,15 +210,12 @@ class ToneStepsTest {
     }
 
     /**
-     * A portable's battery is asked for only with Beta features on, since it has never been read off
-     * one (T-21). Kitchen is on mains, so the question is whether it is asked, not what it says.
+     * A portable's battery is asked for with Beta features off: it left Beta once a tester's Move read
+     * right (issue #2). Kitchen is on mains, so the question is whether it is asked, not what it says.
      */
-    @Test fun `the battery is asked for only with beta features on`() = runBlocking<Unit> {
+    @Test fun `the battery is asked for without beta features`() = runBlocking<Unit> {
         openKitchen()  // the tone is published only once every read in it, the battery's too, is back
-        assertEquals(emptyList<String>(), paths.filter { it.startsWith("/status/batterystatus") })
-        viewModel.setBetaEnabled(true)
-        viewModel.loadTone(household.state.value.groups.first { it.name == "Kitchen" }.id)
-        withTimeout(5_000) { while (paths.none { it.startsWith("/status/batterystatus") }) delay(20) }
+        assertEquals(listOf("/status/batterystatus"), paths.filter { it.startsWith("/status/batterystatus") }.distinct())
     }
 
     /**

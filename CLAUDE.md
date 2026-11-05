@@ -436,7 +436,9 @@ no third line, no "(current source)". **Any release notes must say Line-In is un
 real Port, Five or Amp has taken it (PUNCH P-14).
 
 **Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
-as is a portable's battery line, and each says "Beta" where it appears. Save favorite and the item
+and says "Beta" where it appears. A portable's battery line was too, until a tester's pair of Move 1s
+(issue #2, 2026-11-03, on an onn stick and a Fire TV) showed its level, and a drop of a few percent
+off the base; it has been every room's since. Its raw reply is still not captured (P-16). Save favorite and the item
 menu's Sonos Favorites actions left Beta on 2026-10-17, after saves, adds and removes on the Shield. With the switch on, every
 room is also offered **another room's** line-in ("Line-In on Den"), as Sonos's own steps imply but
 never state. Anything else that has never run on a device goes behind the same switch. **Send a
@@ -590,7 +592,7 @@ Two things sit outside the widget's version, in the order asked for:
   to state once and never touch again. Room settings is every room's since T-08 (2026-10-10): the
   room's own speaker's **Status light** and **Touch controls** (the Sonos app's Button Control,
   so On is unlocked), read with its tone; a **volume limit** and a **battery** as lines where there
-  is one (the limit cannot be set unsigned; battery is untested against a portable); for a room
+  is one (the limit cannot be set unsigned; battery seen on a tester's Move, issue #2); for a room
   with a soundbar, the soundbar's **Remote feedback light** and **IR repeater**, written to the
   soundbar itself; then "This is my TV". **About this system** (Settings → Household) lists every
   speaker and whether an update waits, by `DownloadSize`; nothing here ever applies one.

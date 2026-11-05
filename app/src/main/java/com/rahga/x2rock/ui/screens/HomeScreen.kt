@@ -1094,7 +1094,7 @@ private fun SettingsPanel(
                 Text(if (betaEnabled) "Beta features   On" else "Beta features   Off")
             }
             Text(
-                "Features not yet tried on real speakers, such as Line-In and a portable's battery. Each says Beta where it appears.",
+                "Features not yet tried on real speakers, such as Line-In. Each says Beta where it appears.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
