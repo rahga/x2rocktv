@@ -353,7 +353,8 @@ on the second here, where x2rock's firmware fired one set 82s ahead two minutes 
 **A track says how it is delivered** (`playbackMetadata:1`, `currentItem.track.quality`, a
 `trackQuality` object; read with `getMetadataStatus` on Media Room's One SL, 97.1, 2026-11-05):
 `bitDepth`, `sampleRate` in Hz, `lossless`, `immersive`. Apple Music: 16, 44100, lossless, not
-immersive. An iHeartRadio station's track: 16, 24000, *not* lossless — a lossy stream still names a
+immersive. Spotify Connect, cast from the Spotify app: 16, 44100, *not* lossless, its container a
+`playlist` named for what the app was playing. An iHeartRadio station's track: 16, 24000, *not* lossless — a lossy stream still names a
 depth, its decoder's. Plex's album track: the object with no fields at all. `nextItem.track.quality`
 came empty even where the current track's was full. UPnP says less: `GetPositionInfo`'s DIDL `res`
 carries only a MIME type (`audio/mp4` for that same Apple Music track), no rate or depth.

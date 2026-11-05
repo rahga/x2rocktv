@@ -87,7 +87,8 @@ data class Track(
  * How a track is delivered, as `playbackMetadata:1` puts it on `track.quality` (`trackQuality`).
  * Captured three ways: **empty** on a Plex album (the object and no fields), **lossy 16-bit 24 kHz**
  * on an iHeartRadio station, **lossless 16-bit 44.1 kHz** on Apple Music (Media Room, 2026-11-05,
- * `event.losslessMetadataStatus.json`). `immersive` has only ever been seen false. Asked for by a
+ * `event.losslessMetadataStatus.json`), **lossy 16-bit 44.1 kHz** on Spotify Connect cast from the
+ * Spotify app (the same day, `event.spotifyMetadataStatus.json`). `immersive` has only ever been seen false. Asked for by a
  * tester (issue #2), who plays from Spotify Connect.
  */
 data class TrackQuality(

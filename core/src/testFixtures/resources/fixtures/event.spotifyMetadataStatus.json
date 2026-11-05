@@ -1,0 +1,115 @@
+{
+  "_objectType": "metadataStatus",
+  "container": {
+    "_objectType": "container",
+    "id": {
+      "_objectType": "universalMusicObjectId",
+      "accountId": "sn_26",
+      "objectId": "spotify:artistTopTracks:6guC9FqvlVboSKTI77NG2k",
+      "serviceId": "12"
+    },
+    "imageUrl": "https://spotify-static.ws.sonos.com/icons/playlist_legacy.png",
+    "images": [
+      {
+        "_objectType": "image",
+        "url": "https://spotify-static.ws.sonos.com/icons/playlist_legacy.png"
+      }
+    ],
+    "name": "Top Tracks",
+    "service": {
+      "_objectType": "service",
+      "id": "12",
+      "images": [],
+      "name": "Spotify"
+    },
+    "type": "playlist"
+  },
+  "currentItem": {
+    "_objectType": "queueItem",
+    "policies": {
+      "_objectType": "playbackPolicy"
+    },
+    "track": {
+      "_objectType": "track",
+      "album": {
+        "_objectType": "album",
+        "name": "Instant Gratification"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Dance Gavin Dance"
+      },
+      "durationMillis": 205000,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_26",
+        "objectId": "spotify:track:7xCcUcMcGsIYGKUVgBZUw5",
+        "serviceId": "12"
+      },
+      "imageUrl": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a7xCcUcMcGsIYGKUVgBZUw5%3fsid%3d12%26flags%3d8232%26sn%3d26",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a7xCcUcMcGsIYGKUVgBZUw5%3fsid%3d12%26flags%3d8232%26sn%3d26"
+        }
+      ],
+      "name": "We Own the Night",
+      "quality": {
+        "_objectType": "trackQuality",
+        "bitDepth": 16,
+        "immersive": false,
+        "lossless": false,
+        "sampleRate": 44100
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "12",
+        "images": [],
+        "name": "Spotify"
+      },
+      "type": "track"
+    }
+  },
+  "nextItem": {
+    "_objectType": "queueItem",
+    "policies": {
+      "_objectType": "playbackPolicy"
+    },
+    "track": {
+      "_objectType": "track",
+      "album": {
+        "_objectType": "album",
+        "name": "Whatever I Say Is Royal Ocean"
+      },
+      "artist": {
+        "_objectType": "artist",
+        "name": "Dance Gavin Dance"
+      },
+      "durationMillis": 209000,
+      "id": {
+        "_objectType": "universalMusicObjectId",
+        "accountId": "sn_26",
+        "objectId": "spotify:track:4KmwTaGAU5Gl9zyhJN0rie",
+        "serviceId": "12"
+      },
+      "imageUrl": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a4KmwTaGAU5Gl9zyhJN0rie%3fsid%3d12%26flags%3d8232%26sn%3d26",
+      "images": [
+        {
+          "_objectType": "image",
+          "url": "http://192.0.2.94:1400/getaa?s=1&u=x-sonos-spotify%3aspotify%253atrack%253a4KmwTaGAU5Gl9zyhJN0rie%3fsid%3d12%26flags%3d8232%26sn%3d26"
+        }
+      ],
+      "name": "Tidal Wave: Breakfast, Lunch, and Dinner",
+      "quality": {
+        "_objectType": "trackQuality"
+      },
+      "service": {
+        "_objectType": "service",
+        "id": "12",
+        "images": [],
+        "name": "Spotify"
+      },
+      "type": "track"
+    }
+  }
+}
