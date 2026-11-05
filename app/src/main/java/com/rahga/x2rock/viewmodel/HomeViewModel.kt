@@ -569,7 +569,7 @@ class HomeViewModel @Inject constructor(
         /** The room's soundbar, when it has one, and its TV-remote settings: see `RemoteSettings`. */
         val soundbarId: String? = null,
         val remote: RemoteSettings? = null,
-        /** A portable's pack, or `null` on mains. Untested against a portable: see `parseBattery`. */
+        /** A portable's pack, or `null` on mains. See `parseBattery`. */
         val battery: Battery? = null,
         /** The room's Sub and surrounds, where it has either; see `SonosHousehold.satellites`. */
         val satellites: Satellites? = null,
@@ -615,8 +615,8 @@ class HomeViewModel @Inject constructor(
             val light = async { runCatching { household.statusLight(playerId) }.getOrNull() }
             val locked = async { runCatching { household.buttonsLocked(playerId) }.getOrNull() }
             val remote = async { soundbar?.let { runCatching { household.remoteSettings(it) }.getOrNull() } }
-            // Never seen on a portable, so asked only with Beta features on (T-21).
-            val battery = async { if (betaFeatures.enabled.value) runCatching { household.battery(playerId) }.getOrNull() else null }
+            // Out of Beta since a tester's Move read right, on and off its base (issue #2).
+            val battery = async { runCatching { household.battery(playerId) }.getOrNull() }
             val satellites = async { runCatching { household.satellites(playerId) }.getOrNull() }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null

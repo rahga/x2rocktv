@@ -7,6 +7,8 @@ rise by one with every build that leaves the developer's machine.
 
 ### Changed
 
+- A portable's battery shows in Room settings without Beta features: a tester's Move read it right,
+  on and off its base.
 - A preset started from Browse follows Browse's pin: with the pin held you stay in Browse, and the room
   the preset formed becomes the selected room — its name, the now-playing bar, the remote's media keys
   and Browse's own next press all go to it.

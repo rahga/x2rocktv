@@ -2135,7 +2135,7 @@ class SonosHousehold(
         }.awaitAll().sortedBy { it.room }
     }
 
-    /** A portable's battery, or null on mains. Untested against a portable: see [parseBattery]. */
+    /** A portable's battery, or null on mains. See [parseBattery]. */
     suspend fun battery(playerId: String): Battery? = upnp.battery(hostnameOf(playerId))
     /** A soundbar's TV-remote settings; [soundbarId] must be the soundbar itself. */
     suspend fun remoteSettings(soundbarId: String): RemoteSettings = upnp.remoteSettings(hostnameOf(soundbarId))

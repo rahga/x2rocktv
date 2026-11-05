@@ -57,8 +57,8 @@ still open is at the head of [`docs/punch-list.md`](docs/punch-list.md), and
 service by service.
 
 A few features have never run against a real speaker, because neither household has the hardware:
-Line-In, and a portable's battery. They stay hidden until **Settings → Beta features** is turned
-on, and each says "Beta" where it appears. **Send a report**, under that same switch, shows a QR
+Line-In, for one. They stay hidden until **Settings → Beta features** is turned on, and each says
+"Beta" where it appears. A portable's battery was one of them until a tester's Move read it right. **Send a report**, under that same switch, shows a QR
 code that opens a draft GitHub issue describing your system, so a tester can tell us what happened.
 
 ## Building
