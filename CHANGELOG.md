@@ -5,6 +5,11 @@ rise by one with every build that leaves the developer's machine.
 
 ## Unreleased
 
+### New
+
+- The player shows how the track is delivered, between the seek bar's times — "Lossless · 16-bit ·
+  44.1 kHz", or "Compressed" — where the speakers say. Asked for by a tester.
+
 ### Changed
 
 - A preset started from Browse follows Browse's pin: with the pin held you stay in Browse, and the room

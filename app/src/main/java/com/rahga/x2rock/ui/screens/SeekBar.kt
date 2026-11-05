@@ -67,7 +67,10 @@ internal fun ProgressBar(
     onFocused: (Boolean) -> Unit = {},
     /** The bar stopped taking focus while it had it: see the effect on `seekable` below. */
     onLeave: () -> Unit = {},
-    /** "Up next · …" or "Previous · …", drawn between the times while set: see PlayerPane's nextFocused. */
+    /**
+     * "Up next · …" or "Previous · …" while Next or Prev has focus, otherwise the track's quality:
+     * drawn between the times while set, and not while the bar itself has focus. See PlayerPane.
+     */
     caption: String? = null,
 ) {
     // Always laid out, blank where there is nothing to show: a station, a TV input or an empty

@@ -453,6 +453,19 @@ class PlayerViewModelTest {
         assertNull("a station names nothing to follow", station.upNextLine())
     }
 
+    /**
+     * The track's quality reaches the pane, for the caption between the seek bar's times (issue #2):
+     * Apple Music's lossless track as Media Room reported it, and nothing for Plex's empty one.
+     */
+    @Test fun `a track's quality reaches the pane`() = runBlocking<Unit> {
+        fake.pushFixture("losslessMetadataStatus", groupId)
+        val lossless = withTimeout(5_000) { viewModel.uiState.first { it.trackName == "Spidersong" } }
+        assertEquals("Lossless · 16-bit · 44.1 kHz", lossless.quality)
+        fake.pushFixture("metadataStatus", groupId)
+        val plex = withTimeout(5_000) { viewModel.uiState.first { it.trackName != null && it.trackName != "Spidersong" } }
+        assertNull(plex.quality)
+    }
+
     /** Media keys and voice transport arrive here; they must reach the speaker. */
     @Test fun `a transport control from the system reaches the player`() = runBlocking<Unit> {
         assertNotNull("nothing attached to the publisher", publisher.controls)

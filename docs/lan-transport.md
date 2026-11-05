@@ -350,6 +350,14 @@ back **when the alarm's duration ran out**, 178s after the snooze — the durati
 the scheduled time (x2rock) and seems to end a snooze early too. Alarms set 40–50s ahead fired
 on the second here, where x2rock's firmware fired one set 82s ahead two minutes late.
 
+**A track says how it is delivered** (`playbackMetadata:1`, `currentItem.track.quality`, a
+`trackQuality` object; read with `getMetadataStatus` on Media Room's One SL, 97.1, 2026-11-05):
+`bitDepth`, `sampleRate` in Hz, `lossless`, `immersive`. Apple Music: 16, 44100, lossless, not
+immersive. An iHeartRadio station's track: 16, 24000, *not* lossless — a lossy stream still names a
+depth, its decoder's. Plex's album track: the object with no fields at all. `nextItem.track.quality`
+came empty even where the current track's was full. UPnP says less: `GetPositionInfo`'s DIDL `res`
+carries only a MIME type (`audio/mp4` for that same Apple Music track), no rate or depth.
+
 **The alarms themselves are `AlarmClock:1`, household-wide** (captured off Kitchen 2026-10-10 with
 disarmed alarms made for it, then removed). Any player answers for every alarm, and each names its
 room by a *player* id. `ListAlarms` carries its `<Alarms>` document as escaped **text**, so it is
