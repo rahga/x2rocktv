@@ -100,6 +100,28 @@ class GatherRoomsTest {
         assertEquals(0, fake.commandsNamed("modifyGroupMembers"))
     }
 
+    // The captured Dining Room is a stereo pair: AA00 is the player, AA01 only among its deviceIds.
+    private val diningPlayer = "RINCON_AA00BBCCDDEE01400"
+    private val diningBonded = "RINCON_AA01BBCCDDEE01400"
+
+    @Test fun `a speaker bonded since the preset was saved stands as its room, with its level`() {
+        val kitchen = group("Kitchen").coordinatorId
+        val (rooms, levels) = household.asRoomsNow(listOf(kitchen, diningBonded), mapOf(kitchen to 20, diningBonded to 30))
+        assertEquals(listOf(kitchen, diningPlayer), rooms)
+        assertEquals(mapOf(kitchen to 20, diningPlayer to 30), levels)
+    }
+
+    @Test fun `both halves of a pair saved apart become one room, at the room's own level`() {
+        val (rooms, levels) = household.asRoomsNow(listOf(diningBonded, diningPlayer), mapOf(diningBonded to 30, diningPlayer to 25))
+        assertEquals(listOf(diningPlayer), rooms)
+        assertEquals(mapOf(diningPlayer to 25), levels)
+    }
+
+    @Test fun `a speaker on no room's list is kept, for gathering to name`() {
+        val gone = "RINCON_000000000000001400"
+        assertEquals(listOf(gone) to mapOf(gone to 10), household.asRoomsNow(listOf(gone), mapOf(gone to 10)))
+    }
+
     @Test fun `a room not on the network fails the preset rather than gathering the rest`() = runBlocking<Unit> {
         val kitchen = group("Kitchen")
         fake.clearHistory()
