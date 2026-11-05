@@ -704,7 +704,7 @@ checked on the Streamer. What it settled, so it is not undone by accident:
   title (Shield); the time row's middle costs no height, and showing each only on its button keeps
   the pane quieter, as the service logo shows only on volume and seek.
 - **The track's quality sits between the seek bar's times** (issue #2, 2026-11-05): "Lossless ·
-  16-bit · 44.1 kHz", "Compressed · 24 kHz", from `track.quality` (`TrackQuality.summary`), dim,
+  16-bit · 44.1 kHz" (Apple Music), "Compressed · 44.1 kHz" (Spotify Connect), from `track.quality` (`TrackQuality.summary`), dim,
   whenever Next or Prev does not have the slot and the bar is not focused. It costs no height, and a
   room with no duration has no time row, so a station shows none. Nothing where the player says
   nothing (Plex). "Immersive" is the field's own word: none has been seen, so Atmos is not named.

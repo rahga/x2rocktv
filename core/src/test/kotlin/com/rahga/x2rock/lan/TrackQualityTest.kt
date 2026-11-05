@@ -14,8 +14,8 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * A track's `quality` (issue #2), from the three captures that carry one: Plex's empty object, an
- * iHeartRadio station's lossy stream, and Apple Music's lossless track.
+ * A track's `quality` (issue #2), from the captures that carry one: Plex's empty object, an
+ * iHeartRadio station's lossy stream, Apple Music's lossless track, and Spotify Connect's lossy one.
  */
 class TrackQualityTest {
 
@@ -26,6 +26,8 @@ class TrackQualityTest {
         assertEquals(TrackQuality(bitDepth = 16, sampleRate = 44100, lossless = true, immersive = false), quality("losslessMetadataStatus"))
         assertEquals("Lossless · 16-bit · 44.1 kHz", quality("losslessMetadataStatus")?.summary())
         assertEquals("a lossy stream's bit depth is not named", "Compressed · 24 kHz", quality("stationMetadataStatus")?.summary())
+        // Spotify Connect, cast from the Spotify app to Media Room (2026-11-05): the tester's own case.
+        assertEquals("Compressed · 44.1 kHz", quality("spotifyMetadataStatus")?.summary())
         assertNull("Plex sends the object with nothing in it", quality("metadataStatus")?.summary())
     }
 

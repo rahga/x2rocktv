@@ -830,7 +830,7 @@ class FakePlayer(
             // radioMetadataStatus is a stream loaded by URL: no currentItem and no track
             // object at all, which is the whole reason `streamInfo` has to be read.
             "metadataStatus", "tvMetadataStatus", "tvSurroundMetadataStatus",
-            "radioMetadataStatus", "stationMetadataStatus", "losslessMetadataStatus" -> "playbackMetadata:1"
+            "radioMetadataStatus", "stationMetadataStatus", "losslessMetadataStatus", "spotifyMetadataStatus" -> "playbackMetadata:1"
             "groupVolume" -> "groupVolume:1"
             // Captured off the office One SL, 2026-10-05: a 15-minute timer set by x2rock.
             "sleepTimerStatus" -> "sleepTimer:1"
