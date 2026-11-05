@@ -297,11 +297,15 @@ const val HT_PLAYBACK = "HT_PLAYBACK"
 private val GROUP_SCOPED = setOf("playback:1", "playbackMetadata:1", "groupVolume:1", "sleepTimer:1")
 
 /**
- * The capability of a player with an analog line-in — a Port, a Five, an Amp, a Play:5.
+ * The capability of a player with an analog line-in — a Port, a Five, an Amp, a Play:5 — taken from
+ * Sonos's published capability list (2026-10-10), since no player in either household this was built
+ * against has a line-in.
  *
- * **Untested on hardware** (2026-10-10): taken from Sonos's published capability list, never seen
- * in a capture, because no player in either household this was built against has a line-in. Mark
- * it so in any release notes until a real player has reported it and taken [SonosHousehold.useLineIn].
+ * **First seen on a Move 1** (issue #2, 2026-11-03, a tester's beta report: `AIRPLAY, AUDIO_CLIP,
+ * CLOUD, LINE_IN, PLAYBACK, SVC, VOICE` on 27.1): a speaker with no line-in socket, only Bluetooth.
+ * So the string is real, and does not mean a socket; presumably it is the Bluetooth input, which
+ * nothing has confirmed. [SonosHousehold.useLineIn] has still never been pressed on any player, and
+ * what a room on that input reports is still unseen. Untested in any release notes until it has.
  */
 const val LINE_IN = "LINE_IN"
 

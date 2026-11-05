@@ -435,6 +435,12 @@ what a room *on* its line-in reports is unknown: nothing recognises it, so there
 no third line, no "(current source)". **Any release notes must say Line-In is untested** until a
 real Port, Five or Amp has taken it (PUNCH P-14).
 
+**A Move 1 reports `LINE_IN`** (issue #2, 2026-11-03, a tester's beta report from a stereo pair of
+them on 27.1), though it has no line-in socket, only Bluetooth. The string is real, then, but it is
+not proof of a socket: on a portable it is presumably the Bluetooth input, so a Move's room is offered
+a "Line-In" row whose press has never been seen. Asked of the tester: press it with a phone connected
+over Bluetooth, and send a report while the Move plays from Bluetooth.
+
 **Since T-21 (2026-10-12) it is a beta feature**, shown only with **Settings → Beta features** on,
 as is a portable's battery line, and each says "Beta" where it appears. Save favorite and the item
 menu's Sonos Favorites actions left Beta on 2026-10-17, after saves, adds and removes on the Shield. With the switch on, every
