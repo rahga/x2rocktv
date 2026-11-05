@@ -11,6 +11,7 @@ import com.rahga.x2rock.channel.ChannelSync
 import com.rahga.x2rock.channel.RoomTile
 import com.rahga.x2rock.lan.HouseholdChoice
 import com.rahga.x2rock.lan.SonosHousehold
+import com.rahga.x2rock.lan.Balance
 import com.rahga.x2rock.lan.Battery
 import com.rahga.x2rock.lan.RemoteSettings
 import com.rahga.x2rock.lan.TvSoundbar
@@ -573,6 +574,8 @@ class HomeViewModel @Inject constructor(
         val battery: Battery? = null,
         /** The room's Sub and surrounds, where it has either; see `SonosHousehold.satellites`. */
         val satellites: Satellites? = null,
+        /** A stereo pair's balance, −100..100 (`Balance`); `null` for any other room, or with Beta off. */
+        val balance: Int? = null,
     )
 
     private val _tone = MutableStateFlow<ToneUi?>(null)
@@ -618,10 +621,12 @@ class HomeViewModel @Inject constructor(
             // Out of Beta since a tester's Move read right, on and off its base (issue #2).
             val battery = async { runCatching { household.battery(playerId) }.getOrNull() }
             val satellites = async { runCatching { household.satellites(playerId) }.getOrNull() }
+            // Never yet written to a pair, so asked only with Beta features on (issue #2).
+            val balance = async { if (betaFeatures.enabled.value) runCatching { household.balance(playerId) }.getOrNull() else null }
             val read = settings.await()
             val eqNow = read?.eq ?: return@coroutineScope null
             val limit = read.volumeScalingFactor?.let { (it * 100).roundToInt().coerceIn(0, 100) }
-            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await(), satellites.await())
+            ToneUi(playerId, eqNow.bass, eqNow.treble, eqNow.loudness, trueplay.await(), light.await(), locked.await(), limit, soundbar, remote.await(), battery.await(), satellites.await(), balance.await())
         }
         if (read == null || edits != toneEdits || playerId != tonePlayer) return
         _tone.value = read
@@ -658,6 +663,14 @@ class HomeViewModel @Inject constructor(
         val tone = _tone.value ?: return
         val target = (tone.treble + delta).coerceIn(Upnp.TONE_RANGE)
         if (target != tone.treble) editTone("treble", "change the tone", tone.copy(treble = target)) { household.setTreble(it, target) }
+    }
+
+    /** A stereo pair's balance, a tenth of the way per press, as the Sonos app's slider moves. */
+    fun stepBalance(delta: Int) {
+        val tone = _tone.value ?: return
+        val now = tone.balance ?: return
+        val target = (now + delta * BALANCE_STEP).coerceIn(Balance.RANGE)
+        if (target != now) editTone("balance", "change the balance", tone.copy(balance = target)) { household.setBalance(it, target) }
     }
 
     fun toggleLoudness() {
@@ -787,6 +800,7 @@ class HomeViewModel @Inject constructor(
     private companion object {
         /** The same window the player pane uses, so a held key behaves the same in both. */
         const val VOLUME_DEBOUNCE_MILLIS = 300L
+        const val BALANCE_STEP = 10
     }
 }
 

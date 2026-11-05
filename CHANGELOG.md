@@ -5,6 +5,11 @@ rise by one with every build that leaves the developer's machine.
 
 ## Unreleased
 
+### New
+
+- **Balance** for a stereo pair, in Configure → Sound, as a beta feature: it has not yet been tried on
+  a pair. Asked for by a tester with two Moves.
+
 ### Changed
 
 - A portable's battery shows in Room settings without Beta features: a tester's Move read it right,

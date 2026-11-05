@@ -71,6 +71,12 @@ class ToneStepsTest {
                     if (action == "SetLEDState") lights += Regex("<DesiredLEDState>(\\w+)<").find(text)!!.groupValues[1]
                     if (action == "SetLEDFeedbackState") feedbacks += Regex("<LEDFeedbackState>(\\w+)<").find(text)!!.groupValues[1]
                     if (action == "SetEQ") eqWrites += Regex("<EQType>(\\w+)</EQType><DesiredValue>(-?\\d+)<").find(text)!!.destructured.let { (t, v) -> "$t=$v" }
+                    val channel = Regex("<Channel>(LF|RF)</Channel>").find(text)?.groupValues?.get(1)
+                    if (action == "SetVolume" && channel != null) {
+                        val level = Regex("<DesiredVolume>(\\d+)<").find(text)!!.groupValues[1]
+                        channelWrites += "$channel=$level"
+                        channels[channel] = level
+                    }
                     return MockResponse().setBody(when (action) {
                         // Kitchen's, 2026-10-10: light off, controls unlocked.
                         "GetLEDState" -> FakePlayer.fixtureText("GetLEDState.xml")
@@ -82,6 +88,10 @@ class ToneStepsTest {
                         "SetLEDFeedbackState" -> FakePlayer.fixtureText("SetLEDFeedbackState.xml")
                         // Kitchen's SubGain reply, 2026-10-11, standing for every EQ type read here.
                         "GetEQ" -> FakePlayer.fixtureText("GetEQ.SubGain.xml")
+                        // Media Room's One SL, 2026-11-05, with whatever this stand-in was last told.
+                        "GetVolume" -> channel?.let { FakePlayer.fixtureText("GetVolume.$it.xml").replace(">100<", ">${channels[it] ?: "100"}<") }
+                            ?: return unknownAction()
+                        "SetVolume" -> if (channel != null) "" else return unknownAction()
                         else -> return unknownAction()
                     })
                 }
@@ -107,6 +117,10 @@ class ToneStepsTest {
             withTimeout(10_000) { viewModel.uiState.first { it is HomeViewModel.UiState.Success } }
         }
     }
+
+    /** Every channel level written, as `LF=100`, in order; and each channel's level now. */
+    private val channelWrites = CopyOnWriteArrayList<String>()
+    private val channels = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     /** Every `SetEQ` written, as `type=value`, in order. */
     private val eqWrites = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -237,5 +251,38 @@ class ToneStepsTest {
         assertEquals("shown at once", 2, viewModel.tone.value?.satellites?.subLevel)
         withTimeout(5_000) { while (eqWrites.isEmpty()) delay(20) }
         assertEquals(listOf("SubGain=2"), eqWrites.toList())
+    }
+
+    /**
+     * A stereo pair's balance (issue #2): Dining Room is the captured pair. Offered only with Beta
+     * features on, since it has never been written to a pair; a press is a tenth of the way, and
+     * the two presses are written once, both channels, leaning left.
+     */
+    @Test fun `a stereo pair's balance is offered with beta on, and stepped`() = runBlocking<Unit> {
+        fake.pushFixture("activeZonesChange")
+        withTimeout(5_000) { household.state.first { it.bondedChannels.isNotEmpty() } }
+        val dining = household.state.value.groups.first { it.name == "Dining Room" }
+        viewModel.loadTone(dining.id)
+        val off = withTimeout(5_000) { viewModel.tone.first { it?.playerId == dining.coordinatorId } }!!
+        assertEquals("not offered with Beta off", null, off.balance)
+
+        viewModel.setBetaEnabled(true)
+        viewModel.loadTone(dining.id)
+        val read = withTimeout(5_000) { viewModel.tone.first { it?.balance != null } }!!
+        assertEquals(0, read.balance)
+        viewModel.stepBalance(-1)
+        viewModel.stepBalance(-1)
+        assertEquals("shown at once", -20, viewModel.tone.value?.balance)
+        withTimeout(5_000) { while (channelWrites.size < 2) delay(20) }
+        assertEquals(listOf("LF=100", "RF=80"), channelWrites.toList())
+        assertEquals("Left 20", com.rahga.x2rock.ui.screens.balanceLabel(-20))
+        assertEquals("Centre", com.rahga.x2rock.ui.screens.balanceLabel(0))
+    }
+
+    /** Kitchen is no pair: no balance even with Beta on, and its channels are never asked. */
+    @Test fun `a room that is no stereo pair has no balance`() = runBlocking<Unit> {
+        viewModel.setBetaEnabled(true)
+        openKitchen()
+        assertEquals(null, viewModel.tone.value?.balance)
     }
 }
