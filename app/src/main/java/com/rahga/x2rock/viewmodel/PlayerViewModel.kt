@@ -98,6 +98,11 @@ data class PlayerUiState(
     /** UPnP is switched off for the household: see `HouseholdState.upnpOff`. */
     val upnpOff: Boolean = false,
     /**
+     * Which bonded speakers have dropped off, in words — "Left Surround Speaker Disconnected" — or
+     * null while every one is connected. See [offlineSpeakersLine].
+     */
+    val offlineSpeakers: String? = null,
+    /**
      * The group's volume is fixed — a Port or an Amp with a fixed line-out — so it is set on
      * the amplifier it feeds, not here. `groupVolume:1`'s `fixed`; x2rock shows "fixed".
      */
@@ -165,6 +170,39 @@ private fun trackCaption(label: String, title: String?, artist: String?): String
  * out of the pane on the press itself (P-78, 2026-10-23). The read that lands settles it, and takes
  * the buttons away only where the new track cannot be rated.
  */
+/**
+ * A room's disconnected bonded speakers in words, from each one's `channelMap`: "Left Surround
+ * Speaker Disconnected", "Sub Disconnected", "Surround Speakers and Sub Disconnected". Named by the
+ * channel it plays, which is how the Sonos app's setup names them too; a channel map nobody has
+ * met is "Bonded Speaker" rather than a guess.
+ */
+internal fun offlineSpeakersLine(channels: List<Set<String>>): String {
+    val names = channels.map { bondedSpeakerName(it) }
+    // Both surrounds gone reads as one thing, not "Left Surround Speaker and Right Surround Speaker".
+    val merged = if (LEFT_SURROUND in names && RIGHT_SURROUND in names)
+        listOf("Surround Speakers") + (names - LEFT_SURROUND - RIGHT_SURROUND)
+    else names
+    val counted = merged.groupingBy { it }.eachCount().map { (name, n) -> if (n > 1) "$n ${name}s" else name }
+    val joined = when (counted.size) {
+        1 -> counted[0]
+        else -> counted.dropLast(1).joinToString(", ") + " and " + counted.last()
+    }
+    return "$joined Disconnected"
+}
+
+private const val LEFT_SURROUND = "Left Surround Speaker"
+private const val RIGHT_SURROUND = "Right Surround Speaker"
+
+private fun bondedSpeakerName(channels: Set<String>): String = when (channels) {
+    setOf("LR") -> LEFT_SURROUND
+    setOf("RR") -> RIGHT_SURROUND
+    setOf("SW") -> "Sub"
+    // A stereo pair's other half.
+    setOf("LF") -> "Left Speaker"
+    setOf("RF") -> "Right Speaker"
+    else -> "Bonded Speaker"
+}
+
 internal fun ratingWhileReading(
     last: Pair<String, SonosHousehold.RatingState>?,
     groupId: String?,
@@ -315,6 +353,14 @@ class PlayerViewModel @Inject constructor(
                     playbackError = state.lastError?.describe(),
                     ringingAlarm = state.ringingAlarm,
                     upnpOff = householdState.upnpOff,
+                    offlineSpeakers = group?.playerIds.orEmpty()
+                        .mapNotNull { id ->
+                            householdState.offlineSpeakers[id]?.let { offlineSpeakersLine(it) }
+                                // In a group of rooms, which room's speaker it is.
+                                ?.let { line -> if (group!!.playerIds.size > 1) "${household.playerName(id)}: $line" else line }
+                        }
+                        .joinToString("\n")
+                        .ifEmpty { null },
                     // Per-speaker rows only mean anything once a group has more than one.
                     playerVolumes = group?.playerIds
                         ?.takeIf { it.size > 1 }

@@ -466,6 +466,41 @@ class PlayerViewModelTest {
         assertNull(plex.quality)
     }
 
+    /**
+     * The captured zones event, Bedroom's left surround unplugged: the pane names the speaker, and a
+     * room whose bonded speakers are all connected says nothing.
+     */
+    @Test fun `a disconnected bonded speaker is named at the top of the pane`() = runBlocking<Unit> {
+        val groups = household.state.value.groups
+        val bedroom = groups.first { it.name == "Bedroom" }
+        val livingRoom = groups.first { it.name == "Living Room" }
+        // The fake has said nothing about Bedroom's playback until a status for it is pushed.
+        fake.pushFixture("metadataStatus", bedroom.id)
+        viewModel.selectGroup(bedroom.id, bedroom.name)
+        fake.pushFixture("activeZonesChange")
+        val named = withTimeout(5_000) { viewModel.uiState.first { it.offlineSpeakers != null } }
+        assertEquals("Left Surround Speaker Disconnected", named.offlineSpeakers)
+
+        fake.pushFixture("metadataStatus", livingRoom.id)
+        viewModel.selectGroup(livingRoom.id, livingRoom.name)
+        val other = withTimeout(5_000) { viewModel.uiState.first { it.groupName == "Living Room" } }
+        assertNull(other.offlineSpeakers)
+    }
+
+    @Test fun `offline speakers are named by the channel they play`() {
+        assertEquals("Right Surround Speaker Disconnected", offlineSpeakersLine(listOf(setOf("RR"))))
+        assertEquals("Sub Disconnected", offlineSpeakersLine(listOf(setOf("SW"))))
+        assertEquals("Right Speaker Disconnected", offlineSpeakersLine(listOf(setOf("RF"))))
+        assertEquals("Surround Speakers Disconnected", offlineSpeakersLine(listOf(setOf("LR"), setOf("RR"))))
+        assertEquals(
+            "Surround Speakers and Sub Disconnected",
+            offlineSpeakersLine(listOf(setOf("RR"), setOf("SW"), setOf("LR"))),
+        )
+        assertEquals("Left Surround Speaker and Sub Disconnected", offlineSpeakersLine(listOf(setOf("LR"), setOf("SW"))))
+        assertEquals("2 Subs Disconnected", offlineSpeakersLine(listOf(setOf("SW"), setOf("SW"))))
+        assertEquals("Bonded Speaker Disconnected", offlineSpeakersLine(listOf(emptySet())))
+    }
+
     /** Media keys and voice transport arrive here; they must reach the speaker. */
     @Test fun `a transport control from the system reaches the player`() = runBlocking<Unit> {
         assertNotNull("nothing attached to the publisher", publisher.controls)

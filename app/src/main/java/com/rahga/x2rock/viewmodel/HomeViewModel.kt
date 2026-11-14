@@ -176,7 +176,7 @@ class HomeViewModel @Inject constructor(
                             artUrl = pushed?.artUrl,
                             onTvInput = pushed?.onTvInput == true,
                             muted = pushed?.volume?.muted == true,
-                            offlineSpeakers = group.playerIds.sumOf { state.offlineSpeakers[it] ?: 0 },
+                            offlineSpeakers = group.playerIds.sumOf { state.offlineSpeakers[it]?.size ?: 0 },
                             inputFormat = pushed?.inputFormat.orEmpty(),
                             streamInfo = pushed?.streamInfo,
                             isRadio = pushed?.isRadio == true,

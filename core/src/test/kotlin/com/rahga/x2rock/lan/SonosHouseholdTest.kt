@@ -901,12 +901,12 @@ class SonosHouseholdTest {
      * other two zones have members too, so a parser counting members rather than disconnected
      * ones would put Living Room's four in the map and fail.
      */
-    @Test fun `a bonded speaker that dropped off is counted against its room`() = runBlocking<Unit> {
+    @Test fun `a bonded speaker that dropped off is held against its room, by its channel`() = runBlocking<Unit> {
         connected()
         fake.pushFixture("activeZonesChange")
         val offline = withTimeout(5_000) { household.state.first { it.offlineSpeakers.isNotEmpty() } }.offlineSpeakers
         val bedroom = household.state.value.groups.first { it.name == "Bedroom" }.coordinatorId
-        assertEquals(mapOf(bedroom to 1), offline)
+        assertEquals(mapOf(bedroom to listOf(setOf("LR"))), offline)
     }
 
     // ------------------------------------------------------------- HDMI

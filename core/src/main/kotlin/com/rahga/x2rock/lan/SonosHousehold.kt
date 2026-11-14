@@ -210,11 +210,12 @@ data class HouseholdState(
     val upnpOff: Boolean = false,
     /**
      * Bonded speakers that have dropped off, by the room they belong to: the room's own player
-     * id — the one `getGroups` lists — to how many of its satellites, surrounds or Sub report
-     * `disconnected`. Such a speaker is not a player in the Control API at all, so nothing else
-     * says it has gone: the room plays on, quieter, without saying why. From `zones:1`.
+     * id — the one `getGroups` lists — to the `channelMap` of each of its satellites, surrounds or
+     * Sub that reports `disconnected` (`LR` for the left surround, `SW` for a Sub). Such a speaker
+     * is not a player in the Control API at all, so nothing else says it has gone: the room plays
+     * on, quieter, without saying why. From `zones:1`.
      */
-    val offlineSpeakers: Map<String, Int> = emptyMap(),
+    val offlineSpeakers: Map<String, List<Set<String>>> = emptyMap(),
     /**
      * What each room's bonded speakers play, by the room's own player id: `SW` for a Sub, `LR` and
      * `RR` for surrounds, from the same `zones:1` event. The only honest answer to "does this room
@@ -2872,10 +2873,10 @@ class SonosHousehold(
                     room to members
                 }.orEmpty()
                 val offline = zones.mapNotNull { (room, members) ->
-                    val gone = members.count { member ->
-                        member.getAsJsonObject("state")?.bool("disconnected") == true
-                    }
-                    if (gone > 0) room to gone else null
+                    val gone = members
+                        .filter { it.getAsJsonObject("state")?.bool("disconnected") == true }
+                        .map { m -> m.getAsJsonArray("channelMap")?.map { it.asString }.orEmpty().toSet() }
+                    if (gone.isNotEmpty()) room to gone else null
                 }.toMap()
                 val bonded = zones.associate { (room, members) ->
                     room to members.filter { it.string("id") != room }

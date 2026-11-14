@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
 import androidx.tv.material3.ClickableSurfaceDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
@@ -77,6 +78,9 @@ import com.rahga.x2rock.viewmodel.PlayerViewModel
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 internal fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLeftFocusRequester: FocusRequester, volumeEntry: VolumeEntry) {
+    // What the room list's warning badge means, said where the room is open: a bonded speaker has
+    // dropped off and the room plays on without it, which nothing else would say.
+    state.offlineSpeakers?.let { OfflineSpeakers(it) }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -114,6 +118,23 @@ internal fun PaneHeader(state: PlayerUiState, viewModel: PlayerViewModel, exitLe
             onExitLeft = { exitLeftFocusRequester.requestFocusSafely() },
             entry = volumeEntry,
         )
+    }
+}
+
+@Composable
+private fun OfflineSpeakers(text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(bottom = 8.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.error,
+        )
+        Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.error)
     }
 }
 
