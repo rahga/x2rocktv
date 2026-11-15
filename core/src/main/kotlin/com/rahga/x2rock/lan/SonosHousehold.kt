@@ -60,7 +60,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -755,6 +757,11 @@ class SonosHousehold(
             // screen in place of "reconnecting", and after a disconnect it stuck.
             throw e
         } catch (e: Exception) {
+            // Cancelled already, whatever arrived is the cancellation's doing: a disconnect cancels
+            // this attempt and then closes its socket, and the command it waits on can end on that
+            // close's IOException rather than the cancellation (a scope cancelling keeps a child's
+            // real exception over its own). Reported, a disconnect read as a failed connect.
+            currentCoroutineContext().ensureActive()
             if (generation != session && !ownTeardown) throw e
             // With Authentication on, every Control API command is refused with
             // ERROR_NO_PERMISSION, getGroups first, while UPnP keeps answering (x2rock, verified
